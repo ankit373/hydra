@@ -205,13 +205,13 @@ func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Bud
 				}
 			}
 			switch {
-			case ctx.Err() != nil:
-				return att, ctx.Err()
 			case perr != nil:
 				return att, perr
-			case err == nil:
+			case err == nil: // answered, so kept even if the kill came just after
 				att.Answer, att.TTFT, att.ErrKind = resp.Output, resp.TTFT, ""
 				return att, nil
+			case ctx.Err() != nil:
+				return att, ctx.Err()
 			}
 			var se *executor.StatusError
 			if errors.As(err, &se) && (se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden) {
@@ -238,9 +238,7 @@ func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Bud
 func (d *Direct) price(h provider.Head, model string, wc float64, resp *executor.Response, err error, killed bool) (Call, error) {
 	var se *executor.StatusError
 	switch {
-	case killed:
-		return Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"}, nil
-	case err == nil:
+	case err == nil: // a call that completed has token counts, even if a kill came after
 		c := Call{Head: h.ID, Model: resp.Model, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens,
 			TokensEstimated: resp.TokensEstimated, PriceRef: d.prices[model].Ref}
 		cost, perr := d.prices.Cost(model, resp.InputTokens, resp.OutputTokens)
@@ -250,6 +248,8 @@ func (d *Direct) price(h provider.Head, model string, wc float64, resp *executor
 		}
 		c.CostUSD = cost
 		return c, nil
+	case killed:
+		return Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"}, nil
 	case errors.As(err, &se) && slices.Contains([]int{http.StatusTooManyRequests, http.StatusServiceUnavailable,
 		http.StatusUnauthorized, http.StatusForbidden}, se.Code):
 		return Call{Head: h.ID, PriceRef: "refused-unbilled"}, nil

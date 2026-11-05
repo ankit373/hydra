@@ -234,18 +234,21 @@ func TestLoad_RefusesAHandEditedSplit(t *testing.T) {
 // would leave its two spellings free to straddle the splits.
 func TestLoad_RefusesTextThatNeedsUnicodeNormalisation(t *testing.T) {
 	rows := []Row{{"ok/1", "what's my balance", "x"}, {"mark/1", "café", "x"},
-		{"wide/1", "ｂalance", "x"}, {"lig/1", "ﬁle", "x"}, {"ok/2", "£10 fee… ’", "x"}}
+		{"wide/1", "ｂalance", "x"}, {"lig/1", "ﬁle", "x"}, {"ok/2", "£10 fee… ’", "x"},
+		{"greek/1", "ά", "x"}, {"ok/3", "नमस्ते", "x"}, {"ok/4", "กิน", "x"}}
 	good, _ := AssignSplits("stub", rows)
 	_, err := Load(stubSuite{rows}, Dataset{}, "", writeTSV(t, good))
 	if err == nil {
 		t.Fatal("loaded text with a combining mark, a fullwidth form and a ligature")
 	}
-	for _, id := range []string{"mark/1", "wide/1", "lig/1"} {
+	// A mark on a Latin or Greek letter is a variant NFC would fold; the virama and vowel
+	// sign in Devanagari "namaste", or a Thai vowel, are how the word is spelt.
+	for _, id := range []string{"mark/1", "wide/1", "lig/1", "greek/1"} {
 		if !strings.Contains(err.Error(), id) {
 			t.Errorf("error does not name %s: %v", id, err)
 		}
 	}
-	if strings.Contains(err.Error(), "ok/") || !strings.Contains(err.Error(), "3 items") {
+	if strings.Contains(err.Error(), "ok/") || !strings.Contains(err.Error(), "4 items") {
 		t.Errorf("error names the wrong items: %v", err)
 	}
 }

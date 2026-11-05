@@ -182,8 +182,10 @@ func (r *Runner) rerunID(base string) (string, error) {
 // scored row.
 func complete(dir string) (bool, error) {
 	var run Run
-	if err := readJSON(filepath.Join(dir, "run.json"), &run); err != nil {
-		return false, nil // never got as far as run.json: resume it
+	if err := readJSON(filepath.Join(dir, "run.json"), &run); os.IsNotExist(err) {
+		return false, nil // killed before run.json was written: resume it
+	} else if err != nil {
+		return false, fmt.Errorf("bench: %s: %w", dir, err)
 	}
 	rows, _, err := parseResults(filepath.Join(dir, "items.jsonl"), run.ID)
 	if err != nil {

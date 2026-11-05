@@ -52,15 +52,13 @@ func splitText(text string) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
-// normalisable refuses text splitText cannot key without Unicode normalisation, which
-// would need golang.org/x/text: combining marks, fullwidth or halfwidth forms, and
-// compatibility ligatures. Two spellings of one utterance could otherwise straddle splits.
+// normalisable refuses what splitText cannot key without NFC (golang.org/x/text): a
+// combining mark on a Latin, Greek or Cyrillic letter, a fullwidth form, a ligature.
+// Devanagari, Thai or Arabic marks are spelling, not variants, and load.
 func normalisable(suite string, rows []Row) error {
 	var bad []string
 	for _, r := range rows {
-		if strings.IndexFunc(r.Text, func(c rune) bool {
-			return unicode.Is(unicode.Mn, c) || (c >= 0xFF00 && c <= 0xFFEF) || (c >= 0xFB00 && c <= 0xFB4F)
-		}) >= 0 {
+		if needsNormalising(r.Text) {
 			bad = append(bad, r.ID)
 		}
 	}
@@ -68,8 +66,25 @@ func normalisable(suite string, rows []Row) error {
 		return nil
 	}
 	shown := bad[:min(len(bad), 10)]
-	return fmt.Errorf("bench: %s has %d items needing Unicode normalisation (combining marks, fullwidth forms or ligatures): %s",
+	return fmt.Errorf("bench: %s has %d items needing Unicode normalisation (combining marks on Latin, Greek or Cyrillic, fullwidth forms or ligatures): %s",
 		suite, len(bad), strings.Join(shown, ", "))
+}
+
+func needsNormalising(text string) bool {
+	var base rune // the letter a run of combining marks sits on
+	for _, c := range text {
+		switch {
+		case (c >= 0xFF00 && c <= 0xFFEF) || (c >= 0xFB00 && c <= 0xFB4F):
+			return true
+		case unicode.Is(unicode.Mn, c):
+			if unicode.In(base, unicode.Latin, unicode.Greek, unicode.Cyrillic) {
+				return true
+			}
+		default:
+			base = c
+		}
+	}
+	return false
 }
 
 // splitOf keys on the text, not the id, so a duplicate cannot leak from calibration into test.

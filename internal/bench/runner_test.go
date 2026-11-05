@@ -628,3 +628,26 @@ func TestExecute_RerunResumesAnIncompleteRerun(t *testing.T) {
 		t.Fatalf("--rerun after a complete -r2: %s %v", o3.RunID, err)
 	}
 }
+
+// A rerun whose run.json is unreadable is reported, not passed over for a new -r<k>.
+func TestExecute_RerunReportsACorruptRerun(t *testing.T) {
+	r := testRunner(t, 4, newFakeExec(), "frontier")
+	r.Rerun, r.MaxUSD = true, 2*0.002+0.001
+	o, err := r.Execute(context.Background())
+	if !errors.Is(err, ErrBudget) {
+		t.Fatalf("first rerun: %v", err)
+	}
+	os.WriteFile(filepath.Join(o.Dir, "run.json"), []byte("{"), 0o644)
+	if done, err := complete(o.Dir); err == nil || done {
+		t.Fatalf("complete() read a corrupt run.json as done=%v, err=%v", done, err)
+	}
+	r.MaxUSD = 1
+	if o2, err := r.Execute(context.Background()); err == nil || !strings.Contains(err.Error(), o.RunID) {
+		t.Fatalf("a corrupt %s was passed over for %s (%v)", o.RunID, o2.RunID, err)
+	}
+	// A rerun killed before it wrote run.json at all is still resumed.
+	os.Remove(filepath.Join(o.Dir, "run.json"))
+	if o3, err := r.Execute(context.Background()); err == nil && o3.RunID != o.RunID {
+		t.Fatalf("a rerun with no run.json yet was passed over for %s", o3.RunID)
+	}
+}

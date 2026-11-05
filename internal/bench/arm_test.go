@@ -285,3 +285,32 @@ func TestDirect_ALocalErrorFailsTheRowWithoutRetry(t *testing.T) {
 		}
 	}
 }
+
+// lateKill answers, but the run's context is cancelled while it does: the call was
+// completed and billed for real.
+type lateKill struct{ cancel context.CancelFunc }
+
+func (l lateKill) For(provider.Head) executor.Executor { return l }
+
+func (l lateKill) Execute(_ context.Context, req executor.Request) (*executor.Response, error) {
+	l.cancel()
+	return &executor.Response{Output: "yes", InputTokens: 1, Model: req.Head.Meta["model"]}, nil
+}
+
+// A call that completed as the kill arrived is charged its real cost, not its ceiling,
+// and its answer is kept.
+func TestDirect_ACallThatFinishedAsTheKillCameIsPricedAndKept(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	d, _ := fallbackArm(t, newFakeExec(), nil)
+	d.exec = lateKill{cancel}.For
+	it := fakeItems(1)["test/000"]
+	req, _ := fakeSuite{}.Prompt(it)
+	var spent []Call
+	att, err := d.Call(ctx, it, req, NewBudget(1, 0), func(c Call) error { spent = append(spent, c); return nil })
+	if err != nil || att.Answer != "yes" || len(att.Calls) != 1 {
+		t.Fatalf("answer %q, err %v, calls %+v: want the answer kept", att.Answer, err, att.Calls)
+	}
+	if c := att.Calls[0]; c.CostUSD != 0.001 || c.PriceRef != "ref/m-front" || len(spent) != 1 {
+		t.Fatalf("call %+v: want its real $0.001, not the $0.002 ceiling", c)
+	}
+}
