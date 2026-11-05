@@ -114,6 +114,10 @@ type Options struct {
 	// which of the flag and the policy file to change. Empty reads as the flag.
 	MaxCostSource string
 
+	// Temperature is passed to the head unchanged; nil means the provider
+	// default. CLI and agy heads ignore it.
+	Temperature *float64
+
 	// MaxMemoryMB and MaxCPUSeconds cap a dispatched subprocess's address
 	// space and CPU time, from policy.yaml's max_memory_mb/max_cpu_seconds.
 	// 0 means no ceiling, same spelling MaxCostUSD already uses. Applied by
@@ -275,14 +279,22 @@ func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result
 		return nil, err
 	}
 	prompt := fmt.Sprintf("%s\n\nYou asked: %s\nThe user answered: %s", q.Prompt, q.Question, answer)
-	return d.Dispatch(ctx, prompt, Options{
+	return d.Dispatch(ctx, prompt, resumeOptions(q))
+}
+
+// resumeOptions is what a parked task is dispatched with once answered: what
+// it was parked under, with approval for the one head the human was shown.
+func resumeOptions(q pending.Question) Options {
+	return Options{
 		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
 		System: q.System, Enum: q.Enum, Resource: q.Resource,
+		Domain: q.Domain, Temperature: q.Temperature, NoCache: q.NoCache,
+		MaxCostUSD: q.MaxCostUSD, MaxCostSource: q.MaxCostSource,
 		RunID: q.RunID, TaskID: q.TaskID,
 		AnsweredHead: q.Head,
 		// A2A context is already inside q.Prompt, Dispatch injected it before
 		// the gate parked the task, so naming the file again would double it.
-	})
+	}
 }
 
 // Decline refuses a parked task without running it.
@@ -784,6 +796,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	var lastErr error
 	var attempts []Attempt
+	// Refusals the request itself caused, against heads actually sent, so a
+	// run that sent nothing can say it was the request and not the heads.
+	var tooWarm, overCost, sent int
 	for i, h := range candidates {
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
@@ -833,6 +848,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			refuse("cannot carry tool definitions")
 			continue
 		}
+		// Skipped like the tools case, never sent and failed: the provider would
+		// answer 400, and the breaker would park a healthy head over it.
+		if limit := executor.MaxTemperature(h); opts.Temperature != nil && *opts.Temperature > limit {
+			refuse(fmt.Sprintf("accepts a temperature of at most %g, not %g", limit, *opts.Temperature))
+			tooWarm++
+			continue
+		}
 		// The egress gate, deliberately independent of the ledger's decision:
 		// the ledger answers who may act, this answers where content may go.
 		// The reroute above should already have made this unreachable for a
@@ -874,6 +896,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Prompt:   prompt, Head: h.ID, Resource: opts.Resource,
 				Enum: opts.Enum, TierHint: opts.TierHint, System: opts.System,
 				LocalOnly: localOnly, MaxTokens: opts.MaxTokens,
+				Domain: opts.Domain, Temperature: opts.Temperature,
+				MaxCostUSD: opts.MaxCostUSD, MaxCostSource: opts.MaxCostSource,
+				NoCache: opts.NoCache,
 			}
 			// A question that cannot be stored has not been asked, so this
 			// fails the dispatch rather than proceeding unapproved.
@@ -921,9 +946,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					Agent: "hydra-dispatch", Tool: h.ID, Decision: ledger.Deny,
 					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, opts.MaxCostUSD),
 				})
+				overCost++
 				continue
 			}
 		}
+		sent++
 		started := time.Now()
 		exec := executor.For(h)
 		emit := func(kind StreamKind, text, reason string) {
@@ -947,6 +974,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Prompt:        prompt,
 			Head:          h,
 			MaxTokens:     opts.MaxTokens,
+			Temperature:   opts.Temperature,
 			System:        opts.System,
 			Messages:      opts.Messages,
 			Tools:         opts.Tools,
@@ -1044,8 +1072,27 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		Level: runlog.LevelError, Status: "failed",
 		Detail: fmt.Sprintf("all %d heads failed", len(candidates)),
 	})
+	switch n := len(candidates); {
+	case tooWarm == n && n > 0:
+		return nil, fmt.Errorf("%w: temperature %g is above what every candidate head accepts",
+			executor.ErrUnaskable, *opts.Temperature)
+	case sent == 0 && overCost > 0:
+		lastErr = overCeiling{lastErr}
+	}
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
+
+// ErrOverCostCeiling marks a dispatch that sent nothing and whose ceiling
+// refused at least one head that could otherwise have run: the ceiling, not a
+// head, is why there is no answer.
+var ErrOverCostCeiling = errors.New("no head was sent the request, and the cost ceiling refused at least one")
+
+// overCeiling grades an error as ErrOverCostCeiling without changing what it
+// says, so the CLI's message stays exactly what it was.
+type overCeiling struct{ err error }
+
+func (e overCeiling) Error() string   { return e.err.Error() }
+func (e overCeiling) Unwrap() []error { return []error{e.err, ErrOverCostCeiling} }
 
 // quotaMode reads state.json once and returns the (possibly downgraded) tier,
 // the governing quota and its mode. The mode is rate-aware, so a fast burn
