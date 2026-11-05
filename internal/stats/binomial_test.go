@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: MIT
+
+package stats
+
+import (
+	"math"
+	"testing"
+)
+
+// References are scipy's beta.ppf(1 − α, k + 1, n − k); k = 0 also has the closed form 1 − α^{1/n}.
+func TestClopperPearsonUpper_Golden(t *testing.T) {
+	cases := []struct {
+		k, n int
+		want float64
+	}{
+		{0, 100, 0.029513049607039932},
+		{3, 50, 0.1478371763641812},
+		{35, 500, 0.09174006190473744},
+		{64, 910, 0.08588608387949787}, // H2's sized n
+		{1, 1000, 0.004734993575499777},
+		{7, 7, 1},
+	}
+	for _, c := range cases {
+		got, err := ClopperPearsonUpper(c.k, c.n, 0.05)
+		if err != nil {
+			t.Fatal(err)
+		}
+		near(t, "upper", got, c.want, exact)
+	}
+	near(t, "k=0 closed form", 1-math.Pow(0.05, 1.0/100), 0.029513049607039932, exact)
+}
+
+func TestClopperPearsonUpper_RefusesWhatItCannotAnswer(t *testing.T) {
+	bad := []struct {
+		k, n  int
+		alpha float64
+	}{
+		{0, 0, 0.05}, {-1, 10, 0.05}, {11, 10, 0.05}, {1, 10, 0}, {1, 10, 1}, {1, 10, math.NaN()},
+	}
+	for _, c := range bad {
+		if _, err := ClopperPearsonUpper(c.k, c.n, c.alpha); err == nil {
+			t.Errorf("ClopperPearsonUpper(%d, %d, %v) answered", c.k, c.n, c.alpha)
+		}
+	}
+}
+
+func TestWilson_GoldenAndEdges(t *testing.T) {
+	lo, hi := Wilson(81, 263, 1.959964)
+	near(t, "lo", lo, 0.25528851948901576, exact)
+	near(t, "hi", hi, 0.3662095774580194, exact)
+	if lo, hi := Wilson(0, 0, 1.959964); lo != 0 || hi != 1 {
+		t.Errorf("n = 0 gave [%v, %v], want the whole range", lo, hi)
+	}
+	if lo, _ := Wilson(0, 50, 1.959964); lo != 0 {
+		t.Errorf("0 of 50 has lower bound %v", lo)
+	}
+	_, hi = Wilson(50, 50, 1.959964)
+	near(t, "50 of 50 upper", hi, 1, exact)
+}
+
+func TestPassHatK_Golden(t *testing.T) {
+	tasks := []Trials{{4, 4}, {4, 3}, {4, 2}, {4, 0}}
+	got, err := PassHatK(tasks, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	near(t, "pass^2", got, 5.0/12, exact)
+	got, _ = PassHatK(tasks, 1)
+	near(t, "pass^1 = pass@1", got, 9.0/16, exact)
+	// C(999,500)/C(1000,500) = 500/1000; both binomials overflow a float64.
+	got, err = PassHatK([]Trials{{1000, 999}}, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	near(t, "pass^500", got, 0.5, exact)
+}
+
+func TestPassHatK_RefusesWhatItCannotAnswer(t *testing.T) {
+	bad := []struct {
+		tasks []Trials
+		k     int
+	}{
+		{[]Trials{{4, 4}, {1, 1}}, 2}, // N < k
+		{nil, 1},
+		{[]Trials{{4, 4}}, 0},
+		{[]Trials{{4, 5}}, 1},
+		{[]Trials{{4, -1}}, 1},
+	}
+	for _, c := range bad {
+		if _, err := PassHatK(c.tasks, c.k); err == nil {
+			t.Errorf("PassHatK(%v, %d) answered", c.tasks, c.k)
+		}
+	}
+}

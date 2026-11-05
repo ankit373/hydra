@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/rand/v2"
-	"sort"
+
+	"github.com/ankit373/hydra/internal/stats"
 )
 
 // Counterfactual evaluation answers "what would this other routing policy have
@@ -169,7 +169,11 @@ func Evaluate(samples []CounterfactualSample, opts Options) (Estimate, error) {
 			ErrInsufficientSupport, est.ESS, minESS, est.Supporting)
 	}
 
-	est.Mean = weightedMean(values, weights)
+	all := make([]int, len(values))
+	for i := range all {
+		all[i] = i
+	}
+	est.Mean, _ = stats.WeightedMean(values, weights)(all)
 	est.Lo, est.Hi = bootstrapInterval(values, weights, level, resamples, opts.Seed)
 	est.Method = "self-normalized IPS, percentile bootstrap"
 	if math.IsInf(clip, 1) {
@@ -178,19 +182,6 @@ func Evaluate(samples []CounterfactualSample, opts Options) (Estimate, error) {
 		est.Method += fmt.Sprintf(", weights clipped at %g", clip)
 	}
 	return est, nil
-}
-
-// weightedMean is the self-normalised estimate: Σwv / Σw.
-func weightedMean(values, weights []float64) float64 {
-	var num, den float64
-	for i, w := range weights {
-		num += values[i] * w
-		den += w
-	}
-	if den == 0 {
-		return 0
-	}
-	return num / den
 }
 
 // effectiveSampleSize is Kish's (Σw)²/Σw². With equal weights it equals the
@@ -208,45 +199,10 @@ func effectiveSampleSize(weights []float64) float64 {
 }
 
 // bootstrapInterval resamples rows with replacement and returns the percentile
-// interval of the weighted mean.
-//
-// Seeded rather than randomly initialised: the same log must produce the same
+// interval of the weighted mean. Seeded: the same log must produce the same
 // interval twice, or a reader cannot tell a changed estimate from a rerun.
 func bootstrapInterval(values, weights []float64, level float64, resamples int, seed uint64) (lo, hi float64) {
-	n := len(values)
-	rng := rand.New(rand.NewPCG(seed, 0x9E3779B97F4A7C15))
-	means := make([]float64, 0, resamples)
-	for b := 0; b < resamples; b++ {
-		var num, den float64
-		for i := 0; i < n; i++ {
-			j := rng.IntN(n)
-			num += values[j] * weights[j]
-			den += weights[j]
-		}
-		if den > 0 {
-			means = append(means, num/den)
-		}
-	}
-	if len(means) == 0 {
-		return 0, 0
-	}
-	sort.Float64s(means)
+	b := stats.Resample(len(values), resamples, seed, stats.WeightedMean(values, weights))
 	tail := (1 - level) / 2
-	return percentile(means, tail), percentile(means, 1-tail)
-}
-
-// percentile reads a sorted slice at q using nearest-rank, which needs no
-// interpolation assumption about a distribution that is not normal anyway.
-func percentile(sorted []float64, q float64) float64 {
-	if len(sorted) == 0 {
-		return 0
-	}
-	i := int(q * float64(len(sorted)-1))
-	if i < 0 {
-		i = 0
-	}
-	if i >= len(sorted) {
-		i = len(sorted) - 1
-	}
-	return sorted[i]
+	return b.Quantile(tail), b.Quantile(1 - tail)
 }

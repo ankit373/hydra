@@ -115,6 +115,7 @@ floor internal/shellpath            84
 floor internal/signals              92
 floor internal/serve                 88
 floor internal/sketch               91
+floor internal/stats                95
 floor internal/swarm                89
 floor internal/sysinfo              82
 floor internal/testutil             81

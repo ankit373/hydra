@@ -78,6 +78,8 @@ internal/reliability/   ← Is a stated confidence honest? Brier + Murphy decomp
                           (stated confidence, recorded verdict) pairs. `hyctl trust reliability`.
 internal/ope/           ← Off-policy estimation: IPW over sampled logs, plus counterfactual policy
                           evaluation with bootstrap intervals. `hyctl trace evaluate`.
+internal/stats/         ← Pure maths shared by ope, entity and the benchmark harness: seeded paired
+                          bootstrap, Tango, exact McNemar, Clopper–Pearson, Wilson, pass^k (#1198).
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/embed/         ← Vectors from an embedding model already on the machine. No new dependency.
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.
