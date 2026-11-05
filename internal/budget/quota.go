@@ -21,15 +21,13 @@ const (
 // Quota is one scope's pressure. Session scopes only for now; limits in USD or
 // tokens arrive with the cost ledger that would enforce them.
 type Quota struct {
-	Scope       string  `json:"-"`
-	ContextFrac float64 `json:"context_frac"`      // 0..1
-	History     []int   `json:"history,omitempty"` // percent points, newest last, ≤ MaxPctHistory
+	Scope       string
+	ContextFrac float64 // 0..1
+	History     []int   // percent points, newest last, ≤ MaxPctHistory
 }
 
-// Pct clamps here so a hand-written out-of-range value cannot reach a caller.
-func (q Quota) Pct() int {
-	return min(max(int(math.Round(q.ContextFrac*100)), 0), 100)
-}
+// Pct is the level in whole percent, rounded the way the history is recorded.
+func (q Quota) Pct() int { return roundPct(q.ContextFrac * 100) }
 
 // Mode is the rate-aware governor mode for this quota.
 func (q Quota) Mode() Mode {
@@ -42,37 +40,73 @@ func (q Quota) Burn() (ratePct, risk float64) {
 	return RiskFromHistory(q.History)
 }
 
-// Quotas reads every quota in a state.json body: the `quotas` key, then the
-// legacy alias, which wins for SessionClaudeCode because the protocol still
-// writes it. Sorted by Scope; malformed JSON yields nil.
-func Quotas(state []byte) []Quota {
-	var m map[string]any
-	if err := json.Unmarshal(state, &m); err != nil {
-		return nil
+// State is state.json decoded once, for the governor and `hyctl status` alike.
+type State struct {
+	Quotas []Quota                   // sorted by Scope
+	Budget map[string]map[string]any // per-model snapshots, keyed by head ID
+}
+
+// ParseState reads a state.json body. A field of the wrong type reads as
+// absent rather than failing the file; malformed JSON yields the zero State.
+func ParseState(raw []byte) State {
+	var w struct {
+		Pct     any             `json:"claude_pct"`
+		History any             `json:"claude_pct_history"`
+		Quotas  json.RawMessage `json:"quotas"`
+		Budget  json.RawMessage `json:"budget"`
 	}
-	// A malformed `quotas` key leaves the alias; a malformed entry drops only itself.
-	var s struct {
-		Quotas map[string]json.RawMessage `json:"quotas"`
+	if json.Unmarshal(raw, &w) != nil {
+		return State{}
 	}
-	_ = json.Unmarshal(state, &s)
+	var s State
+	_ = json.Unmarshal(w.Budget, &s.Budget)
+
+	var entries map[string]json.RawMessage
+	_ = json.Unmarshal(w.Quotas, &entries)
 	byScope := map[string]Quota{}
-	for scope, raw := range s.Quotas {
-		var q Quota
-		if json.Unmarshal(raw, &q) != nil {
-			continue
+	for scope, raw := range entries {
+		if q, ok := parseQuota(scope, raw); ok {
+			byScope[scope] = q
 		}
-		q.Scope = scope
-		byScope[scope] = q
 	}
-	if q, ok := LegacySessionQuota(m); ok {
-		byScope[q.Scope] = q
+	// The alias fills the scope only when no explicit quota names it.
+	if _, explicit := byScope[SessionClaudeCode]; !explicit {
+		if q, ok := legacySessionQuota(w.Pct, w.History); ok {
+			byScope[SessionClaudeCode] = q
+		}
 	}
-	out := make([]Quota, 0, len(byScope))
 	for _, q := range byScope {
-		out = append(out, q)
+		s.Quotas = append(s.Quotas, q)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Scope < out[j].Scope })
-	return out
+	sort.Slice(s.Quotas, func(i, j int) bool { return s.Quotas[i].Scope < s.Quotas[j].Scope })
+	return s
+}
+
+// parseQuota rejects a fraction outside 0..1: a percent written there by
+// mistake must not read as an emergency.
+func parseQuota(scope string, raw json.RawMessage) (Quota, bool) {
+	var e struct {
+		ContextFrac *float64 `json:"context_frac"`
+		History     any      `json:"history"`
+	}
+	if json.Unmarshal(raw, &e) != nil || e.ContextFrac == nil || *e.ContextFrac < 0 || *e.ContextFrac > 1 {
+		return Quota{}, false
+	}
+	return Quota{Scope: scope, ContextFrac: *e.ContextFrac, History: parseHistory(e.History)}, true
+}
+
+// legacySessionQuota derives SessionClaudeCode from claude_pct and its history
+// on every read, so the next `jq` write needs no migration step.
+func legacySessionQuota(pct, history any) (Quota, bool) {
+	level, ok := pct.(float64)
+	if !ok {
+		return Quota{}, false
+	}
+	return Quota{
+		Scope:       SessionClaudeCode,
+		ContextFrac: float64(roundPct(level)) / 100,
+		History:     parseHistory(history),
+	}, true
 }
 
 // Governing is the most urgent quota (highest Mode, ties by Scope), ok=false
@@ -90,49 +124,39 @@ func Governing(qs []Quota) (Quota, bool) {
 	return best, found
 }
 
-// LegacySessionQuota derives SessionClaudeCode from claude_pct and its history
-// on every read, so the next `jq` write needs no migration step.
-func LegacySessionQuota(state map[string]any) (Quota, bool) {
-	pct, ok := state[legacyPctKey].(float64)
-	if !ok {
-		return Quota{}, false
-	}
-	return Quota{
-		Scope:       SessionClaudeCode,
-		ContextFrac: pct / 100,
-		History:     asIntSlice(state[legacyHistoryKey]),
-	}, true
-}
-
 // MirrorLegacyHistory appends the orchestrator's level to its bounded history,
 // so the rate-aware governor and the frozen legacy readers see the trajectory.
 func MirrorLegacyHistory(state map[string]any) {
-	if pct := asInt(state[legacyPctKey]); pct > 0 {
+	pct, ok := state[legacyPctKey].(float64)
+	if !ok {
+		return
+	}
+	if level := roundPct(pct); level > 0 {
 		state[legacyHistoryKey] = AppendPctHistory(
-			asIntSlice(state[legacyHistoryKey]), pct, MaxPctHistory)
+			parseHistory(state[legacyHistoryKey]), level, MaxPctHistory)
 	}
 }
 
-// asInt coerces a value decoded from JSON (numbers arrive as float64) to an int.
-func asInt(v any) int {
-	switch x := v.(type) {
-	case float64:
-		return int(x)
-	case int:
-		return x
-	}
-	return 0
-}
-
-// asIntSlice coerces a JSON-decoded array (elements arrive as float64) to []int.
-func asIntSlice(v any) []int {
+// parseHistory takes a JSON-decoded series. One non-numeric point makes the
+// whole series unknown: a null read as 0 would fake a burst of burn.
+func parseHistory(v any) []int {
 	raw, ok := v.([]any)
 	if !ok {
 		return nil
 	}
 	out := make([]int, 0, len(raw))
 	for _, e := range raw {
-		out = append(out, asInt(e))
+		f, ok := e.(float64)
+		if !ok {
+			return nil
+		}
+		out = append(out, roundPct(f))
 	}
 	return out
+}
+
+// roundPct is the one rounding from a percentage to a level, so the level and
+// its newest history point never disagree.
+func roundPct(v float64) int {
+	return min(max(int(math.Round(v)), 0), 100)
 }

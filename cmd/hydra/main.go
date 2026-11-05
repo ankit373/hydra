@@ -706,12 +706,22 @@ func printBudgetStatus(names map[string]string) {
 	if err != nil {
 		return
 	}
-	// One line per quota, each with its rate-aware mode: a fast burn escalates
-	// above the static level band before it crosses a line.
-	for _, q := range budget.Quotas(raw) {
+	state := budget.ParseState(raw)
+
+	// One line per quota with a level, each with its rate-aware mode: a fast
+	// burn escalates above the static level band before it crosses a line.
+	var shown []budget.Quota
+	width := 0
+	for _, q := range state.Quotas {
+		if q.Pct() > 0 {
+			shown = append(shown, q)
+			width = max(width, len(q.Scope))
+		}
+	}
+	for _, q := range shown {
 		pct, eff := q.Pct(), q.Mode()
 		line := fmt.Sprintf("  %s  %s %3d%%  %s",
-			dimStyle.Render(q.Scope),
+			dimStyle.Render(fmt.Sprintf("%-*s", width, q.Scope)),
 			budgetBar(pct), pct, budgetModeStyle(eff.String()).Render(eff.String()),
 		)
 		if eff > budget.ModeFor(pct) {
@@ -720,13 +730,6 @@ func printBudgetStatus(names map[string]string) {
 				burnRate, risk*100))
 		}
 		fmt.Println(line)
-	}
-
-	var state struct {
-		Budget map[string]map[string]any `json:"budget"`
-	}
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return
 	}
 
 	if len(state.Budget) == 0 {
@@ -793,7 +796,7 @@ func budgetBar(pct int) string {
 		filled = width
 	}
 	// state.json is written by another process, and by hand, per the
-	// orchestrator protocol's `jq` write. A negative value there
+	// orchestrator protocol's `jq '.claude_pct = 52'`. A negative value there
 	// reached strings.Repeat with a negative count, which panics: `hyctl status`
 	// crashed on a malformed field it only meant to display.
 	if filled < 0 {

@@ -533,19 +533,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	// Apply quota preservation, may downgrade tier or abort.
 	tier, q, mode := d.quotaMode(hint)
-	switch mode {
-	case budget.ModeEmergency:
-		log.Printf("🚨 EMERGENCY: %s at %d%%, routing to local tier only. Start a new session.", q.Scope, q.Pct())
+	if line := governorLog(q, mode); line != "" {
+		log.Print(line)
+	}
+	if mode == budget.ModeEmergency {
 		tier = "10"
 		opts.LocalOnly = true
-	case budget.ModeCritical:
-		log.Printf("🔴 CRITICAL: %s at %d%%, downgrading tier by 2. Run /compact NOW.", q.Scope, q.Pct())
-	case budget.ModeWarning:
-		log.Printf("🟠 WARNING: %s at %d%%, downgrading tier by 1. Run /compact now.", q.Scope, q.Pct())
-	case budget.ModeCaution:
-		log.Printf("🟡 CAUTION: %s at %d%%, Run /compact immediately.", q.Scope, q.Pct())
-	case budget.ModeCompact:
-		log.Printf("ℹ️  %s at %d%%, Consider running /compact.", q.Scope, q.Pct())
 	}
 
 	// Inject A2A handoff context into prompt if provided. --a2a names a file the
@@ -986,7 +979,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 // downgrades before the static band would; no quota at all is ModeNormal.
 func (d *Dispatcher) quotaMode(tierHint string) (string, budget.Quota, budget.Mode) {
 	raw, _ := os.ReadFile(filepath.Join(config.Dir(), "logs", "state.json"))
-	q, ok := budget.Governing(budget.Quotas(raw))
+	q, ok := budget.Governing(budget.ParseState(raw).Quotas)
 	mode := budget.ModeNormal
 	if ok {
 		mode = q.Mode()
@@ -1012,6 +1005,30 @@ func (d *Dispatcher) quotaMode(tierHint string) (string, budget.Quota, budget.Mo
 		t = maxTier
 	}
 	return strconv.Itoa(t), q, mode
+}
+
+// governorLog is the line a governed dispatch logs. /compact and a new session
+// are Claude Code's remedies, so any other scope is told only what routing did.
+func governorLog(q budget.Quota, mode budget.Mode) string {
+	var line, advice string
+	switch mode {
+	case budget.ModeEmergency:
+		line, advice = "🚨 EMERGENCY: %s at %d%%, routing to local tier only.", " Start a new session."
+	case budget.ModeCritical:
+		line, advice = "🔴 CRITICAL: %s at %d%%, downgrading tier by 2.", " Run /compact NOW."
+	case budget.ModeWarning:
+		line, advice = "🟠 WARNING: %s at %d%%, downgrading tier by 1.", " Run /compact now."
+	case budget.ModeCaution:
+		line, advice = "🟡 CAUTION: %s at %d%%.", " Run /compact immediately."
+	case budget.ModeCompact:
+		line, advice = "ℹ️  %s at %d%%.", " Consider running /compact."
+	default:
+		return ""
+	}
+	if q.Scope == budget.SessionClaudeCode {
+		line += advice
+	}
+	return fmt.Sprintf(line, q.Scope, q.Pct())
 }
 
 // handoffFiles is the file set a handoff records, so the next agent's

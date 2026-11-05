@@ -391,6 +391,33 @@ func TestToFloat(t *testing.T) {
 	}
 }
 
+// A quota at 0% is no reading worth a line, as claude_pct at 0 never had one;
+// the lines that are shown align their bars whatever the scope's length.
+func TestPrintBudgetStatus_HidesEmptyQuotasAndAlignsScopes(t *testing.T) {
+	testutil.NewSandbox(t)
+	dir := filepath.Join(config.Dir(), "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state := `{"claude_pct":30,"quotas":{"session:x":{"context_frac":0.5},"session:idle":{"context_frac":0}}}`
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := stripANSICodes(captureStdout(t, func() { printBudgetStatus(nil) }))
+	if strings.Contains(out, "session:idle") {
+		t.Errorf("a quota at 0%% was printed:\n%s", out)
+	}
+	var cols []int
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "session:") {
+			cols = append(cols, strings.IndexAny(line, "█░"))
+		}
+	}
+	if len(cols) != 2 || cols[0] != cols[1] {
+		t.Errorf("want two quota lines with bars in one column, got columns %v:\n%s", cols, out)
+	}
+}
+
 // printBudgetStatus reads state.json written by another process. It must
 // survive every shape that file can be in.
 func TestPrintBudgetStatus_SurvivesEveryStateShape(t *testing.T) {

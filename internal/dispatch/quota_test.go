@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -105,41 +106,71 @@ func TestQuotaMode_EmergencyStillForcesLocal(t *testing.T) {
 	}
 }
 
-// Every dispatch read-modify-writes state.json; under concurrency the mirrored
-// history must stay bounded or the governor's rate signal grows without limit.
-func TestSyncStateJSON_ConcurrentMirrorKeepsHistoryBounded(t *testing.T) {
+// Concurrent dispatches read-modify-write state.json while the orchestrator
+// writes its level. A sync that wrote back a stale read would roll the level
+// back and leave a history whose newest point is not the level on disk.
+func TestSyncStateJSON_ConcurrentMirrorNeverRollsTheLevelBack(t *testing.T) {
 	testutil.NewSandbox(t)
-	full := make([]int, budget.MaxPctHistory) // already at the bound, so any unbounded append shows
-	for i := range full {
-		full[i] = i + 1
-	}
-	writeStatePct(t, 10, full)
+	writeStatePct(t, 10, nil)
 	path := filepath.Join(config.Dir(), "logs", "state.json")
 	d := &Dispatcher{}
 
+	const writers, rounds = 32, 16
+	writes, last, rolledBack := 0, 10, 0 // guarded by stateMu
 	var wg sync.WaitGroup
-	for i := range 16 {
+	for i := range writers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// A distinct level per writer, so every sync has something to append.
-			stateMu.Lock()
-			raw, _ := os.ReadFile(path)
-			m := map[string]any{}
-			_ = json.Unmarshal(raw, &m)
-			m["claude_pct"] = 20 + i
-			raw, _ = json.Marshal(m)
-			_ = os.WriteFile(path, raw, 0o600)
-			stateMu.Unlock()
-			d.syncStateJSON(&Result{Head: provider.Head{ID: fmt.Sprintf("h%d", i)}})
+			for range rounds {
+				stateMu.Lock()
+				raw, _ := os.ReadFile(path)
+				m := map[string]any{}
+				_ = json.Unmarshal(raw, &m)
+				if m["claude_pct"] != float64(last) {
+					rolledBack++
+				}
+				writes++
+				last = 1 + writes%99
+				m["claude_pct"] = last
+				raw, _ = json.Marshal(m)
+				_ = os.WriteFile(path, raw, 0o600)
+				stateMu.Unlock()
+				d.syncStateJSON(&Result{Head: provider.Head{ID: fmt.Sprintf("h%d", i)}})
+			}
 		}()
 	}
 	wg.Wait()
 
-	hist, _ := readState(t)["claude_pct_history"].([]any)
-	if len(hist) == 0 || len(hist) > budget.MaxPctHistory {
-		t.Errorf("claude_pct_history has %d entries after 16 concurrent syncs, want 1..%d: %v",
-			len(hist), budget.MaxPctHistory, hist)
+	if rolledBack > 0 {
+		t.Errorf("%d of %d writes found the level on disk rolled back by a sync's stale write", rolledBack, writes)
+	}
+	state := readState(t)
+	hist, _ := state["claude_pct_history"].([]any)
+	if state["claude_pct"] != float64(last) || len(hist) == 0 || hist[len(hist)-1] != float64(last) {
+		t.Errorf("after %d concurrent syncs the last level written was %d, but state.json holds "+
+			"claude_pct=%v with history %v", writes, last, state["claude_pct"], hist)
+	}
+}
+
+// The /compact and new-session advice is Claude Code's remedy; another scope
+// has no such command, so it must be told only what routing did.
+func TestGovernorLog_AdvisesOnlyTheClaudeCodeSession(t *testing.T) {
+	for _, mode := range []budget.Mode{budget.ModeCompact, budget.ModeCaution, budget.ModeWarning,
+		budget.ModeCritical, budget.ModeEmergency} {
+		claude := governorLog(budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.8}, mode)
+		other := governorLog(budget.Quota{Scope: "session:codex", ContextFrac: 0.8}, mode)
+		if !strings.Contains(claude, "session:claude-code at 80%") ||
+			!(strings.Contains(claude, "/compact") || strings.Contains(claude, "new session")) {
+			t.Errorf("%s for claude-code = %q, want the scope, level and its remedy", mode, claude)
+		}
+		if !strings.Contains(other, "session:codex at 80%") ||
+			strings.Contains(other, "/compact") || strings.Contains(other, "session.") {
+			t.Errorf("%s for another scope = %q, want the scope and level with no Claude Code advice", mode, other)
+		}
+	}
+	if got := governorLog(budget.Quota{Scope: budget.SessionClaudeCode}, budget.ModeNormal); got != "" {
+		t.Errorf("normal mode logged %q, want nothing", got)
 	}
 }
 
