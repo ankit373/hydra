@@ -708,15 +708,15 @@ func printBudgetStatus(names map[string]string) {
 	}
 	state := budget.ParseState(raw)
 
-	// One line per quota with a level, each with its rate-aware mode: a fast
-	// burn escalates above the static level band before it crosses a line.
+	// The session quota with its rate-aware mode, labelled as it always was: a
+	// fast burn escalates above the static level band before it crosses a line.
 	for _, q := range state.Quotas {
 		pct, eff := q.Pct(), q.Mode()
 		if pct <= 0 {
 			continue
 		}
 		line := fmt.Sprintf("  %s  %s %3d%%  %s",
-			dimStyle.Render(q.Scope),
+			dimStyle.Render("Claude  :"),
 			budgetBar(pct), pct, budgetModeStyle(eff.String()).Render(eff.String()),
 		)
 		if eff > budget.ModeFor(pct) {

@@ -29,6 +29,11 @@ func TestParseState_ReadsEveryShape(t *testing.T) {
 		{"claude_pct over 100 clamps to 100", `{"claude_pct":140}`,
 			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 1}}},
 		{"string claude_pct is absent", `{"claude_pct":"fifty"}`, nil},
+		// develop decoded claude_pct as an int, so a fraction was unset; dispatch
+		// and the frozen TUI and desktop must keep agreeing on that.
+		{"a fractional claude_pct is unset", `{"claude_pct":79.6}`, nil},
+		{"a huge claude_pct clamps before conversion", `{"claude_pct":1e19}`,
+			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 1}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ParseState([]byte(tc.state)).Quotas
@@ -42,7 +47,7 @@ func TestParseState_ReadsEveryShape(t *testing.T) {
 // One bad point used to read as 0, a 60-point drop and recovery that faked a
 // burn; the whole series is unknown instead, so the level band governs alone.
 func TestParseState_NonNumericHistoryIsNoHistory(t *testing.T) {
-	for _, hist := range []string{`[60,null,62]`, `[60,"x",62]`, `"60,62"`} {
+	for _, hist := range []string{`[60,null,62]`, `[60,"x",62]`, `[60,61.5,62]`, `"60,62"`} {
 		qs := ParseState([]byte(`{"claude_pct":62,"claude_pct_history":` + hist + `}`)).Quotas
 		if len(qs) != 1 || qs[0].History != nil || qs[0].Mode() != ModeCompact {
 			t.Errorf("history %s: got %+v, want no history and mode compact", hist, qs)
@@ -64,12 +69,12 @@ func TestParseState_IgnoresTheQuotasKey(t *testing.T) {
 	}
 }
 
-// The table is decoded only on demand; a non-object entry is skipped rather
-// than rendered as an empty row, and a malformed table costs nothing else.
+// The table is decoded only on demand. A null entry stays an empty row, as it
+// always rendered; a non-object entry is skipped; a malformed table costs nothing else.
 func TestParseState_Budget(t *testing.T) {
 	got := ParseState([]byte(`{"budget":{"m":{"pct":40},"bad":"x","gone":null}}`)).Budget()
-	if len(got) != 1 || got["m"]["pct"] != float64(40) {
-		t.Errorf("Budget() = %v, want only m at 40", got)
+	if _, gone := got["gone"]; len(got) != 2 || got["m"]["pct"] != float64(40) || !gone {
+		t.Errorf("Budget() = %v, want m at 40 and gone as an empty row, without bad", got)
 	}
 	if s := ParseState([]byte(`{"claude_pct":30,"budget":"x"}`)); len(s.Budget()) != 0 || len(s.Quotas) != 1 {
 		t.Errorf("a malformed budget key cost the quotas or read as a table: %+v", s)
@@ -110,12 +115,19 @@ func TestMirrorLegacyHistory(t *testing.T) {
 		t.Error("an unknown level of 0 started a history")
 	}
 
+	// The writer reads the level as the reader does: a fraction is unset, so it
+	// adds no point the governor would never see as a level.
 	frac := map[string]any{"claude_pct": 79.6}
 	MirrorLegacyHistory(frac)
-	hist, _ := frac["claude_pct_history"].([]int)
-	level := ParseState([]byte(`{"claude_pct":79.6}`)).Quotas[0].Pct()
-	if level != 80 || len(hist) != 1 || hist[0] != 80 {
-		t.Errorf("claude_pct 79.6: level %d, newest history point %v; want both 80", level, hist)
+	if _, ok := frac["claude_pct_history"]; ok {
+		t.Errorf("a fractional claude_pct started a history: %v", frac["claude_pct_history"])
+	}
+	whole := map[string]any{"claude_pct": float64(29)}
+	MirrorLegacyHistory(whole)
+	hist, _ := whole["claude_pct_history"].([]int)
+	level := ParseState([]byte(`{"claude_pct":29}`)).Quotas[0].Pct()
+	if level != 29 || len(hist) != 1 || hist[0] != 29 {
+		t.Errorf("claude_pct 29: level %d, newest history point %v; want both 29", level, hist)
 	}
 }
 

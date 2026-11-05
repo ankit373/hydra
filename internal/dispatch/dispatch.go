@@ -1003,32 +1003,29 @@ func (d *Dispatcher) quotaMode(tierHint string) (string, budget.Quota, budget.Mo
 	return strconv.Itoa(t), q, mode
 }
 
-// governorLog is the line a governed dispatch logs. It claims a downgrade only
-// when the tier moved, and gives Claude Code's remedies only to its own scope.
+// governorLog keeps the wording users already know; session:claude-code is the
+// only scope at checkpoint A. A downgrade is claimed only when the tier moved.
 func governorLog(q budget.Quota, mode budget.Mode, fromTier, toTier string) string {
-	var label, action, advice string
+	moved := fromTier != toTier
 	switch mode {
 	case budget.ModeEmergency:
-		label, action, advice = "🚨 EMERGENCY", ", routing to local tier only", " Start a new session."
+		return fmt.Sprintf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", q.Pct())
 	case budget.ModeCritical:
-		label, advice = "🔴 CRITICAL", " Run /compact NOW."
+		if moved {
+			return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", q.Pct())
+		}
+		return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%. Run /compact NOW.", q.Pct())
 	case budget.ModeWarning:
-		label, advice = "🟠 WARNING", " Run /compact now."
+		if moved {
+			return fmt.Sprintf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", q.Pct())
+		}
+		return fmt.Sprintf("🟠 WARNING: Claude at %d%%. Run /compact now.", q.Pct())
 	case budget.ModeCaution:
-		label, advice = "🟡 CAUTION", " Run /compact immediately."
+		return fmt.Sprintf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", q.Pct())
 	case budget.ModeCompact:
-		label, advice = "ℹ️  NOTE", " Consider running /compact."
-	default:
-		return ""
+		return fmt.Sprintf("ℹ️  Claude at %d%%, Consider running /compact.", q.Pct())
 	}
-	if action == "" && fromTier != toTier {
-		action = fmt.Sprintf(", downgrading tier %s → %s", fromTier, toTier)
-	}
-	line := fmt.Sprintf("%s: %s at %d%%%s.", label, q.Scope, q.Pct(), action)
-	if q.Scope == budget.SessionClaudeCode {
-		line += advice
-	}
-	return line
+	return ""
 }
 
 // handoffFiles is the file set a handoff records, so the next agent's

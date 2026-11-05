@@ -152,24 +152,21 @@ func TestSyncStateJSON_InProcessSyncsNeverRollTheLevelBack(t *testing.T) {
 	}
 }
 
-// The /compact and new-session advice is Claude Code's remedy; another scope
-// has no such command, so it must be told only what routing did.
-func TestGovernorLog_AdvisesOnlyTheClaudeCodeSession(t *testing.T) {
-	for _, mode := range []budget.Mode{budget.ModeCompact, budget.ModeCaution, budget.ModeWarning,
-		budget.ModeCritical, budget.ModeEmergency} {
-		claude := governorLog(budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.8}, mode, "3", "3")
-		other := governorLog(budget.Quota{Scope: "session:codex", ContextFrac: 0.8}, mode, "3", "3")
-		if !strings.Contains(claude, "session:claude-code at 80%") ||
-			!(strings.Contains(claude, "/compact") || strings.Contains(claude, "new session")) {
-			t.Errorf("%s for claude-code = %q, want the scope, level and its remedy", mode, claude)
+// The governor's lines are what users already read; these are develop's
+// strings verbatim (dispatch.go at b76d105), for a tier that moved.
+func TestGovernorLog_KeepsDevelopsWording(t *testing.T) {
+	q := budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.77}
+	for mode, want := range map[budget.Mode]string{
+		budget.ModeEmergency: "🚨 EMERGENCY: Claude at 77%, routing to local tier only. Start a new session.",
+		budget.ModeCritical:  "🔴 CRITICAL: Claude at 77%, downgrading tier by 2. Run /compact NOW.",
+		budget.ModeWarning:   "🟠 WARNING: Claude at 77%, downgrading tier by 1. Run /compact now.",
+		budget.ModeCaution:   "🟡 CAUTION: Claude at 77%, Run /compact immediately.",
+		budget.ModeCompact:   "ℹ️  Claude at 77%, Consider running /compact.",
+		budget.ModeNormal:    "",
+	} {
+		if got := governorLog(q, mode, "3", "5"); got != want {
+			t.Errorf("%s logged %q, want develop's %q", mode, got, want)
 		}
-		if !strings.Contains(other, "session:codex at 80%") ||
-			strings.Contains(other, "/compact") || strings.Contains(other, "session.") {
-			t.Errorf("%s for another scope = %q, want the scope and level with no Claude Code advice", mode, other)
-		}
-	}
-	if got := governorLog(budget.Quota{Scope: budget.SessionClaudeCode}, budget.ModeNormal, "3", "3"); got != "" {
-		t.Errorf("normal mode logged %q, want nothing", got)
 	}
 }
 
@@ -177,13 +174,14 @@ func TestGovernorLog_AdvisesOnlyTheClaudeCodeSession(t *testing.T) {
 // "") or one already at the floor has nothing to downgrade.
 func TestGovernorLog_ClaimsADowngradeOnlyWhenTheTierMoved(t *testing.T) {
 	q := budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.77}
-	for _, tc := range []struct{ from, to string }{{"", ""}, {"10", "10"}} {
-		if got := governorLog(q, budget.ModeCritical, tc.from, tc.to); strings.Contains(got, "downgrading") {
-			t.Errorf("tier %q → %q logged %q, which claims a downgrade that did not happen", tc.from, tc.to, got)
+	for _, mode := range []budget.Mode{budget.ModeCritical, budget.ModeWarning} {
+		for _, tc := range []struct{ from, to string }{{"", ""}, {"10", "10"}} {
+			if got := governorLog(q, mode, tc.from, tc.to); strings.Contains(got, "downgrading") ||
+				!strings.Contains(got, "Claude at 77%") {
+				t.Errorf("%s, tier %q → %q logged %q, which claims a downgrade that did not happen",
+					mode, tc.from, tc.to, got)
+			}
 		}
-	}
-	if got := governorLog(q, budget.ModeCritical, "3", "5"); !strings.Contains(got, "downgrading tier 3 → 5") {
-		t.Errorf("tier 3 → 5 logged %q, want the downgrade it made", got)
 	}
 }
 

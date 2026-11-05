@@ -25,8 +25,9 @@ type Quota struct {
 	History     []int   // percent points, newest last, ≤ MaxPctHistory
 }
 
-// Pct is the level in whole percent, rounded the way the history is recorded.
-func (q Quota) Pct() int { return roundPct(q.ContextFrac * 100) }
+// Pct is the level in whole percent. Rounding undoes the float error of
+// level/100*100, which would otherwise truncate 29 to 28.
+func (q Quota) Pct() int { return int(math.Round(q.ContextFrac * 100)) }
 
 // Mode is the rate-aware governor mode for this quota.
 func (q Quota) Mode() Mode {
@@ -46,14 +47,15 @@ type State struct {
 }
 
 // Budget is the per-model snapshot table keyed by head ID, decoded on demand
-// because the dispatch path never reads it. A non-object entry is skipped.
+// because the dispatch path never reads it. A null entry stays an empty row,
+// as it always rendered; a non-object entry is skipped.
 func (s State) Budget() map[string]map[string]any {
 	var entries map[string]json.RawMessage
 	_ = json.Unmarshal(s.budget, &entries)
 	out := map[string]map[string]any{}
 	for id, raw := range entries {
 		var snap map[string]any
-		if json.Unmarshal(raw, &snap) == nil && snap != nil {
+		if json.Unmarshal(raw, &snap) == nil {
 			out[id] = snap
 		}
 	}
@@ -81,13 +83,13 @@ func ParseState(raw []byte) State {
 // legacySessionQuota derives SessionClaudeCode from claude_pct and its history
 // on every read, so the next `jq` write needs no migration step.
 func legacySessionQuota(pct, history any) (Quota, bool) {
-	level, ok := pct.(float64)
+	level, ok := legacyLevel(pct)
 	if !ok {
 		return Quota{}, false
 	}
 	return Quota{
 		Scope:       SessionClaudeCode,
-		ContextFrac: float64(roundPct(level)) / 100,
+		ContextFrac: float64(level) / 100,
 		History:     parseHistory(history),
 	}, true
 }
@@ -107,18 +109,14 @@ func Governing(qs []Quota) (q Quota, mode Mode, ok bool) {
 // MirrorLegacyHistory appends the orchestrator's level to its bounded history,
 // so the rate-aware governor and the frozen legacy readers see the trajectory.
 func MirrorLegacyHistory(state map[string]any) {
-	pct, ok := state[legacyPctKey].(float64)
-	if !ok {
-		return
-	}
-	if level := roundPct(pct); level > 0 {
+	if level, ok := legacyLevel(state[legacyPctKey]); ok && level > 0 {
 		state[legacyHistoryKey] = AppendPctHistory(
 			parseHistory(state[legacyHistoryKey]), level, MaxPctHistory)
 	}
 }
 
-// parseHistory takes a JSON-decoded series. One non-numeric point makes the
-// whole series unknown: a null read as 0 would fake a burst of burn.
+// parseHistory takes a JSON-decoded series. One point that is not a whole
+// number makes the series unknown: a null read as 0 would fake a burst of burn.
 func parseHistory(v any) []int {
 	raw, ok := v.([]any)
 	if !ok {
@@ -126,17 +124,21 @@ func parseHistory(v any) []int {
 	}
 	out := make([]int, 0, len(raw))
 	for _, e := range raw {
-		f, ok := e.(float64)
+		level, ok := legacyLevel(e)
 		if !ok {
 			return nil
 		}
-		out = append(out, roundPct(f))
+		out = append(out, level)
 	}
 	return out
 }
 
-// roundPct is the one rounding from a percentage to a level, so the level and
-// its newest history point never disagree.
-func roundPct(v float64) int {
-	return min(max(int(math.Round(v)), 0), 100)
+// legacyLevel reads a legacy percentage as the int it always was: a fraction is
+// unset, and the clamp runs before conversion so a huge value cannot overflow.
+func legacyLevel(v any) (int, bool) {
+	f, ok := v.(float64)
+	if !ok || f != math.Trunc(f) {
+		return 0, false
+	}
+	return int(min(max(f, 0), 100)), true
 }
