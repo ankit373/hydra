@@ -14,7 +14,7 @@ import (
 
 // benchDispatcher returns a Dispatcher pre-loaded with a realistic head list
 // and tier config. No real API keys or file I/O needed, this is the pure
-// routing path (policy eval + claudeMode + selectHeads).
+// routing path (policy eval + quotaMode + selectHeads).
 func benchDispatcher() *Dispatcher {
 	heads := []provider.Head{
 		{ID: "claude-core", Name: "claude-opus-4-7", Provider: "anthropic", CapScore: 100, AuthReady: true},
@@ -59,19 +59,19 @@ func BenchmarkClaudeMode(b *testing.B) {
 	d := benchDispatcher()
 	b.ResetTimer()
 	for range b.N {
-		_, _, _ = d.claudeMode("7")
+		_, _, _ = d.quotaMode("7")
 	}
 }
 
 // BenchmarkRoutingPath measures the full pre-execution routing path:
-// claudeMode + policy.Evaluate + selectHeads. This is the number that
+// quotaMode + policy.Evaluate + selectHeads. This is the number that
 // appears on the landing page as "route overhead".
 func BenchmarkRoutingPath(b *testing.B) {
 	d := benchDispatcher()
 	prompt := "write a User DTO for profile settings"
 	b.ResetTimer()
 	for range b.N {
-		tier, _, _ := d.claudeMode("7")
+		tier, _, _ := d.quotaMode("7")
 		req := policy.Request{Prompt: prompt, TierHint: tier}
 		action := d.policy.Evaluate(req)
 		if !action.Deny {

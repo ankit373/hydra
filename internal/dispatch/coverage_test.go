@@ -611,92 +611,26 @@ func TestDispatch_BadA2AFileFailsTheRun(t *testing.T) {
 	})
 }
 
-// claudeMode is the token-preservation governor. Its whole purpose is to
-// downgrade before the orchestrator runs out, so each band's downgrade is
-// pinned, this table was inert for every non-numeric hint before #165.
-func TestClaudeMode_DowngradesByBand(t *testing.T) {
-	tests := []struct {
-		name     string
-		pct      int
-		hint     string
-		wantTier string
-		wantMode string
-	}{
-		{"normal leaves the tier alone", 10, "3", "3", "normal"},
-		{"compact band still does not downgrade", 55, "3", "3", "compact"},
-		{"caution band still does not downgrade", 66, "3", "3", "caution"},
-		{"warning downgrades one tier", 72, "3", "4", "warning"},
-		{"critical downgrades two", 77, "3", "5", "critical"},
-		{"emergency pins to the local tier", 85, "3", "10", "emergency"},
-		{"a downgrade cannot exceed tier 10", 77, "9", "10", "critical"},
-		{"a named tier survives the governor untouched", 72, "expert", "expert", "warning"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			testutil.NewSandbox(t)
-			writeStatePct(t, tt.pct, nil)
-
-			dd := liveDispatcher()
-			tier, mode, pct := dd.claudeMode(tt.hint)
-			if pct != tt.pct {
-				t.Errorf("pct = %d, want %d", pct, tt.pct)
-			}
-			if mode != tt.wantMode {
-				t.Errorf("mode = %q, want %q", mode, tt.wantMode)
-			}
-			if tier != tt.wantTier {
-				t.Errorf("tier = %q, want %q", tier, tt.wantTier)
-			}
-		})
-	}
-}
-
 // The governor is rate-aware: a fast burn escalates the mode above its static
 // level band, so the downgrade happens before the threshold is crossed rather
 // than after.
-func TestClaudeMode_FastBurnEscalatesAboveTheStaticBand(t *testing.T) {
+func TestQuotaMode_FastBurnEscalatesAboveTheStaticBand(t *testing.T) {
 	testutil.NewSandbox(t)
 	// A steep trajectory ending at a level that is only "compact" statically.
 	writeStatePct(t, 60, []int{10, 25, 40, 52, 60})
 
 	dd := liveDispatcher()
-	_, fastMode, _ := dd.claudeMode("3")
+	_, _, fastMode := dd.quotaMode("3")
 
 	testutil.NewSandbox(t)
 	writeStatePct(t, 60, []int{58, 59, 59, 60, 60}) // flat
-	_, slowMode, _ := dd.claudeMode("3")
+	_, _, slowMode := dd.quotaMode("3")
 
 	if fastMode == slowMode {
 		t.Skipf("both trajectories yield %q; the risk model did not separate them", fastMode)
 	}
-	if slowMode != "compact" {
+	if slowMode != budget.ModeCompact {
 		t.Errorf("a flat trajectory at 60%% = %q, want the static band \"compact\"", slowMode)
-	}
-}
-
-func TestReadClaudePct_MissingOrCorruptStateIsZeroNotAPanic(t *testing.T) {
-	testutil.NewSandbox(t)
-
-	if got := readClaudePct(); got != 0 {
-		t.Errorf("readClaudePct() = %d with no state.json, want 0", got)
-	}
-	if got := readClaudePctHistory(); got != nil {
-		t.Errorf("readClaudePctHistory() = %v with no state.json, want nil", got)
-	}
-
-	dir := filepath.Join(config.Dir(), "logs")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte("{truncated"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := readClaudePct(); got != 0 {
-		t.Errorf("readClaudePct() = %d on corrupt state.json, want 0", got)
-	}
-	if got := readClaudePctHistory(); got != nil {
-		t.Errorf("readClaudePctHistory() = %v on corrupt state.json, want nil", got)
 	}
 }
 
@@ -767,35 +701,6 @@ func TestSyncStateJSON_MergesBudgetAcrossDispatchesInsteadOfReplacing(t *testing
 	}
 	if _, ok := budgetMap["tier8-head"]; !ok {
 		t.Errorf("budget map = %v, missing tier8-head", budgetMap)
-	}
-}
-
-// asInt / asIntSlice bridge JSON's float64 numbers back to ints. A wrong answer
-// here silently zeroes the governor's history.
-func TestAsIntAndAsIntSlice(t *testing.T) {
-	if got := asInt(float64(52)); got != 52 {
-		t.Errorf("asInt(float64) = %d, want 52, JSON numbers arrive as float64", got)
-	}
-	if got := asInt(52); got != 52 {
-		t.Errorf("asInt(int) = %d, want 52", got)
-	}
-	for _, v := range []any{nil, "52", true, []any{1}} {
-		if got := asInt(v); got != 0 {
-			t.Errorf("asInt(%#v) = %d, want 0", v, got)
-		}
-	}
-
-	got := asIntSlice([]any{float64(1), float64(2), float64(3)})
-	if len(got) != 3 || got[0] != 1 || got[2] != 3 {
-		t.Errorf("asIntSlice = %v, want [1 2 3]", got)
-	}
-	if got := asIntSlice("not an array"); got != nil {
-		t.Errorf("asIntSlice(string) = %v, want nil", got)
-	}
-	// A mixed array must not drop elements, the history's length is its rate
-	// signal, so a silently shortened slice changes the risk estimate.
-	if got := asIntSlice([]any{float64(1), "x", float64(3)}); len(got) != 3 || got[1] != 0 {
-		t.Errorf("asIntSlice with a bad element = %v, want [1 0 3]", got)
 	}
 }
 

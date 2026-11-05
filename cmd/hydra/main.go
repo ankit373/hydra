@@ -706,31 +706,27 @@ func printBudgetStatus(names map[string]string) {
 	if err != nil {
 		return
 	}
-	var state struct {
-		ClaudePct        int                       `json:"claude_pct"`
-		ClaudePctHistory []int                     `json:"claude_pct_history"`
-		Budget           map[string]map[string]any `json:"budget"`
-	}
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return
-	}
-
-	// claude_pct block (orchestrator context window). When enough history has
-	// accumulated, show the rate-aware effective mode (first-passage risk), a
-	// fast burn escalates above the static level band before it crosses a line.
-	if state.ClaudePct > 0 {
-		burnRate, risk := budget.RiskFromHistory(state.ClaudePctHistory)
-		eff := budget.EffectiveMode(state.ClaudePct, risk)
-		bar := budgetBar(state.ClaudePct)
+	// One line per quota, each with its rate-aware mode: a fast burn escalates
+	// above the static level band before it crosses a line.
+	for _, q := range budget.Quotas(raw) {
+		pct, eff := q.Pct(), q.Mode()
 		line := fmt.Sprintf("  %s  %s %3d%%  %s",
-			dimStyle.Render("Claude  :"),
-			bar, state.ClaudePct, budgetModeStyle(eff.String()).Render(eff.String()),
+			dimStyle.Render(q.Scope),
+			budgetBar(pct), pct, budgetModeStyle(eff.String()).Render(eff.String()),
 		)
-		if eff > budget.ModeFor(state.ClaudePct) {
+		if eff > budget.ModeFor(pct) {
+			burnRate, risk := q.Burn()
 			line += "  " + dimStyle.Render(fmt.Sprintf("↑ burning +%.0f%%/step, %.0f%% risk of 80%%",
 				burnRate, risk*100))
 		}
 		fmt.Println(line)
+	}
+
+	var state struct {
+		Budget map[string]map[string]any `json:"budget"`
+	}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return
 	}
 
 	if len(state.Budget) == 0 {
@@ -797,7 +793,7 @@ func budgetBar(pct int) string {
 		filled = width
 	}
 	// state.json is written by another process, and by hand, per the
-	// orchestrator protocol's `jq '.claude_pct = 52'`. A negative value there
+	// orchestrator protocol's `jq` write. A negative value there
 	// reached strings.Repeat with a negative count, which panics: `hyctl status`
 	// crashed on a malformed field it only meant to display.
 	if filled < 0 {
