@@ -23,7 +23,7 @@ type ckKey struct {
 // ckKeyOf reads a keypress the way v1 did: alt is a flag only alt+1-9 reads,
 // so alt+j still types j and alt+enter still submits.
 func ckKeyOf(msg tea.KeyPressMsg) ckKey {
-	k := ckKey{Key: tea.Key(msg), alt: msg.Mod.Contains(tea.ModAlt)}
+	k := ckKey{Key: ckLegacyKey(tea.Key(msg)), alt: msg.Mod.Contains(tea.ModAlt)}
 	k.Mod &^= tea.ModAlt
 	locks := tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 	if k.alt && k.Text == "" && k.Mod&^(tea.ModShift|locks) == 0 && k.Code != tea.KeySpace && unicode.IsPrint(k.Code) {
@@ -35,6 +35,19 @@ func ckKeyOf(msg tea.KeyPressMsg) ckKey {
 		default:
 			k.Text = string(unicode.ToUpper(k.Code))
 		}
+	}
+	return k
+}
+
+// ckLegacyKey drops modifiers v1 never saw: v2 always turns on kitty and
+// modifyOtherKeys reporting, while legacy input sent shift+enter and
+// ctrl+enter as enter, and shift+space, shift+backspace, shift+esc plain.
+func ckLegacyKey(k tea.Key) tea.Key {
+	switch k.Code {
+	case tea.KeyEnter:
+		k.Mod &^= tea.ModShift | tea.ModCtrl
+	case tea.KeySpace, tea.KeyBackspace, tea.KeyEscape:
+		k.Mod &^= tea.ModShift
 	}
 	return k
 }

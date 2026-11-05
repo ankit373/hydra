@@ -410,6 +410,26 @@ func TestKeys_V2DecodingKeepsV1Behaviour(t *testing.T) {
 	if got := next.(Cockpit).th().input; got != "!" {
 		t.Errorf("alt+shift+1 typed %q, v1 typed !", got)
 	}
+	// v2 always enables kitty and modifyOtherKeys, so shift arrives on keys
+	// where v1's legacy input never reported it.
+	m := testCockpit()
+	m.th().input = "ab"
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModShift, Text: " "})
+	if got := next.(Cockpit).th().input; got != "ab " {
+		t.Errorf("shift+space typed %q, v1 typed a space", got)
+	}
+	next, _ = next.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModShift})
+	if got := next.(Cockpit).th().input; got != "ab" {
+		t.Errorf("shift+backspace left %q, v1 deleted", got)
+	}
+	next, _ = next.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift})
+	if got := next.(Cockpit).th().input; got != "" {
+		t.Errorf("shift+enter did not send: input %q", got)
+	}
+	wiz, _ := NewInitModel(wizardHeads()).Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
+	if wiz.(InitModel).step != stepTiers {
+		t.Errorf("ctrl+enter in the wizard left step %v, v1 confirmed", wiz.(InitModel).step)
+	}
 	next, _ = testCockpit().Update(tea.PasteMsg{Content: "enter"})
 	if p := next.(Cockpit); p.th().input != "enter" || p.th().exec != nil {
 		t.Errorf("a pasted \"enter\" acted as the key: input=%q", p.th().input)

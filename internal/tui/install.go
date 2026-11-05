@@ -157,7 +157,7 @@ func (m InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.step == installStepDone {
 			return m, tea.Quit // the outcome waits for a key (TUI-12)
 		}
-		switch msg.String() {
+		switch ckLegacyKey(tea.Key(msg)).String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "esc", "left", "h":

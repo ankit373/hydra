@@ -24,10 +24,17 @@ import (
 // environment once by Lip Gloss and never by asking the terminal. NO_COLOR
 // draws no SGR at all, bold and reverse included, as Lip Gloss v1 did.
 func OutputProfile() colorprofile.Profile {
-	if p := lipgloss.Writer.Profile; p != colorprofile.ASCII {
+	if p := lipgloss.Writer.Profile; p > colorprofile.ASCII && !noColorEnv() {
 		return p
 	}
 	return colorprofile.NoTTY
+}
+
+// noColorEnv is termenv's reading, which v1 used: NO_COLOR set to anything,
+// or CLICOLOR=0 unless CLICOLOR_FORCE says otherwise. colorprofile wants a bool.
+func noColorEnv() bool {
+	force := os.Getenv("CLICOLOR_FORCE")
+	return os.Getenv("NO_COLOR") != "" || (os.Getenv("CLICOLOR") == "0" && (force == "" || force == "0"))
 }
 
 // ANSI16 is the 16-colour pick Lip Gloss v1 drew c with: termenv's nearest

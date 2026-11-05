@@ -408,6 +408,26 @@ func TestANSI16_KeepsTheV1Picks(t *testing.T) {
 func TestOutputProfile_NoColorDrawsNoSGR(t *testing.T) {
 	was := lipgloss.Writer.Profile
 	t.Cleanup(func() { lipgloss.Writer.Profile = was })
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	// termenv honoured any NO_COLOR value and CLICOLOR=0; colorprofile parses
+	// a bool, so "yes" would have turned colour back on.
+	lipgloss.Writer.Profile = colorprofile.TrueColor
+	for _, env := range [][2]string{{"NO_COLOR", "yes"}, {"NO_COLOR", "x"}, {"CLICOLOR", "0"}} {
+		t.Setenv(env[0], env[1])
+		if got := OutputProfile(); got != colorprofile.NoTTY {
+			t.Errorf("%s=%s draws at %v, v1 drew no colour", env[0], env[1], got)
+		}
+		t.Setenv(env[0], "")
+	}
+	t.Setenv("CLICOLOR", "0")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	if got := OutputProfile(); got != colorprofile.TrueColor {
+		t.Errorf("CLICOLOR_FORCE did not override CLICOLOR=0: %v", got)
+	}
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
 	for in, want := range map[colorprofile.Profile]colorprofile.Profile{
 		colorprofile.ASCII: colorprofile.NoTTY, colorprofile.NoTTY: colorprofile.NoTTY,
 		colorprofile.ANSI: colorprofile.ANSI, colorprofile.TrueColor: colorprofile.TrueColor,

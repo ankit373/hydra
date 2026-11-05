@@ -24,6 +24,14 @@ func TestProfileWriter_DrawsWhatV1Drew(t *testing.T) {
 	in := "\x1b[2K\x1b[1;38;5;214mwarn\x1b[0m \x1b[48;5;236;38;2;0;112;122mcode\x1b[m \x1b[4:3;38;5;196mx\x1b[m"
 	was := lipgloss.Writer.Profile
 	t.Cleanup(func() { lipgloss.Writer.Profile = was })
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR", "")
+	// Bytes with no escape are written as they are, a raw C1 CSI byte
+	// (0x9B) in non-UTF-8 data included, as v1 wrote them.
+	lipgloss.Writer.Profile = colorprofile.NoTTY
+	if raw := "a\x9b31mb\n"; captureStdout(t, func() { fmt.Fprint(stdout, raw) }) != raw {
+		t.Error("data with no escape sequence was altered")
+	}
 	for p, want := range map[colorprofile.Profile]string{
 		colorprofile.NoTTY:     "\x1b[2Kwarn code x",
 		colorprofile.ASCII:     "\x1b[2Kwarn code x",

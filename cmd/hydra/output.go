@@ -29,6 +29,10 @@ type profileWriter struct{ f **os.File }
 
 func (w profileWriter) Write(b []byte) (int, error) {
 	p := tui.OutputProfile()
+	if p == colorprofile.TrueColor || !bytes.Contains(b, []byte{0x1b}) {
+		// Nothing to rewrite: v1 wrote these bytes unchanged, raw C1 included.
+		return (*w.f).Write(b)
+	}
 	if p > colorprofile.ANSI {
 		return (&colorprofile.Writer{Forward: *w.f, Profile: p}).Write(b)
 	}

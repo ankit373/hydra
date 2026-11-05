@@ -221,8 +221,10 @@ func runUpgrade(w io.Writer) error {
 
 	fmt.Fprintln(w, dimStyle.Render("  Running install.sh..."))
 	c := exec.Command("sh", "-c", installScriptCommand)
-	c.Stdout = w
-	c.Stderr = w
+	c.Stdout, c.Stderr = w, w
+	if pw, ok := w.(profileWriter); ok {
+		c.Stdout, c.Stderr = *pw.f, *pw.f // the script gets the terminal itself, as in v1
+	}
 	if exeErr == nil {
 		c.Env = append(os.Environ(), "HYDRA_BIN="+filepath.Dir(exe))
 	}
