@@ -623,3 +623,14 @@ were checked for presence only and never printed.
 8. **Local runs while the machine sleeps.** Should full runs move to an always-on host
    (CI runner or VM), with secrets in its store? Or is a resumable laptop run
    acceptable?
+
+## Decisions (2026-11-05, ankit373)
+
+1. **Budget:** up to $150 for checkpoint A. Run the smoke tier ($5) first, then one full seed. Checkpoint B's budget is decided on A's results.
+2. **Providers:** Bedrock plus an OpenRouter key, which the user will add.
+3. **Defaults** (taken unless the user objects):
+   - **Frontier bar:** the strongest Opus available on Bedrock or OpenRouter, pinned by model id in the run config.
+   - **SROIE:** dropped (licence unverified).
+   - **Per-item answers:** committed to `bench/results/` (public datasets).
+   - **Underpowered thresholds** (H14, extraction H1, H9, H15/H16, E3's 0.5-pt margin): pre-registered as "inconclusive expected" at A. Revisit at E7.R.
+   - **Full runs:** stay on this machine for A.

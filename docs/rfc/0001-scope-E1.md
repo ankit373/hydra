@@ -266,3 +266,10 @@ None of these is reflected in RFC §3 or the E1 tickets.
 
 1. **Narrow checkpoint A to classification only?** That means Banking77 as the gate and CLINC150 reported. CORD/`jsonschema`/`http`, `/v1/feedback` (H5), the kNN resolver (H4), content parts and `/v1/messages` would all be measured at checkpoint B. This narrows #1204's "first layer" and #1213's checkpoint A list (thresholds 3 and 5–8 move to B). The alternative is to keep #1213 as filed and accept that A waits for every first-layer ticket.
 2. **Change `hyctl serve`'s default routing?** Today `model: "hydra"` (and an empty model) runs pinned to `--enum STANDARD`. A requires it to route by objective (`quality`), with `hydra/<enum>` and an explicit `--enum` still pinning. This changes behaviour for existing clients such as open-code-review pointed at `hydra`. Is that acceptable as a non-breaking `feat`, or should the objective default only on a new id (e.g. `hydra/auto`) and leave `hydra` pinned?
+
+## Decisions (2026-11-05, ankit373)
+
+1. **Checkpoint A is classification only:** Banking77 and CLINC150. CORD, the `jsonschema`/`http` verifiers, `/v1/feedback`, kNN, content parts and `/v1/messages` move to checkpoint B.
+2. **`model: "hydra"` on `hyctl serve` switches from a pinned `STANDARD` to objective routing (`quality`).** This is a deliberate breaking change.
+   - The CHANGELOG must say so.
+   - The old behaviour stays reachable with `hydra/standard`.
