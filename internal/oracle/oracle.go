@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
@@ -307,8 +308,18 @@ func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]
 	}
-	if len(s) > detailMaxLen {
-		return s[:detailMaxLen] + "...(truncated)"
+	return truncate(s, detailMaxLen)
+}
+
+// truncate is the package's one cut for diagnostic text: at most n bytes, never half a
+// rune (a valid rune starts within UTFMax-1 bytes of any cut), and marked when cut.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
 	}
-	return s
+	cut := n
+	for cut > n-(utf8.UTFMax-1) && cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "...(truncated)"
 }
