@@ -9,9 +9,9 @@
     ╚═╝  ╚═╝   ╚═╝   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
 </pre>
 
-### Picks the model best suited to each task, and checks the answer
+### Picks the model best suited to each task, and can check the answer before you rely on it
 
-*Any model, any provider. Hydra checks the answer and escalates when the check fails.*
+*Any model, any provider. Hydra can check the answer, and ask another model when the check fails.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
 [![Go 1.24](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -30,13 +30,13 @@
 
 ## What is Hydra?
 
-**Hydra picks the model best suited to each task, checks the answer, and escalates when the check fails.**
+**Hydra picks the model best suited to each task, and can check the answer before you rely on it.**
 
 You probably have access to several models: hosted APIs (OpenAI, Anthropic, Gemini, Bedrock, Mistral and others), local models through Ollama or llama.cpp, and CLI agents. Each is good at different kinds of work, and none of them tells you when its answer is wrong. Hydra sits in front of all of them. In RFC 0001's terms it is a *verified cascade gateway*:
 
 - **It finds your models.** Hydra discovers API keys, local model servers and CLI agents on your machine, with no configuration.
 - **It picks by measured record.** Each model is ranked on how often its answers have actually passed for that task type on your machine, starting from a catalogue score until it has a record. Today an unpinned request goes to the lowest-cost model measured competent at the task type, with stronger models behind it as the fallback chain.
-- **It checks the answer.** Verifiers (tests, compile and lint for code; a grounding check against the prompt's own context; agreement between independent models) are evidence about the output. With `--confidence`, Hydra keeps asking until the answer's probability of being correct, P(correct), clears your target, then stops.
+- **It can check the answer.** Verifiers (tests, compile and lint for code; a grounding check against the prompt's own context; agreement between independent models) are evidence about the output. With `--confidence`, Hydra keeps asking until the answer's probability of being correct, P(correct), clears your target, then stops.
 - **It keeps data where you say.** An egress gate refuses files like `.env` or `~/.aws/credentials` to any model that leaves your machine, and a local-only policy keeps sensitive work on your hardware.
 - **It records what happened.** Every request is logged with the model that answered, token counts and cost.
 
@@ -670,7 +670,7 @@ without any extra configuration.
 
 ### 🧭 Checking the answer: confidence routing
 
-Most routers pick a model and hope. Hydra checks the answer: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)**: it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds that the answer is correct cross your target P(correct).
+Most routers pick a model and hope. Hydra can check the answer: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)**: it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds that the answer is correct cross your target P(correct).
 
 ```bash
 hyctl dispatch --confidence 0.95 "is this migration safe to run in prod?"
