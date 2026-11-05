@@ -6,11 +6,12 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -22,14 +23,56 @@ import (
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
+// ANSI-256 pairs (dark terminal, light terminal), each at 4.5:1 or better on
+// its background; the light values replace ones that measured 1.4:1 on white.
+type wizPair struct{ dark, light string }
+
 var (
-	sTitle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	sSelected = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
-	sDim      = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	sPrompt   = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
-	sError    = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	sHint     = lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("240"))
+	wizTitle    = wizPair{"205", "162"}
+	wizSelected = wizPair{"46", "22"}
+	wizDim      = wizPair{"245", "240"}
+	wizPrompt   = wizPair{"75", "25"}
+	wizError    = wizPair{"203", "160"}
+	wizWarn     = wizPair{"214", "94"}
+	wizSuccess  = wizPair{"82", "22"}
+	wizCode     = wizPair{"117", "24"}
+	wizCodeBg   = wizPair{"236", "254"}
+
+	sTitle, sSelected, sDim, sPrompt, sError, sHint           lipgloss.Style
+	warnStyle, successStyle, codeStyle, fitsStyle, noFitStyle lipgloss.Style
 )
+
+// setWizardTheme draws the init and install wizards for a dark or light
+// background; ckSetTheme calls it so the two never disagree.
+func setWizardTheme(dark bool) {
+	c := func(p wizPair) color.Color {
+		return ckDepth(lipgloss.LightDark(dark)(lipgloss.Color(p.light), lipgloss.Color(p.dark)))
+	}
+	sTitle = lipgloss.NewStyle().Bold(true).Foreground(c(wizTitle))
+	sSelected = lipgloss.NewStyle().Bold(true).Foreground(c(wizSelected))
+	sDim = lipgloss.NewStyle().Foreground(c(wizDim))
+	sPrompt = lipgloss.NewStyle().Foreground(c(wizPrompt))
+	sError = lipgloss.NewStyle().Foreground(c(wizError))
+	sHint = lipgloss.NewStyle().Italic(true).Foreground(c(wizDim))
+	warnStyle = lipgloss.NewStyle().Bold(true).Foreground(c(wizWarn))
+	successStyle = lipgloss.NewStyle().Bold(true).Foreground(c(wizSuccess))
+	codeStyle = lipgloss.NewStyle().Foreground(c(wizCode)).Background(c(wizCodeBg)).Padding(0, 1)
+	fitsStyle = lipgloss.NewStyle().Foreground(c(wizSuccess))
+	noFitStyle = sDim
+}
+
+// styleLines styles each line on its own and keeps the newlines outside
+// Render: lipgloss pads a multi-line block to its widest line, which pushed
+// the wizards' first option 49-73 columns right (TUI-02, #465).
+func styleLines(s lipgloss.Style, text string) string {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if l != "" {
+			lines[i] = s.Render(l)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
 
@@ -76,14 +119,25 @@ func NewInitModel(result *probe.Result) InitModel {
 func (m InitModel) Init() tea.Cmd { return nil }
 
 func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
+	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
 	}
 
-	switch key.String() {
+	if m.step == stepDone {
+		// The summary waits for a key: quitting on save closed the alt
+		// screen and wiped it before anyone could read it (TUI-12).
+		return m, tea.Quit
+	}
+	switch ckLegacyKey(tea.Key(key)).String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
+
+	case "esc", "left", "h":
+		if m.step > stepCortex {
+			m.step--
+			m.cursor = 0
+		}
 
 	case "up", "k":
 		if m.cursor > 0 {
@@ -93,7 +147,7 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.cursor = clamp(m.cursor+1, 0, m.maxCursor())
 
-	case "enter", " ":
+	case "enter", "space":
 		return m.confirm()
 	}
 
@@ -146,7 +200,6 @@ func (m InitModel) confirm() (tea.Model, tea.Cmd) {
 		if err := m.save(); err != nil {
 			m.err = err
 		}
-		return m, tea.Quit
 	}
 
 	return m, nil
@@ -164,7 +217,14 @@ func (m InitModel) maxCursor() int {
 
 // ── View ──────────────────────────────────────────────────────────────────────
 
-func (m InitModel) View() string {
+// View draws the wizard on the alt screen.
+func (m InitModel) View() tea.View {
+	v := tea.NewView(m.frame())
+	v.AltScreen = true
+	return v
+}
+
+func (m InitModel) frame() string {
 	var b strings.Builder
 	b.WriteString(sTitle.Render("  Hydra, First Run Setup") + "\n\n")
 
@@ -190,12 +250,16 @@ func (m InitModel) View() string {
 	// Same lipgloss gotcha as viewDone (#465): a blank line written inside
 	// Render gets padded to the block's widest line instead of staying a real
 	// newline, so both surrounding newlines stay outside the styled text.
-	b.WriteString("\n" + sHint.Render("  ↑↓ navigate   enter select   q quit") + "\n")
+	hint := "  ↑↓ navigate   enter select   esc back   q quit"
+	if m.step == stepDone {
+		hint = "  press any key to exit"
+	}
+	b.WriteString("\n" + sHint.Render(hint) + "\n")
 	return b.String()
 }
 
 func (m InitModel) viewCortex(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Which model should be your Cortex (main brain)?\n\n"))
+	b.WriteString(styleLines(sPrompt, "  Which model should be your Cortex (main brain)?\n\n"))
 	for i, h := range m.result.Heads {
 		suffix := ""
 		if i == 0 {
@@ -211,7 +275,7 @@ func (m InitModel) viewCortex(b *strings.Builder) {
 }
 
 func (m InitModel) viewTiers(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Heads by the tier they will route at:\n\n"))
+	b.WriteString(styleLines(sPrompt, "  Heads by the tier they will route at:\n\n"))
 	// The tier a head routes at, not a score band bucketed into config. The
 	// bands were a third routing table that disagreed with routing.yaml about
 	// what every one of these words meant (#782).
@@ -241,17 +305,17 @@ func (m InitModel) viewTiers(b *strings.Builder) {
 	}
 	if hasLocal {
 		best := m.specs.BestOllamaModel()
-		b.WriteString(sDim.Render(fmt.Sprintf(
+		b.WriteString(styleLines(sDim, fmt.Sprintf(
 			"\n  Hardware: %s\n  Best local model for your machine: %s\n",
 			m.specs.Summary(), best.DisplayName,
 		)))
 	}
 
-	b.WriteString(sPrompt.Render("\n  Press enter to confirm\n"))
+	b.WriteString(styleLines(sPrompt, "\n  Press enter to confirm\n"))
 }
 
 func (m InitModel) viewPrivacy(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Should prompts that look like PII stay on local Heads only?\n\n"))
+	b.WriteString(styleLines(sPrompt, "  Should prompts that look like PII stay on local Heads only?\n\n"))
 	opts := []string{
 		"Yes, keep likely PII on local Heads only",
 		"No , use any Head",
@@ -266,7 +330,7 @@ func (m InitModel) viewPrivacy(b *strings.Builder) {
 }
 
 func (m InitModel) viewCapture(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Store the text of prompts and responses?\n\n"))
+	b.WriteString(styleLines(sPrompt, "  Store the text of prompts and responses?\n\n"))
 	opts := []string{
 		"No , keep only the statistics (recommended)",
 		"Yes, store the text too, redacted and size-capped",
@@ -278,14 +342,14 @@ func (m InitModel) viewCapture(b *strings.Builder) {
 			b.WriteString(sDim.Render("    "+opt) + "\n")
 		}
 	}
-	b.WriteString(sHint.Render("\n  Prompts and responses are verbatim source. Hydra can route and\n" +
-		"  report without them. Stored text is deduplicated and capped at a\n" +
-		"  disk budget, oldest first, and anything matching a secret detector\n" +
+	b.WriteString(styleLines(sHint, "\n  Prompts and responses are verbatim source. Hydra can route and\n"+
+		"  report without them. Stored text is deduplicated and capped at a\n"+
+		"  disk budget, oldest first, and anything matching a secret detector\n"+
 		"  is replaced before it is written.\n"))
 }
 
 func (m InitModel) viewEmbed(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Store a vector for each dispatch?\n\n"))
+	b.WriteString(styleLines(sPrompt, "  Store a vector for each dispatch?\n\n"))
 	opts := []string{
 		"No , do not embed prompts (recommended)",
 		"Yes, embed with a local model already on this machine",
@@ -297,14 +361,14 @@ func (m InitModel) viewEmbed(b *strings.Builder) {
 			b.WriteString(sDim.Render("    "+opt) + "\n")
 		}
 	}
-	b.WriteString(sHint.Render("\n  A vector is what lets Hydra recognise a task it has seen before.\n" +
-		"  Nothing leaves the machine: the model runs under Ollama, text is\n" +
-		"  redacted before it is embedded, and the store is capped at a disk\n" +
+	b.WriteString(styleLines(sHint, "\n  A vector is what lets Hydra recognise a task it has seen before.\n"+
+		"  Nothing leaves the machine: the model runs under Ollama, text is\n"+
+		"  redacted before it is embedded, and the store is capped at a disk\n"+
 		"  budget, oldest first. With no embedding model this stays off.\n"))
 }
 
 func (m InitModel) viewCache(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Answer a repeated question from the last answer?\n\n"))
+	b.WriteString(styleLines(sPrompt, "  Answer a repeated question from the last answer?\n\n"))
 	opts := []string{
 		"No , always ask a head (recommended)",
 		"Yes, reuse the answer when the question is the same",
@@ -316,23 +380,23 @@ func (m InitModel) viewCache(b *strings.Builder) {
 			b.WriteString(sDim.Render("    "+opt) + "\n")
 		}
 	}
-	b.WriteString(sHint.Render("\n  This is the only setting here that changes what you get back.\n" +
-		"  The same question word for word is always safe; anything else has\n" +
-		"  to be about exactly the same things, and a prompt carrying personal\n" +
+	b.WriteString(styleLines(sHint, "\n  This is the only setting here that changes what you get back.\n"+
+		"  The same question word for word is always safe; anything else has\n"+
+		"  to be about exactly the same things, and a prompt carrying personal\n"+
 		"  data is never answered from the cache at all.\n"))
 }
 
 func (m InitModel) viewSkills(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Skills enabled for your setup:\n\n"))
+	b.WriteString(styleLines(sPrompt, "  Skills enabled for your setup:\n\n"))
 	for _, s := range m.skills {
 		b.WriteString("    ✓ " + s + "\n")
 	}
-	b.WriteString(sPrompt.Render("\n  Press enter to finish\n"))
+	b.WriteString(styleLines(sPrompt, "\n  Press enter to finish\n"))
 }
 
 func (m InitModel) viewDone(b *strings.Builder) {
 	if m.err != nil {
-		b.WriteString(sError.Render(fmt.Sprintf("  ✗ Setup failed: %v\n", m.err)))
+		b.WriteString(styleLines(sError, fmt.Sprintf("  ✗ Setup failed: %v\n", m.err)))
 		return
 	}
 	// The blank line must stay outside Render: lipgloss pads every line of a
@@ -342,6 +406,7 @@ func (m InitModel) viewDone(b *strings.Builder) {
 	b.WriteString(sSelected.Render("  ✓ Hydra is ready") + "\n\n")
 	b.WriteString(fmt.Sprintf("  Cortex : %s\n", m.cortex.Name))
 	b.WriteString(fmt.Sprintf("  Config : %s\n", config.Path()))
+	b.WriteString("\n  Next: run " + sPrompt.Render("hyctl tui") + " to start\n")
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -7,8 +7,68 @@ package tui
 // cannot drift; only the behavior lives in the switches below.
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	"unicode"
+
+	tea "charm.land/bubbletea/v2"
 )
+
+// ckKey is a keypress, or a bracketed paste carried as one so a paste takes
+// the path it took in Bubble Tea v1: it has no key name, only text.
+type ckKey struct {
+	tea.Key
+	paste bool
+	alt   bool
+}
+
+// ckKeyOf reads a keypress the way v1 did: alt is a flag only alt+1-9 reads,
+// so alt+j still types j and alt+enter still submits.
+func ckKeyOf(msg tea.KeyPressMsg) ckKey {
+	k := ckKey{Key: ckLegacyKey(tea.Key(msg)), alt: msg.Mod.Contains(tea.ModAlt)}
+	k.Mod &^= tea.ModAlt
+	locks := tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
+	if k.alt && k.Text == "" && k.Mod&^(tea.ModShift|locks) == 0 && k.Code != tea.KeySpace && unicode.IsPrint(k.Code) {
+		switch {
+		case !k.Mod.Contains(tea.ModShift):
+			k.Text = string(k.Code)
+		case k.ShiftedCode != 0:
+			k.Text = string(k.ShiftedCode)
+		default:
+			k.Text = string(unicode.ToUpper(k.Code))
+		}
+	}
+	return k
+}
+
+// ckLegacyKey drops modifiers v1 never saw: v2 always turns on kitty and
+// modifyOtherKeys reporting, while legacy input sent shift+enter and
+// ctrl+enter as enter, and shift+space, shift+backspace, shift+esc plain.
+func ckLegacyKey(k tea.Key) tea.Key {
+	switch k.Code {
+	case tea.KeyEnter:
+		k.Mod &^= tea.ModShift | tea.ModCtrl
+	case tea.KeySpace, tea.KeyBackspace, tea.KeyEscape:
+		k.Mod &^= tea.ModShift
+	}
+	return k
+}
+
+// name is the key as Bubble Tea spells it ("enter", "ctrl+s", "j"); a paste
+// has none, so pasted text never matches a binding.
+func (k ckKey) name() string {
+	if k.paste {
+		return ""
+	}
+	return k.String()
+}
+
+// runes is the text the key types, v1's KeyRunes; space and named keys type
+// nothing here, as in v1.
+func (k ckKey) runes() []rune {
+	if k.Text == "" || (!k.paste && k.Code == tea.KeySpace) {
+		return nil
+	}
+	return []rune(k.Text)
+}
 
 // ckBinding is one documented key: what it does, which glossary group it is
 // explained under ("" = bar-only refinement of a generic group row), and which
@@ -29,6 +89,7 @@ var ckKeymap = []ckBinding{
 	{"ctrl+u/ctrl+d", "scroll half a page", "EVERYWHERE", nil},
 	{"home/end", "top / bottom · chat: end returns to live", "EVERYWHERE", nil},
 	{"ctrl+c", "quit", "EVERYWHERE", nil},
+	{"ctrl+s", "select text: hand the mouse to the terminal to copy · again restores wheel scroll", "EVERYWHERE", nil},
 
 	{"ctrl+t", "new thread", "THREADS", nil},
 	{"ctrl+t", "thread", "", []int{ckViewChat}},
@@ -37,7 +98,7 @@ var ckKeymap = []ckBinding{
 	{"ctrl+\\", "split: pin a second thread beside this one (≥100 cols) · again closes", "THREADS", nil},
 	{"ctrl+b", "background the thread, it keeps running in agents, pings chat when done", "THREADS", nil},
 	{"ctrl+g", "jump to the next thread needing you (confirms, plan gates, failures)", "THREADS", nil},
-	{"a · x", "after an isolated edit: apply the worktree to your tree · x x discards it", "THREADS", nil},
+	{"/apply · /undo", "after an isolated edit: apply the worktree to your tree · discard it (asks y/n)", "THREADS", nil},
 
 	{"enter", "send · approve a plan · empty input: open the last trace", "CHAT", nil},
 	{"enter", "send", "", []int{ckViewChat}},
@@ -48,7 +109,7 @@ var ckKeymap = []ckBinding{
 	{"ctrl+o", "route", "", []int{ckViewChat}},
 	{"esc", "cancel the running task · discard a plan · clear the input", "CHAT", nil},
 	{"y/n", "approve / refuse a pending plan or file write", "CHAT", nil},
-	{"d · x · o", "after an edit: diff · undo · open in $EDITOR (empty input)", "CHAT", nil},
+	{"/diff /undo /open", "after an edit: diff · undo (asks y/n) · open in $EDITOR", "CHAT", nil},
 	{"e", "expand the collapsed output of a head that gave up (empty input)", "CHAT", nil},
 	{"/ask /edit /plan /auto…", "set the mode by name (/architect /careful /unattended too)", "CHAT", nil},
 	{":chat :agents :models :activity :usage :audit", "jump · :q quit", "CHAT", nil},
@@ -93,48 +154,53 @@ func ckBarBindings(v int) []ckBinding {
 // key routes one keypress. Chat keeps every binding it always had, new shell
 // keys apply only where they collide with nothing (#465's discipline); all
 // thread keys are modifier-based so typing is never broken.
-func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC:
+func (m Cockpit) key(msg ckKey) (tea.Model, tea.Cmd) {
+	switch msg.name() {
+	case "ctrl+c":
 		return m, tea.Quit
-	case tea.KeyTab:
+	case "tab":
 		return m.jump((m.view + 1) % ckViewCount()), nil
-	case tea.KeyEsc:
+	case "esc":
 		nm, cmd := m.escape()
 		return nm, cmd
-	case tea.KeyPgUp:
+	case "pgup":
 		return m.scrollBy(-m.pageSize()), nil
-	case tea.KeyPgDown:
+	case "pgdown":
 		return m.scrollBy(m.pageSize()), nil
-	case tea.KeyCtrlU:
+	case "ctrl+u":
 		return m.scrollBy(-m.pageSize() / 2), nil
-	case tea.KeyCtrlD:
+	case "ctrl+d":
 		return m.scrollBy(m.pageSize() / 2), nil
-	case tea.KeyHome:
+	case "home":
 		return m.scrollBy(-ckScrollAll), nil
-	case tea.KeyEnd:
+	case "end":
 		return m.scrollBy(ckScrollAll), nil
-	case tea.KeyCtrlT:
+	case "ctrl+t":
 		return m.addThread(), nil
-	case tea.KeyCtrlG:
+	case "ctrl+g":
 		return m.nextAttention(), nil
+	case "ctrl+s":
+		// Mouse capture is what gives wheel scrolling, and it is also what
+		// stops the terminal selecting text, so the user picks (TUI-105).
+		// View declares the mouse mode, so flipping the flag is the toggle.
+		m.mouseOff = !m.mouseOff
+		return m, nil
 	}
 	// alt+1-9 jumps to that thread from anywhere.
-	if msg.Alt && msg.Type == tea.KeyRunes && len(msg.Runes) == 1 &&
-		msg.Runes[0] >= '1' && msg.Runes[0] <= '9' {
-		return m.focusThread(int(msg.Runes[0] - '0')), nil
+	if rs := msg.runes(); msg.alt && len(rs) == 1 && rs[0] >= '1' && rs[0] <= '9' {
+		return m.focusThread(int(rs[0] - '0')), nil
 	}
 	if m.glossary {
 		// The overlay keeps scrolling (above) and closes on esc or ?; every
 		// other key is swallowed. j/k and the arrows scroll it too.
-		switch msg.Type {
-		case tea.KeyDown:
+		switch msg.name() {
+		case "down":
 			return m.scrollBy(1), nil
-		case tea.KeyUp:
+		case "up":
 			return m.scrollBy(-1), nil
 		}
-		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
-			switch msg.Runes[0] {
+		if rs := msg.runes(); len(rs) == 1 {
+			switch rs[0] {
 			case '?':
 				m.glossary = false
 			case 'j':
@@ -240,6 +306,10 @@ func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 		return m.stopWait(t, w, note)
 	case m.view == ckViewChat && t.planWait != nil:
 		return m.stopWait(t, *t.planWait, "plan discarded, nothing ran")
+	case m.view == ckViewChat && t.undoAsk != nil:
+		t.undoAsk = nil
+		m.flash = "kept, nothing changed"
+		return m, nil
 	case m.view == ckViewChat && t.input != "":
 		t.input = ""
 	case m.view == ckViewChat && t.queued != nil:
@@ -262,24 +332,25 @@ func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 
 // viewKey handles keys on the non-chat views, where no text input exists so
 // digits, '?', and letters are free to act as shortcuts.
-func (m Cockpit) viewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyUp:
+func (m Cockpit) viewKey(msg ckKey) (tea.Model, tea.Cmd) {
+	switch msg.name() {
+	case "up":
 		return m.move(-1), nil
-	case tea.KeyDown:
+	case "down":
 		return m.move(1), nil
-	case tea.KeyEnter:
+	case "enter":
 		return m.enterRow()
-	case tea.KeySpace:
+	case "space":
 		if m.view == ckViewModels {
 			m = m.toggleCollapse()
 		}
 		return m, nil
-	case tea.KeyRunes:
-		if len(msg.Runes) != 1 {
+	}
+	if rs := msg.runes(); rs != nil {
+		if len(rs) != 1 {
 			return m, nil
 		}
-		r := msg.Runes[0]
+		r := rs[0]
 		if r >= '1' && r <= '6' {
 			return m.jump(int(r - '1')), nil
 		}

@@ -1,0 +1,249 @@
+{
+  "font": {
+    "family": {
+      "$type": "fontFamily",
+      "text": {
+        "$value": [
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif"
+        ]
+      },
+      "mono": {
+        "$value": [
+          "JetBrains Mono",
+          "ui-monospace",
+          "SF Mono",
+          "Menlo",
+          "monospace"
+        ],
+        "$description": "Code, commands, IDs and numeric columns only."
+      },
+      "display": {
+        "$value": [
+          "system-ui",
+          "sans-serif"
+        ],
+        "$description": "Open decision: Space Grotesk or system-ui (scope §10.4)."
+      }
+    },
+    "size": {
+      "$type": "dimension",
+      "$description": "12px floor for any text; 13px for interactive labels.",
+      "xs": {
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        }
+      },
+      "sm": {
+        "$value": {
+          "value": 13,
+          "unit": "px"
+        }
+      },
+      "md": {
+        "$value": {
+          "value": 14,
+          "unit": "px"
+        }
+      },
+      "base": {
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        }
+      },
+      "lg": {
+        "$value": {
+          "value": 18,
+          "unit": "px"
+        }
+      },
+      "xl": {
+        "$value": {
+          "value": 22,
+          "unit": "px"
+        }
+      },
+      "2xl": {
+        "$value": {
+          "value": 28,
+          "unit": "px"
+        }
+      },
+      "3xl": {
+        "$value": {
+          "value": 36,
+          "unit": "px"
+        }
+      },
+      "4xl": {
+        "$value": {
+          "value": 48,
+          "unit": "px"
+        }
+      }
+    },
+    "weight": {
+      "$type": "fontWeight",
+      "regular": {
+        "$value": 400
+      },
+      "medium": {
+        "$value": 500
+      },
+      "semibold": {
+        "$value": 600
+      },
+      "bold": {
+        "$value": 700
+      }
+    }
+  },
+  "space": {
+    "1": {
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      }
+    },
+    "2": {
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
+    },
+    "3": {
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      }
+    },
+    "4": {
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
+    },
+    "6": {
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
+    },
+    "8": {
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      }
+    },
+    "12": {
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      }
+    },
+    "16": {
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      }
+    },
+    "24": {
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      }
+    },
+    "32": {
+      "$value": {
+        "value": 128,
+        "unit": "px"
+      }
+    },
+    "$type": "dimension",
+    "$description": "4px base. TUI padding is 0, 1 or 2 cells."
+  },
+  "radius": {
+    "$type": "dimension",
+    "control": {
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      }
+    },
+    "card": {
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      }
+    },
+    "pill": {
+      "$value": {
+        "value": 999,
+        "unit": "px"
+      }
+    }
+  },
+  "motion": {
+    "duration": {
+      "$type": "duration",
+      "$description": "Non-essential motion drops to 0 under reduced motion.",
+      "fast": {
+        "$value": {
+          "value": 120,
+          "unit": "ms"
+        }
+      },
+      "base": {
+        "$value": {
+          "value": 200,
+          "unit": "ms"
+        }
+      },
+      "slow": {
+        "$value": {
+          "value": 320,
+          "unit": "ms"
+        }
+      }
+    },
+    "easing": {
+      "$type": "cubicBezier",
+      "standard": {
+        "$value": [
+          0.2,
+          0,
+          0,
+          1
+        ]
+      },
+      "emphasized": {
+        "$value": [
+          0.3,
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  },
+  "focus": {
+    "$type": "dimension",
+    "width": {
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      }
+    },
+    "offset": {
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      }
+    }
+  }
+}

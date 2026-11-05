@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -53,14 +53,11 @@
 }
   </script>
 
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/page-aliases.css">
 <style>
 :root{
   color-scheme:dark;
-  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
-  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
-  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
-  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
-  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
   --math:"Cambria Math","Latin Modern Math","STIX Two Math",Georgia,"Times New Roman",serif;
@@ -83,7 +80,7 @@ a{color:inherit;text-decoration:none;}
 :focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
 .mono{font-family:var(--mono);}
 .tnum{font-variant-numeric:tabular-nums;}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
+.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
   -webkit-background-clip:text;background-clip:text;color:transparent;}
 .accent{color:var(--aqua);}.cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
 .cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
@@ -94,7 +91,7 @@ b{color:var(--ink);}
   font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--line);}
 .topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
 .topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
@@ -308,7 +305,7 @@ sup.cite a{color:var(--aqua);}
 footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 .foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;max-width:var(--maxw);margin:0 auto;padding:0 24px;}
 .foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
-  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
   -webkit-background-clip:text;background-clip:text;color:transparent;}
 .foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
 .foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
@@ -503,7 +500,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
   <div class="foot">
     <div>
       <a class="mark" href="/">HYDRA</a>
-      <p>The Trust Control Plane for AI development. Route to a confidence of correctness.</p>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it.</p>
     </div>
     <nav>
       <a href="/">Home</a>

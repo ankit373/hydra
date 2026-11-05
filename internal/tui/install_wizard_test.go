@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ankit373/hydra/internal/sysinfo"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -152,8 +152,14 @@ func TestInstallWizard_DecliningRunsNothing(t *testing.T) {
 	if im.step == installStepRunning {
 		t.Error("declining started the install anyway")
 	}
-	if cmd == nil {
-		t.Error("declining did not quit")
+	if cmd != nil {
+		t.Error("declining quit before the commands could be read")
+	}
+	if v := stripANSI(im.View().Content); !strings.Contains(v, "Run these yourself") || !strings.Contains(v, im.selected.installCmd) {
+		t.Errorf("declining does not repeat the commands:\n%s", v)
+	}
+	if _, cmd = m.Update(key("enter")); cmd == nil {
+		t.Error("a key on the done screen did not quit")
 	}
 }
 
@@ -230,10 +236,13 @@ func TestInstallWizard_ReportsTheOutcome(t *testing.T) {
 	if !im.done || im.err {
 		t.Errorf("a successful install reported done=%v err=%v", im.done, im.err)
 	}
-	if cmd == nil {
-		t.Error("a finished install did not quit")
+	if cmd != nil {
+		t.Error("a finished install quit before its outcome could be read")
 	}
-	if v := im.View(); strings.TrimSpace(v) == "" {
+	if _, cmd = m.Update(key("q")); cmd == nil {
+		t.Error("a key on the outcome did not quit")
+	}
+	if v := im.View().Content; strings.TrimSpace(v) == "" {
 		t.Error("the done screen renders nothing")
 	}
 
@@ -242,7 +251,7 @@ func TestInstallWizard_ReportsTheOutcome(t *testing.T) {
 	if !m2.(InstallModel).err {
 		t.Error("a failed install was reported as a success")
 	}
-	if v := m2.(InstallModel).View(); !strings.Contains(strings.ToLower(v), "fail") {
+	if v := m2.(InstallModel).View().Content; !strings.Contains(strings.ToLower(v), "fail") {
 		t.Errorf("the failure is not visible on screen:\n%s", v)
 	}
 }
@@ -253,7 +262,7 @@ func TestInstallWizard_EveryStepRenders(t *testing.T) {
 
 	m := tea.Model(newInstallModelFor(&sysinfo.Specs{TotalRAMGB: 32, FreeRAMGB: 20}))
 	for i := 0; i < 4; i++ {
-		if v := m.(InstallModel).View(); strings.TrimSpace(v) == "" {
+		if v := m.(InstallModel).View().Content; strings.TrimSpace(v) == "" {
 			t.Fatalf("step %v rendered nothing", m.(InstallModel).step)
 		}
 		m, _ = m.Update(key("enter"))

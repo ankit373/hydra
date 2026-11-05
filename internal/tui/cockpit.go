@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -107,6 +107,7 @@ type Cockpit struct {
 	view     int // one of the ckView* constants
 	glossary bool
 	flash    string // transient status-bar note, replaced by the next action
+	mouseOff bool   // ctrl+s select mode: the terminal owns the mouse, no wheel
 
 	// chat (view 0), executes for real (#597) across parallel threads (#598).
 	// Per-task state (input, log, pipeline, code panel) lives on each thread;
@@ -303,37 +304,58 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, ckSpinTick(t.exec)
 			}
 		}
-	case tea.MouseMsg:
-		switch tea.MouseEvent(msg).Button {
-		case tea.MouseButtonWheelUp:
+	case ckEditorDoneMsg:
+		if msg.err != nil {
+			m.flash = "couldn't open the editor: " + msg.err.Error()
+		}
+		// The view declares the mouse mode, so the renderer restores capture
+		// after the editor by itself, and select mode stays as it was.
+		return m, nil
+	case tea.MouseWheelMsg:
+		switch msg.Button {
+		case tea.MouseWheelUp:
 			return m.scrollBy(-3), nil
-		case tea.MouseButtonWheelDown:
+		case tea.MouseWheelDown:
 			return m.scrollBy(3), nil
 		}
-	case tea.KeyMsg:
+	case tea.PasteMsg:
+		// Bracketed paste stays one message: pasted text is never shortcuts.
+		return m.key(ckKey{Key: tea.Key{Text: msg.Content}, paste: true})
+	case tea.KeyPressMsg:
 		// Terminals coalesce fast keystrokes into one multi-rune message;
 		// handlers are written for one key at a time, so replay individually.
-		// Bracketed paste stays one message: pasted text is never shortcuts.
-		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 && !msg.Paste {
+		k := ckKeyOf(msg)
+		if rs := k.runes(); len(rs) > 1 {
 			var cur tea.Model = m
 			var cmds []tea.Cmd
-			for _, r := range msg.Runes {
+			for _, r := range rs {
 				var c tea.Cmd
-				cur, c = cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				cur, c = cur.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 				if c != nil {
 					cmds = append(cmds, c)
 				}
 			}
 			return cur, tea.Batch(cmds...)
 		}
-		return m.key(msg)
+		return m.key(k)
 	}
 	return m, nil
 }
 
 // ── frame ─────────────────────────────────────────────────────────────────────
 
-func (m Cockpit) View() string {
+// View is the alt-screen frame, with wheel capture unless select mode handed
+// the mouse to the terminal (TUI-105).
+func (m Cockpit) View() tea.View {
+	v := tea.NewView(m.frame())
+	v.AltScreen = true
+	if !m.mouseOff {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
+	return v
+}
+
+func (m Cockpit) frame() string {
 	m = m.withThreads()
 	if !m.ready {
 		return "\n  starting hydra cockpit…\n"
@@ -394,7 +416,7 @@ func CockpitSnapshotView(view int) string {
 		view = ckViewChat
 	}
 	m = m.jump(view)
-	return m.View()
+	return m.frame()
 }
 
 // ckSnapshotModel builds the one demo Cockpit state every snapshot view
@@ -445,11 +467,11 @@ func CockpitSnapshot() string {
 	var b strings.Builder
 	for v, name := range ckViewNames {
 		b.WriteString(label(fmt.Sprintf("VIEW %d/%d · %s (tab · %d)", v+1, len(ckViewNames), strings.ToUpper(name), v+1)))
-		b.WriteString("\n" + base.jump(v).View() + "\n\n")
+		b.WriteString("\n" + base.jump(v).frame() + "\n\n")
 	}
 	g := base
 	g.glossary = true
-	b.WriteString(label("GLOSSARY (?)") + "\n" + g.View())
+	b.WriteString(label("GLOSSARY (?)") + "\n" + g.frame())
 	return b.String()
 }
 

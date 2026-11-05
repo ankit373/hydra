@@ -4,10 +4,12 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // stripANSI removes lipgloss's escape sequences so the underlying text can be
@@ -441,11 +443,17 @@ func TestCkWordmark_PreservesText(t *testing.T) {
 	if got := stripANSI(ckWordmark("HYDRA")); got != "HYDRA" {
 		t.Errorf("wordmark text = %q", got)
 	}
-	if c := ckLerpHex(0.0); c != lipgloss.Color("#2AF0E0") {
-		t.Errorf("lerp(0) = %v", c)
-	}
-	if c := ckLerpHex(1.0); c != lipgloss.Color("#E852C8") {
-		t.Errorf("lerp(1) = %v", c)
+	for _, tt := range []struct {
+		dark      bool
+		from, end string
+	}{{true, "#2AF0E0", "#E852C8"}, {false, "#00707A", "#A21CAF"}} {
+		withTheme(t, colorprofile.TrueColor, tt.dark)
+		if c := ckLerpHex(0.0); c != lipgloss.Color(tt.from) {
+			t.Errorf("dark=%v lerp(0) = %v, want %s", tt.dark, c, tt.from)
+		}
+		if c := ckLerpHex(1.0); c != lipgloss.Color(tt.end) {
+			t.Errorf("dark=%v lerp(1) = %v, want %s", tt.dark, c, tt.end)
+		}
 	}
 }
 
@@ -458,16 +466,19 @@ func TestPlural(t *testing.T) {
 // The tier colour ramp must be defined for every tier, including ones outside
 // the documented 1-10 range.
 func TestCkTierColor_CoversEveryTier(t *testing.T) {
-	seen := map[lipgloss.Color]bool{}
-	for tier := -1; tier <= 12; tier++ {
-		c := ckTierColor(tier)
-		if c == "" {
-			t.Errorf("tier %d has no colour", tier)
+	for _, dark := range []bool{true, false} {
+		withTheme(t, colorprofile.TrueColor, dark)
+		seen := map[color.Color]bool{}
+		for tier := -1; tier <= 12; tier++ {
+			c := ckTierColor(tier)
+			if c == nil || c == (lipgloss.NoColor{}) {
+				t.Errorf("dark=%v tier %d has no colour", dark, tier)
+			}
+			seen[c] = true
 		}
-		seen[c] = true
-	}
-	if len(seen) < 3 {
-		t.Errorf("the ramp collapsed to %d colours", len(seen))
+		if len(seen) < 3 {
+			t.Errorf("dark=%v: the ramp collapsed to %d colours", dark, len(seen))
+		}
 	}
 }
 

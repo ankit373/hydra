@@ -69,7 +69,7 @@ export function Code({
       <div className="empty">
         <p className="empty__title">This run changed no files</p>
         <p>
-          File edits appear here. Try <code>hyctl edit --file … --enum … --prompt "…"</code>.
+          File edits appear here. From a terminal, try <code>hyctl edit --file … --enum … --prompt "…"</code>.
         </p>
       </div>
     )

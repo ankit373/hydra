@@ -41,8 +41,8 @@ capture_embeddings in config.toml. Results name the span, so
 				return err
 			}
 			if !retrieve.Enabled(cfg) {
-				fmt.Println("Capture is off, so there is nothing to search.")
-				fmt.Println("Turn it on with capture_embeddings = true in config.toml.")
+				fmt.Fprintln(stdout, "Capture is off, so there is nothing to search.")
+				fmt.Fprintln(stdout, "Turn it on with capture_embeddings = true in config.toml.")
 				return nil
 			}
 
@@ -62,27 +62,27 @@ capture_embeddings in config.toml. Results name the span, so
 					"lexical": mode.Lexical, "dense": mode.Dense,
 					"results": hits, "indexed": s.Index().Stat().Docs,
 				}, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 
 			st := s.Index().Stat()
 			if st.Docs == 0 {
-				fmt.Println("Nothing indexed yet. Run a dispatch with capture on.")
+				fmt.Fprintln(stdout, "Nothing indexed yet. Run a dispatch with capture on.")
 				return nil
 			}
 			if len(hits) == 0 {
-				fmt.Printf("  no match in %d indexed prompt%s\n", st.Docs, plural(st.Docs))
+				fmt.Fprintf(stdout, "  no match in %d indexed prompt%s\n", st.Docs, plural(st.Docs))
 				return nil
 			}
 
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%s over %d indexed prompt%s", mode, st.Docs, plural(st.Docs))))
 			for i, h := range hits {
-				fmt.Printf("  %2d. %s  %s\n", i+1, h.DocID,
+				fmt.Fprintf(stdout, "  %2d. %s  %s\n", i+1, h.DocID,
 					dimStyle.Render(fmt.Sprintf("score %.4f", h.Score)))
 			}
-			fmt.Printf("  %s\n", dimStyle.Render("hyctl trace view --span <id> shows the run behind one"))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("hyctl trace view --span <id> shows the run behind one"))
 			return nil
 		},
 	}

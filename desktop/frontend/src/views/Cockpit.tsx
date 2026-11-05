@@ -126,14 +126,14 @@ export function Cockpit({
       {conf > 0 && (
         <section className="ck">
           <div className="ck__head">
-            <span className="ck__lbl">Confidence</span>
+            <span className="ck__lbl">Likely correct</span>
             <span className="ck__rule" />
           </div>
           <div className="ck__gauge">
             <Gauge value={conf} />
             <div>
               <div className="ck__gaugeNum">{pct(conf * 100, 0)}</div>
-              <div className="ck__gaugeCap">reached on this run</div>
+              <div className="ck__gaugeCap">checked on this run</div>
             </div>
           </div>
         </section>
@@ -185,7 +185,7 @@ function ModelRows({ dash }: { dash: DashboardData | null }) {
   if (cal.length === 0 && byModel.length === 0) {
     return (
       <p className="ck__empty">
-        Nothing recorded yet. Calibration fills in from <code>hyctl trust record</code>.
+        Nothing measured yet. This fills in as answers are checked, or from <code>hyctl trust record</code>.
       </p>
     )
   }

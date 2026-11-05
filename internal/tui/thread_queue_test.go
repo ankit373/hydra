@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/editor"
@@ -59,7 +59,7 @@ func TestQueue_SameFileQueuesThenAutoStartsOnApply(t *testing.T) {
 		t.Fatal("thread 1 got no worktree")
 	}
 
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m2, cmd = m.startTask("edit pkg/main.go second")
 	m = runCmds(t, m2, cmd)
 	th2 := m.th()
@@ -83,7 +83,7 @@ func TestQueue_SameFileQueuesThenAutoStartsOnApply(t *testing.T) {
 
 	// Blocker applies → the queued thread auto-starts and lands its own edit.
 	m = altDigit(m, '1')
-	m, acmd := keyRune(m, 'a')
+	m, acmd := command(m, "/apply")
 	m = runCmds(t, m, acmd)
 	th2 = m.threadByID(2)
 	if th2.queued != nil {
@@ -112,7 +112,7 @@ func TestQueue_DiscardAlsoReleases(t *testing.T) {
 	m.repoRoot = repo
 	m2, cmd := m.startTask("edit pkg/other.go one")
 	m = runCmds(t, m2, cmd)
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m2, cmd = m.startTask("edit pkg/other.go two")
 	m = runCmds(t, m2, cmd)
 	if m.th().queued == nil {
@@ -120,8 +120,7 @@ func TestQueue_DiscardAlsoReleases(t *testing.T) {
 	}
 
 	m = altDigit(m, '1')
-	m, _ = keyRune(m, 'x') // arm
-	m, dcmd := keyRune(m, 'x')
+	m, dcmd := undoConfirmed(m)
 	m = runCmds(t, m, dcmd)
 	th2 := m.threadByID(2)
 	if th2.queued != nil || th2.lastDone == nil {
@@ -138,10 +137,10 @@ func TestQueue_ChainRequeuesBehindTheNewBlocker(t *testing.T) {
 	m.repoRoot = repo
 	m2, cmd := m.startTask("edit pkg/third.go a")
 	m = runCmds(t, m2, cmd)
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m2, cmd = m.startTask("edit pkg/third.go b")
 	m = runCmds(t, m2, cmd)
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m2, cmd = m.startTask("edit pkg/third.go c")
 	m = runCmds(t, m2, cmd)
 
@@ -150,7 +149,7 @@ func TestQueue_ChainRequeuesBehindTheNewBlocker(t *testing.T) {
 	}
 	// Thread 1 applies: 2 starts, 3 requeues behind 2.
 	m = altDigit(m, '1')
-	m, acmd := keyRune(m, 'a')
+	m, acmd := command(m, "/apply")
 	m = runCmds(t, m, acmd)
 	if m.threadByID(2).queued != nil {
 		t.Fatal("thread 2 did not start")
@@ -201,7 +200,7 @@ func TestQueue_NoRepoSerializesEditsInPlace(t *testing.T) {
 	logs := stripANSI(strings.Join(th1.log, "\n"))
 	_ = logs
 
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m2, cmd := m.startTask("edit pkg/b.go too")
 	m = runCmds(t, m2, cmd)
 	if m.th().queued == nil {
@@ -248,7 +247,7 @@ func TestQueue_GraphCoupledTargetsQueue(t *testing.T) {
 	m.metrics.graph = g
 	m2, cmd := m.startTask("edit pkg/main.go base")
 	m = runCmds(t, m2, cmd)
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m2, cmd = m.startTask("edit pkg/other.go dependent")
 	m = runCmds(t, m2, cmd)
 	q := m.th().queued
@@ -264,7 +263,7 @@ func TestQueue_GraphCoupledTargetsQueue(t *testing.T) {
 // causally ordered clocks stay silent.
 func TestConcurrentWarnings_VectorClockBackstop(t *testing.T) {
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	t1, t2 := m.threadByID(1), m.threadByID(2)
 	t1.files = []string{"pkg/main.go"}
 	t2.files = []string{"pkg/main.go"}
@@ -351,7 +350,7 @@ func TestThreads_ConcurrentWorkersSettleOnTheirOwnThreads(t *testing.T) {
 	var cmds []tea.Cmd
 	for i, f := range []string{"pkg/main.go", "pkg/other.go", "pkg/third.go"} {
 		if i > 0 {
-			m = press(m, tea.KeyCtrlT)
+			m = press(m, "ctrl+t")
 		}
 		m2, cmd := m.startTask("edit " + f + " concurrently")
 		m = m2
@@ -391,7 +390,7 @@ func TestThreads_ConcurrentWorkersSettleOnTheirOwnThreads(t *testing.T) {
 	for id := 1; id <= 3; id++ {
 		m = altDigit(m, rune('0'+id))
 		var acmd tea.Cmd
-		m, acmd = keyRune(m, 'a')
+		m, acmd = command(m, "/apply")
 		m = runCmds(t, m, acmd)
 		if m.threadByID(id).wt != nil {
 			t.Errorf("thread %d's apply left its worktree", id)

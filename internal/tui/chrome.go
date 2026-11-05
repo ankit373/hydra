@@ -7,10 +7,11 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/budget"
 )
@@ -24,7 +25,7 @@ func (m Cockpit) header() string {
 	tabs := make([]string, len(ckViewNames))
 	for i, name := range ckViewNames {
 		if i == m.view {
-			tabs[i] = ckChipS.Render(name)
+			tabs[i] = ckActiveTab(name)
 		} else {
 			tabs[i] = ckTabS.Render(name)
 		}
@@ -34,12 +35,12 @@ func (m Cockpit) header() string {
 	if gap < 1 {
 		// Narrow: the chip alone would say nothing about the other views, so
 		// keep the position and the key that moves between them (#630).
-		full = ckChipS.Render(ckViewName(m.view)) +
+		full = ckActiveTab(ckViewName(m.view)) +
 			ckFaintS.Render(fmt.Sprintf(" %d/%d tab", m.view+1, ckViewCount()))
 		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
 	}
 	if gap < 1 {
-		full = ckChipS.Render(ckViewName(m.view))
+		full = ckActiveTab(ckViewName(m.view))
 		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
 	}
 	if gap < 1 {
@@ -87,9 +88,12 @@ func ckBandStyle(pct int) lipgloss.Style {
 func (m Cockpit) statusBar() string {
 	right := m.statusFact()
 	if m.flash != "" {
-		right = ckMidS.Render(m.flash)
+		right = ckMidS.Render(ckSafe(m.flash))
 	} else {
 		right = ckDimS.Render(right)
+	}
+	if m.mouseOff {
+		right = ckMidS.Render("select mode, ctrl+s ends") + ckDimS.Render(" · ") + right
 	}
 	shortcuts := ckAquaS.Render("?") + ckFaintS.Render(" shortcuts")
 
@@ -175,14 +179,37 @@ func ckWordmark(s string) string {
 	return b.String()
 }
 
-// ckLerpHex blends cyan → violet → magenta across t∈[0,1].
-func ckLerpHex(t float64) lipgloss.Color {
-	var a, b [3]int
+// ckLerpHex blends the brand stops (start → mid → end) across t∈[0,1], with
+// the tokens' deeper light-theme stops on light backgrounds.
+func ckLerpHex(t float64) color.Color {
+	return ckDepth(lipgloss.LightDark(ckDark)(
+		lipgloss.Color(ckLerp3(t, ckBrandLight[0], ckBrandLight[1], ckBrandLight[2])),
+		lipgloss.Color(ckLerp3(t, ckBrandDark[0], ckBrandDark[1], ckBrandDark[2]))))
+}
+
+// The wordmark's stops, parsed once: ckWordmark asks for them per rune per frame.
+var (
+	ckBrandDark  = [3][3]int{ckHexRGB(tokBrandStart.Dark), ckHexRGB(tokBrandMid.Dark), ckHexRGB(tokBrandEnd.Dark)}
+	ckBrandLight = [3][3]int{ckHexRGB(tokBrandStart.Light), ckHexRGB(tokBrandMid.Light), ckHexRGB(tokBrandEnd.Light)}
+)
+
+// ckHexRGB reads a generated "#rrggbb" truecolor value. A malformed one is a
+// broken token build, so it stops the program rather than painting black.
+func ckHexRGB(c tokDepths) [3]int {
+	var v [3]int
+	if _, err := fmt.Sscanf(c.TrueColor, "#%02x%02x%02x", &v[0], &v[1], &v[2]); err != nil {
+		panic(fmt.Sprintf("tui: generated brand colour %q: %v", c.TrueColor, err))
+	}
+	return v
+}
+
+func ckLerp3(t float64, from, mid, to [3]int) string {
+	a, b := from, mid
 	if t < 0.5 {
-		a, b, t = [3]int{0x2A, 0xF0, 0xE0}, [3]int{0x8B, 0x5C, 0xF6}, t/0.5
+		t = t / 0.5
 	} else {
-		a, b, t = [3]int{0x8B, 0x5C, 0xF6}, [3]int{0xE8, 0x52, 0xC8}, (t-0.5)/0.5
+		a, b, t = mid, to, (t-0.5)/0.5
 	}
 	l := func(x, y int) int { return int(float64(x) + float64(y-x)*t) }
-	return lipgloss.Color(fmt.Sprintf("#%02X%02X%02X", l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2])))
+	return fmt.Sprintf("#%02X%02X%02X", l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2]))
 }

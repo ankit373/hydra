@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -264,7 +264,7 @@ func cmdWorkflowResume() *cobra.Command {
 						return err
 					}
 				}
-				fmt.Printf("  %s\n", dimStyle.Render("nothing left to run; every step is done"))
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("nothing left to run; every step is done"))
 				return nil
 			}
 			return runWorkflow(cmd.Context(), w)
@@ -288,8 +288,8 @@ func dryRunWorkflow(ctx context.Context, w workflow.Workflow) error {
 		return err
 	}
 	defer d.Close()
-	fmt.Printf("\n  %s %s\n", cortexStyle.Render("▶ WORKFLOW · dry run"), w.ID)
-	fmt.Printf("  %s\n\n", dimStyle.Render(w.Task))
+	fmt.Fprintf(stdout, "\n  %s %s\n", cortexStyle.Render("▶ WORKFLOW · dry run"), w.ID)
+	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(w.Task))
 
 	r := routerFor(d, w)
 	for _, s := range w.Steps {
@@ -297,7 +297,7 @@ func dryRunWorkflow(ctx context.Context, w workflow.Workflow) error {
 		if hint == "" {
 			hint = "auto"
 		}
-		fmt.Printf("  %s %s %s\n",
+		fmt.Fprintf(stdout, "  %s %s %s\n",
 			dimStyle.Render(fmt.Sprintf("[%d/%d]", s.N, len(w.Steps))), s.Title, dimStyle.Render("· "+hint))
 		opts, _, err := r.options(s.Prompt, s.Enum)
 		if err != nil {
@@ -309,14 +309,14 @@ func dryRunWorkflow(ctx context.Context, w workflow.Workflow) error {
 			return err
 		}
 		if opts.MaxCostUSD > 0 {
-			fmt.Printf("      %s\n", dimStyle.Render(fmt.Sprintf("ceiling $%.4f (%s)", opts.MaxCostUSD, opts.MaxCostSource)))
+			fmt.Fprintf(stdout, "      %s\n", dimStyle.Render(fmt.Sprintf("ceiling $%.4f (%s)", opts.MaxCostUSD, opts.MaxCostSource)))
 		}
-		fmt.Printf("      %s %s (score %d, %s)\n", cortexStyle.Render("→"), res.Head.Name, res.Head.CapScore, res.Head.Source)
+		fmt.Fprintf(stdout, "      %s %s (score %d, %s)\n", cortexStyle.Render("→"), res.Head.Name, res.Head.CapScore, res.Head.Source)
 		for j, f := range res.Fallbacks {
-			fmt.Println(dimStyle.Render(fmt.Sprintf("        %d. %-28s score %d  %s", j+1, f.Name, f.CapScore, f.Source)))
+			fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("        %d. %-28s score %d  %s", j+1, f.Name, f.CapScore, f.Source)))
 		}
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	return nil
 }
 
@@ -327,8 +327,8 @@ func runWorkflow(ctx context.Context, w workflow.Workflow) error {
 		return err
 	}
 	defer d.Close()
-	fmt.Printf("\n  %s %s\n", cortexStyle.Render("▶ WORKFLOW"), w.ID)
-	fmt.Printf("  %s\n\n", dimStyle.Render(w.Task))
+	fmt.Fprintf(stdout, "\n  %s %s\n", cortexStyle.Render("▶ WORKFLOW"), w.ID)
+	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(w.Task))
 
 	// The workflow's task is what this run is about. Without it the cockpit
 	// fell back to the first step's routing enum and listed the run as
@@ -351,7 +351,7 @@ func runWorkflow(ctx context.Context, w workflow.Workflow) error {
 				if hint == "" {
 					hint = "auto"
 				}
-				fmt.Printf("  %s %s %s\n",
+				fmt.Fprintf(stdout, "  %s %s %s\n",
 					dimStyle.Render(fmt.Sprintf("[%d/%d]", s.N, total)),
 					s.Title, dimStyle.Render("· "+hint))
 			}
@@ -365,8 +365,8 @@ func runWorkflow(ctx context.Context, w workflow.Workflow) error {
 	}
 	printWorkflow(done)
 	if last := lastOutput(done); last != "" {
-		fmt.Println(last)
-		fmt.Println()
+		fmt.Fprintln(stdout, last)
+		fmt.Fprintln(stdout)
 	}
 	if err != nil {
 		return err
@@ -434,12 +434,12 @@ func printWorkflow(w workflow.Workflow) {
 	observed := w.Observed()
 	width := lipgloss.Width(workflowHeader()) - 2
 	sep := dimStyle.Render("  " + strings.Repeat("─", width))
-	fmt.Println(sep)
+	fmt.Fprintln(stdout, sep)
 	// TIER has its own column: appended to HEAD it was the first thing the
 	// 18-char truncation cut, and which tier answered is the most informative
 	// part of the row.
-	fmt.Println(workflowHeader())
-	fmt.Println(sep)
+	fmt.Fprintln(stdout, workflowHeader())
+	fmt.Fprintln(stdout, sep)
 	for _, s := range w.Steps {
 		head := dimStyle.Render("—")
 		if s.Model != "" {
@@ -458,18 +458,18 @@ func printWorkflow(w workflow.Workflow) {
 		if s.Status == workflow.Done {
 			spent = fmt.Sprintf("$%.4f", s.CostUSD)
 		}
-		fmt.Println(workflowRow(s.N, truncLabel(s.Title, 28),
+		fmt.Fprintln(stdout, workflowRow(s.N, truncLabel(s.Title, 28),
 			statusLabel(workflow.ObservedStep(s.Status, observed)), tier, head, took, spent))
 		if s.Err != "" {
-			fmt.Printf("      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
+			fmt.Fprintf(stdout, "      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
 		}
 	}
-	fmt.Println(sep)
+	fmt.Fprintln(stdout, sep)
 	done, total := w.Progress()
-	fmt.Printf("  %s %s  ·  %d/%d steps  ·  $%.4f\n\n",
+	fmt.Fprintf(stdout, "  %s %s  ·  %d/%d steps  ·  $%.4f\n\n",
 		dimStyle.Render("Workflow →"), cortexStyle.Render(string(observed)), done, total, w.CostUSD())
 	if observed == workflow.Interrupted {
-		fmt.Printf("  %s\n\n", warnStyle.Render(
+		fmt.Fprintf(stdout, "  %s\n\n", warnStyle.Render(
 			"the process running this is gone; continue it with `hyctl workflow resume "+w.ID+"`"))
 	}
 }
@@ -483,9 +483,9 @@ func printStepOutputs(w workflow.Workflow) {
 		}
 		head := fmt.Sprintf("── step %d · %s", s.N, truncLabel(s.Title, 40))
 		meta := fmt.Sprintf("%s · T%d · $%.4f", s.Model, s.Tier, s.CostUSD)
-		fmt.Printf("  %s\n", cortexStyle.Render(head))
-		fmt.Printf("  %s\n\n", dimStyle.Render(meta))
-		fmt.Printf("%s\n\n", s.Output)
+		fmt.Fprintf(stdout, "  %s\n", cortexStyle.Render(head))
+		fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(meta))
+		fmt.Fprintf(stdout, "%s\n\n", s.Output)
 	}
 }
 
@@ -537,21 +537,21 @@ func cmdWorkflowList() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(list)
 			}
 			if len(list) == 0 {
-				fmt.Printf("\n  %s\n\n", dimStyle.Render("no workflows yet; start one with `hyctl workflow run --step ...`"))
+				fmt.Fprintf(stdout, "\n  %s\n\n", dimStyle.Render("no workflows yet; start one with `hyctl workflow run --step ...`"))
 				return nil
 			}
 			sep := dimStyle.Render("  " + strings.Repeat("─", 66))
-			fmt.Println()
-			fmt.Println(workflowListHeader())
-			fmt.Println(sep)
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, workflowListHeader())
+			fmt.Fprintln(stdout, sep)
 			for _, w := range list {
 				done, total := w.Progress()
-				fmt.Println(workflowListRow(truncLabel(w.ID, 22), statusLabel(w.Observed()),
+				fmt.Fprintln(stdout, workflowListRow(truncLabel(w.ID, 22), statusLabel(w.Observed()),
 					fmt.Sprintf("%d/%d", done, total),
 					fmt.Sprintf("$%.4f", w.CostUSD()),
 					truncLabel(oneLine(w.Task), 30)))
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -573,9 +573,9 @@ func cmdWorkflowShow() *cobra.Command {
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(w)
 			}
-			fmt.Printf("\n  %s %s  ·  %s\n", cortexStyle.Render("▶ WORKFLOW"), w.ID,
+			fmt.Fprintf(stdout, "\n  %s %s  ·  %s\n", cortexStyle.Render("▶ WORKFLOW"), w.ID,
 				dimStyle.Render(createdAge(w.Created)))
-			fmt.Printf("  %s\n\n", dimStyle.Render(w.Task))
+			fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(w.Task))
 			printWorkflow(w)
 			printStepOutputs(w)
 			return nil
@@ -594,7 +594,7 @@ func cmdWorkflowRemove() *cobra.Command {
 			if err := workflow.Delete(args[0]); err != nil {
 				return err
 			}
-			fmt.Printf("  %s %s\n", dimStyle.Render("removed"), args[0])
+			fmt.Fprintf(stdout, "  %s %s\n", dimStyle.Render("removed"), args[0])
 			return nil
 		},
 	}

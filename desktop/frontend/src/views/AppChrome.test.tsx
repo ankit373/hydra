@@ -41,7 +41,7 @@ const footer = (over: { routable?: number | null; headsError?: string | null } =
 
 // A probe in flight and a probe that has failed were both null, so a dead
 // backend read as "still working on it", for ever. Measured in a real browser:
-// the header said "probing…" and the footer "probing heads…" indefinitely
+// the header said "probing…" and the footer "looking for models…" indefinitely
 // against a backend that refused every call (#1100).
 describe('the head count distinguishes three states, not two', () => {
   it('says it is probing while nothing has answered yet', () => {
@@ -59,7 +59,7 @@ describe('the head count distinguishes three states, not two', () => {
     // The polls deliberately keep the previous value; a failed tick must not
     // report zero heads on a machine that has some.
     header({ routable: 2, headsError: 'connection refused' })
-    expect(screen.getByText('2 routable')).toBeInTheDocument()
+    expect(screen.getByText('2 ready')).toBeInTheDocument()
     expect(screen.queryByText('probe failed')).not.toBeInTheDocument()
   })
 
@@ -70,11 +70,11 @@ describe('the head count distinguishes three states, not two', () => {
 
   it('makes the same distinction in the footer', () => {
     const { unmount } = footer()
-    expect(screen.getByText('probing heads…')).toBeInTheDocument()
+    expect(screen.getByText('looking for models…')).toBeInTheDocument()
     unmount()
 
     footer({ headsError: 'connection refused' })
     expect(screen.getByText('probe failed')).toBeInTheDocument()
-    expect(screen.queryByText('probing heads…')).not.toBeInTheDocument()
+    expect(screen.queryByText('looking for models…')).not.toBeInTheDocument()
   })
 })

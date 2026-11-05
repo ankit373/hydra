@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/a2a"
 )
@@ -41,14 +41,14 @@ type ckThread struct {
 	gone []ckAbandoned
 	attn bool // finished needing eyes (a failure), cleared on visit
 
-	bg         bool        // re-parented to the agents view
-	queued     *ckQueued   // waiting on an overlap blocker; nil otherwise
-	wt         *ckWorktree // edit isolation; nil = shared tree
-	files      []string    // repo-relative edit targets this thread holds
-	clock      a2a.Clock   // causal backstop across threads
-	inEdit     bool        // an in-place (no-isolation) edit task is running
-	discardArm bool        // first x pressed; the next x discards the worktree
-	lastRunID  string      // latest task's run id, the agents-view join key
+	bg        bool        // re-parented to the agents view
+	queued    *ckQueued   // waiting on an overlap blocker; nil otherwise
+	wt        *ckWorktree // edit isolation; nil = shared tree
+	files     []string    // repo-relative edit targets this thread holds
+	clock     a2a.Clock   // causal backstop across threads
+	inEdit    bool        // an in-place (no-isolation) edit task is running
+	undoAsk   *ckUndoAsk  // /undo's pending y/n question; nil = none
+	lastRunID string      // latest task's run id, the agents-view join key
 
 	// code panel, per thread, each shows its own last edit
 	codeLang  string
@@ -177,7 +177,7 @@ func (m Cockpit) focusThread(id int) Cockpit {
 		t.bg = false
 	}
 	t.attn = false
-	t.discardArm = false
+	t.undoAsk = nil
 	for i, o := range m.threads {
 		if o.id == id {
 			if m.cur != i {
@@ -369,7 +369,7 @@ func (m Cockpit) threadChip(t *ckThread) string {
 		body += ckVioletS.Render(" ·wt")
 	}
 	if t.id == m.th().id {
-		return ckChipS.Render(label) + ckThreadGlyph(t.status()) + ckInkS.Bold(true).Render(body)
+		return ckActiveTab(label) + ckThreadGlyph(t.status()) + ckInkS.Bold(true).Render(body)
 	}
 	return ckDimS.Render(label) + ckThreadGlyph(t.status()) + ckDimS.Render(body)
 }
