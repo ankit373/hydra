@@ -76,6 +76,7 @@ pnpm-lock.yaml
 !desktop/frontend/package-lock.json
 # Same for the design-token build: CI runs `npm ci` to check generated files.
 !design/package-lock.json
+!docs-check/package-lock.json
 
 # Private planning docs, local-only scoping / planning / spec / review / design.
 # NEVER commit these. Glob patterns catch future ones; explicit names below are legacy.
