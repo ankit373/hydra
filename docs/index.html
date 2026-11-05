@@ -264,12 +264,8 @@
   background:linear-gradient(90deg,var(--hy-color-accent-strong),var(--hy-color-brand-mid),var(--hy-color-brand-end));-webkit-background-clip:text;background-clip:text;
   color:transparent;margin-bottom:var(--hy-space-2);}
 .deep .db{font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);letter-spacing:.5px;line-height:1.6;transition:opacity var(--hy-motion-duration-fast) ease-out;font-family:var(--hy-font-family-mono);}
-/* top must clear .site-header (position:sticky, top:0, 52px tall, z-index:60).
-   At top:20px this pill sat entirely inside the bar's 0-52px band, and since
-   .hero-pin creates no stacking context above z-index 60, the bar painted over
-   it, background and backdrop-filter and all, so every click landed on the
-   topbar and "skip intro" did nothing. Kept below the bar rather than raised
-   above it: floating a hero control over the nav is the wrong fix. */
+/* top must clear the sticky .site-header (52px, z-index 60): at top:20px the bar
+   painted over this pill and swallowed every click. */
 .skip-intro{position:absolute;top:68px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
   font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-text-subtle);
   border:1px solid var(--hy-color-border-subtle);border-radius:20px;padding:var(--hy-space-1) var(--hy-space-3);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);background:color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent);}
@@ -473,6 +469,7 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">v1.x · MIT</span>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
@@ -482,7 +479,6 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
     <a href="https://github.com/ankit373/hydra">GitHub</a>
   </nav>
   <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
 </header>
 
 <main id="main">
@@ -1023,8 +1019,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var x=cv.getContext('2d'), stage=$('#heroSticky'), heroPin=$('#heroPin');
   var heroCopy=$('#heroCopy'), scrollHint=$('#scrollHint');
   // Canvas colours read the generated tokens, so the drawing follows design/tokens.
-  var T=getComputedStyle(document.documentElement);
-  function tok(n){return T.getPropertyValue('--hy-color-'+n).trim();}
+  var tok=Hydra.color;
   var C={cyan:tok('accent-strong'),violet:tok('brand-mid'),magenta:tok('brand-end'),aqua:tok('accent-default'),cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high'),dim:tok('text-subtle'),ink:tok('text-default'),muted:tok('text-muted'),edge:tok('border-strong')};
 
   // ── graph model ──────────────────────────────────────────────────────────
@@ -1095,7 +1090,6 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var fR=N(pt(B,[[-0.11,V],[0.17,T]]),hCol,0.9,'horn',null,null,hb+STAG*5);
     E(head,hL,'horn');E(head,hR,'horn');E(head,sn,'horn');E(head,jw,'horn');E(hL,sn,'horn');E(hR,sn,'horn');E(jw,sn,'horn');
     E(sn,fL,'horn');E(sn,fR,'horn');E(fL,fR,'horn');
-    var hdEl=$('#hudHeads'); if(hdEl)hdEl.textContent=HEADS.length;
   }
 
   // the three heads Hydra ships with today
@@ -1271,36 +1265,20 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   }
 
   // ── telemetry sim ───────────────────────────────────────────────────────────
-  var ENUMS=['SIMPLE','STANDARD','MODERATE','COMPLEX','CRITICAL'];
-  var saved=0,localCount=0,totalDispatches=0,activeHead=1,upSec=0,govPct=34,lastConf=0.94;
-  var logbody=$('#hudLogBody'); var lines=[];
-  function pad(n){return n<10?'0'+n:''+n;}
+  // The canvas features read these: which model answered, how sure the check was, governor load.
+  var activeHead=1,govPct=34,lastConf=0.94;
   function tick(){
+    if(released||document.hidden)return; // nothing draws the packets it would queue
     var born=HEADS.filter(function(h){return h.headIdx!=null&&nodes[h.headIdx].age>=REVEAL;});
     if(!born.length)return;
     var h=born[Math.floor(Math.random()*born.length)];
-    var idx=HEADS.indexOf(h);activeHead=idx;
-    var en=ENUMS[Math.floor(Math.random()*ENUMS.length)];
-    var lat=Math.round(h.lat*(0.85+Math.random()*0.3));
-    var conf=(h.conf-0.02+Math.random()*0.04); lastConf=conf;
-    totalDispatches++; if(h.local)localCount++;
-    var cost=h.local?0:parseFloat(h.cost.slice(1))*(0.4+Math.random());
-    var avoid=0.9*(0.5+Math.random()); saved+=Math.max(0,avoid-cost);
+    activeHead=HEADS.indexOf(h);
+    lastConf=h.conf-0.02+Math.random()*0.04;
     spawnDispatch(h);
-    var line='<div class="line"><span class="en">'+en+'</span> &rarr; <span class="hd">'+h.name+'</span> &middot; <span class="c">'+(h.local?'local':'$'+cost.toFixed(3))+'</span> &middot; '+lat+'ms &middot; <span class="ok">checked '+conf.toFixed(2)+' ✓</span></div>';
-    lines.unshift(line); if(lines.length>7)lines.pop(); if(logbody)logbody.innerHTML=lines.join('');
-    var confEl=$('#hudConf'); if(confEl)confEl.textContent=conf.toFixed(2);
-    var confbarEl=$('#hudConfbar'); if(confbarEl)confbarEl.style.width=Math.round(conf*100)+'%';
-    var savedEl=$('#hudSaved'); if(savedEl)savedEl.textContent='$'+saved.toFixed(2);
-    var localEl=$('#hudLocal'); if(localEl)localEl.textContent=Math.round(localCount/totalDispatches*100)+'%';
     govPct=Math.max(20,Math.min(96,govPct+(Math.random()-0.45)*8));
-    var band=govPct<50?'NORMAL':govPct<75?'WARNING':'CRITICAL';
-    var mEl=$('#hudMode'); if(mEl){mEl.textContent=band+' '+Math.round(govPct)+'%';mEl.style.color=govPct<50?C.cheap:govPct<75?C.mid:C.exp;}
-    var mstateEl=$('#hudMstate'); if(mstateEl)mstateEl.style.color=govPct<75?C.cheap:C.exp;
-    if(activeFeature===3&&deepTitleEl&&mEl)deepTitleEl.style.background=mEl.style.color;
+    if(activeFeature===3&&deepTitleEl)deepTitleEl.style.background=govPct<50?C.cheap:govPct<75?C.mid:C.exp;
   }
-  if(!reduce){setInterval(tick,1400);setTimeout(tick,400);
-    setInterval(function(){upSec++;var upEl=$('#hudUp');if(upEl)upEl.textContent=pad(Math.floor(upSec/60))+':'+pad(upSec%60);},1000);}
+  if(!reduce){setInterval(tick,1400);setTimeout(tick,400);}
 
   // ── render ───────────────────────────────────────────────────────────────
   var START_TS=null;

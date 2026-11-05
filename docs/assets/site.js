@@ -48,13 +48,20 @@
     kick();
   }
 
+  // The async clipboard can exist and still refuse (permissions, iframes), so it falls back.
   function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () { return legacyCopy(text); });
+    }
+    return legacyCopy(text);
+  }
+  function legacyCopy(text) {
     var ta = document.createElement('textarea');
     ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); } finally { document.body.removeChild(ta); }
-    return Promise.resolve();
+    var ok;
+    try { ok = document.execCommand('copy'); } finally { document.body.removeChild(ta); }
+    return ok ? Promise.resolve() : Promise.reject(new Error('copy refused'));
   }
 
   function wire() {
@@ -78,18 +85,28 @@
       var b = e.target.closest('[data-copy]');
       if (!b) return;
       var label = b.querySelector('.cp') || b;
-      var was = label.textContent;
+      if (!('label' in b.dataset)) b.dataset.label = label.textContent;
       copyText(b.getAttribute('data-copy')).then(function () {
         b.classList.add('done', 'copied');
         label.textContent = 'copied';
         announce('Copied to the clipboard');
-        setTimeout(function () { b.classList.remove('done', 'copied'); label.textContent = was; }, 1600);
+        clearTimeout(b._copyReset);
+        b._copyReset = setTimeout(function () {
+          b.classList.remove('done', 'copied');
+          label.textContent = b.dataset.label;
+        }, 1600);
       }, function () { announce('Copy failed; select the command and copy it by hand'); });
     });
   }
 
   // Canvas and SVG drawing read the same tokens CSS does, by role name ('accent-default').
-  function color(role) { return getComputedStyle(root).getPropertyValue('--hy-color-' + role).trim(); }
+  // Resolved once per role, since canvases ask inside their per-frame loops.
+  var resolved = {};
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { resolved = {}; });
+  function color(role) {
+    if (!(role in resolved)) resolved[role] = getComputedStyle(root).getPropertyValue('--hy-color-' + role).trim();
+    return resolved[role];
+  }
   function rgb(role) {
     var h = color(role);
     return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -106,11 +123,14 @@
       else if (!over && 'scrollFocus' in e.dataset) { e.removeAttribute('tabindex'); delete e.dataset.scrollFocus; }
     }
   }
+  // Tabs and <details> reveal hidden regions without a resize, so re-check after those too.
   var scrollTimer;
-  window.addEventListener('resize', function () { clearTimeout(scrollTimer); scrollTimer = setTimeout(focusScrollers, 150); });
+  function recheck() { clearTimeout(scrollTimer); scrollTimer = setTimeout(focusScrollers, 150); }
+  window.addEventListener('resize', recheck);
+  document.addEventListener('click', recheck);
+  document.addEventListener('toggle', recheck, true);
 
-  window.Hydra = { loop: loop, announce: announce, copy: copyText, reducedMotion: reduce,
-    color: color, rgb: rgb, rgba: rgba };
+  window.Hydra = { loop: loop, color: color, rgb: rgb, rgba: rgba };
   function init() { wire(); focusScrollers(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

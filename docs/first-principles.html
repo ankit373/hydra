@@ -131,6 +131,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">first principles</span>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
@@ -140,7 +141,6 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
     <a href="https://github.com/ankit373/hydra">GitHub</a>
   </nav>
   <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
 </header>
 
 <main id="main">
@@ -396,8 +396,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
   "use strict";
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   // Canvas colours read the generated tokens, so the drawing follows design/tokens.
-  var T=getComputedStyle(document.documentElement);
-  function tok(n){return T.getPropertyValue('--hy-color-'+n).trim();}
+  var tok=Hydra.color;
   var C = {bg:tok('surface-base'),ink:tok('text-default'),dim:tok('text-muted'),faint:tok('text-subtle'),
            cyan:tok('accent-strong'),aqua:tok('accent-default'),violet:tok('accent-secondary'),magenta:tok('brand-end'),
            cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high')};

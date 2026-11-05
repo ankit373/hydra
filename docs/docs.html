@@ -43,7 +43,7 @@
 /* layout */
 .shell{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:250px 1fr;}
 @media(max-width:960px){.shell{grid-template-columns:1fr;}}
-.side{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);overflow-y:auto;
+.side{position:sticky;top:var(--site-header-h);align-self:start;height:calc(100vh - var(--site-header-h));overflow-y:auto;
   padding:var(--hy-space-6) var(--hy-space-3) var(--hy-space-16) var(--hy-space-6);border-right:1px solid var(--hy-color-border-subtle);}
 @media(max-width:960px){.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--hy-color-border-subtle);}}
 .side-toggle{display:none;width:100%;text-align:left;background:color-mix(in srgb,var(--hy-color-accent-secondary) 6%,transparent);border:1px solid var(--hy-color-border-subtle);
@@ -209,6 +209,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">docs</span>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html" aria-current="page">Docs</a>
@@ -218,7 +219,6 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
     <a href="https://github.com/ankit373/hydra">GitHub</a>
   </nav>
   <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
 </header>
 
 <div class="hydra-widget" id="hydraWidget" aria-hidden="true">

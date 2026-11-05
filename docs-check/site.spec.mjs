@@ -78,6 +78,8 @@ for (const path of PAGES) {
       await toggle.click()
       await expect(toggle).toHaveAttribute('aria-expanded', 'true')
       await expect(docs).toBeVisible()
+      await page.keyboard.press('Tab') // the links it opened come next, not the page below
+      await expect(page.locator('#site-nav a').first()).toBeFocused()
       await page.keyboard.press('Escape')
       await expect(toggle).toHaveAttribute('aria-expanded', 'false')
       await expect(toggle).toBeFocused()
@@ -123,10 +125,11 @@ test('nothing in the home hero covers its text', async ({ page }) => {
       const box = (e) => e.getBoundingClientRect()
       const meet = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
       const text = [...document.querySelectorAll('.hero-inner *')].filter((e) => e.checkVisibility() && box(e).width)
-      const over = [...document.querySelectorAll('.hero-sticky *')]
-        .filter((e) => !e.closest('.hero-inner') && e.checkVisibility() && getComputedStyle(e).position === 'absolute'
-          && !['CANVAS'].includes(e.tagName) && getComputedStyle(e).pointerEvents !== 'none' || e.matches('.hud-panel, .deep'))
-        .filter((e) => e.checkVisibility() && parseFloat(getComputedStyle(e).opacity) > 0)
+      // Overlays: any text the hero draws outside its own copy, while it can be seen.
+      const seen = (e) => { for (let a = e; a; a = a.parentElement) if (getComputedStyle(a).opacity === '0') return false; return true }
+      const over = [...document.querySelectorAll('.hero-sticky *')].filter((e) => !e.closest('.hero-inner')
+        && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())
+        && e.checkVisibility() && seen(e) && box(e).width > 0)
       const out = []
       for (const o of over) for (const t of text) if (meet(box(o), box(t))) out.push(`${o.className} over ${t.tagName}.${t.className}`)
       return out

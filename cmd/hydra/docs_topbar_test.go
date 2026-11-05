@@ -10,10 +10,9 @@ import (
 	"testing"
 )
 
-// maxTopbarLinks is what the header fits on one line above its breakpoint:
-// logo, six nav links and the call to action. Measured: the widest page's bar
-// (first-principles, with its tag) needs 845px, and the nav folds at 900.
-// A ninth link means re-measuring, not raising this number on faith.
+// maxTopbarLinks: logo, six nav links and the call to action, measured at 845px
+// on the widest page (first-principles) against a 900px fold. A ninth link
+// means re-measuring, not raising this number on faith.
 const maxTopbarLinks = 8
 
 var topbarRe = regexp.MustCompile(`(?s)<header class="site-header"[^>]*>(.*?)</header>`)
