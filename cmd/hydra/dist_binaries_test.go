@@ -37,12 +37,22 @@ func mainPackages(t *testing.T) []string {
 			continue
 		}
 		dir := filepath.Join(root, e.Name())
-		pkgs, err := parser.ParseDir(token.NewFileSet(), dir, nil, 0)
+		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil {
-			t.Fatalf("parsing %s: %v", dir, err)
+			t.Fatalf("listing %s: %v", dir, err)
 		}
-		if _, ok := pkgs["main"]; ok {
-			out = append(out, "./cmd/"+e.Name())
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			pf, err := parser.ParseFile(token.NewFileSet(), f, nil, parser.PackageClauseOnly)
+			if err != nil {
+				t.Fatalf("parsing %s: %v", f, err)
+			}
+			if pf.Name.Name == "main" {
+				out = append(out, "./cmd/"+e.Name())
+				break
+			}
 		}
 	}
 	if len(out) == 0 {
