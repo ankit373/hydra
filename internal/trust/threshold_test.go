@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/reliability"
-	"github.com/ankit373/hydra/internal/stats"
 )
 
 // simulatedRun votes for the right answer 80% of the time, A being right 60% of the
@@ -174,25 +173,6 @@ func TestChooseThreshold_RefusesBadArguments(t *testing.T) {
 				t.Fatal("accepted")
 			}
 		})
-	}
-}
-
-func TestBinomialCDF_KnownValues(t *testing.T) {
-	tests := []struct {
-		k, n int
-		p    float64
-		want float64
-	}{
-		{k: 0, n: 0, p: 0.3, want: 1},
-		{k: 0, n: 10, p: 0.1, want: math.Pow(0.9, 10)},
-		{k: 1, n: 2, p: 0.5, want: 0.75},
-		{k: 2, n: 4, p: 0.5, want: 11.0 / 16},
-		{k: 5, n: 5, p: 0.7, want: 1},
-	}
-	for _, tc := range tests {
-		if got := stats.BinomialCDF(tc.k, tc.n, tc.p); math.Abs(got-tc.want) > 1e-12 {
-			t.Errorf("stats.BinomialCDF(%d, %d, %v) = %v, want %v", tc.k, tc.n, tc.p, got, tc.want)
-		}
 	}
 }
 

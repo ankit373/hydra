@@ -207,7 +207,7 @@ func bootstrapInterval(values, weights []float64, level float64, resamples int, 
 	if err != nil {
 		return 0, 0, err
 	}
-	b, err := stats.Resample(len(values), resamples, seed, mean)
+	b, err := stats.Resample(mean, resamples, seed)
 	if err != nil {
 		return 0, 0, err
 	}

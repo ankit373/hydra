@@ -51,6 +51,45 @@ func TestClopperPearsonUpper_Golden(t *testing.T) {
 	}
 }
 
+// Moved from internal/trust, which now calls this one implementation.
+func TestBinomialCDF_KnownValues(t *testing.T) {
+	tests := []struct {
+		k, n int
+		p    float64
+		want float64
+	}{
+		{k: 0, n: 0, p: 0.3, want: 1},
+		{k: 0, n: 10, p: 0.1, want: math.Pow(0.9, 10)},
+		{k: 1, n: 2, p: 0.5, want: 0.75},
+		{k: 2, n: 4, p: 0.5, want: 11.0 / 16},
+		{k: 5, n: 5, p: 0.7, want: 1},
+	}
+	for _, tc := range tests {
+		if got := BinomialCDF(tc.k, tc.n, tc.p); math.Abs(got-tc.want) > 1e-12 {
+			t.Errorf("BinomialCDF(%d, %d, %v) = %v, want %v", tc.k, tc.n, tc.p, got, tc.want)
+		}
+	}
+}
+
+// The edges are exact, where the log-space sum would meet log 0.
+func TestBinomialCDF_Edges(t *testing.T) {
+	tests := []struct {
+		k, n int
+		p    float64
+		want float64
+	}{
+		{-1, 10, 0.5, 0}, {-1, 0, 0.5, 0},
+		{10, 10, 0.5, 1}, {12, 10, 0.5, 1}, {10, 10, 1, 1},
+		{3, 10, 0, 1}, {0, 10, 0, 1},
+		{3, 10, 1, 0}, {9, 10, 1, 0},
+	}
+	for _, tc := range tests {
+		if got := BinomialCDF(tc.k, tc.n, tc.p); got != tc.want {
+			t.Errorf("BinomialCDF(%d, %d, %v) = %v, want %v", tc.k, tc.n, tc.p, got, tc.want)
+		}
+	}
+}
+
 // Rounding can sum the whole distribution past 1; a probability never is.
 func TestBinomialCDF_NeverExceedsOne(t *testing.T) {
 	for _, n := range []int{60, 500, 1100} {
@@ -77,17 +116,25 @@ func TestClopperPearsonUpper_RefusesWhatItCannotAnswer(t *testing.T) {
 }
 
 func TestWilson_GoldenAndEdges(t *testing.T) {
-	lo, hi := Wilson(81, 263, 1.959964)
+	lo, hi, err := Wilson(81, 263, 1.959964)
+	if err != nil {
+		t.Fatal(err)
+	}
 	near(t, "lo", lo, 0.25528851948901576, exact)
 	near(t, "hi", hi, 0.3662095774580194, exact)
-	if lo, hi := Wilson(0, 0, 1.959964); lo != 0 || hi != 1 {
+	if lo, hi, _ := Wilson(0, 0, 1.959964); lo != 0 || hi != 1 {
 		t.Errorf("n = 0 gave [%v, %v], want the whole range", lo, hi)
 	}
-	if lo, _ := Wilson(0, 50, 1.959964); lo != 0 {
+	if lo, _, _ := Wilson(0, 50, 1.959964); lo != 0 {
 		t.Errorf("0 of 50 has lower bound %v", lo)
 	}
-	_, hi = Wilson(50, 50, 1.959964)
+	_, hi, _ = Wilson(50, 50, 1.959964)
 	near(t, "50 of 50 upper", hi, 1, exact)
+	for _, c := range [][2]int{{-1, 10}, {11, 10}, {0, -1}} {
+		if _, _, err := Wilson(c[0], c[1], 1.959964); err == nil {
+			t.Errorf("Wilson(%d, %d) answered", c[0], c[1])
+		}
+	}
 }
 
 func TestPassHatK_Golden(t *testing.T) {

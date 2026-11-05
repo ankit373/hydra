@@ -15,14 +15,34 @@ type Discordant struct {
 	C int // A failed, R passed
 }
 
+// validate refuses counts no paired comparison can produce, which would otherwise
+// be answered as if they were data.
+func (d Discordant) validate() error {
+	if d.N < 0 || d.B < 0 || d.C < 0 || d.B+d.C > d.N {
+		return fmt.Errorf("stats: no paired comparison has N=%d with B=%d and C=%d", d.N, d.B, d.C)
+	}
+	return nil
+}
+
+// tangoReady is what both Tango functions need: valid counts and at least one item.
+func (d Discordant) tangoReady() error {
+	if err := d.validate(); err != nil {
+		return err
+	}
+	if d.N == 0 {
+		return errors.New("stats: Tango needs at least one paired item")
+	}
+	return nil
+}
+
 // Delta is the paired difference in pass rates. N = 0 has none, so callers check N.
 func (d Discordant) Delta() float64 { return float64(d.B-d.C) / float64(d.N) }
 
 // PairedDiscordant aligns two pass vectors item by item and returns the counts
 // with each item's difference d_i ∈ {−1, 0, 1}.
 func PairedDiscordant(a, r []bool) (Discordant, []float64, error) {
-	if len(a) != len(r) {
-		return Discordant{}, nil, fmt.Errorf("stats: paired vectors differ in length, %d against %d", len(a), len(r))
+	if err := sameLength(len(a), len(r)); err != nil {
+		return Discordant{}, nil, err
 	}
 	d := Discordant{N: len(a)}
 	diff := make([]float64, len(a))
@@ -42,6 +62,9 @@ func PairedDiscordant(a, r []bool) (Discordant, []float64, error) {
 // TangoNI is Tango's (1998) score test for paired proportions, H0: Δ ≤ −margin.
 // It returns the score z and the one-sided p = 1 − Φ(z); all-concordant data at margin 0 give 0, ½.
 func TangoNI(d Discordant, margin float64) (z, p float64, err error) {
+	if err := d.tangoReady(); err != nil {
+		return 0, 0, err
+	}
 	if !(margin >= 0 && margin < 1) {
 		return 0, 0, fmt.Errorf("stats: Tango margin %v is outside [0, 1)", margin)
 	}
@@ -54,9 +77,6 @@ func TangoNI(d Discordant, margin float64) (z, p float64, err error) {
 // tangoZ is the score statistic at θ₀ = Δ under H0, taken over the whole of
 // (−1, 1) so TangoLowerBound can cross zero when the arm is ahead.
 func tangoZ(d Discordant, theta float64) (float64, error) {
-	if d.N <= 0 {
-		return 0, errors.New("stats: Tango needs at least one paired item")
-	}
 	n, b, c := float64(d.N), float64(d.B), float64(d.C)
 	num := b - c - n*theta
 	if num == 0 {
@@ -79,8 +99,8 @@ func tangoZ(d Discordant, theta float64) (float64, error) {
 // TangoLowerBound inverts TangoNI: the smallest −margin the test does not reject
 // at alpha, by bisection to 1e-12 on (−1, Delta()]. z is 0 at Delta(), so that end never rejects.
 func TangoLowerBound(d Discordant, alpha float64) (float64, error) {
-	if d.N <= 0 {
-		return 0, errors.New("stats: Tango needs at least one paired item")
+	if err := d.tangoReady(); err != nil {
+		return 0, err
 	}
 	if !(alpha > 0 && alpha < 0.5) {
 		return 0, fmt.Errorf("stats: alpha %v is outside (0, 0.5)", alpha)
@@ -104,14 +124,17 @@ func TangoLowerBound(d Discordant, alpha float64) (float64, error) {
 
 // McNemarExact is the conditional binomial test on B of B+C at p = ½. oneSided is
 // P(X ≥ B), "A beats R"; twoSided is min(1, 2·min tail). No discordant pair gives 1, 1.
-func McNemarExact(d Discordant) (oneSided, twoSided float64) {
+func McNemarExact(d Discordant) (oneSided, twoSided float64, err error) {
+	if err := d.validate(); err != nil {
+		return 0, 0, err
+	}
 	m := d.B + d.C
 	if m == 0 {
-		return 1, 1
+		return 1, 1, nil
 	}
 	upper := BinomialCDF(d.C, m, 0.5) // P(X ≥ B) = P(X ≤ C) by symmetry at ½, clamped to 1
 	lower := BinomialCDF(d.B, m, 0.5)
-	return upper, math.Min(1, 2*math.Min(upper, lower))
+	return upper, math.Min(1, 2*math.Min(upper, lower)), nil
 }
 
 // NormalCDF is Φ(x), through erfc so a far tail keeps its precision.

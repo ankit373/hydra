@@ -59,7 +59,10 @@ func TestMcNemarExact_Golden(t *testing.T) {
 		{60, 0, math.Pow(2, -60), 2 * math.Pow(2, -60)},
 	}
 	for _, c := range cases {
-		one, two := McNemarExact(Discordant{N: 2000, B: c.b, C: c.c})
+		one, two, err := McNemarExact(Discordant{N: 2000, B: c.b, C: c.c})
+		if err != nil {
+			t.Fatal(err)
+		}
 		near(t, "one-sided", one, c.one, exact)
 		near(t, "two-sided", two, c.two, exact)
 		if one > 1 || two > 1 {
@@ -223,6 +226,21 @@ func TestTango_RefusesWhatItCannotAnswer(t *testing.T) {
 	}
 	if _, err := TangoLowerBound(Discordant{}, 0.05); err == nil {
 		t.Error("TangoLowerBound answered with n = 0")
+	}
+}
+
+// Counts no paired comparison can produce are refused by every test, not answered.
+func TestPairedTests_RefuseImpossibleCounts(t *testing.T) {
+	for _, d := range []Discordant{{100, -2, 3}, {100, 3, -2}, {10, 6, 5}, {-1, 0, 0}} {
+		if _, _, err := TangoNI(d, 0.02); err == nil {
+			t.Errorf("TangoNI answered %+v", d)
+		}
+		if _, err := TangoLowerBound(d, 0.05); err == nil {
+			t.Errorf("TangoLowerBound answered %+v", d)
+		}
+		if _, _, err := McNemarExact(d); err == nil {
+			t.Errorf("McNemarExact answered %+v", d)
+		}
 	}
 }
 
