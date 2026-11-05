@@ -161,6 +161,9 @@ func TestServeRouter_CarriesTheAnswerHeadAndTokensBack(t *testing.T) {
 	if ans.InputTokens == 0 && ans.OutputTokens == 0 {
 		t.Error("no tokens carried back, so the client's usage block reads as a free call")
 	}
+	if ans.Evidence == nil || *ans.Evidence != (serve.Evidence{TaskClass: "default", TaskClassBasis: "default"}) {
+		t.Errorf("evidence %+v, want the default class echoed with its basis", ans.Evidence)
+	}
 }
 
 // A request the router cannot serve has to surface as an error, not as an empty
@@ -413,5 +416,92 @@ func TestServeHeads_AnEmptyFlagClearsTheConfigList(t *testing.T) {
 	}
 	if err := serveUntil(t, "--heads", ""); err != nil {
 		t.Errorf(`--heads "" still applied [serve] heads: %v`, err)
+	}
+}
+
+// The class resolves header, then --task-class, then default, and says which,
+// so a client can tell its own choice from the server's fallback.
+func TestServeRouter_ResolvesTheClassAndItsBasis(t *testing.T) {
+	const route = "classification.banking77"
+	for _, tc := range []struct {
+		name         string
+		defaultClass string
+		req          serve.Request
+		want         serve.Evidence
+		domain       string
+	}{
+		{"header wins", route, serve.Request{TaskClass: "a.b"}, serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}, "a.b"},
+		{"route default", route, serve.Request{}, serve.Evidence{TaskClass: route, TaskClassBasis: "route"}, route},
+		{"nothing named", "", serve.Request{}, serve.Evidence{TaskClass: "default", TaskClassBasis: "default"}, "default"},
+		{"pinned route, header", route, serve.Request{TaskClass: "a.b", Route: serve.Route{Tier: "4"}}, serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}, "a.b"},
+		{"pinned head, no header", route, serve.Request{Route: serve.Route{Head: "h1"}}, serve.Evidence{TaskClass: route, TaskClassBasis: "route"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts, ev, err := serveRouter{defaultEnum: "STANDARD", defaultClass: tc.defaultClass}.options(tc.req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ev != tc.want {
+				t.Errorf("evidence %+v, want %+v", ev, tc.want)
+			}
+			if opts.Domain != tc.domain {
+				t.Errorf("Domain = %q, want %q", opts.Domain, tc.domain)
+			}
+		})
+	}
+}
+
+// G4. Decision 2 keeps the old pinned route reachable as hydra/standard; a
+// route default leaking into it would rerank what was a fixed tier.
+func TestServeRouter_HydraStandardRoutesAsBefore(t *testing.T) {
+	r := serveRouter{defaultEnum: "MODERATE", defaultClass: "classification.banking77"}
+	opts, _, err := r.options(serve.Request{Route: serve.Route{Enum: "STANDARD"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tier := dispatch.EnumToTier("STANDARD")
+	if opts.TierHint != tier || opts.Enum != "STANDARD" || opts.Domain != "" {
+		t.Errorf("hydra/standard built %+v, want TierHint=%q Enum=STANDARD Domain=\"\"", opts, tier)
+	}
+}
+
+// G7b. At #1208 serve has no policy ceiling of its own, so the header is the
+// only one and must arrive as sent; #1209 adds the rows with a policy ceiling.
+func TestServeRouter_MaxCostOnlyLowersTheCeiling(t *testing.T) {
+	const policy = 0.0
+	for _, tc := range []struct{ header, want float64 }{
+		{0, 0},
+		{0.25, 0.25},
+	} {
+		opts, _, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{MaxCostUSD: tc.header})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if opts.MaxCostUSD != tc.want {
+			t.Errorf("policy ceiling %v, header %v gave MaxCostUSD %v, want %v", policy, tc.header, opts.MaxCostUSD, tc.want)
+		}
+	}
+}
+
+// The serve half of G7: the client's temperature must reach the options the
+// router dispatches with, nil included, which is the provider default.
+func TestServeRouter_PassesTheTemperatureThrough(t *testing.T) {
+	zero := 0.0
+	for _, sent := range []*float64{nil, &zero} {
+		opts, _, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{Temperature: sent})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if opts.Temperature != sent {
+			t.Errorf("router was given temperature %v, client sent %v", opts.Temperature, sent)
+		}
+	}
+}
+
+func TestCmdServe_BadTaskClassIsRefusedBeforeBinding(t *testing.T) {
+	testutil.NewSandbox(t)
+	_, _, err := run(t, "serve", "--task-class", "classify/banking77")
+	if err == nil || !strings.Contains(err.Error(), "--task-class") {
+		t.Fatalf("a bad --task-class was not refused at startup: %v", err)
 	}
 }

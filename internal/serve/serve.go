@@ -58,6 +58,14 @@ type Request struct {
 	MaxTokens  int
 	Route      Route
 
+	// TaskClass is the class the client named, already validated; empty when
+	// it named none, so the router can tell a choice from its own default.
+	TaskClass string
+	// Temperature is nil when the client left it to the provider.
+	Temperature *float64
+	// MaxCostUSD is the client's ceiling for this request; 0 means none.
+	MaxCostUSD float64
+
 	// RequestID is what this request is traceable by. serve mints it and the
 	// router adopts it as the run id, so the value a client is handed back is
 	// one `hyctl trace view` resolves rather than an unrelated random (#1149).
@@ -78,6 +86,7 @@ type Answer struct {
 	Model        string
 	InputTokens  int
 	OutputTokens int
+	Evidence     *Evidence
 }
 
 // Model is one entry in the /v1/models listing.
@@ -154,8 +163,10 @@ type chatRequest struct {
 	StreamOptions       *struct {
 		IncludeUsage bool `json:"include_usage"`
 	} `json:"stream_options"`
-	Tools      []executor.ToolDef `json:"tools"`
-	ToolChoice json.RawMessage    `json:"tool_choice"`
+	Tools       []executor.ToolDef `json:"tools"`
+	ToolChoice  json.RawMessage    `json:"tool_choice"`
+	Temperature *float64           `json:"temperature"`
+	Metadata    map[string]string  `json:"metadata"`
 }
 
 // readBody reads one request within maxBody, saying why when it cannot.
@@ -186,7 +197,7 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 		writeError(w, http.StatusBadRequest, "messages is empty, so there is nothing to answer")
 		return
 	}
-	route, err := parseRoute(in.Model)
+	base, err := parseTarget(req.Header, in)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -194,24 +205,24 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 
 	// Before anything is written, so it is on an error response too: a client
 	// that got a 502 is exactly the one that needs to find the trace.
-	id := runid.New()
-	w.Header().Set(RequestIDHeader, id)
+	base.RequestID = runid.New()
+	w.Header().Set(RequestIDHeader, base.RequestID)
 
 	if in.Stream {
-		streamChat(w, req, r, in, route, id)
+		streamChat(w, req, r, in, base)
 		return
 	}
 
-	ans, err := r.Chat(req.Context(), request(in, route, id, nil))
+	ans, err := r.Chat(req.Context(), request(in, base, nil))
 	if err != nil {
 		writeError(w, statusFor(err), err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	body := map[string]any{
 		// The same value as the header, and a run id, so a client that logged
 		// only the body can still run `hyctl trace view <id>` (#1149).
-		"id":      id,
+		"id":      base.RequestID,
 		"object":  "chat.completion",
 		"created": time.Now().Unix(),
 		// The head *id*, not its display name: this value is what a client
@@ -234,16 +245,39 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 			"completion_tokens": ans.OutputTokens,
 			"total_tokens":      ans.InputTokens + ans.OutputTokens,
 		},
-	})
+	}
+	writeEvidence(w, body, ans.Evidence)
+	writeJSON(w, http.StatusOK, body)
+}
+
+// parseTarget reads what a request asks of the router beyond its conversation:
+// the route, the class the client named, its ceiling and its temperature.
+func parseTarget(h http.Header, in chatRequest) (Request, error) {
+	route, err := parseRoute(in.Model)
+	if err != nil {
+		return Request{}, err
+	}
+	class, err := explicitClass(h, in.Metadata)
+	if err != nil {
+		return Request{}, err
+	}
+	if err = checkTemperature(in.Temperature); err != nil {
+		return Request{}, err
+	}
+	ceiling, err := maxCost(h)
+	if err != nil {
+		return Request{}, err
+	}
+	return Request{Route: route, TaskClass: class, MaxCostUSD: ceiling}, nil
 }
 
 // streamChat answers as server-sent events.
-func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatRequest, route Route, id string) {
+func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatRequest, base Request) {
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
-	st := newStreamer(w, in.Model, id)
-	ans, err := r.Chat(ctx, request(in, route, id, func(e Event) { st.event(e, cancel) }))
+	st := newStreamer(w, in.Model, base.RequestID)
+	ans, err := r.Chat(ctx, request(in, base, func(e Event) { st.event(e, cancel) }))
 	st.done = true
 
 	switch {
@@ -263,16 +297,14 @@ func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatReque
 
 // request is the one derivation of what the router is asked, so the streamed
 // and buffered paths cannot come to disagree about it.
-func request(in chatRequest, route Route, id string, on func(Event)) Request {
-	return Request{
-		Messages:   in.Messages,
-		Tools:      in.Tools,
-		ToolChoice: in.ToolChoice,
-		MaxTokens:  firstPositive(in.MaxCompletionTokens, in.MaxTokens),
-		Route:      route,
-		RequestID:  id,
-		OnEvent:    on,
-	}
+func request(in chatRequest, base Request, on func(Event)) Request {
+	base.Messages = in.Messages
+	base.Tools = in.Tools
+	base.ToolChoice = in.ToolChoice
+	base.MaxTokens = firstPositive(in.MaxCompletionTokens, in.MaxTokens)
+	base.Temperature = in.Temperature
+	base.OnEvent = on
+	return base
 }
 
 // parseRoute reads the model field as a routing instruction, which makes any

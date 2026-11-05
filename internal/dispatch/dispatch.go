@@ -114,6 +114,10 @@ type Options struct {
 	// which of the flag and the policy file to change. Empty reads as the flag.
 	MaxCostSource string
 
+	// Temperature is passed to the head unchanged; nil means the provider
+	// default. CLI and agy heads ignore it.
+	Temperature *float64
+
 	// MaxMemoryMB and MaxCPUSeconds cap a dispatched subprocess's address
 	// space and CPU time, from policy.yaml's max_memory_mb/max_cpu_seconds.
 	// 0 means no ceiling, same spelling MaxCostUSD already uses. Applied by
@@ -947,6 +951,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Prompt:        prompt,
 			Head:          h,
 			MaxTokens:     opts.MaxTokens,
+			Temperature:   opts.Temperature,
 			System:        opts.System,
 			Messages:      opts.Messages,
 			Tools:         opts.Tools,
