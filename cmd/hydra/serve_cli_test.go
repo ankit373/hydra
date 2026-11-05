@@ -107,7 +107,7 @@ func TestPrintServeBanner_SaysHowManyHeadsCanCarryTools(t *testing.T) {
 	}
 
 	var local bytes.Buffer
-	printServeBanner(&local, "127.0.0.1:8787", "STANDARD", false, true, heads)
+	printServeBanner(&local, "127.0.0.1:8787", "STANDARD", false, true, heads, 0)
 	out := local.String()
 	// Under --local the cloud head is not reachable, so it is not counted.
 	for _, want := range []string{"127.0.0.1:8787", "STANDARD", "1 of 1", "local only", "loopback only"} {
@@ -117,7 +117,7 @@ func TestPrintServeBanner_SaysHowManyHeadsCanCarryTools(t *testing.T) {
 	}
 
 	var all bytes.Buffer
-	printServeBanner(&all, "127.0.0.1:8787", "STANDARD", false, false, heads)
+	printServeBanner(&all, "127.0.0.1:8787", "STANDARD", false, false, heads, 0)
 	if !strings.Contains(all.String(), "1 of 2") {
 		t.Errorf("without --local both heads are reachable:\n%s", all.String())
 	}
@@ -125,7 +125,7 @@ func TestPrintServeBanner_SaysHowManyHeadsCanCarryTools(t *testing.T) {
 
 func TestPrintServeBanner_SaysWhenATokenIsRequired(t *testing.T) {
 	var buf bytes.Buffer
-	printServeBanner(&buf, "0.0.0.0:8787", "HARD", true, false, nil)
+	printServeBanner(&buf, "0.0.0.0:8787", "HARD", true, false, nil, 0)
 	if !strings.Contains(buf.String(), "bearer token required") {
 		t.Errorf("an exposed endpoint did not say it is authenticated:\n%s", buf.String())
 	}

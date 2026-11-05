@@ -23,7 +23,8 @@ import (
 // decisionRouter adapts decide.Router to the endpoint, opening one run per
 // request the way the chat path does.
 type decisionRouter struct {
-	router decide.Router
+	router   decide.Router
+	unlisted int // decision sources the serve allowlist dropped, which the banner reports
 }
 
 var _ serve.Decider = decisionRouter{}
@@ -46,11 +47,15 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, 
 		return decisionRouter{}, fmt.Errorf("calibration load: %w", err)
 	}
 	var heads []provider.Head
+	unlisted := 0
 	for _, h := range executor.DecisionHeads(ctx) {
-		if (localOnly && !h.LocalOnly) || !allows(h.ID) {
-			continue
+		switch {
+		case localOnly && !h.LocalOnly:
+		case !allows(h.ID):
+			unlisted++
+		default:
+			heads = append(heads, h)
 		}
-		heads = append(heads, h)
 	}
 	ceiling, _ := costCeiling(policy.ForFile(config.ScriptHome(), policy.Spec{}), false, 0)
 	return decisionRouter{router: decide.Router{
@@ -59,7 +64,7 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, 
 		Ask:    executor.DecisionExecutor{},
 		Cal:    cal,
 		Target: trust.Target{Confidence: confidence, MaxCostUSD: ceiling},
-	}}, nil
+	}, unlisted: unlisted}, nil
 }
 
 // decisionPrice estimates one call from the input's size; decision sources bill input only.

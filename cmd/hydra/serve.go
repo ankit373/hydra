@@ -266,7 +266,7 @@ func cmdServe() *cobra.Command {
 				return err
 			}
 			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
-			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads())
+			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
@@ -296,7 +296,7 @@ func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string, flagSet, loc
 	return nil
 }
 
-func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head) {
+func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head, unlistedDecisions int) {
 	// Over the heads this server can actually reach. Counting all 16 on a
 	// --local endpoint advertised ten that no request could ever route to
 	// (#1147).
@@ -326,6 +326,10 @@ func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, 
 	fmt.Fprintf(w, "  auth              %s\n", auth)
 	if localOnly {
 		fmt.Fprintf(w, "  heads             local only\n")
+	}
+	if unlistedDecisions > 0 {
+		fmt.Fprintf(w, "  decisions         none: --heads names no decision source, so /v1/decisions has none (%d dropped)\n",
+			unlistedDecisions)
 	}
 	// "can be sent tools", which is a property of the dialect, not a promise
 	// that the model will answer with a structured call: measured here, Ollama

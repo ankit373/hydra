@@ -32,7 +32,7 @@ func (d *Dispatcher) answerCache() (*cache.Store, embed.Embedder) {
 		}
 		d.answers = st
 		if st != nil {
-			d.answerEmb = embed.Resolve(d.heads, d.cfg.EmbedModel)
+			d.answerEmb = embed.Resolve(d.embedHeads(), d.cfg.EmbedModel)
 		}
 	})
 	return d.answers, d.answerEmb
