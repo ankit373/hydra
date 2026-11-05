@@ -49,7 +49,7 @@ export function TierTrack({ entries }: { entries: TimelineEntry[] }) {
   return (
     <div className="tt">
       <div className="tt__head">
-        <span className="tt__lbl">Tier movement</span>
+        <span className="tt__lbl">Routing level over the run</span>
         <span className="tt__sum">{summary(steps)}</span>
       </div>
       {/* The line stretches with the column, so the SVG is non-uniformly
@@ -127,9 +127,9 @@ function summary(steps: Step[]): string {
   const word = hops === 1 ? 'once' : `${hops} times`
   if (last < first) return `escalated ${word} · T${first} → T${last}`
   if (last > first) return `eased off ${word} · T${first} → T${last}`
-  return `moved ${word}, ended where it started · T${first}`
+  return `moved ${word} and ended where it started · T${first}`
 }
 
 function ariaLabel(steps: Step[]): string {
-  return `Tier movement: ${steps.map((s) => `T${s.tier}`).join(' then ')}`
+  return `Routing level over the run: ${steps.map((s) => `T${s.tier}`).join(' then ')}`
 }

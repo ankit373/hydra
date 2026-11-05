@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { calibrationLabel, calibrationStrength, calibrationWidthPct, contextHeadroom, contextModeText, contextWindow, costBand } from './format'
+import { calibrationLabel, calibrationStrength, calibrationWidthPct, contextHeadroom, contextModeText, contextWindow, costBand, usd, usdExact, usdWhole } from './format'
+
+describe('money reads like money', () => {
+  it('groups thousands', () => {
+    expect(usd(42000)).toBe('$42,000.00')
+    expect(usdWhole(42000)).toBe('$42,000')
+    expect(usdExact(1234.5)).toBe('$1,234.50')
+  })
+
+  it('shows cents from a dollar up, not ledger padding', () => {
+    expect(usdExact(18.22)).toBe('$18.22')
+    expect(usd(1.834)).toBe('$1.83')
+  })
+
+  it('keeps sub-dollar precision where it carries information', () => {
+    expect(usdExact(0.0182)).toBe('$0.0182')
+    expect(usdExact(0.5)).toBe('$0.50')
+  })
+
+  it('keeps the zero and sub-cent readings', () => {
+    expect(usd(0)).toBe('$0')
+    expect(usd(0.004)).toBe('<$0.01')
+    expect(usdExact(0)).toBe('—')
+  })
+})
 
 describe('costBand does not alarm about sub-cent spend', () => {
   // The real defect (#594): $0.0009 was the largest figure in the table, so
