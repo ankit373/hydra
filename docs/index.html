@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -235,6 +235,7 @@
   }
   </script>
 
+<link rel="stylesheet" href="assets/tokens.css">
 <style>
 /* ============================================================================
    HYDRA, flagship landing page. "Ten generations from now."
@@ -253,11 +254,11 @@
   src:url("fonts/JetBrainsMono.woff2") format("woff2");}
 :root{
   color-scheme:dark;
-  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
-  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
-  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
-  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
-  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
+  --bg:var(--hy-color-surface-base);--bg2:var(--hy-color-surface-raised);--panel:var(--hy-color-surface-card);
+  --line:var(--hy-color-border-subtle);--line-2:var(--hy-color-border-default);
+  --ink:var(--hy-color-text-default);--dim:var(--hy-color-text-muted);--faint:var(--hy-color-text-subtle);
+  --cyan:var(--hy-color-accent-strong);--aqua:var(--hy-color-accent-default);--violet:var(--hy-color-brand-mid);--magenta:var(--hy-color-brand-end);
+  --cheap:var(--hy-color-cost-low);--mid:var(--hy-color-cost-mid);--exp:var(--hy-color-cost-high);
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
   --display:"Space Grotesk",system-ui,sans-serif;
@@ -421,7 +422,7 @@ h2.big{font-size:clamp(28px,4.4vw,46px);letter-spacing:-1px;font-weight:800;line
 
 /* ── section 2 · universe / galaxy ─────────────────────────────────────── */
 .galaxy-frame{position:relative;margin-top:34px;border:1px solid var(--line-2);border-radius:16px;overflow:hidden;
-  background:radial-gradient(140% 100% at 72% 68%,rgba(0,230,195,.06),transparent 46%),linear-gradient(180deg,#080A16,#06070F);
+  background:radial-gradient(140% 100% at 72% 68%,rgba(0,230,195,.06),transparent 46%),linear-gradient(180deg,#080A16,var(--bg));
   box-shadow:0 40px 120px rgba(0,0,0,.5),inset 0 0 100px rgba(60,50,140,.06);}
 #galaxy{display:block;width:100%;height:clamp(420px,62vw,640px);touch-action:none;}
 .axislbl{position:absolute;font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;
@@ -605,7 +606,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   font-size:11px;color:var(--faint);}
 .app-tease-views b{font-family:var(--display);font-size:14px;color:var(--ink);font-weight:600;}
 .app-tease-cta{display:inline-flex;align-items:center;gap:9px;padding:11px 20px;border-radius:8px;
-  font-family:var(--mono);font-size:13px;font-weight:700;color:#06070F;
+  font-family:var(--mono);font-size:13px;font-weight:700;color:var(--bg);
   background:linear-gradient(90deg,var(--cyan),var(--violet));transition:.15s;white-space:nowrap;}
 .app-tease-cta:hover{filter:brightness(1.12);text-decoration:none;transform:translateY(-1px);}
 @media(max-width:640px){.app-tease{flex-direction:column;align-items:stretch;}

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -42,14 +42,15 @@
   }
   </script>
 
+<link rel="stylesheet" href="assets/tokens.css">
 <style>
 :root{
   color-scheme:dark;
-  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
-  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
-  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
-  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
-  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
+  --bg:var(--hy-color-surface-base);--bg2:var(--hy-color-surface-raised);--panel:var(--hy-color-surface-card);
+  --line:var(--hy-color-border-subtle);--line-2:var(--hy-color-border-default);
+  --ink:var(--hy-color-text-default);--dim:var(--hy-color-text-muted);--faint:var(--hy-color-text-subtle);
+  --cyan:var(--hy-color-accent-strong);--aqua:var(--hy-color-accent-default);--violet:var(--hy-color-brand-mid);--magenta:var(--hy-color-brand-end);
+  --cheap:var(--hy-color-cost-low);--mid:var(--hy-color-cost-mid);--exp:var(--hy-color-cost-high);
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
   --maxw:1120px;
@@ -197,7 +198,7 @@ a{color:inherit;text-decoration:none;}
 .cta-blk{text-align:center;padding-top:96px;padding-bottom:44px;border-top:1px solid var(--line);position:relative;}
 .cta-blk .big > span{display:block;}
 .cta{display:inline-flex;align-items:center;gap:12px;margin-top:28px;font-family:var(--mono);font-size:15px;
-  padding:17px 32px;border-radius:12px;color:#06070F;font-weight:700;letter-spacing:.3px;
+  padding:17px 32px;border-radius:12px;color:var(--bg);font-weight:700;letter-spacing:.3px;
   background:linear-gradient(96deg,var(--cyan),var(--violet) 60%,var(--magenta));
   box-shadow:0 12px 44px rgba(120,90,255,.38);transition:transform .16s,box-shadow .16s;}
 .cta:hover{transform:translateY(-2px);box-shadow:0 16px 58px rgba(120,90,255,.55);}
