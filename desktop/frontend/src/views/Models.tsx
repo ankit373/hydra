@@ -157,7 +157,7 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
   if (!reg.found) {
     return (
       <>
-        <PageHeader title="Models" subtitle="What this machine can route to." />
+        <PageHeader title="Models" subtitle="The models this machine can use." />
         <div className="empty">
           <p className="empty__title">Couldn't read the model registry</p>
           <p>{reg.error || 'models.yaml could not be parsed.'}</p>
@@ -170,11 +170,11 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
     <>
       <PageHeader
         title="Models"
-        subtitle="What this machine can route to, and how well each one has actually done."
+        subtitle="The models this machine can use, and how well each one has actually done."
         provenance={
           heads
-            ? `${heads.routable} of ${heads.heads.length} discovered heads routable · declared by models.yaml, reachability by probe`
-            : 'probing the machine for reachable heads…'
+            ? `${heads.routable} of ${heads.heads.length} discovered models ready · declared by models.yaml, reachability by probe`
+            : 'looking for reachable models on this machine…'
         }
         toolbar={
           <>
@@ -191,7 +191,7 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
               aria-label="Sort by"
               onChange={(e) => setSort(e.target.value as Sort)}
             >
-              <option value="tier">Cheapest tier first</option>
+              <option value="tier">Most capable first</option>
               <option value="name">Name</option>
               <option value="used">Most used</option>
               <option value="context">Largest context</option>
@@ -210,7 +210,7 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
         onSelect={setTab}
         tabs={[
           { id: 'all', label: 'All', count: counts.all },
-          { id: 'routable', label: 'Routable', count: counts.routable },
+          { id: 'routable', label: 'Ready', count: counts.routable },
           { id: 'local', label: 'Local', count: counts.local },
           { id: 'off', label: 'Unreachable', count: counts.off },
         ]}
@@ -314,7 +314,7 @@ function Scorecard({ row, cal }: { row: Row; cal: CalibrationRow[] }) {
     <aside className="scard">
       <div className="scard__name">{label(model)}</div>
       <div className="scard__sub">
-        {model.provider} &middot; tier <span className="scard__hl">T{model.tier}</span>
+        {model.provider} &middot; routing level (1 = most capable) <span className="scard__hl">T{model.tier}</span>
       </div>
 
       <div className="scard__rule" />
@@ -331,8 +331,8 @@ function Scorecard({ row, cal }: { row: Row; cal: CalibrationRow[] }) {
       <div className="scard__lbl">Measured record</div>
       {rows.length === 0 ? (
         <p className="scard__none">
-          Nothing measured yet. This is absence of evidence, not a low score, record outcomes
-          and it fills in.
+          Nothing measured yet. That means no evidence, not a low score. It fills in as
+          answers are checked.
         </p>
       ) : (
         rows.map((r) => (
@@ -343,7 +343,7 @@ function Scorecard({ row, cal }: { row: Row; cal: CalibrationRow[] }) {
             </div>
             <div className="scard__calSub">
               evidence weight &middot; {r.n} {r.n === 1 ? 'outcome' : 'outcomes'}
-              {r.n < 10 && <span className="scard__thin"> &middot; too few to trust</span>}
+              {r.n < 10 && <span className="scard__thin"> &middot; too few to rely on</span>}
             </div>
           </div>
         ))

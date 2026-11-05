@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra, The Trust Control Plane for AI Development</title>
-  <meta name="description" content="Route to a target confidence of correctness, not just the cheapest model. Hydra samples models adaptively (SPRT), cuts AI API costs 70-85% along the way, and keeps sensitive data local.">
-  <meta name="keywords" content="trust control plane, AI confidence routing, multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, llm orchestration CLI, model routing open source">
+  <title>Hydra: the right model for each task, and an answer you can check</title>
+  <meta name="description" content="Hydra is an open source gateway for AI models from any provider. It picks the model best suited to each task, and can check the answer before you rely on it. Hosted APIs, local models and CLI agents.">
+  <meta name="keywords" content="AI gateway, LLM gateway, LLM router, verified AI answers, model routing, multi-model AI, OpenAI-compatible endpoint, local LLM, Ollama, AI cost tracking, open source">
 
   <!-- Open Graph / Social sharing -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/">
-  <meta property="og:title" content="Hydra, The Trust Control Plane for AI Development">
-  <meta property="og:description" content="Hydra routes tasks across every model on your machine to a target confidence of correctness, sampling adaptively (SPRT) and stopping once the evidence is strong enough. Cuts AI costs 70-85% along the way. Open source, MIT license.">
+  <meta property="og:title" content="Hydra: the right model for each task, and an answer you can check">
+  <meta property="og:description" content="Hydra is an open source gateway for AI models from any provider. It picks the model best suited to each task, and can check the answer before you rely on it. Open source, MIT license.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
-  <meta name="twitter:title" content="Hydra, The Trust Control Plane for AI Development">
-  <meta name="twitter:description" content="Route to a confidence of correctness, not just the cheapest model. One command, every AI model, provable trust, open source LLM orchestration CLI in Go.">
+  <meta name="twitter:title" content="Hydra: the right model for each task, and an answer you can check">
+  <meta name="twitter:description" content="Hydra picks the model best suited to each task, and can check the answer before you rely on it. Any provider, open source.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <!-- Canonical URL -->
@@ -38,10 +38,10 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Hydra",
-    "alternateName": "Hydra Trust Control Plane",
+    "alternateName": "Hydra verified cascade gateway",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux",
-    "description": "Hydra is the Trust Control Plane for AI development: it routes tasks across every model on your machine to a target confidence of correctness, sampling models adaptively (SPRT) and stopping once the evidence is strong enough, while cutting AI API costs 70-85% along the way.",
+    "description": "Hydra is an open source gateway for AI models from any provider. It picks the model best suited to each task, and can check the answer before you rely on it. It works with hosted APIs, local models and CLI agents, and runs as a desktop app, a command-line tool (hyctl) and an OpenAI-compatible endpoint.",
     "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
     "softwareVersion": "1.6.1",
@@ -59,24 +59,24 @@
       "price": "0",
       "priceCurrency": "USD"
     },
-    "keywords": "trust control plane, AI confidence routing, multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, go cli, swarm dispatch",
+    "keywords": "AI gateway, LLM gateway, LLM router, verified AI answers, model routing, multi-model AI, OpenAI-compatible endpoint, local LLM, Ollama, AI cost tracking, go cli",
     "image": "https://hydra.uvansa.com/logo.png",
     "sameAs": "https://github.com/ankit373/hydra",
     "featureList": [
-      "Confidence routing, hyctl dispatch --confidence samples models adaptively (SPRT) and stops once a target confidence of correctness is reached",
+      "Checked answers: hyctl dispatch --confidence asks models one at a time and stops once a sequential probability ratio test (SPRT) says the answer is correct with the probability you set",
       "Per-source calibration (hyctl trust calibration), measures each model's diagnostic power from real outcomes, and flags a source whose specificity has never been measured instead of reporting a number for it",
       "hyctl trust outcome, trains every model that voted in a past run once its answer is known, including the dissenters, because a model that disagreed with an answer that turned out wrong is the only evidence that measures specificity",
       "hyctl edit, applies a change and then runs the language validator against the file it just wrote, so the pass or fail is about the content the model actually produced. That verdict trains calibration and fills the oracle-verified corpus, rejections included",
-      "hyctl trust reliability, checks the confidence number against reality, when Hydra says 90% is it right 90% of the time, as a Brier score decomposed into calibration and discrimination plus a reliability diagram, and it refuses to report below twenty judged runs",
-      "Blast-radius aware routing, a code dependency graph raises the confidence bar for widely-depended-on files",
+      "hyctl trust reliability, checks the stated probability against reality: when Hydra says 90%, is it right 90% of the time? It reports this as a Brier score decomposed into calibration and discrimination plus a reliability diagram, and it refuses to report below twenty judged runs",
+      "Blast-radius aware routing for code: a dependency graph raises the required probability of a correct answer for widely depended-on files",
       "Local MCP accountability ledger, records and gates what each agent's tools touch",
-      "10-tier model routing by task complexity",
-      "Automatic fallback chains terminating at always-on local Qwen",
+      "Routing by task type and complexity, on each model's measured record",
+      "Automatic fallback chains that can end at a local model",
       "Local Ollama + cloud model hybrid, provider-neutral discovery",
-      "hyctl vet, reviews a diff and says what is wrong with it: open-code-review resolves which files are worth reviewing and by what rules with no model and no spend, and Hydra routes each file to a Head of its own, so cost, policy, fallback and per-domain calibration all apply",
-      "hyctl vet --confidence reviews each file with as many Heads as its blast radius warrants: a leaf file gets one cheap Head, a hub-core file gets as many as it takes, and the SPRT ensemble stops the moment the target confidence is reached",
-      "hyctl vet refuses to guess: an unreadable reply is reported as unreadable rather than as a clean file, a finding naming a file the Head was never shown is discarded, and it exits 3 on a blocking finding so a script can gate on it",
-      "hyctl serve, an OpenAI-compatible endpoint in front of the router, so any tool that speaks OpenAI routes through Hydra: the model field is the routing instruction (hydra, hydra/hard, hydra/t4, or a head id), and tool calling is passed through on every chat dialect it speaks, not just the OpenAI one, so agent loops work. It streams: stream: true is answered as server-sent events, and a fallback after output has already gone out ends the stream rather than appending a second head's answer to an abandoned partial",
+      "hyctl vet, reviews a diff and says what is wrong with it: open-code-review resolves which files are worth reviewing and by what rules with no model and no spend, and Hydra routes each file to a model of its own, so cost, policy, fallback and per-task-type calibration all apply",
+      "hyctl vet --confidence reviews each file with as many models as its blast radius warrants: a leaf file gets one low-cost model, a hub-core file gets as many as it takes, and the SPRT stops the moment the target probability is reached",
+      "hyctl vet refuses to guess: an unreadable reply is reported as unreadable rather than as a clean file, a finding naming a file the model was never shown is discarded, and it exits 3 on a blocking finding so a script can gate on it",
+      "hyctl serve, an OpenAI-compatible endpoint in front of the router, so any tool that speaks OpenAI routes through Hydra: the model field is the routing instruction (hydra, hydra/hard, hydra/t4, or a model id), and tool calling is passed through on every chat dialect it speaks, not just the OpenAI one, so agent loops work. It streams: stream: true is answered as server-sent events, and a fallback after output has already gone out ends the stream rather than appending a second model's answer to an abandoned partial",
       "hyctl serve binds loopback and refuses an off-loopback bind with no token, rather than warning, because the endpoint spends money and reads your code",
       "Interactive TUI cockpit (hyctl tui), chat, route work, and watch spend live",
       "Desktop app (Wails v2) for macOS, Windows and Linux, chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage, Audit and Settings views",
@@ -86,8 +86,8 @@
       "Per-run event log, reconstruct any run's supervision tree, timeline and file edits",
       "Swarm dispatch, race, best, and all modes across multiple models simultaneously",
       "Token budget enforcement, per-model context window tracking with pressure modes",
-      "Dynamic live pricing, OpenRouter API pricing with 24h cache and tier fallback",
-      "hyctl stats, real-time session cost rollup by model, tier, and day",
+      "Dynamic live pricing, OpenRouter API pricing with a 24h cache and built-in fallback prices",
+      "hyctl stats, real-time session cost rollup by model, routing level and day",
       "hyctl stats --latency, p50/p90/p99 per model from mergeable sketches, not a rescan of the cost log",
       "Oracle-verified eval corpus (hyctl eval), labelled examples kept verbatim and exempt from retention, each tagged with the routing decision it judges",
       "Corpus readiness (hyctl eval readiness), whether enough verified examples exist per routing enum to fit a routing choice rather than guess at one",
@@ -95,8 +95,8 @@
       "Classifier evidence (hyctl eval classify), leave-one-out over the corpus asking whether similarity to past work predicts whether a routing key passes, with resolution scored against a permutation null so a finite corpus cannot report noise as a finding",
       "hyverify, a standalone verifier that records what a repository's own test suite says about a candidate file, with no router and no Hydra config, because a serving-side router never sees your test suite and cannot manufacture that ground truth",
       "hyctl trace seal, folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
-      "Routing rules in config (registry/signals.yaml), priority-ordered rules over PII, injection, blast-radius and keyword signals that pin a tier, force local-only, raise the confidence bar or refuse; ships empty so routing is unchanged until you write one",
-      "Cheapest measured-competent routing, an unpinned dispatch runs the cheapest head this machine has measured competent at the task's domain rather than the strongest one it owns; needs twenty judged answers in that domain, so an unmeasured machine routes exactly as before, and a named tier or enum is still obeyed as the instruction it is",
+      "Routing rules in config (registry/signals.yaml), priority-ordered rules over PII, injection, blast-radius and keyword signals that pin a routing level, force local-only, raise the required probability of a correct answer or refuse; ships empty so routing is unchanged until you write one",
+      "Routing on measured records: an unpinned request goes to a model this machine has measured competent at that task type, the lowest-cost one among them; it needs twenty judged answers for the task type, so an unmeasured machine routes exactly as before, and a named routing level or enum is still obeyed as the instruction it is",
       "Hybrid recall over past dispatches (hyctl trace search), BM25 fused with vector cosine by rank, so it still works on a machine with no embedding model installed",
       "Opt-in embedding store (hyctl trace embeddings), one vector per dispatch from a local Ollama model, redacted before it is embedded and keyed on the model so two vector spaces are never compared; off by default",
       "Opt-in payload store (hyctl trace payloads), prompt and response text, off by default, chunked so a repeated system prompt is stored once, and redacted before it is written",
@@ -118,9 +118,9 @@
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Hydra",
-    "alternateName": "Hydra Trust Control Plane",
+    "alternateName": "Hydra verified cascade gateway",
     "url": "https://hydra.uvansa.com/",
-    "description": "The Trust Control Plane for AI development, open source, written in Go"
+    "description": "Hydra picks the model best suited to each task, and can check the answer before you rely on it. Open source, written in Go."
   }
   </script>
 
@@ -135,23 +135,23 @@
       "name": "What is Hydra?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way."
+        "text": "Hydra is an open source gateway for AI models. For each request it picks the model best suited to that kind of task. It can also check the answer, and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider, and runs as a desktop app, a command-line tool (hyctl) and an OpenAI-compatible endpoint."
       }
     },
     {
       "@type": "Question",
-      "name": "What is a Trust Control Plane?",
+      "name": "How does Hydra check an answer?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model's calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius, spending more only where accuracy demands it."
+        "text": "Every model and every checker, such as a test suite, a validator or a grounding check, gets a measured record of how often its verdicts turn out right for each task type. When you set a target, for example 95% with hyctl dispatch --confidence 0.95, Hydra combines their verdicts in a sequential probability ratio test (SPRT) and stops as soon as the probability that the answer is correct crosses it. If the answer cannot get there, Hydra asks the next-best model. hyctl trust calibration shows the measured records."
       }
     },
     {
       "@type": "Question",
-      "name": "How does Hydra reduce AI costs?",
+      "name": "How does Hydra keep costs down?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Hydra classifies each task by complexity and routes it to the cheapest model capable of handling it. Boilerplate code, mock data, and simple helpers go to local Qwen via Ollama (free). Standard CRUD and API work goes to Gemini Flash (~100x cheaper than Claude). Only architecture decisions and complex reasoning tasks reach Claude. This tiered routing typically reduces total LLM spend by 70-85% compared to routing everything through a frontier model."
+        "text": "With a target set, it stops as soon as the answer is checked, so it does not pay for models it does not need, and it can send work to a free local model when that model has a good record on the task type. Every request is logged with its cost, and hyctl stats shows where the money went. Hydra does not quote a savings percentage, because the saving depends on your tasks and your models. hyctl trace evaluate estimates it from your own logs."
       }
     },
     {
@@ -159,7 +159,7 @@
       "name": "How do I install Hydra?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Install the Hydra CLI (hyctl) via Homebrew: 'brew install ankit373/hydra/hyctl'. Also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Optionally install Ollama for local model support."
+        "text": "The desktop app is a download for macOS, Windows and Linux from the desktop app page. The command-line tool, hyctl, installs with Homebrew: 'brew install ankit373/hydra/hyctl'. It is also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Install Ollama too if you want to run models locally."
       }
     },
     {
@@ -167,15 +167,15 @@
       "name": "What models does Hydra support?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with 'hyctl models add' or by editing registry/models.yaml, no code changes required."
+        "text": "Any model you can reach: hosted APIs that speak the OpenAI, Anthropic, Gemini, Cohere, Bedrock or Azure formats, OpenRouter, local servers such as Ollama and llama.cpp, and CLI agents installed on your machine. hyctl probe finds what is already there. Add a model with 'hyctl models add' or by editing registry/models.yaml, with no code changes."
       }
     },
     {
       "@type": "Question",
-      "name": "What is swarm dispatch?",
+      "name": "What is a swarm request?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race 'your prompt'."
+        "text": "A swarm sends one prompt to several models at once. Race mode returns the first successful answer, best mode asks a judge model to pick the strongest one, and all mode returns every answer for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race 'your prompt'."
       }
     },
     {
@@ -183,7 +183,7 @@
       "name": "Does Hydra work without internet?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline, only the model API calls require network access."
+        "text": "Yes, with a local model. Routing, logging and cost tracking run entirely on your machine, and when hosted APIs are unreachable or over budget Hydra falls back to a local model, for example one served by Ollama. Only calls to hosted models need the network."
       }
     },
     {
@@ -191,7 +191,7 @@
       "name": "Does Hydra stream model output as it arrives?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes, on every surface. A dispatch renders while the model is still writing it in the terminal, the hyctl tui cockpit, the desktop app and across a swarm fan-out. Seven executor paths stream natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini, Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI. A head that cannot stream is not a separate code path, its whole output is delivered as one delta so every surface is written once. When the router falls back mid-answer the abandoned partial collapses to one line naming the head, how much it wrote and why it stopped, rather than staying on screen as if it were the answer."
+        "text": "Yes, on every surface. An answer renders while the model is still writing it: in the terminal, in the hyctl tui cockpit, in the desktop app and across a swarm. Seven executor paths stream natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini, Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI. A model that cannot stream is not a separate code path: its whole output is delivered as one delta, so every surface is written once. When the router falls back mid-answer, the abandoned partial collapses to one line naming the model, how much it wrote and why it stopped, rather than staying on screen as if it were the answer."
       }
     },
     {
@@ -199,7 +199,7 @@
       "name": "What data leaves my machine when I use Hydra?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Only the prompt you dispatch, and only to the head that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the oracle-verified corpus all stay in ~/.hydra on your own disk. An egress gate refuses a file classified as secret, such as .env or ~/.aws/credentials, to any head that leaves the machine, and a local-only policy pins sensitive work to models running on your hardware. Traces are exported to an OpenTelemetry collector only when you pass --otlp with an endpoint."
+        "text": "Only the prompt you send, and only to the model that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the verified example corpus all stay in ~/.hydra on your own disk. An egress gate refuses to send a file classified as secret, such as .env or ~/.aws/credentials, to any model outside your machine, and a local-only policy pins sensitive work to models running on your hardware. Traces go to an OpenTelemetry collector only when you pass --otlp with an endpoint."
       }
     },
     {
@@ -207,7 +207,7 @@
       "name": "Can Hydra route between local models like Ollama and llama.cpp?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Hydra discovers a running Ollama server as one routable head per model, and a llama.cpp server as one head per loaded model, identified from llama.cpp's own build_info rather than assumed from its port, so an unrelated service on 8080 yields no heads. A LiteLLM proxy is discovered as one head per model it fronts, and whether each counts as local is decided from the upstream the proxy reports rather than from its address, because a proxy on localhost forwarding to OpenAI is the normal deployment. hyctl models pull fetches a model into the local Ollama server, including a HuggingFace GGUF repo, without leaving hyctl."
+        "text": "Yes. Hydra lists each model a running Ollama server offers, and each model a llama.cpp server has loaded. It identifies llama.cpp from the server's own build_info rather than assuming from the port, so an unrelated service on 8080 is not mistaken for one. A LiteLLM proxy is listed as one entry per model it fronts, and whether each counts as local is decided from the upstream the proxy reports rather than from its address, because a proxy on localhost forwarding to OpenAI is the normal deployment. hyctl models pull fetches a model into the local Ollama server, including a HuggingFace GGUF repo, without leaving hyctl."
       }
     }
   ]
@@ -220,8 +220,8 @@
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "Hydra",
-    "alternateName": "Hydra Trust Control Plane",
-    "description": "Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes tasks across every model on your machine to a target confidence of correctness.",
+    "alternateName": "Hydra verified cascade gateway",
+    "description": "Hydra is an open source gateway for AI models from any provider. It picks the model best suited to each task, and can check the answer before you rely on it. Written in Go.",
     "codeRepository": "https://github.com/ankit373/hydra",
     "programmingLanguage": "Go",
     "license": "https://opensource.org/licenses/MIT",
@@ -639,35 +639,35 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <!-- ══ 1 · HERO, hydra-hud: dive into the cortex ══════════════════════════ -->
 <div class="hero-pin" id="heroPin">
   <header class="hero-sticky" id="heroSticky">
-    <canvas id="stage" aria-label="Live control-plane visualization: many heads converging into the cortex, then diving in to demonstrate routing, trust, swarm, the budget governor and local-first policy"></canvas>
+    <canvas id="stage" aria-label="Animated illustration with sample data: models from several providers connect to Hydra's router, which then demonstrates routing, answer checking, swarm requests, the budget governor and local-only policy"></canvas>
     <div id="scan" aria-hidden="true"></div><div id="vig" aria-hidden="true"></div>
     <div class="hero-hud" id="heroHud" aria-hidden="true">
       <div class="hud-corner tl"></div><div class="hud-corner tr"></div><div class="hud-corner bl"></div><div class="hud-corner br"></div>
-      <div class="hud-meta">local-first &middot; provider-neutral<br><b id="hudHeads">3</b> heads discovered<br>uptime <b id="hudUp">00:00</b></div>
-      <div class="hud-panel" id="hudLog"><div class="ttl"><span>routing log</span><span class="dot">&#9679; live</span></div><div id="hudLogBody"></div></div>
+      <div class="hud-meta">provider-neutral &middot; sample data<br><b id="hudHeads">3</b> models found<br>uptime <b id="hudUp">00:00</b></div>
+      <div class="hud-panel" id="hudLog"><div class="ttl"><span>routing log</span><span class="dot">&#9679; sample</span></div><div id="hudLogBody"></div></div>
       <div class="hud-panel" id="hudTele">
         <div class="ttl"><span>telemetry</span><span class="dot" id="hudMstate">&#9679;</span></div>
-        <div class="hud-row"><span>confidence</span><b id="hudConf">0.94</b></div><div class="hud-bar"><i id="hudConfbar" style="width:94%"></i></div>
-        <div class="hud-row" style="margin-top:12px"><span>saved vs all-Claude</span><b id="hudSaved">$0.00</b></div>
+        <div class="hud-row"><span>P(correct)</span><b id="hudConf">0.94</b></div><div class="hud-bar"><i id="hudConfbar" style="width:94%"></i></div>
+        <div class="hud-row" style="margin-top:12px"><span>saved vs one top model</span><b id="hudSaved">$0.00</b></div>
         <div class="hud-row"><span>routed local</span><b id="hudLocal">0%</b></div>
         <div class="hud-row"><span>governor</span><b class="hud-mode" id="hudMode">NORMAL 34%</b></div>
       </div>
       <div class="deep" id="hudDeep">
-        <div class="dt" id="hudDeepTitle">INSIDE THE CORTEX</div>
+        <div class="dt" id="hudDeepTitle">INSIDE THE ROUTER</div>
         <div class="db" id="hudDeepBody">everything the router is doing, one capability at a time</div>
       </div>
     </div>
     <a class="skip-intro" href="#universe">skip intro ↓</a>
     <div class="hero-inner" id="heroCopy">
-      <div class="eyebrow">local-first <span>·</span> provider-neutral <span>·</span> trust control plane</div>
-      <h1 class="wordmark">HYDRA<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;">, the local-first Trust Control Plane: multi-model AI orchestration CLI</span></h1>
-      <div class="tagline">One Cortex · Many Heads</div>
-      <p class="subline">The local-first <b>Trust Control Plane</b> for AI. Hydra discovers every model on your machine, CLI agents, API keys, local servers, and routes each task to the cheapest head that clears your <b>target confidence</b>.</p>
+      <div class="eyebrow">open source <span>·</span> any provider <span>·</span> answer checking</div>
+      <h1 class="wordmark">HYDRA<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;">: the gateway that picks the right model for each task and can check the answer</span></h1>
+      <div class="tagline">Pick the model · check the answer</div>
+      <p class="subline">Hydra sends each request to the model <b>best suited to the task</b>, and <b>can check the answer</b> and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider.</p>
       <div class="ctas">
         <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
           <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
         </button>
-        <a class="btn-ghost" href="/docs.html">Read the docs →</a>
+        <a class="btn-ghost" href="/app.html">Get the desktop app →</a>
       </div>
     </div>
     <div class="scrollhint" id="scrollHint" aria-hidden="true">drag to orbit &middot; scroll to dive ↓</div>
@@ -678,40 +678,40 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
 <!-- ══ 2 · WHERE WE FIT IN THE UNIVERSE ═════════════════════════════════════ -->
 <section class="blk wrap reveal" id="universe">
-  <div class="klabel"><span>Where we fit in the universe</span><b>the uncontested quadrant</b></div>
-  <h2 class="big">Every other tool is a <span class="grad">hosted proxy</span>.<br>We built the local-first one.</h2>
-  <p class="lede">Cloud gateways route your traffic through <b>their</b> servers. Eval tools score answers <b>after</b> the fact. Local runtimes each manage only <b>their own</b> models. Plot the field on two axes, hosted↔local and cost-routing↔trust, and one quadrant sits empty. That is where Hydra lives. <b>Hover any star.</b></p>
+  <div class="klabel"><span>Where Hydra fits</span><b>what decides, and when</b></div>
+  <h2 class="big">Most gateways decide <span class="grad">before the call</span>.<br>Hydra can also check after it.</h2>
+  <p class="lede">Gateways pick a model by rules or a predicted score, and retry only on an HTTP error. Eval tools score answers <b>after</b> the fact. Local runtimes each manage only <b>their own</b> models. Hydra picks a model from its measured record on that kind of task, and can check the answer before you get it. Plot the field on two axes, hosted↔local and cost routing↔checked answers, and one quadrant sits empty. <b>Hover any star.</b></p>
 
   <div class="galaxy-frame">
-    <canvas id="galaxy" aria-label="Constellation of AI infrastructure tools plotted on two axes; Hydra alone occupies the local-first, trust quadrant"></canvas>
+    <canvas id="galaxy" aria-label="Constellation of AI infrastructure tools plotted on two axes; Hydra alone occupies the local-first, checked-answer quadrant"></canvas>
     <div class="axislbl left">hosted · proxy-first</div>
     <div class="axislbl right">local-first · on-device</div>
-    <div class="axislbl top">trust · confidence</div>
+    <div class="axislbl top">checked answers</div>
     <div class="axislbl bottom">cost · latency routing</div>
-    <div class="quadtag"><span class="em">the empty quadrant</span><br>local-first × trust<br>→ Hydra, alone</div>
+    <div class="quadtag"><span class="em">the empty quadrant</span><br>local-first × checked<br>→ Hydra, alone</div>
     <div class="gtip" id="gtip"><span class="cat" id="gtipCat"></span><br><span class="nm" id="gtipNm"></span><div class="tg" id="gtipTg"></div></div>
   </div>
   <div class="glegend">
     <span><i style="color:#7FA8FF"></i> Cloud gateways</span>
     <span><i style="color:#8B5CF6"></i> Eval &amp; observability</span>
     <span><i style="color:#E852C8"></i> Local runtimes</span>
-    <span><i style="color:#5a5f85"></i> Frontier heads (destinations)</span>
+    <span><i style="color:#5a5f85"></i> Hosted models (destinations)</span>
     <span><i style="color:#00E6C3"></i> Hydra</span>
   </div>
 </section>
 
 <!-- ══ 3 · THE MATH, DRAWN ══════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="math">
-  <div class="klabel"><span>The math, drawn</span><b>mechanism, not decoration</b></div>
+  <div class="klabel"><span>The math, drawn</span><b>how the router decides</b></div>
   <h2 class="big">Three curves that <span class="grad">run the router</span>.</h2>
-  <p class="lede">Routing isn't vibes. Hydra rides the cost/quality Pareto frontier, stops sampling the instant confidence clears the bar, and reads the code graph to know when a change is dangerous. Here is the actual math.</p>
+  <p class="lede">Hydra picks from each model's measured record, stops asking for more evidence once the answer clears your target, and for code, reads the dependency graph to know when a change is risky. Here is the math.</p>
 
   <div class="chartgrid">
     <!-- (a) Pareto frontier -->
     <div class="chart" id="chartPareto">
       <div class="ct">a · cost vs quality</div>
       <h3>The Pareto frontier</h3>
-      <p class="cd">Single models are dots. For any one of them, Hydra's routed curve reaches equal or better quality at lower cost, it picks the best head <em>per task</em>.</p>
+      <p class="cd">Single models are dots. Routing each task to the model best suited to it reaches equal or better quality at lower cost than any one of them, because the choice is made <em>per task</em>.</p>
       <svg viewBox="0 0 340 260" role="img" aria-label="Cost versus quality scatter. Hydra's routed frontier dominates single-model points.">
         <!-- axes -->
         <line class="axisln" x1="40" y1="220" x2="326" y2="220"/>
@@ -735,7 +735,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
           <circle class="pop" cx="214" cy="96"  r="4.5" fill="#E0A93A" style="transition-delay:.35s"/>
           <text class="dotlbl pop" x="220" y="99" style="transition-delay:.4s">GPT-class</text>
           <circle class="pop" cx="286" cy="76"  r="4.5" fill="#8B5CF6" style="transition-delay:.45s"/>
-          <text class="dotlbl pop" x="238" y="70" style="transition-delay:.5s">all-Claude</text>
+          <text class="dotlbl pop" x="238" y="70" style="transition-delay:.5s">top model</text>
         </g>
         <!-- hyctl markers on the frontier -->
         <g class="dots">
@@ -744,19 +744,19 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
           <text class="dotlbl pop" x="120" y="42" fill="#00E6C3" style="transition-delay:.8s">Hydra routes here</text>
         </g>
       </svg>
-      <div class="foot">Same quality, <b>lower cost</b>: the RouteLLM result, applied per dispatch.</div>
+      <div class="foot">Matching a top model's quality at <b>lower cost</b> is the published RouteLLM result; Hydra applies the idea per request.</div>
     </div>
 
     <!-- (b) SPRT confidence convergence -->
     <div class="chart" id="chartSprt">
       <div class="ct">b · optimal stopping</div>
-      <h3>Confidence, then stop</h3>
-      <p class="cd">Hydra polls heads until the sequential test (SPRT) crosses your target confidence, then it stops early and banks the unspent heads.</p>
-      <svg viewBox="0 0 340 260" role="img" aria-label="Confidence rising with each head queried, crossing the 0.95 target and stopping early.">
+      <h3>Check, then stop</h3>
+      <p class="cd">Hydra asks models one at a time until the sequential test (SPRT) says the answer is correct with your target probability. Then it stops and skips the models it no longer needs.</p>
+      <svg viewBox="0 0 340 260" role="img" aria-label="Probability of a correct answer rising with each model asked, crossing the 0.95 target and stopping early.">
         <line class="axisln" x1="40" y1="220" x2="326" y2="220"/>
         <line class="axisln" x1="40" y1="20" x2="40" y2="220"/>
-        <text class="axtx" x="183" y="245" text-anchor="middle">heads queried  →</text>
-        <text class="axtx" x="12" y="120" text-anchor="middle" transform="rotate(-90 12 120)">confidence  →</text>
+        <text class="axtx" x="183" y="245" text-anchor="middle">models asked  →</text>
+        <text class="axtx" x="12" y="120" text-anchor="middle" transform="rotate(-90 12 120)">P(correct)  →</text>
         <!-- target line 0.95 -->
         <line class="gridln" x1="40" y1="54" x2="326" y2="54" stroke="#00E6C3" stroke-dasharray="5 5" opacity=".7"/>
         <text class="axtx" x="322" y="48" text-anchor="end" fill="#00E6C3">target 0.95</text>
@@ -776,31 +776,31 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <text class="dotlbl pop" x="256" y="52" fill="#00E6C3" style="transition-delay:1.8s">accept ✔</text>
         <text class="dotlbl pop" x="256" y="66" fill="#5a5f85" style="transition-delay:1.9s">stopped early</text>
       </svg>
-      <div class="foot"><b>Fewer heads, cleared bar</b>: the calibrated number the field lacks.</div>
+      <div class="foot"><b>Fewer calls, bar cleared</b>: a stated probability you can audit against outcomes.</div>
     </div>
 
     <!-- (c) percolation-κ blast radius -->
     <div class="chart" id="chartPercol">
       <div class="ct">c · percolation-κ</div>
       <h3>Blast radius (Molloy-Reed)</h3>
-      <p class="cd">κ = ⟨k²⟩/⟨k⟩. A hub file with many transitive dependents is cascade-capable, so it demands more confidence. <b>Hover a node.</b></p>
+      <p class="cd">κ = ⟨k²⟩/⟨k⟩. A hub file with many transitive dependents is cascade-capable, so an edit to it must clear a higher bar. <b>Hover a node.</b></p>
       <svg viewBox="0 0 340 260" id="percolSvg" role="img" aria-label="Dependency graph. Hovering a high-kappa hub lights its dependents.">
         <g id="pgEdges"></g>
         <g id="pgNodes"></g>
         <text class="pg-readout" id="pgReadout" x="170" y="248" text-anchor="middle">hover a node, κ &amp; blast radius</text>
       </svg>
-      <div class="foot"><b>High-κ ⇒ higher bar.</b> The confidence target rises with the graph.</div>
+      <div class="foot"><b>High-κ ⇒ higher bar.</b> The required probability rises with the graph.</div>
     </div>
   </div>
   <div style="text-align:center;margin-top:38px;">
-    <a class="btn-ghost" href="/first-principles.html">Derive it yourself, six interactive proofs on the First Principles page →</a>
+    <a class="btn-ghost" href="/first-principles.html">Derive it yourself: six interactive proofs on the First Principles page →</a>
   </div>
 </section>
 
 <!-- ══ 4b · SECURITY ═══════════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="security">
   <div class="klabel"><span>Accountability</span><b>counts hide the sequence</b></div>
-  <h2 class="big">You gave an agent your repo. <span class="grad">What did it do?</span></h2>
+  <h2 class="big">You gave an agent access. <span class="grad">What did it do?</span></h2>
   <p class="lede">Every access an agent makes is recorded in a local, hash-chained ledger. <b>hyctl security</b> reads that log and answers the one question you actually have, not a wall of metrics.</p>
 
   <div class="term" style="margin-top:22px;max-width:760px">
@@ -820,8 +820,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <details class="more">
     <summary>How the verdict is computed, and what it refuses to claim</summary>
     <div class="more-body">
-<p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real heads, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · head-binary integrity · edit blast radius.</p>
-  <p class="cmp-note">And the limit no percentage can state, printed in words on the default view: a CLI-agent head is itself an agent, in a process Hydra does not control. The score covers what Hydra <em>sends and records</em>, not what such a head independently reads and ships. Only a local-only run keeps the whole task on your machine.</p>
+<p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real models, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · CLI agent binary integrity · edit blast radius.</p>
+  <p class="cmp-note">And the limit no percentage can state, printed in words on the default view: a CLI agent that Hydra sends work to is itself an agent, in a process Hydra does not control. The score covers what Hydra <em>sends and records</em>, not what such an agent independently reads and ships. Only a local-only run keeps the whole task on your machine.</p>
 
   <p class="cmp-note"><b>Honest about its own limits.</b> Framework mappings are marked <em>curated</em> assertions, not measurements. Defect cost is per-occurrence, not annualised. A file the dependency graph does not index is <em>unknown</em>, never “low-risk”. The attestation is unsigned, because Hydra has no key management and a signature without one is theatre.</p>
     </div>
@@ -854,53 +854,53 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <p class="cmp-note"><b>The negative result is the weaker one, and says so.</b> A host firewall that drops the probe looks exactly like a server that is not listening, so <em>loopback only</em> is reported as weaker evidence than <em>exposed</em>. A machine with no non-loopback address ruled nothing out. A lookup that failed is unchecked, never clean. The advisory query is the only part of the whole report that leaves your machine, so it is off unless you ask for it.</p>
 
-  <p class="cmp-note"><b>Including its own state directory.</b> The report had always said the head-binary baseline is forgeable by anything able to write <code>~/.hydra</code>, and nothing read a permission bit. Writable is the finding, since that is where the integrity baseline and the ledger's chain anchor live as plain files; readable is reported separately, since it exposes the listing and not the contents. It repairs nothing: the report is a read.</p>
+  <p class="cmp-note"><b>Including its own state directory.</b> The report had always said the CLI agent binary baseline is forgeable by anything able to write <code>~/.hydra</code>, and nothing read a permission bit. Writable is the finding, since that is where the integrity baseline and the ledger's chain anchor live as plain files; readable is reported separately, since it exposes the listing and not the contents. It repairs nothing: the report is a read.</p>
     </div>
   </details>
 
-  <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to trust in the first place, every existing MCP directory answers “does this exist”, none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every trust state drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
+  <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to run in the first place. Every existing MCP directory answers “does this exist”; none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every score drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
 </section>
 
 <!-- ══ 5 · CRAZY NUMBERS ════════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="numbers">
   <div class="klabel"><span>By the numbers</span><b>every number has a mechanism</b></div>
-  <h2 class="big">Loud numbers. <span class="grad">Real levers.</span></h2>
-  <p class="lede">No tokens-processed arms race. Each of these is something you can reproduce on your own machine with <b>hyctl stats</b> and <b>hyctl probe</b>.</p>
+  <h2 class="big">Numbers you can <span class="grad">check</span>.</h2>
+  <p class="lede">No savings percentage: what Hydra saves depends on your tasks and your models. Each number below is a property of the software you can verify, and <b>hyctl stats</b> and <b>hyctl trace evaluate</b> measure cost on your own work.</p>
 
   <div class="bento">
     <div class="tile big" style="--gl:rgba(63,217,138,.12)">
-      <div class="num tnum" data-to="73" data-suffix="%">73<span class="u">%</span></div>
+      <div class="num tnum" data-to="0">0</div>
       <div>
-        <div class="cap">cheaper, typically</div>
-        <div class="mech">Median cost avoided by routing boilerplate <em>away</em> from the frontier orchestrator to a mid or local head. Reproduce with <code>hyctl stats</code>.</div>
+        <div class="cap">accounts, servers or telemetry</div>
+        <div class="mech">Hydra runs on your machine. Spend logs, run logs and calibration stay in <code>~/.hydra</code>, and only the prompt goes to the model that answers it.</div>
       </div>
     </div>
     <div class="tile med" style="--gl:rgba(0,230,195,.12)">
-      <div class="num tnum" data-to="58" data-suffix="%">58<span class="u">%</span></div>
+      <div class="num tnum" data-to="20">20</div>
       <div>
-        <div class="cap">kept 100% local</div>
-        <div class="mech">Share of tasks that never left your machine. No hosted gateway can claim this.</div>
+        <div class="cap">checked answers before a record counts</div>
+        <div class="mech">Hydra routes on a model's record for a task type only after 20 checked answers there. Until then it says the record is unmeasured.</div>
       </div>
     </div>
     <div class="tile med" style="--gl:rgba(139,92,246,.12)">
       <div class="num tnum" data-to="0.95" data-dec="2">0.95</div>
       <div>
-        <div class="cap">target confidence</div>
-        <div class="mech">Routes to a calibrated confidence-of-correctness, then stops early via SPRT.</div>
+        <div class="cap">example target P(correct)</div>
+        <div class="mech">Your bar for a checked answer. Hydra stops asking models once the evidence clears it (SPRT).</div>
       </div>
     </div>
     <div class="tile med" style="--gl:rgba(42,240,224,.12)">
-      <div class="num tnum" data-to="12">12</div>
+      <div class="num tnum" data-to="1">1</div>
       <div>
-        <div class="cap">heads discovered</div>
-        <div class="mech">CLI agents + API keys + local servers found on a typical dev box. Run <code>hyctl probe</code>.</div>
+        <div class="cap">binary, no daemon</div>
+        <div class="mech">One Go binary is the command line, the terminal cockpit and the OpenAI-compatible endpoint. Run <code>hyctl probe</code> to see the models it finds.</div>
       </div>
     </div>
     <div class="tile wide" style="--gl:rgba(232,82,200,.12)">
-      <div class="num tnum" data-to="100" data-suffix="%">100<span class="u">%</span></div>
+      <div class="num tnum" data-to="0">0</div>
       <div>
-        <div class="cap">offline-capable · ~0ms routing overhead</div>
-        <div class="mech">The router runs on-device with zero network calls to decide. Local Qwen is the always-on terminal fallback, so a dispatch <em>never</em> hard-fails on a rate limit.</div>
+        <div class="cap">network calls to choose a model</div>
+        <div class="mech">The router decides on your machine. With a local model installed, Hydra falls back to it when a hosted API is down or rate-limited.</div>
       </div>
     </div>
   </div>
@@ -908,9 +908,9 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
 <!-- ══ 6 · COMPARISON ═══════════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="compare">
-  <div class="klabel"><span>Hydra vs the gateways</span><b>only one is local-first + trust + ledger</b></div>
-  <h2 class="big">Others route your traffic. <span class="grad">Hydra routes on your metal.</span></h2>
-  <p class="lede">Cost routing and fallback are table stakes, most tools have them. The differentiators are the rows nobody else can check: local-first, confidence/trust routing, and an on-device accountability ledger.</p>
+  <div class="klabel"><span>Hydra vs the gateways</span><b>only one here can check the answer</b></div>
+  <h2 class="big">Others pick a model. <span class="grad">Hydra can also check the answer.</span></h2>
+  <p class="lede">Fallback and cost reporting are table stakes: most tools have them. The differences are in the other rows: checked answers, routing on each model's measured record, local-first operation and an on-device accountability ledger.</p>
 
   <div class="cmp-scroll-wrap">
   <p class="cmp-swipe-hint">swipe to compare →</p>
@@ -929,21 +929,21 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </thead>
       <tbody>
         <tr><th scope="row">Local-first discovery &amp; routing</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="part">partial</span></td></tr>
-        <tr><th scope="row">Provider-neutral, routes <em>away</em> from expensive heads</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td><td><span class="yes">✓</span></td></tr>
+        <tr><th scope="row">Provider-neutral, routes <em>away</em> from expensive models</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Automatic fallback chains</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="part">partial</span></td></tr>
         <tr><th scope="row">Spend logging &amp; cost reporting</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="part">partial</span></td></tr>
-        <tr><th scope="row">Confidence / trust routing (calibrated + optimal-stopping)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
-        <tr><th scope="row">Head ranking learns from verified outcomes <em>on your machine</em></th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
-        <tr><th scope="row">Routes per <em>domain</em>: best at Go, not best on average</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
+        <tr><th scope="row">Can check the answer before returning it (calibrated, stops early)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
+        <tr><th scope="row">Model ranking learns from checked outcomes <em>on your machine</em></th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
+        <tr><th scope="row">Routes per <em>task type</em>: best at this kind of work, not best on average</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Fetches the model too, HuggingFace GGUF included</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">On-device accountability ledger (PII / local-only policy)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="part">partial</span></td></tr>
-        <tr><th scope="row">MCP server trust scoring (not just an index)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
+        <tr><th scope="row">MCP server safety scoring (not just an index)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">Runs fully offline (0 network to route)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="yes">✓</span></td></tr>
       </tbody>
     </table>
   </div>
   </div>
-  <p class="cmp-note"><b>Every row checked above ships today</b>: <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release, not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+  <p class="cmp-note"><b>Every row checked above ships today</b>: <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release. It is not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
 <!-- ══ 6a2 · STREAMING ══════════════════════════════════════════════════════ -->
@@ -951,27 +951,27 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <div class="klabel"><span>Streaming</span><b>every dialect, every surface</b></div>
   <h2 class="big">A slow answer and a broken one <span class="grad">look identical</span>.</h2>
   <p style="max-width:59ch;color:var(--dim)">
-    Until they start arriving. Hydra renders a dispatch while the model is still
-    writing it, in the terminal, in the <code>hyctl tui</code> cockpit, in the
-    desktop app, and across a swarm fan-out. Seven executor paths stream
+    Until they start arriving. Hydra renders an answer while the model is still
+    writing it: in the terminal, in the <code>hyctl tui</code> cockpit, in the
+    desktop app, and across a swarm. Seven executor paths stream
     natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini,
     Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI.
   </p>
   <p style="max-width:59ch;color:var(--dim)">
-    A head that <em>cannot</em> stream is not a second code path. Its whole
+    A model that <em>cannot</em> stream is not a second code path. Its whole
     output is delivered as one delta, so every surface is written once and the
     two kinds cannot drift apart in how they render.
   </p>
 
   <div class="term" style="margin-top:20px;max-width:720px">
-    <div class="copyline" data-copy="hyctl dispatch --enum STANDARD &quot;add pagination to the users endpoint&quot;"><span><span class="p">$</span> hyctl dispatch --enum STANDARD "add pagination…"</span><span class="cp">copy</span></div>
-    <div class="o"><span class="c">ollama/qwen3:8b</span> · T8 · writing…</div>
+    <div class="copyline" data-copy="hyctl dispatch &quot;summarise this contract in five bullet points&quot;"><span><span class="p">$</span> hyctl dispatch "summarise this contract…"</span><span class="cp">copy</span></div>
+    <div class="o"><span class="c">ollama/qwen3:8b</span> · writing…</div>
     <div class="o" style="opacity:.62">⤺ abandoned <span class="c">openrouter/gpt</span> after ~212 chars: 429 rate limited</div>
     <div class="o" style="opacity:.62">&nbsp;&nbsp;&nbsp;hyctl trace view run-7f2a --span 9c1d4e02</div>
   </div>
   <p class="cmp-note" style="margin-top:16px">
     When the router falls back mid-answer, the abandoned partial does not sit
-    there pretending to be the answer. It collapses to one line naming the head,
+    there pretending to be the answer. It collapses to one line naming the model,
     roughly how much it wrote and why it stopped, and expands if you want to
     read it. The trace command appears only when payload capture is on, because
     without it the span stores no text and pointing you at an empty page would
@@ -982,11 +982,11 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="app">
   <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
-  <h2 class="big">Prefer to <span class="grad">watch</span> it rather than grep it?</h2>
+  <h2 class="big">Prefer an <span class="grad">app</span> to a terminal?</h2>
   <p style="max-width:59ch;color:var(--dim)">
-    Everything above is the CLI. The same control plane has a desktop app that
-    opens on a chat: ask for work, and every reply says which model answered, at
-    which tier, and what it cost, beside a pane showing what the router knows.
+    Everything above is the command line. Hydra also has a desktop app that
+    opens on a chat: ask anything, and every reply says which model answered and
+    what it cost, beside a pane showing what the router knows.
     Models, Activity, Usage, Audit and Settings sit behind it, over the logs
     <code>hyctl</code> already writes. No account, no server, nothing leaves the
     machine.
@@ -1010,7 +1010,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <p class="cmp-note" style="margin-top:16px">
     macOS · Linux · Windows, attached to every GitHub release with a SHA-256
     checksum. Not yet code-signed, so macOS needs right-click → Open the first
-    time, the install script clears that for you. ARM64 builds ship for both
+    time. The install script clears that for you. ARM64 builds ship for both
     Windows and Linux (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
     <a href="/app.html#download">Direct downloads</a>.
   </p>
@@ -1019,11 +1019,11 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <!-- ══ 7 · GETTING STARTED ══════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="start">
   <div class="klabel"><span>Getting started</span><b>three commands</b></div>
-  <h2 class="big">Installed to first dispatch in <span class="grad">under a minute</span>.</h2>
+  <h2 class="big">Installed to first answer in <span class="grad">under a minute</span>.</h2>
 
   <div class="steps">
     <div class="step">
-      <div class="n">01, INSTALL</div>
+      <div class="n">01 · INSTALL</div>
       <h3>Get the binary</h3>
       <p>One Go binary. No daemon, no account, no cloud.</p>
       <div class="term">
@@ -1031,27 +1031,27 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <div class="copyline" data-copy="npm install -g hyctl"><span><span class="p">$</span> npm install -g hyctl</span><span class="cp">copy</span></div>
         <div class="copyline" data-copy="pip install hyctl"><span><span class="p">$</span> pip install hyctl</span><span class="cp">copy</span></div>
         <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh"><span><span class="p">$</span> curl -fsSL …/install.sh | sh</span><span class="cp">copy</span></div>
-        <div class="o">🍺 <span class="g">hyctl 1.x</span> installed · or run once with <span class="g">npx hyctl</span></div>
+        <div class="o"><span class="g">✓ hyctl 1.x</span> installed · or run once with <span class="g">npx hyctl</span></div>
       </div>
     </div>
     <div class="step">
-      <div class="n">02, DISCOVER</div>
+      <div class="n">02 · DISCOVER</div>
       <h3>Scan your machine</h3>
-      <p>Finds every head: CLI agents, API keys, local servers. Ranked on what each one has actually got right here, not just a catalogue score.</p>
+      <p>Finds every model you can use: API keys, local servers and CLI agents. Each is ranked on what it has actually got right here, not just a catalogue score.</p>
       <div class="term">
         <div class="copyline" data-copy="hyctl probe"><span><span class="p">$</span> hyctl probe</span><span class="cp">copy</span></div>
-        <div class="o"><span class="g">✓</span> 12 heads · agy · gemini · openrouter</div>
+        <div class="o"><span class="g">✓</span> 12 models · agy · gemini · openrouter</div>
         <div class="o"><span class="c">          ollama(qwen) · lmstudio · …</span></div>
       </div>
     </div>
     <div class="step">
-      <div class="n">03, DISPATCH</div>
-      <h3>Route a task</h3>
-      <p>Classify → tier → cheapest head that clears confidence, ranked on what each one got right at this kind of work.</p>
+      <div class="n">03 · ASK</div>
+      <h3>Ask for something</h3>
+      <p>Hydra picks the model best suited to the task, checks the answer against the target you set, and tells you what it cost.</p>
       <div class="term">
-        <div class="copyline" data-copy='hyctl dispatch --enum SIMPLE "write a User DTO"'><span><span class="p">$</span> hyctl dispatch --enum SIMPLE …</span><span class="cp">copy</span></div>
-        <div class="o"><span class="c">→ T8 gemini-flash · $0.0001</span></div>
-        <div class="o"><span class="g">✓ done</span> · saved $0.0149 vs all-Claude</div>
+        <div class="copyline" data-copy='hyctl dispatch --confidence 0.95 "draft a polite reply declining the meeting"'><span><span class="p">$</span> hyctl dispatch --confidence 0.95 …</span><span class="cp">copy</span></div>
+        <div class="o"><span class="c">→ gemini-flash · ollama/qwen3 agree</span></div>
+        <div class="o"><span class="g">✓ checked</span> · 96% likely correct · $0.0003</div>
       </div>
     </div>
   </div>
@@ -1080,56 +1080,56 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <div class="faq">
     <div class="faq-item">
       <h3>What is Hydra?</h3>
-      <p>Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way.</p>
+      <p>Hydra is an open source gateway for AI models. For each request it picks the model best suited to that kind of task. It can also check the answer, and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider, and runs as a desktop app, a command-line tool (hyctl) and an OpenAI-compatible endpoint.</p>
     </div>
     <div class="faq-item">
-      <h3>What is a Trust Control Plane?</h3>
-      <p>A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model&#x27;s calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius, spending more only where accuracy demands it.</p>
+      <h3>How does Hydra check an answer?</h3>
+      <p>Every model and every checker, such as a test suite, a validator or a grounding check, gets a measured record of how often its verdicts turn out right for each task type. When you set a target, for example 95% with hyctl dispatch --confidence 0.95, Hydra combines their verdicts in a sequential probability ratio test (SPRT) and stops as soon as the probability that the answer is correct crosses it. If the answer cannot get there, Hydra asks the next-best model. hyctl trust calibration shows the measured records.</p>
     </div>
     <div class="faq-item">
-      <h3>How does Hydra reduce AI costs?</h3>
-      <p>Hydra classifies each task by complexity and routes it to the cheapest model capable of handling it. Boilerplate code, mock data, and simple helpers go to local Qwen via Ollama (free). Standard CRUD and API work goes to Gemini Flash (~100x cheaper than Claude). Only architecture decisions and complex reasoning tasks reach Claude. This tiered routing typically reduces total LLM spend by 70-85% compared to routing everything through a frontier model.</p>
+      <h3>How does Hydra keep costs down?</h3>
+      <p>With a target set, it stops as soon as the answer is checked, so it does not pay for models it does not need, and it can send work to a free local model when that model has a good record on the task type. Every request is logged with its cost, and hyctl stats shows where the money went. Hydra does not quote a savings percentage, because the saving depends on your tasks and your models. hyctl trace evaluate estimates it from your own logs.</p>
     </div>
     <div class="faq-item">
       <h3>How do I install Hydra?</h3>
-      <p>Install the Hydra CLI (hyctl) via Homebrew: &#x27;brew install ankit373/hydra/hyctl&#x27;. Also available via npm (&#x27;npm install -g hyctl&#x27;), npx (&#x27;npx hyctl&#x27;), pip (&#x27;pip install hyctl&#x27;), a standalone installer (&#x27;curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh&#x27;), or prebuilt binaries from GitHub releases. Optionally install Ollama for local model support.</p>
+      <p>The desktop app is a download for macOS, Windows and Linux from the desktop app page. The command-line tool, hyctl, installs with Homebrew: 'brew install ankit373/hydra/hyctl'. It is also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Install Ollama too if you want to run models locally.</p>
     </div>
     <div class="faq-item">
       <h3>What models does Hydra support?</h3>
-      <p>Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with &#x27;hyctl models add&#x27; or by editing registry/models.yaml, no code changes required.</p>
+      <p>Any model you can reach: hosted APIs that speak the OpenAI, Anthropic, Gemini, Cohere, Bedrock or Azure formats, OpenRouter, local servers such as Ollama and llama.cpp, and CLI agents installed on your machine. hyctl probe finds what is already there. Add a model with 'hyctl models add' or by editing registry/models.yaml, with no code changes.</p>
     </div>
     <div class="faq-item">
-      <h3>What is swarm dispatch?</h3>
-      <p>Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race &#x27;your prompt&#x27;.</p>
+      <h3>What is a swarm request?</h3>
+      <p>A swarm sends one prompt to several models at once. Race mode returns the first successful answer, best mode asks a judge model to pick the strongest one, and all mode returns every answer for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race 'your prompt'.</p>
     </div>
     <div class="faq-item">
       <h3>Does Hydra work without internet?</h3>
-      <p>Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline, only the model API calls require network access.</p>
+      <p>Yes, with a local model. Routing, logging and cost tracking run entirely on your machine, and when hosted APIs are unreachable or over budget Hydra falls back to a local model, for example one served by Ollama. Only calls to hosted models need the network.</p>
     </div>
     <div class="faq-item">
       <h3>Does Hydra stream model output as it arrives?</h3>
-      <p>Yes, on every surface. A dispatch renders while the model is still writing it in the terminal, the hyctl tui cockpit, the desktop app and across a swarm fan-out. Seven executor paths stream natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini, Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI. A head that cannot stream is not a separate code path, its whole output is delivered as one delta so every surface is written once. When the router falls back mid-answer the abandoned partial collapses to one line naming the head, how much it wrote and why it stopped, rather than staying on screen as if it were the answer.</p>
+      <p>Yes, on every surface. An answer renders while the model is still writing it: in the terminal, in the hyctl tui cockpit, in the desktop app and across a swarm. Seven executor paths stream natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini, Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI. A model that cannot stream is not a separate code path: its whole output is delivered as one delta, so every surface is written once. When the router falls back mid-answer, the abandoned partial collapses to one line naming the model, how much it wrote and why it stopped, rather than staying on screen as if it were the answer.</p>
     </div>
     <div class="faq-item">
       <h3>What data leaves my machine when I use Hydra?</h3>
-      <p>Only the prompt you dispatch, and only to the head that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the oracle-verified corpus all stay in ~/.hydra on your own disk. An egress gate refuses a file classified as secret, such as .env or ~/.aws/credentials, to any head that leaves the machine, and a local-only policy pins sensitive work to models running on your hardware. Traces are exported to an OpenTelemetry collector only when you pass --otlp with an endpoint.</p>
+      <p>Only the prompt you send, and only to the model that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the verified example corpus all stay in ~/.hydra on your own disk. An egress gate refuses to send a file classified as secret, such as .env or ~/.aws/credentials, to any model outside your machine, and a local-only policy pins sensitive work to models running on your hardware. Traces go to an OpenTelemetry collector only when you pass --otlp with an endpoint.</p>
     </div>
     <div class="faq-item">
       <h3>Can Hydra route between local models like Ollama and llama.cpp?</h3>
-      <p>Yes. Hydra discovers a running Ollama server as one routable head per model, and a llama.cpp server as one head per loaded model, identified from llama.cpp&#x27;s own build_info rather than assumed from its port, so an unrelated service on 8080 yields no heads. A LiteLLM proxy is discovered as one head per model it fronts, and whether each counts as local is decided from the upstream the proxy reports rather than from its address, because a proxy on localhost forwarding to OpenAI is the normal deployment. hyctl models pull fetches a model into the local Ollama server, including a HuggingFace GGUF repo, without leaving hyctl.</p>
+      <p>Yes. Hydra lists each model a running Ollama server offers, and each model a llama.cpp server has loaded. It identifies llama.cpp from the server's own build_info rather than assuming from the port, so an unrelated service on 8080 is not mistaken for one. A LiteLLM proxy is listed as one entry per model it fronts, and whether each counts as local is decided from the upstream the proxy reports rather than from its address, because a proxy on localhost forwarding to OpenAI is the normal deployment. hyctl models pull fetches a model into the local Ollama server, including a HuggingFace GGUF repo, without leaving hyctl.</p>
     </div>
   </div>
 </section>
 
 <!-- ══ FINAL CTA ════════════════════════════════════════════════════════════ -->
 <section class="cta reveal">
-  <h2>Stop paying frontier prices<br>for <span class="grad">boilerplate</span>.</h2>
-  <p>One cortex, many heads. Route each task to the cheapest head that clears your bar, on your own hardware, with your spend and policy staying home.</p>
+  <h2>The right model for each task.<br>The answer, <span class="grad">checked</span>.</h2>
+  <p>Hydra works with any provider, runs on your own hardware, and keeps your spend logs and policy on your machine.</p>
   <div class="ctas">
     <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
         <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
       </button>
-    <a class="btn-ghost" href="#universe">See the whitespace ↑</a>
+    <a class="btn-ghost" href="/app.html">Get the desktop app →</a>
   </div>
 </section>
 
@@ -1139,11 +1139,11 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="foot-grid">
       <div class="brand">
         <div class="mark">HYDRA</div>
-        <p>The local-first Trust Control Plane. Discovers every model on your machine and routes by cost, policy and confidence, no vendor privileged.</p>
+        <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Open source, with no vendor privileged.</p>
       </div>
       <div class="col">
         <h4>Product</h4>
-        <a href="#universe">The universe</a>
+        <a href="#universe">Where Hydra fits</a>
         <a href="#math">The math</a>
         <a href="#security">Security</a>
         <a href="#compare">Comparison</a>
@@ -1163,8 +1163,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </div>
     </div>
     <div class="foot-bottom">
-      <span class="badges"><b>MIT</b> · provider-neutral · runs offline · <span>One Cortex · Many Heads</span></span>
-      <span class="egg">$ hyctl dispatch --enum SIMPLE "ship it"<span class="cur"></span></span>
+      <span class="badges"><b>MIT</b> · provider-neutral · runs offline · <span>Pick the model · check the answer</span></span>
+      <span class="egg">$ hyctl dispatch "ship it"<span class="cur"></span></span>
     </div>
   </div>
 </footer>
@@ -1212,7 +1212,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   function pt(base,vs){var r=[base[0],base[1],base[2]];for(var i=0;i<vs.length;i++){var s=vs[i][0],v=vs[i][1];r[0]+=s*v[0];r[1]+=s*v[1];r[2]+=s*v[2];}return r;}
   function eob(x){var c1=1.70158,c3=c1+1;return Math.max(0,1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2));}
 
-  var CORTEX=N([0,-1.25,0],C.aqua,10,'cortex','CORTEX',{k:'router · SPRT ensemble'},0);
+  var CORTEX=N([0,-1.25,0],C.aqua,10,'cortex','ROUTER',{k:'router · SPRT'},0);
 
   // fractal micro-core: the same many-heads-one-cortex pattern, spinning fast, at small scale,
   // inside the router -- a visual echo of everything the ensemble is doing right now.
@@ -1315,11 +1315,11 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var deepEl=$('#hudDeep'), deepTitleEl=$('#hudDeepTitle'), deepBodyEl=$('#hudDeepBody');
   var DIVE_VH=1.0, PER_VH=0.65;
   var FEATURES=[
-    {title:'COST-DESCENDING ROUTING', body:'every task drops through the tier ladder, the cheapest head that clears the bar wins the work.', accent:'linear-gradient(90deg,'+C.exp+','+C.mid+','+C.cheap+')'},
-    {title:'TRUST CONTROL PLANE',     body:'an SPRT ensemble votes to a target confidence, not just to the cheapest answer.', accent:'linear-gradient(90deg,'+C.aqua+','+C.cyan+')'},
-    {title:'SWARM · RACE / BEST-OF-N', body:'fan a task out to several heads at once, judge the field, keep the winner.', accent:'linear-gradient(90deg,'+C.violet+','+C.magenta+')'},
-    {title:'BUDGET GOVERNOR',         body:'a rate-aware governor watches claude_pct and downgrades tiers before you hit the wall.', accent:C.cheap},
-    {title:'LOCAL-FIRST POLICY',      body:'a prompt matching a PII detector routes to a local head, and whatever is not yet enforced is reported as exactly that.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
+    {title:'ROUTING BY MEASURED RECORD', body:'each request goes to a model with a measured record on that kind of task.', accent:'linear-gradient(90deg,'+C.exp+','+C.mid+','+C.cheap+')'},
+    {title:'CHECKED ANSWERS',         body:'with a target set, models and checkers add evidence until the answer clears it, then Hydra stops.', accent:'linear-gradient(90deg,'+C.aqua+','+C.cyan+')'},
+    {title:'SWARM · RACE / BEST-OF-N', body:'send a task to several models at once, judge the answers, keep the best.', accent:'linear-gradient(90deg,'+C.violet+','+C.magenta+')'},
+    {title:'BUDGET GOVERNOR',         body:'a rate-aware governor watches spend and context use, and moves work to lower-cost models before you hit a limit.', accent:C.cheap},
+    {title:'LOCAL-FIRST POLICY',      body:'a prompt matching a PII detector goes to a local model, and whatever is not yet enforced is reported as exactly that.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
   ];
   heroPin.style.height=((DIVE_VH+FEATURES.length*PER_VH)*100)+'vh';
   var zoomT=0, featureT=0, activeFeature=-1, switching=false, featureSwitchStart=-1e9, released=false;
@@ -1327,7 +1327,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   // each renderer draws the cortex acting out its own feature, driven by the real (simulated)
   // telemetry state above -- not decoration, the same numbers the HUD panels already show
   function featRoute(cn,cR,a){
-    var bands=[{c:C.exp,lbl:'PAID · FRONTIER'},{c:C.mid,lbl:'MID TIER'},{c:C.cheap,lbl:'CHEAP / LOCAL'}];
+    var bands=[{c:C.exp,lbl:'PAID · FRONTIER'},{c:C.mid,lbl:'MID-RANGE'},{c:C.cheap,lbl:'LOW-COST / LOCAL'}];
     var h=HEADS[activeHead];
     var cost=h?(h.local?0:parseFloat(h.cost.slice(1))):0.5;
     var lit=h?(h.local||cost<0.05?2:cost<0.3?1:0):1;
@@ -1457,7 +1457,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var cost=h.local?0:parseFloat(h.cost.slice(1))*(0.4+Math.random());
     var avoid=0.9*(0.5+Math.random()); saved+=Math.max(0,avoid-cost);
     spawnDispatch(h);
-    var line='<div class="line"><span class="en">'+en+'</span> &rarr; '+h.tier+' &rarr; <span class="hd">'+h.name+'</span> &middot; <span class="c">'+(h.local?'local':'$'+cost.toFixed(3))+'</span> &middot; '+lat+'ms &middot; <span class="ok">conf '+conf.toFixed(2)+' ✓</span></div>';
+    var line='<div class="line"><span class="en">'+en+'</span> &rarr; <span class="hd">'+h.name+'</span> &middot; <span class="c">'+(h.local?'local':'$'+cost.toFixed(3))+'</span> &middot; '+lat+'ms &middot; <span class="ok">checked '+conf.toFixed(2)+' ✓</span></div>';
     lines.unshift(line); if(lines.length>7)lines.pop(); if(logbody)logbody.innerHTML=lines.join('');
     var confEl=$('#hudConf'); if(confEl)confEl.textContent=conf.toFixed(2);
     var confbarEl=$('#hudConfbar'); if(confbarEl)confbarEl.style.width=Math.round(conf*100)+'%';
@@ -1585,7 +1585,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
         if(align==='center'){x.moveTo(n4.sx,n4.sy-nR*1.6);x.lineTo(lx2,ly2+8);}
         else{var sgn=align==='left'?1:-1;x.moveTo(n4.sx+sgn*nR*1.6,n4.sy);x.lineTo(lx2-sgn*5,ly2);}
         x.stroke();
-        var stat=h.tier+' · '+(h.local?'LOCAL':h.cost+'/1k')+' · '+h.lat+'ms';
+        var stat=(h.local?'LOCAL':h.cost+'/1k')+' · '+h.lat+'ms';
         x.fillStyle='#EAFBFF';x.fillText(h.name.toUpperCase(),lx2,ly2-7);
         x.fillStyle=hexA('#9AA0C4',0.9);x.fillText(stat,lx2,ly2+8);
       } else {
@@ -1598,8 +1598,8 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     // cortex label
     if(nodes[CORTEX].age>=0){var n5=nodes[CORTEX];var ndep2=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(n5.depth+1.2)));var nR2=n5.r*ndep2;
      x.textAlign='left';x.fillStyle=hexA(C.aqua,0.95);x.font='12px "JetBrains Mono",monospace';
-     x.fillText('CORTEX',n5.sx+nR2*2.4+8,n5.sy+2);
-     x.fillStyle=hexA('#9AA0C4',0.8);x.font='10px "JetBrains Mono",monospace';x.fillText('router · SPRT',n5.sx+nR2*2.4+8,n5.sy+16);}
+     x.fillText('ROUTER',n5.sx+nR2*2.4+8,n5.sy+2);
+     x.fillStyle=hexA('#9AA0C4',0.8);x.font='10px "JetBrains Mono",monospace';x.fillText('checks · SPRT',n5.sx+nR2*2.4+8,n5.sy+16);}
     x.textAlign='left';
   }
   function hexA(h,a){var rgb=hx(h);return'rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+','+a+')';}
@@ -1628,10 +1628,10 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     gateway:{col:[127,168,255],label:'Cloud gateway'},
     eval:{col:[139,92,246],label:'Eval / observability'},
     local:{col:[232,82,200],label:'Local runtime'},
-    frontier:{col:[110,116,150],label:'Frontier head'},
-    hyctl:{col:[0,230,195],label:'Trust control plane'}
+    frontier:{col:[110,116,150],label:'Hosted model'},
+    hyctl:{col:[0,230,195],label:'Verified cascade gateway'}
   };
-  /* x: -1 hosted … +1 local-first ; y: -1 cost/latency … +1 trust/confidence */
+  /* x: -1 hosted … +1 local-first ; y: -1 cost/latency … +1 checked answers */
   var STARS=[
     // cloud gateways, hosted + cost/latency (bottom-left)
     {n:'OpenRouter',c:'gateway',x:-0.68,y:-0.52,r:3.4,t:'Hosted model marketplace · ~25ms proxy hop'},
@@ -1652,13 +1652,13 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     {n:'llama.cpp',c:'local',x:0.50,y:-0.74,r:2.7,t:'On-device inference engine'},
     {n:'vLLM',c:'local',x:0.40,y:-0.40,r:2.6,t:'Self-hosted high-throughput serving'},
     // frontier heads, destinations, dim, bottom band
-    {n:'OpenAI',c:'frontier',x:-0.30,y:-0.95,r:2.2,t:'Frontier head, a destination, not a router'},
-    {n:'Anthropic',c:'frontier',x:-0.10,y:-0.98,r:2.2,t:'Frontier head, a destination, not a router'},
-    {n:'Google Gemini',c:'frontier',x:0.12,y:-0.96,r:2.2,t:'Frontier head, a destination, not a router'},
-    {n:'Mistral',c:'frontier',x:0.30,y:-0.93,r:2.0,t:'Frontier head, a destination, not a router'},
-    {n:'Meta Llama',c:'frontier',x:0.02,y:-0.86,r:2.0,t:'Open-weights head, a destination'},
+    {n:'OpenAI',c:'frontier',x:-0.30,y:-0.95,r:2.2,t:'Hosted models, a destination, not a router'},
+    {n:'Anthropic',c:'frontier',x:-0.10,y:-0.98,r:2.2,t:'Hosted models, a destination, not a router'},
+    {n:'Google Gemini',c:'frontier',x:0.12,y:-0.96,r:2.2,t:'Hosted models, a destination, not a router'},
+    {n:'Mistral',c:'frontier',x:0.30,y:-0.93,r:2.0,t:'Hosted models, a destination, not a router'},
+    {n:'Meta Llama',c:'frontier',x:0.02,y:-0.86,r:2.0,t:'Open-weights models, a destination'},
     // Hydra, local + trust (top-right, alone)
-    {n:'Hydra',c:'hyctl',x:0.60,y:0.58,r:6.2,t:'Local-first · provider-neutral · routes to a target confidence, on your machine',hyctl:true}
+    {n:'Hydra',c:'hyctl',x:0.60,y:0.58,r:6.2,t:'Provider-neutral · picks by measured record · can check the answer',hyctl:true}
   ];
   STARS.forEach(function(s,i){s.ph=Math.random()*6.283;s.sp=0.4+Math.random()*0.6;
     s.tw=0.7+Math.random()*0.7;                  // per-star twinkle frequency (organic, non-mechanical)
