@@ -13,18 +13,19 @@ Verified against branch `docs/rfc-0001-verified-cascade-gateway` at `6aea7ac`.
   tier must also run on **Bedrock alone**.
 - The budget for A is $150. The smoke tier comes first and is capped at $5.
 - Task classes use E1's dotted keys (`classification.banking77`,
-  `classification.clinc150`), not the E7 scope's `classify/banking77`. The calibration
-  store keys on this string, and E1 §5 requires the dot.
+  `classification.clinc150`), not the E7 scope's `classify/banking77`, and the request
+  header is `X-Hydra-Task-Class`, not the scope's `X-Hydra-Task`. The calibration store
+  keys on this string, and E1 §1.2's grammar requires the dot.
 
 **Corrections to the E7 scope (K1–K7), found while designing:**
 
 | # | Scope says | What the code says | Effect on this design |
 |---|---|---|---|
-| K1 | "`serve` passes no temperature … dispatch never sets `executor.Request.Temperature`" | `executor.Request.Temperature *float64` already exists (`internal/executor/executor.go:28`, #1041). Only `serve.Request` and `chatRequest` lack it. | Direct arms need no executor change. Serve still needs passthrough (dependency **E1-D4**, §3.4). |
+| K1 | "`serve` passes no temperature … dispatch never sets `executor.Request.Temperature`" | `executor.Request.Temperature *float64` already exists (`internal/executor/executor.go:28`, #1041). Only `serve.Request` and `chatRequest` lack it. | Direct arms need no executor change. Serve still needs passthrough (dependency **E1-D4**, §3.4), which E1 PR 2 (#1208) adds with max-cost passthrough. |
 | K2 | "A way to pin `explore_rate = 0`" | `explore_rate` defaults to 0 (`config.go:75`, omitempty), and a fresh `HYDRA_HOME` has no `config.toml`. | No dependency. The harness writes `explore_rate = 0` explicitly anyway, so the breadcrumb shows it. |
 | K3 | Bedrock offers "Claude (Opus/Sonnet/Haiku), Nova, Llama" to the router | Discovery emits **one** Bedrock head, `env/bedrock`, and its model comes from `BEDROCK_MODEL_ID` (`provider/env/provider.go:44-53`, `executor/http.go:937`). There is no Bedrock allowlist like `[openrouter] models`. | A direct arm can call any Bedrock model, because `executor.modelFor` reads `Meta["model"]`. On Bedrock alone, the **router** sees only one Bedrock model (§3.3, §9 R1). |
 | K4 | Cost is "billed" | `cost.Row.CostSource` is always `"estimated"` (`cost/cost.go:43`). `pricing.DB` is keyed by OpenRouter ids, and a Bedrock id such as `anthropic.claude-…` falls through to tier pricing (`pricing.go:108-114`). | "Billed USD" here means the token counts the provider reported, times a dated price row the run pins. The harness prices every arm itself (§1.5). |
-| K5 | Excluding CLI-agent heads from Hydra arms is assumed to be possible | `hyctl serve` has no head allowlist. CLI heads are found with `exec.LookPath`, and a bare `PATH` makes `shellpath.Adopt` re-add the login shell's `PATH` (`shellpath.go:44-49`). Stripping `PATH` therefore does not work. | New dependency **E1-D5**: a head allowlist for serve (§3.4). |
+| K5 | Excluding CLI-agent heads from Hydra arms is assumed to be possible | `hyctl serve` has no head allowlist. CLI heads are found with `exec.LookPath`, and a bare `PATH` makes `shellpath.Adopt` re-add the login shell's `PATH` (`shellpath.go:44-49`). Stripping `PATH` therefore does not work. | New dependency **E1-D5**: #1325, `hyctl serve --heads` (§3.4; E1 §1.6). |
 | K6 | "Arms run on 1 seed; seed controls item order and subsample selection" | A seed that picks the subsample lets someone shop for seeds. | The subsample is fixed by the committed hash rank. The seed controls only the execution order, the arm rotation and the bootstrap (§4.3). |
 | K7 | Item id "stable upstream id, or sha256 of the canonical input" | CLINC150 has five duplicated utterances, four of them with **conflicting** labels (§2.3). Banking77 has no ids at all. | Ids are positional within a pinned file. The split is keyed on the text, and conflicting duplicates are excluded. |
 
@@ -104,9 +105,10 @@ type Arm interface {
 type ArmConfig struct {
 	Kind      string   `json:"kind"`             // "direct" | "served" | "computed"
 	Models    []string `json:"models"`           // provider model ids, in fallback order
-	Heads     []string `json:"heads,omitempty"`  // served: the router heads allowed (E1-D5)
+	Heads     []string `json:"heads,omitempty"`  // served: the router heads allowed (#1325 --heads)
 	Objective string   `json:"objective,omitempty"`
-	Target    float64  `json:"target,omitempty"` // served: P(correct) target, 0.95
+	Target    float64  `json:"target,omitempty"` // served: serve --confidence, fixed per arm before any run
+	MaxEscalations int `json:"max_escalations,omitempty"` // served: serve --max-escalations, fixed per arm
 	FaultRate float64  `json:"fault_rate,omitempty"`
 }
 
@@ -117,7 +119,7 @@ type Attempt struct {
 	Calls         []Call        `json:"calls"`                // every billed call, escalations included
 	Sources       []string      `json:"sources,omitempty"`    // X-Hydra-Sources, in order consulted
 	Accepted      string        `json:"accepted,omitempty"`   // the source whose answer was returned
-	Decision      string        `json:"decision"`             // "accept" | "abstain" | "exhausted"; direct arms: "accept"
+	Decision      string        `json:"decision"`             // X-Hydra-Decision verbatim: "accept" | "budget_exhausted" | "no_evidence"; direct arms: "accept"
 	PCorrect      *float64      `json:"p_correct,omitempty"`  // X-Hydra-P-Correct; nil when not stated
 	PPassBasis    string        `json:"p_pass_basis,omitempty"`
 	Escalations   int           `json:"escalations"`
@@ -169,8 +171,9 @@ type Run struct {
 }
 ```
 
-- `oracle.Verdict` gains `Score float64` in E1 step 4 (#1209). Until then a suite fills
-  `Passed` and the harness derives `Score` as 1 or 0. No bench-side verdict type exists.
+- `oracle.Verdict.Score` is **not** in A: E1 defers it to #1209-B (E1 deviations table).
+  A suite fills `Passed`, and the harness derives `Result.Score` as 1 or 0. No bench-side
+  verdict type exists.
 - `Result` keeps `Calls` per attempt, because H3 counts the cost of escalations and of
   failed calls, not only the cost of the accepted answer.
 
@@ -330,9 +333,19 @@ func (b *Budget) Spent() float64
 - **Cost per accepted answer** = Σ `CostUSD` over all rows of the arm, failed and errored
   ones included, ÷ #accepted. A direct arm accepts every item it answered. A served arm
   accepts where `Decision == "accept"`.
-- Every arm, served ones included, is priced from tokens × snapshot, never from
-  `X-Hydra-Cost-USD`. Each arm is therefore priced the same way. The header is recorded
-  and cross-checked; a disagreement over 1e-6 is flagged in `summary.json` (§9 R4).
+- **The cost of record.** Every arm, served ones included, is priced from
+  provider-reported tokens × the dated snapshot frozen in `run.json`, never from
+  `X-Hydra-Cost-USD`. Each arm is therefore priced the same way. This is the measured cost
+  for #1213's thresholds (Q8, settled; E1 §3), and the harness never calls
+  `dispatch.CallCost`.
+- **The cross-check.** The header is recorded per served request and must agree with the
+  harness value within **max($0.000001, 1% of the harness value)**.
+  - It is checked for heads that `pricing.DB` prices by model name (OpenRouter allowlist
+    heads) and for local heads ($0 on both sides).
+  - `env/bedrock` is tier-priced by `CallCost` (K4, E1 R3), so its requests are counted in
+    `header_cost_unchecked`, not compared.
+  - A checked request outside the tolerance increments `header_cost_mismatch`, and any
+    mismatch makes H3 `inconclusive` with that reason (§9 R3).
 
 ## 2. Dataset fetching and splits
 
@@ -419,8 +432,11 @@ is still **not** committed: the scope says so, and the lockfile is enough to rep
 - **Split key.** The split is computed from
   `sha256("split\x00" ‖ suite ‖ "\x00" ‖ canon(text))`, **not** from the id. Two copies of
   the same utterance therefore always land in the same split, so a calibration copy cannot
-  leak an answer into the test split. `canon` is NFC, case-folded, with whitespace
-  collapsed: the same canonicaliser the grader uses (§3.1).
+  leak an answer into the test split. `canon` is `oracle.NormaliseLabel` (E1 §1.4,
+  PR 0): the same function the grader and the served verifier use (§3.1). It folds
+  more than exact text does (case, quotes, a trailing `.`, runs of space or `-`), so the
+  duplicate counts below were found on exact text and PR 2 recomputes them under
+  `NormaliseLabel`; the committed TSV is authoritative.
 - **Bucket.** Let `bucket` be the first 8 bytes of the split hash, mod 1000.
   `bucket < 300` gives calibration and the rest gives test, a 30/70 split (scope §2.1).
   Upstream train/val/test is ignored, because no arm trains (scope §1.3).
@@ -469,20 +485,23 @@ is still **not** committed: the scope says so, and the lockfile is enough to rep
 
   Every arm sends this same request. A served arm sends it as `system` and `user`
   messages with the same strings.
-- **Grader.** `Suite.Grade` builds E1's `match` oracle (#1209) with the singleton set
-  `{gold}` and calls `Verify(ctx, answer, trust.Task{Domain: class})`. Correctness and the
-  serve-side "is this a valid label" check therefore share one canonicaliser. It does NFC,
-  casefolds, trims Unicode whitespace, and strips one layer of matching quotes or
-  backticks. Nothing else is lenient.
+- **Grader.** `Suite.Grade` uses E1's `match` verifier (#1209, PR 0) and nothing else:
+  - **Pass** = `oracle.NormaliseLabel(answer) == oracle.NormaliseLabel(gold)` (E1 §3).
+  - **Format** = the suite's own `oracle.NewMatch("<suite>", Labels(), "")` fails the
+    answer, which is exactly the verdict the served `verifier:match:<suite>` reaches.
+  - Correctness and the serve-side "is this a valid label" check therefore share one
+    normaliser. `NormaliseLabel` lowercases, trims space, quotes, backticks and a trailing
+    `.`, and folds runs of space or `-` to `_` (E1 §1.4). Nothing else is lenient, and
+    E7 does not define its own.
   - An answer that is not in the label set is a `format` fail. It is counted separately
     in `summary.json` (`format_fail_rate`), so verbosity cannot hide as wrongness.
   - An empty answer fails (the INTEGRITY rule; it is a test).
   - CLINC's `oos` is an ordinary label.
-- **Who owns `internal/oracle/match.go`.** E1 step 4 lists `match.go` under #1209, and
-  the scope requires "no second copy". The pure part has no dependencies: the
-  canonicaliser and an exact match over a label set. It lands first, as PR 0 (§8), under
-  #1209's number. E1 step 4 then only wires it into dispatch and route config.
-  **Blocking question Q1.**
+- **Who owns `internal/oracle/match.go`** (Q1, settled). It lands first as a small PR,
+  branch `feature/1209-match-verifier`, body "Part of #1209": E1 §6 PR 0 and §8 PR 0 here
+  are the same PR. It holds `MatchOracle`, `NewMatch` and `NormaliseLabel` as E1 §1.4
+  defines them, and wires nothing. E1 PR 4 then wires it into route config and the
+  cascade, and carries "Closes #1209". E7 imports it and never copies it.
 
 ### 3.2 Direct arms
 
@@ -541,7 +560,9 @@ type Served struct {
 	name      string           // "hydra-quality" | "hydra-cost" | "hydra-default"
 	objective string           // "quality" | "cost" | "" for hydra-default
 	home      string           // $HYDRA_HOME/bench/runs/<run-id>/homes/<arm>
-	heads     []string         // the router heads allowed, from config (E1-D5)
+	heads     []string         // the router heads allowed, from config (#1325 --heads)
+	target    float64          // serve --confidence, fixed per arm in the run config
+	maxEsc    int              // serve --max-escalations, fixed per arm in the run config
 	base      string           // http://127.0.0.1:<port>/v1, chosen by the harness
 	client    *http.Client     // no proxy, no redirects, 120 s timeout
 }
@@ -558,21 +579,29 @@ type Served struct {
      - `capture_embeddings = false`
      - `[openrouter] models = [...]`, from the bench config, only when OpenRouter heads
        are configured
+     - one `[[serve.verifiers]]` entry (E1 §1.4): `class = "<class>"`, `kind = "match"`,
+       `id = "<suite>"`, `labels = "<home>/<suite>.labels"`, where the label file is
+       written from `Suite.Labels()`, one per line
    - No `registry/` override, so the embedded registry is used and `config.Breadcrumb()`
      names it.
-   - No `logs/state.json`, so `claude_pct` reads 0 and `claudeMode`'s emergency
-     `LocalOnly` (E1 C12) cannot fire.
-   - The answer cache stays off explicitly. One cached answer served for another item
-     would be one arm answering with another item's output.
+   - No `logs/state.json`, so `claude_pct` reads 0 and the emergency `LocalOnly` of
+     `claudeMode` (`quotaMode` after #1207; E1 scope C12) cannot fire.
+   - The answer cache stays off explicitly. E1 sets `NoCache` only on requests that carry
+     a verifier cascade (E1 §1.4), so `cache_answers = false` is what covers the rest.
+     One cached answer served for another item would be one arm answering with another
+     item's output.
 2. **Copy in calibration.** `calibration.jsonl` comes from the run's calibration
-   template, `homes/_calibration/` (step 3 below). Its sha256 goes into `summary.json`.
+   template, `homes/_calibration/`, filled as described below under "Filling
+   calibration". It is copied **before** serve starts, because serve loads calibration
+   once at start (E1 §3, R9). Its sha256 goes into `summary.json`.
    Nothing else is copied: not the developer's calibration, evalset, ledger or trust log.
 3. **Start serve.** The harness picks a free loopback port by listening on `:0` and
    closing. It then runs `os.Executable() serve --addr 127.0.0.1:<port>`, and retries with
    a new port up to three times if the bind loses the race. Serve's banner is never
    parsed.
-   - The flags: `--task-class <class>`, `--heads <ids>` (E1-D5), and `--enum` left unset,
-     so objective routing applies.
+   - The flags: `--task-class <class>`, `--heads <ids>` (#1325), `--confidence <target>`
+     and `--max-escalations <k>` from this arm's config (fixed before any run, §6.2), and
+     `--enum` left unset, so objective routing applies.
    - The environment: `HYDRA_HOME=home`, `HYDRA_NO_UPDATE_CHECK=1`, and
      `BEDROCK_MODEL_ID=<the configured Bedrock router model>`. The parent's `PATH` and its
      provider keys pass through; keys are never logged.
@@ -583,7 +612,8 @@ type Served struct {
    - `model: "hydra"`
    - `temperature: 0`
    - `max_tokens: 32`
-   - headers `X-Hydra-Objective: <o>` and `X-Hydra-Task-Class: <class>`
+   - headers `X-Hydra-Objective: <o>`, `X-Hydra-Task-Class: <class>`, and
+     `X-Hydra-Max-Cost-USD: <what the budget has left>` (#1208, §4.4)
 
    The harness reads the answer, `X-Request-Id`, and the evidence headers (#1210):
    `-Sources`, `-P-Correct`, `-Decision`, `-Escalations`, `-Cost-USD` and
@@ -614,6 +644,9 @@ type Served struct {
   cal.Update("verifier:match:"+suite, class, matchVerdict.Passed, outcome) // the verifier's own se/sp (H6)
   ```
 
+  `outcome` is the grader's Pass. `matchVerdict` is the full-label-set `MatchOracle`'s
+  verdict (§3.1), the one the served verifier reaches, not a match against `{gold}`.
+
   These are the exact calls `cmdTrustRecord` makes (`cmd/hydra/main.go:5304-5312`), into
   a file the harness owns. The verifier row is the only source of true negatives in A: a
   generator always says `said-correct=true` (#771).
@@ -622,7 +655,7 @@ type Served struct {
   a tiny extraction from `cmdTrustRecord`, so the two cannot drift. A subprocess per row
   would be 1,000–3,000 `hyctl` spawns and would change nothing about the result.
 - **How many.** `n_cal` per class is 40 in smoke and 500 in full. 40 is at least
-  `rank.MinCommitments` (20), so every head in `heads` reads as `measured` (E1 §1). The
+  `rank.MinCommitments` (20), so every head in `heads` reads as `measured` (E1 §1.3). The
   calibration items are scheduled, resumed and budgeted like test items.
 - **Refusal.** The filler refuses any item whose split is not calibration, with
   `ErrTestItemInCalibration`. A test asserts it (scope §6, E7.4-2).
@@ -649,12 +682,12 @@ type MissingDependency struct {
 
 | Id | Needed for | Ticket | Free preflight probe | Checked again on the first real response |
 |---|---|---|---|---|
-| E1-D1 | objective routing on `model: "hydra"` | #1206 | `POST` with `X-Hydra-Objective: __bench_probe__` must return **400** before routing (E1: "unknown value → 400"). A 200 or a timeout means unsupported. | `X-Hydra-Objective` echoes the value sent |
-| E1-D2 | task class reaches routing | #1208 | `hyctl serve --help` lists `--task-class` (parsed from the same binary) | `X-Hydra-Task-Class` equals the class, and its basis is `header` |
+| E1-D1 | objective routing on `model: "hydra"` | #1206 | `hyctl serve --help` lists `--objective` (parsed from the same binary). A probe POST is not used: before #1206 an unknown objective header is ignored and the request would route and bill. | `X-Hydra-Objective` echoes the value sent |
+| E1-D2 | task class reaches routing | #1208 | `hyctl serve --help` lists `--task-class` | `X-Hydra-Task-Class` equals the class, and its basis is `header` |
 | E1-D3 | evidence headers | #1210 | none for free | `-Sources`, `-Decision`, `-P-Correct`, `-Cost-USD`, `-Escalations` and `-P-Pass-Basis` are all present |
-| E1-D4 | `temperature` passthrough | **not in any E1 ticket** (§9 Q2) | `POST` with `temperature: "x"` must return 400 (the field is parsed). Today it is silently ignored. | `X-Hydra-Temperature` echoes 0, a header to add with #1210 |
-| E1-D5 | head allowlist, so CLI agents are excluded | **new, not ticketed** (§9 Q3) | `GET /v1/models` lists only `heads` plus routing ids. `hyctl probe --json` under the same env shows that every routable head outside `heads` is unreachable to serve. | `X-Hydra-Sources` ⊆ `heads` on every item; otherwise exit 4 |
-| E1-D6 | `match` verifier in the route config | #1209 | `hyctl serve --help` lists the route verifier flag or config key (named by #1205) | the sources include `verifier:match:<suite>` |
+| E1-D4 | `temperature` and `X-Hydra-Max-Cost-USD` passthrough | #1208 (E1 PR 2, with D2) | the D2 probe: both land in the same PR, so `--task-class` in `--help` implies them | none on the wire (E1 adds no temperature echo); E1's G7 is the proof, and the breadcrumb records the value sent |
+| E1-D5 | head allowlist, so CLI agents are excluded | #1325 (`hyctl serve --heads`, E1 §1.6) | `hyctl serve --help` lists `--heads`; then `GET /v1/models` lists only `heads` plus routing ids | `X-Hydra-Sources` ⊆ `heads` ∪ {`verifier:match:<suite>`} on every item; otherwise exit 4 |
+| E1-D6 | `match` verifier in the route config, and per-arm cascade flags | #1209 | `hyctl serve --help` lists `--max-escalations` (the verifier itself is a `[[serve.verifiers]]` config entry, which `--help` cannot show) | the sources include `verifier:match:<suite>` |
 
 - **Refuse or skip.** A missing dependency **refuses** the arm (exit 3, named in the
   output and in `summary.json` under `refused`). It never runs the arm in a degraded form.
@@ -760,10 +793,11 @@ $HYDRA_HOME/bench/runs/<run-id>/     not committed
     `run.json`'s `max_usd_history`.
 - **Starting balance.** `NewBudget(max, spent)` is seeded with Σ `cost_usd` over
   `calib.jsonl` and `items.jsonl` on resume, so the cap covers the whole run.
-- **Served arms.** Each request carries `max_cost` (E1's `MaxCostUSD` passthrough, which
-  is not yet in serve, §9 Q2), set to what the budget has left, so serve can refuse an
-  escalation the harness would refuse. Until that exists, the reservation uses the worst
-  case for `1 + max_escalations` calls (§1.4).
+- **Served arms.** Each request carries `X-Hydra-Max-Cost-USD` (E1 #1208, §1.2), set to
+  what the budget has left, so serve can refuse an escalation the harness would refuse.
+  The header can only lower serve's own ceiling. The reservation still uses the worst case
+  for `1 + max_escalations` calls (§1.4), because the cascade checks its spend after each
+  call and can overshoot by one.
 - **Calibration** is reserved and settled through the same `Budget`.
 
 ### 4.5 Breadcrumb (`run.json` → `summary.json`)
@@ -782,7 +816,7 @@ type Breadcrumb struct {
 	Arms           map[string]ArmConfig `json:"arms"`
 	Prices         PriceSnapshot     `json:"prices"`          // dated rows
 	ProviderModels map[string][]string `json:"provider_models"` // model ids reported back, per arm
-	Temperature    float64           `json:"temperature"`     // the value sent; served arms: X-Hydra-Temperature
+	Temperature    float64           `json:"temperature"`     // the value sent (E1 echoes none; G7 proves it reaches the wire)
 	CalibSHA256    string            `json:"calib_sha256,omitempty"`
 	Host           HostInfo          `json:"host"`            // internal/sysinfo + load average at start
 	ModelCutoffs   map[string]string `json:"model_cutoffs,omitempty"` // stated training cutoffs (contamination)
@@ -829,7 +863,7 @@ type Summary struct {
 	Verdicts   []Verdict              `json:"verdicts"` // empty unless Tier == "full" (§5.4)
 	Refused    []MissingDependency    `json:"refused,omitempty"`
 	Smoke      *SmokeMeasurements     `json:"smoke,omitempty"`  // §6
-	Caveats    []string               `json:"caveats"`  // always includes the contamination note
+	Caveats    []string               `json:"caveats"`  // always the contamination note; at A also the match caveat (§5.4)
 	Timing     Timing                 `json:"timing"`   // excluded from the resume byte-identity test
 }
 
@@ -846,7 +880,8 @@ type ArmSummary struct {
 	AcceptedError    *RateBound         `json:"accepted_error,omitempty"`   // served: k/n + CP upper 95
 	Reliability      *reliability.Report `json:"reliability,omitempty"`     // served, ≥ 500 accepted, 10 bins
 	LatencyMS        LatencyStats       `json:"latency_ms"`                 // sketch p50/p95, valid rows only
-	HeaderCostMismatch int              `json:"header_cost_mismatch,omitempty"`
+	HeaderCostMismatch  int             `json:"header_cost_mismatch,omitempty"`  // checked requests outside max($1e-6, 1%), §1.4
+	HeaderCostUnchecked int             `json:"header_cost_unchecked,omitempty"` // tier-priced env/bedrock requests
 }
 
 type PairedStats struct {
@@ -934,14 +969,23 @@ first match wins. δ = 2 pts.
 | **H2** (T3, report only) | — | n_accepted ≥ 500, CP upper(error) ≤ 0.07 and ECE ≤ 0.05 | the error point estimate > 0.07, or ECE − its bootstrap half-width > 0.05 | n_accepted < 500, or neither of the other cases |
 | **T1** (provider-neutral) | — | the run has no Anthropic API head and no Claude CLI head in `heads`, and there were 0 HTTP 5xx | any 5xx, or such a head is present | — |
 
-- **Reporting A.** CLINC150 is reported against Banking77 (E1 §4). If Banking77 passes
+- **Hypothesis caveat for H1 and H3 at A.** The `match` verifier checks that an answer
+  is a valid label, not that it is the right one. On intent suites most wrong answers are
+  still valid labels, so its LLR on a pass is ≈ 0 (E1 R1). Any `quality` gain at A
+  therefore comes from per-class measured competence on the calibration split, not from
+  verification, and any H3 saving comes from the order, not from verifier-gated stopping.
+  Every H1 and H3 `Verdict.Reason`, every A `summary.json` `caveats` list, and the
+  `table.md` footer say so. `--confidence` and `--max-escalations` are fixed per arm in
+  the run config before any run (§6.2), and the smoke escalation bound (§6.4) gates the
+  full run.
+- **Reporting A.** CLINC150 is reported against Banking77 (E1 scope §4). If Banking77 passes
   and CLINC150 fails, the A verdict is `inconclusive`. That is computed by `report` over
   both suites' summaries, as `checkpoint.json` (the same `Verdict` type, with Suite
   `"*"`).
 - **No re-testing.** Verdicts are computed once per (H, suite). Rerunning `report` on the
   same files gives the same verdict. The thresholds live in `internal/bench/verdict.go`
   as constants that cite the frozen ticket. Changing them is a reviewed diff, made before
-  results exist (E1 §4 last line).
+  results exist (E1 scope §4, last line).
 
 ## 6. Smoke tier
 
@@ -968,8 +1012,8 @@ The smoke tier runs in two stages, because its served arms depend on E1.
 
 | Stage | When | Arms | Router heads (`heads`) |
 |---|---|---|---|
-| **S1, direct** | as soon as PR 3 merges (§8) | `frontier`, `cheapest`, `mid`, plus `oracle` (computed) | none |
-| **S2, served** | after E1-D1…D6 land | `hydra-quality`, `hydra-cost` (+ the S1 arms, resumed, not re-run) | Bedrock alone: `env/bedrock` (model = frontier) and `ollama/qwen2.5-coder:7b`. With OpenRouter: also `openrouter/anthropic/claude-haiku-4.5` and `openrouter/openai/gpt-5-nano` |
+| **S1, direct** | once PR 3 merges (§8) **and** the AWS credentials authenticate (R2); direct Bedrock calls only | `frontier`, `cheapest`, `mid`, plus `oracle` (computed) | none |
+| **S2, served** | after E1-D1…D6 land (E1 PRs 2–6) | `hydra-quality`, `hydra-cost` (+ the S1 arms, resumed, not re-run) | Bedrock alone: `env/bedrock` (model = frontier) and `ollama/qwen2.5-coder:7b`. With OpenRouter: also `openrouter/anthropic/claude-haiku-4.5` and `openrouter/openai/gpt-5-nano` |
 
 `bench/configs/smoke.toml`:
 
@@ -981,7 +1025,7 @@ n_test = 100
 n_cal = 40
 seed = 1
 max_usd = 5.0
-max_escalations = 2
+escalation_bound = 0.20          # any served arm above it blocks the full run pending review (§6.4)
 
 [models]                         # filled in once Q4 is answered; every id is pinned and dated
 frontier = "bedrock:<strongest Opus id enabled in the account's region>"
@@ -995,10 +1039,19 @@ mid      = "bedrock:<Claude Haiku 4.5 id>"
 # [prices."<id>"] in_per_mtok/out_per_mtok/source/date overrides a ref when Bedrock list ≠ OpenRouter (Q4)
 
 [served]
-heads = ["env/bedrock", "ollama/qwen2.5-coder:7b"]
-bedrock_model = "<opus id>"      # exported to serve as BEDROCK_MODEL_ID
+heads = ["env/bedrock", "ollama/qwen2.5-coder:7b"]   # passed as hyctl serve --heads (#1325)
+bedrock_model = "<opus id>"      # exported to serve as BEDROCK_MODEL_ID: the one Bedrock router head
 frontier_head = "env/bedrock"    # used for non-vacuity
-target = 0.95
+
+# Fixed per arm before any run and frozen in run.json; passed as serve flags (E1 R1).
+[arms.hydra-quality]
+objective = "quality"
+confidence = 0.95                # hyctl serve --confidence
+max_escalations = 2              # hyctl serve --max-escalations
+[arms.hydra-cost]
+objective = "cost"
+confidence = 0.95
+max_escalations = 2
 ```
 
 - **Bedrock alone.** Every S1 arm is a direct Bedrock call, and no OpenRouter key is
@@ -1007,8 +1060,9 @@ target = 0.95
   - `hydra-quality` will then almost always choose `env/bedrock`, which is the frontier
     model. That is the vacuous case E1 T2 anticipates.
   - In smoke this costs nothing to discover. In full it would make H1
-    `inconclusive-vacuous` by construction, so the full tier needs OpenRouter, or a
-    Bedrock model allowlist (§9 Q5).
+    `inconclusive-vacuous` by construction, so the full tier's multi-model Hydra arms
+    **require the OpenRouter allowlist** (`[openrouter] models`). This is a run
+    prerequisite, not a code change: no Bedrock allowlist is planned (§9 Q5).
 - **Local Qwen** is $0 and is allowed: T1 forbids only Anthropic API and Claude CLI
   heads. Its latency on a loaded laptop is noise, which is why latency comes only from
   the ABAB subset.
@@ -1051,6 +1105,7 @@ type SmokeMeasurements struct {
 	TokensPerItem  map[string]struct{ InMean, InP95, OutMean, OutP95 float64 }
 	FormatFailRate map[string]float64
 	EscalationRate map[string]float64 // served arms
+	FullRunBlocked []string           // served arms whose EscalationRate > escalation_bound (0.20)
 	RecommendedN   map[string]int     // per suite: max(1000, ⌈6.18·p_disc/0.02²⌉), capped at the test split size
 	FullTierUSD    float64            // the §3.2 table of the scope recomputed from measured tokens
 }
@@ -1061,6 +1116,12 @@ type SmokeMeasurements struct {
 - **The full tier is sized from S2 when S2 exists, and from S1 otherwise.** The
   recommendation is a number for a person to accept. Nothing re-sizes `full.toml`
   automatically.
+- **Escalation gate.** If any served arm's S2 escalation rate exceeds 20%, `report` lists
+  it in `FullRunBlocked`, and `hyctl bench run` refuses a `full` config whose smoke run
+  has a non-empty `FullRunBlocked` until a reviewer records an override in `full.toml`
+  (`escalation_review = "<who, date, reason>"`). A high rate means the weak `match`
+  evidence (§5.4) is driving cost, not routing. The bound and any override are frozen in
+  `run.json`.
 
 ## 7. Test plan
 
@@ -1126,12 +1187,15 @@ type SmokeMeasurements struct {
 - **Grader:**
   - An empty answer fails.
   - A label outside the set is `format`.
-  - `" Card_Arrival "` passes for `card_arrival`, but `card arrival` and
-    `card_arrival because…` fail.
-  - A test asserts that `internal/bench` contains no canonicaliser of its own (scope §6,
-    E7.2-4). It does this with a `go/parser` scan: no `internal/bench/...` non-test file
-    imports `golang.org/x/text/unicode/norm`. The split key calls the oracle's
-    `CanonicalLabel` function and does not reimplement it.
+  - `" Card_Arrival "`, `"card arrival"` and `"Card-Arrival."` pass for `card_arrival`
+    (they normalise to it, E1 `TestNormaliseLabel`), but `card_arrival because…` and
+    `card_arrivals` fail, as `format`.
+  - **`TestBench_NoSecondNormaliser`** asserts that `internal/bench` contains no
+    normaliser of its own (scope §6, E7.2-4). A `go/parser` scan finds no call to
+    `strings.ToLower`, `strings.EqualFold` or `unicode.ToLower` in any
+    `internal/bench/...` non-test file; grading and the split key call
+    `oracle.NormaliseLabel`. E1's G19 (`TestMatchOracle_SameNormaliserAsE7Pass`) is the
+    other half: the served verifier applies that same function.
 
 ### 7.3 Arms with fake executors
 
@@ -1152,8 +1216,8 @@ type fakeExec struct { // scripted per (head, item text): answer, tokens, error,
 - **Served arms.** A fake `hyctl serve` is an `httptest.Server` implementing the
   chat-completions contract. It is reached through a `Launch func(home string, env []string)
   (baseURL string, stop func(), err error)` seam, so no subprocess is needed. Its cases:
-  - with each of the E1-D1…D6 behaviours removed, the arm is refused with that ticket,
-    zero chat calls are made, and the exit is 3;
+  - with each of the E1-D1…D6 behaviours removed (the fake binary's `--help` drops the
+    flag), the arm is refused with that ticket, zero chat calls are made, and the exit is 3;
   - a missing header on item 3, or a source outside `heads`, aborts with exit 4 and writes
     an `ErrKind: "contract"` row;
   - cost rows are joined on the request id from a fake `cost.jsonl` in the arm's home, and
@@ -1210,8 +1274,8 @@ type fakeExec struct { // scripted per (head, item text): answer, tokens, error,
 **Which PR carries `Closes`.** `close-shipped-issues.yml` closes every `Closes #n` it
 finds in a release. If an early PR of a multi-PR ticket said `Closes`, the ticket would
 close at the next release with its work unfinished. So **only the last PR of each ticket
-carries `Closes #n`**, and the earlier ones say `Part of #n`. If you would rather have
-sub-issues so that every PR can close one, see §9 Q7.
+carries `Closes #n`**, and the earlier ones say `Part of #n` (Q7, settled; E1 §6 follows
+the same rule).
 
 **Files every new subcommand must update.** CLAUDE.md's docs-site rule says a new
 `hyctl` subcommand updates `docs/index.html` (CLI tab) and `docs/llms.txt`. That
@@ -1219,16 +1283,16 @@ happens in PR 3, the first PR that ships `hyctl bench run`.
 
 | # | Branch | Title | Body | Depends on | Spend |
 |---|---|---|---|---|---|
-| 0 | `feature/1209-match-oracle` | `feat(oracle): exact label-match verifier with one canonicaliser` | Part of #1209. Adds `internal/oracle/match.go` (`CanonicalLabel`, `Match{Labels}`) and tests. Wires nothing into dispatch. Promotes `golang.org/x/text` to a direct dependency and bumps it from v0.3.8 (§9 R6). | none | $0 |
+| 0 | `feature/1209-match-verifier` | `feat(oracle): match verifier with one label normaliser` | Part of #1209. **The same PR as E1 §6 PR 0.** Adds `internal/oracle/match.go` (`MatchOracle`, `NewMatch`, `NormaliseLabel`, as E1 §1.4 defines them) and `match_test.go`. Wires nothing into dispatch or config. No new dependency (§9 R6). | none | $0 |
 | 1 | `feature/1198-stats` | `feat(stats): paired bootstrap, Tango, McNemar, Clopper–Pearson and pass^k` | Part of #1198. New `internal/stats`. `ope.bootstrapInterval` and `entity.wilson` are rewritten onto it, with no behaviour change: their tests stay byte-identical. Adds a coverage floor. | none | $0 |
-| 2 | `feature/1199-bench-suites` | `feat(bench): pinned dataset fetch, Banking77 and CLINC150 loaders, committed splits` | Closes #1199 (once it is narrowed, Q6). Adds `internal/bench` (Item, Suite, the lockfile, fetch, splits), `internal/bench/suites`, `bench/datasets.lock`, `DATASETS.md`, `splits/*.tsv` and `configs/smoke.ids`, plus `hyctl bench fetch`. | 0 | $0 |
+| 2 | `feature/1199-bench-suites` | `feat(bench): pinned dataset fetch, Banking77 and CLINC150 loaders, committed splits` | Closes #1199, narrowed to Banking77 and CLINC150 at checkpoint A (Q6, settled). Adds `internal/bench` (Item, Suite, the lockfile, fetch, splits), `internal/bench/suites`, `bench/datasets.lock`, `DATASETS.md`, `splits/*.tsv` and `configs/smoke.ids`, plus `hyctl bench fetch`. | 0 | $0 |
 | 3 | `feature/1198-bench-runner` | `feat(bench): resumable runner with budget cap and direct arms` | Part of #1198. Adds Arm, Attempt, Result, Run, the schedule, resume, Budget, PriceSnapshot, the breadcrumb, the direct arms (frontier, cheapest, mid, static-fallback with fault injection) and `hyctl bench run`, plus the docs-site CLI entries. | 2 | $0 |
 | 4 | `feature/1198-bench-report` | `feat(bench): summary, hypothesis verdicts, report and table` | Part of #1198, Part of #1219. Adds `summary.json`, `checkpoint.json`, the verdict rules in §5.4, and `hyctl bench report` and `table`, which write files only and never the README. | 1, 3 | $0 |
 | 5 | `chore/1198-smoke-direct` | `chore(bench): smoke tier S1 results, direct arms on Bedrock` | Part of #1198. Commits `bench/results/core-*-smoke-s1-*/`. The PR body states p_disc and the recommended n. | 4; working Bedrock credentials (Q4) | ≈ $0.9 |
-| 6 | `feature/1198-bench-served-arms` | `feat(bench): Hydra arms through hyctl serve with an isolated HYDRA_HOME` | Part of #1198. Adds the Served arm, the Launch seam, the preflight probes and `MissingDependency`, the contract checks, the cost join, and the extraction of `trust.RecordOutcome` together with the calibration filler. **Mergeable before E1**: until E1 lands, it refuses with exit 3 and names the tickets. | 3 | $0 |
-| 7 | `feature/1201-bench-calibration-curves` | `feat(bench): calibration-split fill, learning curves and seed matrices` | Closes #1201. Adds learning curves at n = 0/20/50/100/200, `bench/seeds/<pack>/<class>.json`, and loading a seed matrix as a `catalogue_prior` prior. | 6, plus E1 #1206, #1208, #1210 | in the full run |
-| 8 | `chore/1198-smoke-served` | `chore(bench): smoke tier S2 with Hydra arms and the determinism check` | **Closes #1198.** S2 smoke, plus the 200-item Banking77 determinism rerun (`--rerun`), frontier and hydra-quality, gated on ≤ 1 discordant item. | 6; E1-D1…D6 merged | ≈ $2 + ≈ $1.5 |
-| — | (under #1213, not E7) | the full checkpoint A run | owned by E1.E. It uses `bench/configs/full.toml`, sized from PR 5 or PR 8. | 8 | ≤ $150 total |
+| 6 | `feature/1198-bench-served-arms` | `feat(bench): Hydra arms through hyctl serve with an isolated HYDRA_HOME` | Part of #1198, Part of #1201 (the calibration filler and its test-item refusal are E7.4-2). Adds the Served arm, the Launch seam, the preflight probes and `MissingDependency`, the contract checks, the cost join, and the extraction of `trust.RecordOutcome` together with the calibration filler. **Mergeable before E1**: until E1 lands, it refuses with exit 3 and names the tickets. | 3 | $0 |
+| 7 | `feature/1201-bench-calibration-curves` | `feat(bench): learning curves and seed matrices` | Closes #1201. The calibration-split fill itself is PR 6. Adds learning curves at n = 0/20/50/100/200, `bench/seeds/<pack>/<class>.json`, and loading a seed matrix as a `catalogue_prior` prior. | 6, plus E1 #1206, #1208, #1210 | in the full run |
+| 8 | `chore/1198-smoke-served` | `chore(bench): smoke tier S2 with Hydra arms and the determinism check` | **Closes #1198.** S2 smoke, plus the 200-item Banking77 determinism rerun (`--rerun`), frontier and hydra-quality, gated on ≤ 1 discordant item. The body states each served arm's escalation rate against the 20% bound (§6.4). | 6; E1-D1…D6 merged (E1 PRs 2–6, incl. #1325) | ≈ $2 + ≈ $1.5 |
+| — | (under #1213, not E7) | the full checkpoint A run | owned by E1.E. It uses `bench/configs/full.toml`, sized from PR 5 or PR 8. Prerequisites: OpenRouter key and allowlist (§6.2), smoke escalation rates ≤ 20% or a recorded review (§6.4), and #1213 recording the harness cost definition and the H1/H3 caveat (§1.4, §5.4). | 8 | ≤ $150 total |
 
 **What can merge first.** PRs 0, 1 and 2 depend on no E1 work, and PRs 3, 4, 5 and 6 depend
 only on earlier E7 PRs:
@@ -1238,17 +1302,22 @@ only on earlier E7 PRs:
 
 PRs 7 and 8 are the only ones that wait for E1.
 
-**How this maps to E1's order (E1 §6).** PR 8 needs E1 steps 2 (#1208), 3 (#1206),
-4 (#1209) and 5 (#1210), plus E1-D4 (temperature) and E1-D5 (head allowlist), which are not yet
-in any E1 ticket (Q2, Q3). Step 1 (#1207 Quota) is **not** a dependency: the fresh home
-keeps `claude_pct` at 0. PR 0 overlaps E1 step 4's `match.go`, which is why Q1 asks for
-that ownership to be agreed first.
+**How this maps to E1's order (E1 §6).** PR 8 needs E1 PRs 2 (#1208, which also carries
+E1-D4: temperature and max-cost), 3 (#1206), 4 (#1209), 5 (#1210) and 6 (#1325, E1-D5).
+E1 PR 1 (#1207 Quota) is **not** a dependency: the fresh home keeps `claude_pct` at 0.
+PR 0 here is E1's PR 0; it merges once and both plans list it.
 
 **Commit size.** None of these PRs touches `internal/dispatch` or `internal/serve`. The
 harness reaches serve only over HTTP and the `os.Executable()` probe, so E7 cannot
-conflict with E1's hotspot files (E1 §6 conflicts 3–4). The only shared edits are
-`cmd/hydra/main.go` (one `AddCommand` line, and the `trust.RecordOutcome` call in
-`cmdTrustRecord`) and `ci/coverage-floors.txt`.
+conflict with E1's hotspot files (E1 §6). The edits outside `internal/bench`,
+`internal/stats`, `bench/` and `cmd/hydra/bench.go` are: `internal/oracle/match.go` (PR 0,
+shared with E1), `internal/ope` and `internal/entity` (PR 1, the lifts), `internal/pricing`
+(PR 3, `FetchedAt`), `internal/trust` (PR 6, `RecordOutcome`), `cmd/hydra/main.go` (one
+`AddCommand` line, and the `trust.RecordOutcome` call in `cmdTrustRecord`) and
+`ci/coverage-floors.txt`. `RecordOutcome` goes in a new file, `internal/trust/record.go`,
+so it does not touch E1 PR 2's `domain.go`. The one file both plans edit is
+`cmd/hydra/main.go`, where E1 PR 1 changes `printBudgetStatus` and E7 PR 6 changes
+`cmdTrustRecord`: disjoint regions, a textual conflict at most.
 
 ## 9. Risks and blocking questions
 
@@ -1256,12 +1325,12 @@ conflict with E1's hotspot files (E1 §6 conflicts 3–4). The only shared edits
 
 | # | Risk | Evidence | Mitigation in this design |
 |---|---|---|---|
-| R1 | **On Bedrock alone, H1 is vacuous by construction.** | Discovery emits one Bedrock head (K3). With `heads = {env/bedrock = Opus, local Qwen}`, `quality` picks Opus almost every time. | Smoke tolerates it, and the full tier must not. The full tier needs OpenRouter heads, or a Bedrock allowlist (Q6). The non-vacuity check (§5.4) makes this outcome impossible to misread as a pass. |
-| R2 | **The Bedrock credentials on this machine do not authenticate right now.** | Read-only `aws bedrock list-foundation-models` on 2026-11-05 returned `UnrecognizedClientException: The security token included in the request is invalid`, three times, with region `ap-south-1`. No secret was printed. | S1 cannot run until this is fixed (Q5). `Direct.Preflight` makes one ≈ $0.00003 Nova Micro call before the schedule, so a bad credential costs one call, not a run. Opus in `ap-south-1` is probably reachable only through a cross-region inference profile id, which has to be pinned. |
-| R3 | **H3's cost may be under-counted for served arms.** | The harness joins `cost.jsonl` on `run_id`. It is not established that dispatch writes a cost row for a **failed** or **escalated** attempt that the provider still billed. | A served item whose header `X-Hydra-Cost-USD` exceeds the joined total is flagged (`header_cost_mismatch`). Any flag makes H3 `inconclusive` with that reason. E1 #1210 should guarantee one cost row per billed call, and this should be added to its acceptance. |
-| R4 | **Hydra may route `cost` on wrong prices for Bedrock.** | `pricing.DB` misses Bedrock ids and falls back to tier pricing (K4). `constrain` and `rank.Cheapest` read `EstimateCost`. | Out of E7's scope, but it decides H3. The harness prices from its own snapshot, so the *measurement* is right even when the routing is not. Reported to E1 as a finding: a Bedrock price map, or `[prices]` in the config. |
+| R1 | **On Bedrock alone, H1 is vacuous by construction.** | Discovery emits one Bedrock head (K3). With `heads = {env/bedrock = Opus, local Qwen}`, `quality` picks Opus almost every time. | Smoke tolerates it, and the full tier must not. The full tier's multi-model Hydra arms require the OpenRouter allowlist (Q5): a run prerequisite, not a code change. The non-vacuity check (§5.4) makes this outcome impossible to misread as a pass. |
+| R2 | **The Bedrock credentials on this machine do not authenticate right now.** | Read-only `aws bedrock list-foundation-models` on 2026-11-05 returned `UnrecognizedClientException: The security token included in the request is invalid`, three times, with region `ap-south-1`. No secret was printed. | A **run prerequisite, not a code change**: S1 (direct Bedrock calls only) cannot run until it is fixed (Q4). `Direct.Preflight` makes one ≈ $0.00003 Nova Micro call before the schedule, so a bad credential costs one call, not a run. Opus in `ap-south-1` is probably reachable only through a cross-region inference profile id, which has to be pinned. |
+| R3 | **H3's cost may be under-counted for served arms.** | The harness joins `cost.jsonl` on `run_id`. E1 #1209 guarantees a cost row for every **escalated** answer (E1 §1.4, guard G15). A **transport-failed** attempt writes no row; the provider usually bills nothing for it, but that is not established. | A checked served request whose `X-Hydra-Cost-USD` differs from the harness value by more than max($0.000001, 1%) is flagged (`header_cost_mismatch`, §1.4). Any flag makes H3 `inconclusive` with that reason. Tier-priced `env/bedrock` requests cannot be checked and are counted in `header_cost_unchecked`. |
+| R4 | **Hydra may route `cost` on wrong prices for Bedrock.** | `pricing.DB` misses Bedrock ids and falls back to tier pricing (K4). `constrain` and `rank.Cheapest` read `headPrice`, which E1 #1209 bases on `CallCost`, so `env/bedrock` is ordered on its tier price. | Out of E7's scope, but it decides H3. The harness prices from its own snapshot, so the *measurement* is right even when the routing is not. Reported to E1 as a finding: a Bedrock price map, or `[prices]` in the config. |
 | R5 | **API nondeterminism and silent model updates.** | Scope §7. | Pinned ids. A reported model id change aborts the run. ABAB rotation. The ≤ 1-discordant determinism gate runs in PR 8 and again before the full run. |
-| R6 | **NFC needs `golang.org/x/text`, today an indirect v0.3.8 (2022).** | `go.mod`. | In A every label is ASCII snake_case, so NFC changes only model answers that contain non-ASCII text. PR 0 promotes x/text to a direct dependency at a current version. If a new direct dependency is unwelcome, `CanonicalLabel` can refuse non-ASCII instead and the answer is graded `format`. That is a decision for E1's #1205, flagged here. |
+| R6 | **No Unicode normalisation (resolved).** | E1's `NormaliseLabel` lowercases and trims; it does no NFC, and `golang.org/x/text` stays an indirect dependency. | Every A label is ASCII snake_case. NFC maps a non-ASCII string to a non-ASCII string, so it could never turn an answer into a valid label: such an answer is graded `format` either way. PR 0 adds no dependency. |
 | R7 | **The threshold arm (T8) is not built.** | E1 freezes T8 as "not run" at A. | Deferred to B. Design note: log-probs are unavailable on Bedrock, so it uses self-report, with τ tuned on calibration-split folds seeded from `run.Seed`. |
 | R8 | **Pricing snapshot timestamp.** | `pricing.DB` does not expose `fetched_at`, which lives in `pricing_cache.json`, and `Load()` may refresh in the background. | PR 3 adds `func (db *DB) FetchedAt() time.Time`, read once. The snapshot is frozen into `run.json`, and a background refresh cannot change a running run. |
 | R9 | **Under-counted billing for the hydra arms before #1210.** | No evidence headers exist yet. | E1-D3 is a hard preflight requirement, so served arms do not run without evidence. |
@@ -1269,48 +1338,97 @@ conflict with E1's hotspot files (E1 §6 conflicts 3–4). The only shared edits
 | R11 | **The calibration sample is thin in smoke.** | 40 items over 77 or 151 labels. | Smoke only proves the plumbing, and full uses 500. Learning curves (#1201) measure what n buys. |
 | R12 | **Contamination.** | Both suites have been public since 2019–20. | A caveat in every summary. Model cutoffs go in the breadcrumb, and only paired Δ is headlined. |
 
-### 9.2 Blocking questions
+### 9.2 Questions, as settled on 2026-11-05
 
-Each question names the PR it blocks.
+Q1–Q3 and Q5–Q8 are settled. Q4 is still open; it blocks only spending (PR 5), not code.
 
-1. **Q1, `internal/oracle/match.go` ownership (blocks PR 0, 2).**
-   - E1 step 4 (#1209) lists this file, and E7.2 needs it first.
-   - Recommendation: E7 lands the pure canonicaliser and matcher as PR 0 under #1209's
-     number. E1 step 4 then only wires it into dispatch and route config.
-   - Alternatively, E7 waits for #1209, which delays PR 2 onwards.
-2. **Q2, `temperature` (and `max_cost`) passthrough in serve (blocks PR 8).**
-   - E7 scope §1.4 asks for temperature passthrough, but E1 §1 does not list it under any
-     ticket.
-   - Recommendation: add both to #1210 (E1.5), echoed as `X-Hydra-Temperature`. Without
-     temperature 0, the determinism gate measures sampling, not Hydra.
-3. **Q3, a head allowlist for `hyctl serve` (E1-D5; blocks PR 8).**
-   - CLI-agent heads (Claude Code, Codex, Antigravity) must be excluded (scope §5.2), and
-     stripping `PATH` cannot do it (K5).
-   - Recommendation: a new E1 ticket for `hyctl serve --heads a,b` / `[serve] heads`. The
-     router may choose and fall back only within the list. The same feature makes a
-     deployment's head set explicit, which is useful beyond the bench.
-4. **Q4, Bedrock access (blocks PR 5).**
-   - Fix the credentials (R2).
+1. **Q1, `internal/oracle/match.go` ownership. Settled.** It lands first as a small PR,
+   branch `feature/1209-match-verifier`, body "Part of #1209" (PR 0 here, and E1 §6 PR 0).
+   It holds `MatchOracle`, `NewMatch` and `oracle.NormaliseLabel`. E7 imports it and never
+   copies it (§3.1).
+2. **Q2, temperature and max-cost passthrough. Settled.** Both belong to E1 PR 2 (#1208),
+   not #1210: `temperature` in the body, and the request header `X-Hydra-Max-Cost-USD`,
+   which can only lower serve's ceiling (E1 §1.2). There is no `X-Hydra-Temperature` echo
+   header; E1's G7 proves the value reaches the wire (§3.4 E1-D4).
+3. **Q3, a head allowlist for `hyctl serve`. Settled.** New ticket #1325,
+   `hyctl serve --heads a,b`, an independent E1 PR (E1 §1.6, §6 PR 6). The router may
+   choose and fall back only within the list. It is an E7 dependency (E1-D5); there is no
+   `[serve] heads` config spelling in A.
+4. **Q4, Bedrock access (blocks PR 5). Open, a run prerequisite.**
+   - Fix the credentials (R2); today they fail with `UnrecognizedClientException`.
    - Confirm the pinned Bedrock ids, inference profiles included, for the strongest Opus,
      Claude Haiku 4.5 and Nova Micro in the account's region, and that model access is
      enabled for each.
    - Confirm whether Bedrock prices equal the OpenRouter snapshot. If not, they go in
      `[prices]` with a source URL and date.
-5. **Q5, the router's model set on Bedrock (blocks the full tier, not smoke).**
-   - Either wait for the OpenRouter key, or add a `[bedrock] models` allowlist that
-     mirrors `[openrouter] models` (a small `provider/env` change, needing an E1 or new
-     ticket).
-   - Without one of these, H1 is `inconclusive-vacuous` (R1).
-6. **Q6, narrowing #1199 (blocks closing it in PR 2).**
-   - #1199 still lists CORD and SROIE. Move CORD to a checkpoint-B ticket and record
-     SROIE as dropped (Decision 3), so PR 2 can close #1199.
-7. **Q7, the `Closes` policy (affects every PR body).**
-   - Recommendation: keep `Part of #n` on all but the last PR per ticket (§8).
-   - Alternatively, file a sub-issue per PR, so each one can carry its own `Closes`.
-8. **Q8, the cost definition (affects H3).**
-   - E1 §4 defines cost as Σ `X-Hydra-Cost-USD`. This design prices every arm from the
-     provider's token counts and one dated snapshot, and uses the header only as a
-     cross-check (R3, R4).
-   - Recommendation: adopt the harness definition in #1213 before results exist. Pricing
-     the frontier arm and Hydra's arms through two different code paths would make H3
-     measure a pricing difference.
+5. **Q5, the router's model set on Bedrock. Settled.** Bedrock yields one router head,
+   `env/bedrock`, from `BEDROCK_MODEL_ID`. The full tier's multi-model Hydra arms require
+   the OpenRouter allowlist. That is a run prerequisite, not a code change: no
+   `[bedrock] models` allowlist is planned. Smoke stage 1 runs on direct Bedrock calls
+   alone once Q4's credentials work.
+6. **Q6, narrowing #1199. Settled.** #1199 narrows to Banking77 and CLINC150 at
+   checkpoint A. CORD moves to checkpoint B and SROIE is dropped, so PR 2 closes #1199.
+   The ticket text itself still has to be edited to match.
+7. **Q7, the `Closes` policy. Settled.** Early PRs say `Part of #n`; only the final PR of
+   a ticket says `Closes #n` (§8). E1 §6 follows the same rule.
+8. **Q8, the cost definition. Settled.** The harness definition, provider-reported tokens
+   × a dated price snapshot frozen in `run.json`, is the measured cost for #1213's
+   thresholds. `X-Hydra-Cost-USD` (`dispatch.CallCost`) is a cross-check that must agree
+   within max($0.000001, 1% of the harness value) per checked request (§1.4, R3). #1213
+   must record this before results exist; it supersedes the E1 scope's "Σ
+   `X-Hydra-Cost-USD`" (E1 scope §4).
+
+## Reconciliation (2026-11-05)
+
+Cross-checked against `0001-design-E1.md`. Changes to this document:
+
+1. **Names.** The header is `X-Hydra-Task-Class` and classes are dotted (stated in the
+   header bullets). `Attempt.Decision` now carries E1's `X-Hydra-Decision` values
+   (`accept`, `budget_exhausted`, `no_evidence`) instead of `accept`/`abstain`/`exhausted`.
+2. **`match.go` (Q1).** PR 0 is `feature/1209-match-verifier`, "Part of #1209", the same PR
+   as E1's PR 0, with E1's `MatchOracle`/`NewMatch`/`NormaliseLabel` instead of
+   `CanonicalLabel`/`Match{Labels}`. The grader computes Pass with `NormaliseLabel` and
+   format with the full-label-set `MatchOracle`; the split key uses `NormaliseLabel`; the
+   grader test expectations follow E1's normaliser (`card arrival` now passes); the
+   no-second-copy test is now `TestBench_NoSecondNormaliser`, paired with E1's G19. The
+   `golang.org/x/text` promotion and NFC are dropped (R6).
+3. **Temperature and max-cost (Q2)** are E1 PR 2 (#1208). `max_cost` became the request
+   header `X-Hydra-Max-Cost-USD`; the `X-Hydra-Temperature` echo is gone (§3.3, §3.4,
+   §4.4, §4.5).
+4. **Head allowlist (Q3)** is #1325 `hyctl serve --heads`, listed as dependency E1-D5 and
+   in PR 8's dependencies.
+5. **#1199 (Q6)** narrows to Banking77 and CLINC150; PR 2 closes it.
+6. **`Closes` policy (Q7)** confirmed. PR 6 is also "Part of #1201", and PR 7's title no
+   longer claims the calibration fill, which PR 6 adds.
+7. **Cost (Q8).** Harness cost is the measurement of record; the header cross-check has a
+   stated tolerance, max($0.000001, 1%), skips tier-priced `env/bedrock`
+   (`header_cost_unchecked`), and any mismatch makes H3 inconclusive (§1.4, §5.2, R3).
+8. **Weak `match` evidence.** `ArmConfig` and `smoke.toml` fix `confidence` and
+   `max_escalations` per served arm, passed as serve flags; the smoke tier gates the full
+   run at a 20% escalation rate (`FullRunBlocked`, §6.4); H1 and H3 carry an explicit
+   caveat (§5.4).
+9. **Bedrock.** One router head from `BEDROCK_MODEL_ID`; the full tier needs the
+   OpenRouter allowlist; S1 waits for working AWS credentials. Recorded as prerequisites,
+   not code (§6.2, R1, R2, Q4, Q5).
+10. **Other contradictions fixed:**
+    - `oracle.Verdict.Score` is not in A (E1 defers it to #1209-B); §1.2 said E1 step 4
+      adds it.
+    - The served home's `config.toml` lacked the `[[serve.verifiers]]` entry E1 §1.4 says
+      the harness writes; added, with the label file.
+    - Cache off: E1 sets `NoCache` only with a verifier cascade, so `cache_answers = false`
+      is stated as what covers the other requests.
+    - Calibration at serve start: the copy happens before serve starts, because serve
+      loads calibration once (E1 R9); the "(step 3 below)" cross-reference was wrong.
+    - The verifier's calibration row uses the full-label-set verdict, not `{gold}`.
+    - Preflight probes E1-D1 and E1-D4 sent a POST that would route and bill on a binary
+      without the feature; they now read `hyctl serve --help`, so every probe costs $0.
+      E1-D6 now looks for `--max-escalations`, since the verifier is a config entry.
+    - R3 named #1210 for the cost-row guarantee; it is #1209 (E1 G15). R4 cited the deleted
+      `EstimateCost`. R1 and R2 pointed at the wrong questions.
+    - The "shared files" note claimed only `cmd/hydra/main.go` and the coverage floors;
+      it now lists every non-bench edit, and the one file both plans touch.
+    - Cross-references to E1 sections fixed (§1.2 for the dot, §1.3 for `measured`, scope
+      §4 for the CLINC rule).
+
+Not changed: `internal/stats` stays a new neutral leaf package. E1 defines no package by
+that name and none exists in the tree.

@@ -88,7 +88,7 @@ func MirrorLegacyHistory(state map[string]any)
 
 **T1 effect.** The non-test Go under `internal/dispatch`, `internal/serve` and `cmd/hydra` holds 0 occurrences of `claude_pct`/`claudeMode`. `internal/budget` holds the only ones. The frozen TUI and desktop app still read the legacy key, which stays mirrored (RFC §6, scope C11).
 
-### 1.2 #1208-A Task class (resolver + basis) and temperature passthrough
+### 1.2 #1208-A Task class (resolver + basis), temperature and max-cost passthrough
 
 **New in `internal/trust/domain.go`** (beside `DomainForFile`, `:43`):
 
@@ -112,12 +112,13 @@ Grammar: `^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$`, at most 128 bytes. A b
   Metadata    map[string]string `json:"metadata"`
   ```
 
-- `Request` (`:54-70`) gains `TaskClass string` (validated, possibly empty) and `Temperature *float64`.
+- `Request` (`:54-70`) gains `TaskClass string` (validated, possibly empty), `Temperature *float64` and `MaxCostUSD float64` (0 = the client set no ceiling).
 - `chat` (`:173`) resolves the explicit class after `parseRoute` and before minting the id. It uses `explicitClass(req.Header, in.Metadata)`:
   - `X-Hydra-Task-Class`, else `X-Hydra-Domain` (alias, C9), else `metadata.task_class`;
   - when more than one is present and they differ after `trust.TaskClass` → 400;
   - grammar failure → 400 with `ErrTaskClass`'s message.
-- `request` (`:266`) copies `TaskClass` and `Temperature`, so the streamed and buffered paths still cannot disagree.
+- `chat` reads `X-Hydra-Max-Cost-USD` (`MaxCostHeader`, declared in `contract.go` beside `TaskClassHeader`). It must parse as a finite number ≥ 0, else 400.
+- `request` (`:266`) copies `TaskClass`, `Temperature` and `MaxCostUSD`, so the streamed and buffered paths still cannot disagree.
 - A temperature outside `[0, 2]` or non-finite → 400 (OpenAI's range).
 
 **Changed: `cmd/hydra/serve.go`:**
@@ -132,6 +133,7 @@ Grammar: `^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$`, at most 128 bytes. A b
   ```
 
   `Options.Domain = class` is set when the route is **unpinned**, or when `basis == "header"`. A header-less `hydra/<enum>`, `hydra/t<N>` or head id therefore keeps `Domain == ""` and routes byte-identically to today (the Decisions' `hydra/standard` rule). `Options.Temperature = req.Temperature`.
+- `Options.MaxCostUSD = req.MaxCostUSD`. The chat path passes no ceiling today, so a request can only add one. #1209 (§1.4) then lowers it against the policy ceiling, and a client can never raise or lift that ceiling. The header is how E7 hands serve what its `--max-usd` budget has left (E7 §4.4).
 - `cmdServe` (`:208`) gains `--task-class` (validated by `trust.TaskClass` before binding, like `--enum` at `:245`).
 
 **Changed: `internal/dispatch/dispatch.go`:**
@@ -151,7 +153,8 @@ Grammar: `^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$`, at most 128 bytes. A b
 | header and alias disagree | 400 naming both values |
 | `--task-class` bad | the startup error before binding |
 | temperature out of range | 400 |
-| a CLI head given a temperature | answers unpinned (no refusal in A, §7 R4) |
+| `X-Hydra-Max-Cost-USD` negative, non-finite or unparseable | 400 |
+| a CLI head given a temperature | answers unpinned (no refusal in A, §7 R4; E7 excludes them with `--heads`, §1.6) |
 
 ### 1.3 #1206-A Objective, unpinned serve default, P̂ basis, seeded exploration
 
@@ -441,6 +444,10 @@ Today `:99` returns the SPRT's candidate even when it stopped on budget. That st
 - reads `--max-escalations` (default 2);
 - reuses `--confidence` (`:274`, already the decisions target) and the policy cost ceiling (`costCeiling`, `serve_decisions.go:55`) as `trust.Target`.
 
+Per request, `Target.MaxCostUSD` and `Options.MaxCostUSD` are the smaller positive of the policy ceiling and the request's `X-Hydra-Max-Cost-USD` (§1.2), or whichever one is set.
+
+E7 starts one `hyctl serve` per served arm, so `--confidence` and `--max-escalations` are per-arm values. The harness fixes them in the run config before any call (§7 R1).
+
 `serveRouter.Chat` builds one `Cascade` per buffered request whose class has verifiers. It passes `Escalate` as an adapter that fills `decide.Answer` from `r.Head.ID`, `r.Output`, P̂/basis (§1.3) and `r.CostUSD`, and keeps each `*Result` for tokens and model.
 
 **Error cases:**
@@ -468,6 +475,7 @@ const (
 	CostHeader        = "X-Hydra-Cost-USD"
 	EscalationsHeader = "X-Hydra-Escalations"
 	BasisHeader       = "X-Hydra-P-Pass-Basis"
+	MaxCostHeader     = "X-Hydra-Max-Cost-USD" // request only, added by #1208 with TaskClassHeader
 	// Deprecated names kept one release on /v1/decisions (removal: follow-up issue).
 	legacySourcesHeader    = "X-Hydra-Decision-Sources"
 	legacyConfidenceHeader = "X-Hydra-Decision-Confidence"
@@ -553,6 +561,32 @@ func (o ChatOutcome) Ledger() []trust.Evidence
 A rejected earlier step's head is then re-expressed by `verdictOn` (`outcome.go:51-66`) as a negative on the served answer. Its verifier's fail is skipped, because it ruled out a superseded answer. That is the existing semantics, unchanged. B's `/v1/feedback` reaches this run through the request id: `X-Request-Id` → run → task span → `trust.FindRunBySpan`.
 
 **Error cases.** A failure to write the trust log never fails the request. This matches `logTrustRun`, which also ignores `LogRun`'s error (`main.go:4159`). Evidence is not written on an error response, which carries only `X-Request-Id` as today.
+
+### 1.6 #1325 Serve head allowlist (`hyctl serve --heads`)
+
+This ticket was added in the 2026-11-05 reconciliation with E7 (E7 §3.4, E1-D5). It is independent of the other E1 tickets.
+
+**Why.** E7 must keep CLI-agent heads (Claude Code, Codex, Antigravity) out of every arm (E7 scope §5.2). They are found with `exec.LookPath`, and `shellpath.Adopt` re-adds the login shell's `PATH`, so stripping `PATH` does not remove them (E7 K5). It is also what makes a deployment's head set explicit.
+
+**Changed: `internal/dispatch/dispatch.go`.**
+
+```go
+// RestrictHeads keeps only the named heads, in their existing (CapScore) order. It refuses
+// an id that discovery did not find, or found unroutable, naming it and the reason.
+func (d *Dispatcher) RestrictHeads(ids []string) error
+```
+
+It filters `d.heads` (`:327`) once at startup. Every reader goes through `d.heads` or `Heads()` (`:371`): selection and fallback (`:1419-1451`), `blockedHeads` (`:1260`), `/v1/models` (`advertisable`, `serve.go:136`) and the banner. So the router can neither choose nor fall back outside the list. The embedding lookups (`cache.go:35`, `capture_recall.go:22`, `:377`) also read `d.heads`, so an embedding head left off the list is unavailable to them. E7 runs with the cache and capture off, so that costs it nothing; the flag's help says so.
+
+**Changed: `cmd/hydra/serve.go`.** `cmdServe` gains `--heads a,b`. When it is set, `RestrictHeads` runs right after `dispatch.New`, and a refusal is a startup error before binding. When it is unset, behaviour is unchanged. There is no config-file spelling in A.
+
+**Error cases:**
+
+- An unknown id, or a duplicated one → startup error naming it.
+- An unroutable id → startup error with its `unroutable_reason`.
+- A pinned head id outside the list → today's unknown-head refusal, because the head no longer exists for this server.
+
+`/v1/decisions` is not restricted. Decision heads are a separate inventory (`executor.DecisionHeads`).
 
 ## 2. Request path end to end (`hyctl serve`, `model:"hydra"`)
 
@@ -665,24 +699,28 @@ client ── POST /v1/chat/completions  {model:"hydra", temperature:0, messages
 
 | Hook E7 needs | Where it lands | What the harness does |
 |---|---|---|
-| **Temperature passthrough** (E7 §1.4: "serve passes no temperature") | #1208-A: `chatRequest.Temperature` → `serve.Request` → `dispatch.Options.Temperature` → `executor.Request.Temperature`. The HTTP dialects already send it. | Send `"temperature": 0`. It is recorded as sent, which holds for every HTTP head. CLI/agy heads ignore it, and E7 already excludes them from every arm (E7 scope §5.2). |
+| **Temperature and max-cost passthrough** (E7 §1.4: "serve passes no temperature"; E7 Q2) | #1208-A (PR 2), both: `chatRequest.Temperature` → `serve.Request` → `dispatch.Options.Temperature` → `executor.Request.Temperature`, and `X-Hydra-Max-Cost-USD` → `Options.MaxCostUSD` (and, from #1209, the cascade's `Target.MaxCostUSD`), which can only lower the policy ceiling (§1.2). The HTTP dialects already send the temperature. There is no echo header; G7 is what proves the temperature reaches the wire. | Send `"temperature": 0`, recorded in the breadcrumb as sent. That holds for every HTTP head; CLI/agy heads ignore it and are kept out by `--heads` (#1325). Send `X-Hydra-Max-Cost-USD` set to what the run's `--max-usd` budget has left. |
+| **Head allowlist** (E7 K5, E1-D5; E7 Q3) | #1325 (§1.6, PR 6): `hyctl serve --heads a,b`. | Start each served arm's `hyctl serve` with `--heads` set to the arm's router heads. `/v1/models` then lists only those heads plus the routing ids. |
 | **Objective header** (E7: "serve reads no objective header") | #1206-A: `X-Hydra-Objective: quality\|cost`, echoed. An unknown value → 400. | Arms `hydra-quality` and `hydra-cost` send the header. `hydra-balanced` does not exist in A (scope §2a). |
 | **Seedable exploration RNG** (E7: "`dispatch/explore.go` uses an unseeded global RNG") | #1206-A: `config.toml explore_seed = <uint64>`, a mutex-guarded PCG on the `Dispatcher`. 0 means unseeded (today). | Write `explore_rate = 0` (pure argmax) into the fresh `HYDRA_HOME/config.toml`. This is enough for A, because every exploration-free run is already deterministic. `explore_seed` is for a run that deliberately explores. Its draws repeat only when requests are sequential (§7 R6). |
-| **Deterministic ordering** | #1206-A: `rank.Strongest` is a total order (Effective, price, ID). `constrain`/`Cheapest` already is (`cheaperFirst`, `constraint.go:70-79`). `SortMeasured`'s `rankLess` ends on ID (`rank.go:85`). | Isolation is already in E7 §1.5. In addition: (a) fill calibration **before** starting `hyctl serve`, because the `Dispatcher` and the cascade load calibration once at start (`dispatch.go:482`); (b) record `X-Hydra-Sources` per item, because the breaker can park a head mid-run after a 429 and change the order for the following items (§7 R5). |
-| **One cost value** | #1209-A: `dispatch.CallCost(db, head, in, out)` → `Result.CostUSD`, read by `cost.jsonl`, the runlog, the cache and serve's `X-Hydra-Cost-USD` (Σ steps). | Direct arms (`frontier`, `cheapest`, `static-fallback`, `threshold`) price each call with **the same** `dispatch.CallCost` against the same `pricing.DB` snapshot, so a paired cost difference measures routing, not two pricing functions. #1242 later changes `CallCost`'s inputs to include cached tokens: one place, with no serve change. |
+| **Deterministic ordering** | #1206-A: `rank.Strongest` is a total order (Effective, price, ID). `constrain`/`Cheapest` already is (`cheaperFirst`, `constraint.go:70-79`). `SortMeasured`'s `rankLess` ends on ID (`rank.go:85`). | Isolation is already in E7 §1.5. In addition: (a) fill calibration **before** starting `hyctl serve`, because the `Dispatcher` and the cascade load calibration once at start (`dispatch.go:482`), so a restarted serve (resume) reads the same file again (E7 §4.2); (b) record `X-Hydra-Sources` per item, because the breaker can park a head mid-run after a 429 and change the order for the following items (§7 R5). |
+| **Answer cache off** | #1209-A sets `NoCache` only when it passes `Escalate` (§1.4), so a request with no verifier (`hydra-default`, a class with none) is still cacheable when `cache_answers` is on. | Write `cache_answers = false` explicitly into the fresh home's `config.toml` (it is also the default), so no arm can be served another item's answer. |
+| **Per-arm cascade parameters** (§7 R1) | #1209-A: `--confidence` and `--max-escalations` on `hyctl serve`. | Fix both per served arm in the run config before any call, pass them as flags to that arm's `hyctl serve`, and freeze them in `run.json`. |
+| **Cost: one value in Hydra, one measurement in the harness** (E7 Q8) | #1209-A: `dispatch.CallCost(db, head, in, out)` → `Result.CostUSD`, read by `cost.jsonl`, the runlog, the cache and serve's `X-Hydra-Cost-USD` (Σ steps). | **The measured cost for #1213's thresholds (T4/H3) is the harness's:** provider-reported tokens × the dated price snapshot frozen in `run.json` (E7 §1.4), applied identically to every arm, direct and served. This supersedes the E1 scope's "Σ `X-Hydra-Cost-USD`" (scope §4) and must be written into #1213 before results exist. `X-Hydra-Cost-USD` is a **cross-check**: per served request, \|header − harness\| ≤ max($0.000001, 1% of the harness value). The check applies to heads whose model `pricing.DB` prices by name (OpenRouter allowlist heads) and to local heads ($0 on both sides). `env/bedrock` is tier-priced by `CallCost` (R3), so its rows are counted as unchecked, not as mismatches. Any checked request outside the tolerance makes H3 `inconclusive` with that reason. E7 therefore does **not** call `CallCost`; #1242 still changes Hydra's cost in one place. |
 | Evidence headers | #1210-A, §2 step 14 | Read `X-Hydra-Decision`, `-P-Correct`, `-Cost-USD`, `-Sources`, `-Escalations`, `-P-Pass-Basis`, and `hydra.steps` from the body. Join on `X-Request-Id`, not the deleted `X-Hydra-Request-Id` (scope C9). |
-| Label verifier and Pass | #1209-A: `oracle.NewMatch` and `oracle.NormaliseLabel` | **Pass** = `NormaliseLabel(answer) == NormaliseLabel(gold)`, with the same function the served verifier uses (E7 §1.1: "There is no bench-only copy"). The harness writes `[[serve.verifiers]]` with the suite's label file. |
-| Calibration fill | the existing CLI, no change | On the calibration split, per item and per head: `hyctl trust record --source <head-id> --domain classification.banking77 --said-correct --outcome correct\|incorrect` fills `CommitmentsIn`, hence P̂. For the verifier: `--source verifier:match:banking77 --said-correct=<verdict.Passed> --outcome <gold match>`. This needs both verdict directions, or `oracle.Measured` stays false and the cascade reads `no_evidence`. |
+| Label verifier and Pass | #1209-A, PR 0 (`feature/1209-match-verifier`): `oracle.NewMatch`, `MatchOracle` and `oracle.NormaliseLabel` | **Pass** = `NormaliseLabel(answer) == NormaliseLabel(gold)`, with the same function the served verifier uses (E7 §1.1: "There is no bench-only copy"). E7 imports it and never copies it. A **format** fail is the served verifier's own verdict: `NewMatch` over the suite's full label set fails the answer. The harness writes `[[serve.verifiers]]` with the suite's label file. |
+| Calibration fill | the existing CLI semantics, no behaviour change | On the calibration split, per item and per head: `hyctl trust record --source <head-id> --domain classification.banking77 --said-correct --outcome correct\|incorrect` fills `CommitmentsIn`, hence P̂. For the verifier: `--source verifier:match:banking77 --said-correct=<verdict.Passed> --outcome <gold match>`, where the verdict is the full-label-set `MatchOracle`'s. This needs both verdict directions, or `oracle.Measured` stays false and the cascade reads `no_evidence`. E7 PR 6 extracts `trust.RecordOutcome` from `cmdTrustRecord` so the harness and the CLI share one writer; that is a refactor with no behaviour change. |
 
-**Name alignment E7 must adopt.** The E1 contract wins here, because it is the shipped API. E7 scope §1.3/§1.4 writes the following:
+**Name alignment.** The E1 contract wins here, because it is the shipped API. E7 scope §1.3/§1.4 writes the following:
 
-| E7 scope writes | E1 uses |
+| E7 scope (or the E7 design draft) writes | E1 uses |
 |---|---|
 | `X-Hydra-Task` | `X-Hydra-Task-Class` |
 | `classify/banking77` | `classification.banking77` (dotted; a `/` is refused by the grammar) |
 | `hydra-balanced` arm | not in A |
+| `Decision` `accept`/`abstain`/`exhausted` | `accept`, `budget_exhausted`, `no_evidence` (§1.4) |
 
-The E7 design (`0001-design-E7.md`, in progress) should use the E1 names.
+The E7 design (`0001-design-E7.md`) uses the E1 names (reconciled 2026-11-05).
 
 ## 4. Backwards compatibility and migration
 
@@ -724,6 +762,7 @@ This section follows scope §5. Nothing on disk is rewritten.
   - `X-Hydra-Decision-Sources` and `X-Hydra-Decision-Confidence` are still sent, with equal values, for one release. A follow-up issue, filed with #1210's PR, removes them.
   - `X-Hydra-Task-Class` is accepted as input there too, with `X-Hydra-Domain` still read as its alias.
 - `X-Request-Id` is unchanged, and no `X-Hydra-Request-Id` is added.
+- One request-only header is new: `X-Hydra-Max-Cost-USD` (#1208, §1.2). It can only lower the server's policy ceiling, so a client that does not send it sees no change.
 
 **Cost rows (`cost.jsonl` `est_cost_usd`).** For heads that name a model (`Meta["model"]`, which is OpenRouter, LiteLLM and llama.cpp), the value moves from the tier price to the model price. The router already ordered on the model price, so the row now states what the router believed. Every other head is unchanged. This is a `fix` line in #1209's PR body, because `hyctl cost` totals for those heads change.
 
@@ -773,6 +812,7 @@ This section follows scope §5. Nothing on disk is rewritten.
   - two that agree;
   - two that disagree → 400 naming both.
 - **`TestChat_TemperatureRange`.** `nil`, `0`, `2` and `0.7` are accepted. `-0.1`, `2.1`, and NaN sent as a string are refused with 400.
+- **`TestChat_MaxCostHeader`.** Absent → 0; `0.25` → 0.25; `-1`, `NaN`, `abc` → 400.
 
 | Guard | Breaks | Prints |
 |---|---|---|
@@ -780,6 +820,7 @@ This section follows scope §5. Nothing on disk is rewritten.
 | **G5** `TestRoutingDomain_CodingPathUnchanged` (table: `--file x.go`, `x.GO`, `Makefile`, `--domain go`, nothing) | the CLI resolves a different calibration cell after E1 (#888's shape) | `routingDomain(%+v) = %q, was %q before E1: history under the old cell is orphaned` |
 | **G6** `TestTaskClass_CannotCollideWithAFileDomain` (property: every `DomainForFile` output is refused by `TaskClass`) | a serve class and a coding cell share a key | `TaskClass accepted %q, which DomainForFile also produces` |
 | **G7** `TestDispatch_TemperatureReachesTheWire` (`httptest` head decoding the body) | temperature is dropped anywhere between `chatRequest` and the provider body | `head received temperature %v, client sent %v` |
+| **G7b** `TestServeRouter_MaxCostOnlyLowersTheCeiling` (recording seam; #1208 adds the no-policy-ceiling row, #1209 adds policy below and above the header) | a client raises or lifts the operator's cost ceiling, or the header never reaches `Options.MaxCostUSD` | `policy ceiling %v, header %v gave MaxCostUSD %v, want %v` |
 
 ### 5.3 #1206-A `internal/rank/constraint_test.go`, `internal/dispatch/objective_test.go`, `internal/dispatch/explore_test.go`
 
@@ -808,6 +849,8 @@ This section follows scope §5. Nothing on disk is rewritten.
 ### 5.4 #1209-A `internal/oracle/match_test.go`, `internal/decide/cascade_test.go`, `internal/dispatch/escalate_test.go`, `internal/config`
 
 **Table-driven tests:**
+
+`match_test.go` (`TestNormaliseLabel`, `TestMatchOracle_Verify`, `TestNewMatch_RefusesBadConfig`, G19) lands with `match.go` in PR 0; the rest lands in PR 4.
 
 - **`TestNormaliseLabel`.** Rows: `"Card Arrival."` → `card_arrival`, `` `card_arrival` ``, quotes, `card-arrival`, inner runs, and empty.
 - **`TestMatchOracle_Verify`.** Rows:
@@ -892,22 +935,34 @@ Then `serve.Handler(serveRouter{…})` runs behind `httptest.NewServer`, and a P
 
 Local heads price at $0, so a second fixture uses an `openai`-shaped stub head with `pricing` holding a model entry to assert non-zero cost. That is unit-level in **G14**, not here.
 
+### 5.7 #1325 `internal/dispatch/restrict_test.go`, `cmd/hydra/serve_cli_test.go`
+
+- **`TestRestrictHeads`.** Rows: a known subset keeps order; an unknown id, a duplicate and an unroutable head are each refused, naming the id.
+
+| Guard | Breaks | Prints |
+|---|---|---|
+| **G24** `TestServeHeads_NoHeadOutsideTheList` (three `httptest` heads, `--heads` names two, the first two fail with 503) | the router chooses or falls back to a head the operator excluded, or `/v1/models` advertises it | `--heads %v, yet %s was %s` |
+
 ## 6. PR plan
 
-Every PR targets `develop`, squash-merges only on all-`SUCCESS` CI, and its body ends `Closes #n`. There is one PR per ticket, in this order:
+Every PR targets `develop` and squash-merges only on all-`SUCCESS` CI. **Only the final PR of a ticket says `Closes #n`; an earlier PR of the same ticket says `Part of #n`** (`close-shipped-issues.yml` closes every `Closes #n` at release, so an early `Closes` would close an unfinished ticket). #1209 has two PRs (0 and 4); every other ticket has one. In this order:
 
-| # | Branch | Title | Depends on | Touches |
-|---|---|---|---|---|
-| 1 | `feature/1207-provider-neutral-quota` | `feat(budget): provider-neutral quotas with a claude_pct read alias` | — | `internal/budget/quota.go` (new), `internal/dispatch/dispatch.go` (535-547, 984-1082, 1627-1634), `cmd/hydra/main.go` (701-732, 796-803) |
-| 2 | `feature/1208-task-class-resolver` | `feat(serve): task class by header, metadata or route default, and temperature passthrough` | — (parallel with 1) | `internal/trust/domain.go`, `internal/serve/serve.go` (`chatRequest`, `Request`, `chat`, `request`), `internal/serve/contract.go` (new, task-class header only), `cmd/hydra/serve.go` (`serveRouter`, `Chat`, `--task-class`), `internal/dispatch/dispatch.go` (`Options`, `:880` literal) |
-| 3 | `feature/1206-routing-objective` | `feat(serve)!: route model "hydra" by objective, quality by default` (`BREAKING CHANGE:` footer naming `hydra/standard` and `--enum`) | 2 | `internal/rank/constraint.go`, `internal/dispatch/dispatch.go` (`Options`, 677-697, success `Result`), `internal/dispatch/explore.go`, `internal/config/config.go` (`explore_seed`), `internal/serve/serve.go`, `cmd/hydra/serve.go` (`routeToDispatch`, flags, banner) |
-| 4 | `feature/1209-match-verifier-escalation` | `feat(oracle): match verifier and verifier-gated escalation on the serve path` (body notes the `est_cost_usd` model-price fix) | 3 | `internal/oracle/match.go` (new), `internal/config/config.go` (`Serve`), `internal/decide/cascade.go` (new), `internal/dispatch/dispatch.go` (`CallCost`, `headPrice`, `Result.CostUSD`, `Options.Escalate`, 930-981, `logDispatch` 1676), `internal/dispatch/cache.go` caller, `cmd/hydra/vet.go:170`, `cmd/hydra/workflow.go:117`, `cmd/hydra/serve.go`, `cmd/hydra/serve_decisions.go` (shared calibrator) |
-| 5 | `feature/1210-response-contract` | `feat(serve): evidence headers, hydra body metadata and a trust run per request` | 4 | `internal/serve/contract.go`, `internal/serve/serve.go` (`Answer`, `chat`), `internal/serve/decisions.go` (16-23, 70, 81-82), `internal/decide/decide.go` (`Outcome.Decision`), `internal/decide/cascade.go` (`Ledger`), `cmd/hydra/serve.go`, and a filed follow-up issue for removing the legacy decision headers |
+| # | Branch | Title | Body | Depends on | Touches |
+|---|---|---|---|---|---|
+| 0 | `feature/1209-match-verifier` | `feat(oracle): match verifier with one label normaliser` | Part of #1209. `MatchOracle`, `NewMatch`, `NormaliseLabel` and their tests only; wires nothing into dispatch or config. Lands first so E7 imports it (E7 Q1). No new dependency. | — | `internal/oracle/match.go` (new), `internal/oracle/match_test.go` (new) |
+| 1 | `feature/1207-provider-neutral-quota` | `feat(budget): provider-neutral quotas with a claude_pct read alias` | Closes #1207 | — | `internal/budget/quota.go` (new), `internal/dispatch/dispatch.go` (535-547, 984-1082, 1627-1634), `cmd/hydra/main.go` (701-732, 796-803) |
+| 2 | `feature/1208-task-class-resolver` | `feat(serve): task class by header, metadata or route default, and temperature and max-cost passthrough` | Closes #1208 | — (parallel with 1) | `internal/trust/domain.go`, `internal/serve/serve.go` (`chatRequest`, `Request`, `chat`, `request`), `internal/serve/contract.go` (new, task-class and max-cost headers only), `cmd/hydra/serve.go` (`serveRouter`, `Chat`, `--task-class`), `internal/dispatch/dispatch.go` (`Options`, `:880` literal) |
+| 3 | `feature/1206-routing-objective` | `feat(serve)!: route model "hydra" by objective, quality by default` (`BREAKING CHANGE:` footer naming `hydra/standard` and `--enum`) | Closes #1206 | 2 | `internal/rank/constraint.go`, `internal/dispatch/dispatch.go` (`Options`, 677-697, success `Result`), `internal/dispatch/explore.go`, `internal/config/config.go` (`explore_seed`), `internal/serve/serve.go`, `cmd/hydra/serve.go` (`routeToDispatch`, flags, banner) |
+| 4 | `feature/1209-match-verifier-escalation` | `feat(dispatch): verifier-gated escalation on the serve path, one cost value` | Closes #1209 (notes the `est_cost_usd` model-price fix) | 0, 3 | `internal/config/config.go` (`Serve`), `internal/decide/cascade.go` (new), `internal/dispatch/dispatch.go` (`CallCost`, `headPrice`, `Result.CostUSD`, `Options.Escalate`, 930-981, `logDispatch` 1676), `internal/dispatch/cache.go` caller, `cmd/hydra/vet.go:170`, `cmd/hydra/workflow.go:117`, `cmd/hydra/serve.go` (incl. the max-cost/policy minimum), `cmd/hydra/serve_decisions.go` (shared calibrator) |
+| 5 | `feature/1210-response-contract` | `feat(serve): evidence headers, hydra body metadata and a trust run per request` | Closes #1210 | 4 | `internal/serve/contract.go`, `internal/serve/serve.go` (`Answer`, `chat`), `internal/serve/decisions.go` (16-23, 70, 81-82), `internal/decide/decide.go` (`Outcome.Decision`), `internal/decide/cascade.go` (`Ledger`), `cmd/hydra/serve.go`, and a filed follow-up issue for removing the legacy decision headers |
+| 6 | `feature/1325-serve-heads` | `feat(serve): --heads restricts the router to named heads` | Closes #1325 | — (independent) | `internal/dispatch/dispatch.go` (`RestrictHeads`), `cmd/hydra/serve.go` (`--heads`, startup) |
 
 **Why this order.**
 
 - PRs 2→5 all edit `cmd/hydra/serve.go` and `internal/serve/serve.go`, so they are strictly sequential to keep conflicts out of review.
+- PR 0 is pure `internal/oracle` and merges first, so E7's PR 2 (suites and grader) can import `NormaliseLabel` without waiting for PR 4.
 - PR 1 touches disjoint regions of `dispatch.go` and can merge at any point.
+- PR 6 (#1325) depends on nothing. It touches `cmdServe`'s flag block and adds one method to `dispatch.go`, so its conflicts with PRs 2–5 are textual; whichever lands second rebases.
 - PR 3 needs PR 2's `Domain` on the serve path, or `quality` would rank on the pooled order.
 - PR 4 needs PR 3's order to escalate along.
 - PR 5 needs PR 4's outcome to report.
@@ -921,7 +976,7 @@ Every PR targets `develop`, squash-merges only on all-`SUCCESS` CI, and its body
 
   #1242 should branch after PR 4 merges, or rebase onto it; the `logDispatch` region (`:1673+`) is touched by both. `internal/swarm`'s tier pricing (`cost.go:41,70`, `sprt.go:93`) is a second cost derivation that E1 does not touch. #1242 must either route it through `CallCost` or fix cached pricing there as well. Until #1242 lands, `X-Hydra-Cost-USD` overstates cost on cached calls. Banking77 prompts are uncached, so A is unaffected, and the A results note must say so (scope §6.2).
 - **#1212 (`/v1/messages`).** It adds a route to `serve.Handler`. Evidence for it reuses `writeEvidence`, with no second vocabulary.
-- **E7.** The harness's `hydra-*` arms are refused with a named dependency until PRs 3 and 5 merge (E7 scope §7). The direct arms, the stats and the smoke tier can land first. E7 must import `oracle.NormaliseLabel` and `dispatch.CallCost` rather than copy them (§3). PR 4 should merge before E7's direct-arm pricing code, so there is nothing to retrofit.
+- **E7.** The harness's `hydra-*` arms are refused with a named dependency until PRs 2–5 and PR 6 (#1325) merge (E7 §3.4). The direct arms, the stats and the smoke tier's stage 1 can land first. E7 imports `oracle.NormaliseLabel` from PR 0 and never copies it. E7 does not call `dispatch.CallCost`: its measured cost is its own frozen snapshot, and `X-Hydra-Cost-USD` is the cross-check (§3, E7 Q8).
 
 ## 7. Risks and open questions
 
@@ -929,10 +984,10 @@ Every PR targets `develop`, squash-merges only on all-`SUCCESS` CI, and its body
 
 | # | Risk | Effect | Mitigation |
 |---|---|---|---|
-| R1 | **`match` checks that the answer is a valid label, not the right one.** On intent suites most wrong answers are still valid labels, so P(pass \| wrong) ≈ 1, sp is low, and LLR(pass) ≈ 0 once calibrated. | The posterior stays ≈ P̂. If every head's P̂ is under the target, every request escalates to `--max-escalations`, which can triple the cost arm's spend and fail T4 for a reason that is not routing. | The arm config fixes `--confidence` and `--max-escalations` before the run, recorded in E7's breadcrumb. The smoke tier reports the escalation rate first. H6 reports the verifier's measured D (scope §4). The design does not special-case it: a weak verifier earning little evidence is the calibration working (RFC §5.2.3). |
+| R1 | **`match` checks that the answer is a valid label, not the right one.** On intent suites most wrong answers are still valid labels, so P(pass \| wrong) ≈ 1, sp is low, and LLR(pass) ≈ 0 once calibrated. | The posterior stays ≈ P̂. If every head's P̂ is under the target, every request escalates to `--max-escalations`, which can triple the cost arm's spend and fail T4 for a reason that is not routing. **So at checkpoint A any `quality` gain comes from per-class measured competence on the calibration split, not from verification.** | (1) E7's run config fixes `--confidence` and `--max-escalations` **per served arm** before any run, and `run.json` freezes them. (2) The smoke tier reports each served arm's escalation rate; if any exceeds **20%**, the full run is blocked pending review (E7 §6.4). (3) **Hypothesis caveat for H1 and H3**, written into #1213 and into every A `summary.json`: "`match` checks label validity, not correctness; a pass or fail of H1/H3 at A measures routing on calibrated per-class competence, not verifier-gated escalation." H6 reports the verifier's measured D (scope §4). The design does not special-case it: a weak verifier earning little evidence is the calibration working (RFC §5.2.3). |
 | R2 | **Quota emergency still forces `LocalOnly` on serve** (scope C12). | A stale `claude_pct ≥ 80` on a dev machine turns a run local-only. | E7 runs in a fresh `HYDRA_HOME` (E7 §1.5). The log line now names the scope that fired. G3 keeps the behaviour deliberate. Scoping session quotas to their own session is E5's work. |
-| R3 | **Only heads that name a model (`Meta["model"]`: OpenRouter allowlist, LiteLLM, llama.cpp) are priced per model.** Bedrock, OpenAI, Anthropic and other key-derived heads are one head per key, priced by tier (`env/provider.go:101`; no `Meta["model"]`). | `X-Hydra-Cost-USD` for those heads is a tier price, and a key-derived provider offers the router one model, not several. | E7 should build its multi-model arms from the OpenRouter allowlist or a LiteLLM proxy, which yield per-model heads with model prices. Record `cost_basis` in E7's per-item rows. Per-model Bedrock heads are a discovery change outside E1. |
-| R4 | CLI and agy heads ignore `Temperature`. | A served answer from one is unpinned. | They are excluded from every E7 arm (E7 scope §5.2). A refusal rule like the tools one (`dispatch.go:762-768`) would be a behaviour change for every CLI user with no A consumer. |
+| R3 | **Only heads that name a model (`Meta["model"]`: OpenRouter allowlist, LiteLLM, llama.cpp) are priced per model.** Bedrock, OpenAI, Anthropic and other key-derived heads are one head per key, priced by tier (`env/provider.go:101`; no `Meta["model"]`). | `X-Hydra-Cost-USD` for those heads is a tier price, and a key-derived provider offers the router one model, not several. | **Bedrock yields one router head**, `env/bedrock`, whose model is `BEDROCK_MODEL_ID`. The full tier's multi-model Hydra arms therefore require the OpenRouter allowlist (`[openrouter] models`). That is a **run prerequisite, not a code change**: no `[bedrock] models` allowlist is planned in E1. Smoke stage 1 (direct Bedrock calls only) can run once AWS credentials work; on 2026-11-05 they fail with `UnrecognizedClientException` (E7 R2). E7 records each call's price row (`price_ref`), and the cost cross-check skips tier-priced `env/bedrock` rows (§3). |
+| R4 | CLI and agy heads ignore `Temperature`. | A served answer from one is unpinned. | They are excluded from every E7 arm (E7 scope §5.2), enforced by `hyctl serve --heads` (#1325, §1.6). A refusal rule like the tools one (`dispatch.go:762-768`) would be a behaviour change for every CLI user with no A consumer. |
 | R5 | **The breaker parks a head after a 429/5xx** (`health`, #1111). | Later items route differently within one run. | The harness records `X-Hydra-Sources` per item. E7's determinism gate (identical rerun, \|Δpass\| ≤ 0.5 pt) catches a material drift. |
 | R6 | A seeded RNG under concurrent requests. | The draw-to-request assignment depends on scheduling. | Determinism is claimed for sequential requests only (G11). E7 runs items sequentially, interleaving arms per item (E7 §7). `explore_rate = 0` needs no seed at all. |
 | R7 | **A catalogue score read as a probability prior** (scope C7). | `P-Correct` for a `catalogue_prior` step is not a measured probability. On an unmeasured machine, `quality` is always-strongest. | `X-Hydra-P-Pass-Basis` labels it. T2's non-vacuity condition refuses a vacuous "held". A test fails if the basis ever says `measured` below 20 (G13). |
@@ -947,3 +1002,19 @@ None. Each scope question is answered by the 2026-11-05 Decisions or by this des
 - `usage` on an escalated request is summed over all steps, matching `X-Hydra-Cost-USD`, not only the served step's tokens.
 - `X-Hydra-Objective` is omitted, not set to a sentinel, on a pinned route.
 - `est_cost_usd` moves to the model price for heads that name a model (§4). This is a `fix` that changes `hyctl cost` totals for those heads.
+
+Run prerequisites for #1213, none of them code: working AWS credentials (R3); an OpenRouter key and allowlist for the full tier (R3); the 20% smoke escalation bound (R1); and #1213 recording the harness cost definition and the H1/H3 caveat before results exist (§3, R1).
+
+## Reconciliation (2026-11-05)
+
+Cross-checked against `0001-design-E7.md`. Changes to this document:
+
+1. **#1208 gains max-cost passthrough** beside temperature (E7 Q2): request header `X-Hydra-Max-Cost-USD` → `serve.Request.MaxCostUSD` → `Options.MaxCostUSD`, and from #1209 the cascade's `Target.MaxCostUSD`. A client can only lower the policy ceiling (§1.2, §1.4, §1.5 constants, §4, test `TestChat_MaxCostHeader`, guard G7b). There is no `X-Hydra-Temperature` echo header; G7 is the proof.
+2. **New ticket #1325, `hyctl serve --heads`** (E7 Q3): §1.6 design (`Dispatcher.RestrictHeads`), §5.7 tests (guard G24), PR 6 in §6, independent of the other PRs.
+3. **`internal/oracle/match.go` lands first** as PR 0, `feature/1209-match-verifier`, "Part of #1209" (E7 Q1). PR 4 no longer creates it and now depends on PR 0 as well as PR 3; its title changed to `feat(dispatch): …` since the oracle is no longer in it.
+4. **`Closes` policy** (E7 Q7): only the final PR of a ticket says `Closes #n`; earlier ones say `Part of #n`. §6 now has a Body column.
+5. **Cost definition** (E7 Q8): the measured cost for #1213 is the harness's tokens × frozen snapshot; `X-Hydra-Cost-USD` is a cross-check within max($0.000001, 1%) per request, skipping tier-priced `env/bedrock` rows. E7 no longer imports `dispatch.CallCost` (§3, §6). This supersedes scope §4's cost line for #1213.
+6. **Weak `match` evidence** (R1): per-arm `--confidence`/`--max-escalations` fixed before any run, a 20% smoke escalation bound that blocks the full run pending review, and an explicit H1/H3 caveat (§1.4 cmd glue, §3, R1).
+7. **Bedrock** (R3): one router head from `BEDROCK_MODEL_ID`; the full tier needs the OpenRouter allowlist; smoke stage 1 needs working AWS credentials. Recorded as run prerequisites, not code.
+8. **§3 harness table**: added rows for the head allowlist, cache off (E1 sets `NoCache` only with `Escalate`, so E7 writes `cache_answers = false`), per-arm cascade parameters, and the calibration-reload-on-restart note; removed the `threshold` arm from the direct arms (not in A); format fails come from the full-label-set `MatchOracle`; the verifier's calibration verdict is the full-label-set one; E7's `trust.RecordOutcome` extraction is noted.
+9. **Name alignment** now also lists the decision vocabulary (`accept`/`budget_exhausted`/`no_evidence`), and the E7 design is marked as using the E1 names.
