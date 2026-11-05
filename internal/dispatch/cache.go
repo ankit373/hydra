@@ -161,7 +161,7 @@ func logCacheHit(rl *runlog.Logger, taskID, span string, hit *cache.Hit) {
 // already classified it, and a cache is the one place where returning it again
 // is a decision rather than an accident. Failures are logged and dropped,
 // since a cache that cannot write must not fail work that already succeeded.
-func (d *Dispatcher) remember(ctx context.Context, prompt string, opts Options, class *policy.Classification, r *Result, costUSD float64) {
+func (d *Dispatcher) remember(ctx context.Context, prompt string, opts Options, class *policy.Classification, r *Result) {
 	st, emb := d.answerCache()
 	if st == nil || r.Output == "" {
 		return
@@ -179,7 +179,7 @@ func (d *Dispatcher) remember(ctx context.Context, prompt string, opts Options, 
 	e := cache.Entry{
 		Prompt: prompt, Response: r.Output,
 		Head: r.Head.ID, Model: r.Response.Model,
-		Enum: opts.Enum, Domain: routingDomain(opts), CostUSD: costUSD,
+		Enum: opts.Enum, Domain: routingDomain(opts), CostUSD: r.CostUSD,
 	}
 	var vec []float32
 	if emb != nil && emb.Available() {

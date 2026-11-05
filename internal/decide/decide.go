@@ -49,6 +49,7 @@ type Outcome struct {
 	Asked []string
 	// Confidence is the first source's own when it sufficed, else the SPRT posterior.
 	Confidence float64
+	Decision   Decision
 }
 
 // ErrNoSource means no source within budget answered.
@@ -76,8 +77,12 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 		return Outcome{}, err
 	}
 	stated := statedConfidence(first)
-	alone := Outcome{Result: first, Asked: asked.order, Confidence: stated}
-	if stated >= r.Target.Confidence || len(r.Heads) == 1 {
+	alone := Outcome{Result: first, Asked: asked.order, Confidence: stated, Decision: BudgetExhausted}
+	if stated >= r.Target.Confidence {
+		alone.Decision = Accepted
+		return alone, nil
+	}
+	if len(r.Heads) == 1 {
 		return alone, nil
 	}
 
@@ -86,6 +91,7 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 		trust.WithEquivalence(sameAnswer))
 	// With nothing calibrated no further answer can move the posterior, so asking would only spend.
 	if errors.Is(err, trust.ErrNoEvidence) {
+		alone.Decision = NoEvidence
 		return alone, nil
 	}
 	if err != nil {
@@ -96,7 +102,11 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 	if res.Samples == 0 || !ok {
 		return alone, nil
 	}
-	return Outcome{Result: accepted, Asked: asked.order, Confidence: res.Confidence}, nil
+	d := BudgetExhausted
+	if res.Decision == trust.DecisionAccept {
+		d = Accepted
+	}
+	return Outcome{Result: accepted, Asked: asked.order, Confidence: res.Confidence, Decision: d}, nil
 }
 
 // afterFirst prices the SPRT's run once paid has answered: its answer costs nothing
