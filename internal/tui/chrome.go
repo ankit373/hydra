@@ -178,13 +178,20 @@ func ckWordmark(s string) string {
 	return b.String()
 }
 
-// ckLerpHex blends cyan → violet → magenta across t∈[0,1], with a darker
-// ramp of the same hues for light backgrounds.
+// ckLerpHex blends the brand stops (start → mid → end) across t∈[0,1], with
+// the tokens' deeper light-theme stops on light backgrounds.
 func ckLerpHex(t float64) lipgloss.AdaptiveColor {
 	return lipgloss.AdaptiveColor{
-		Dark:  ckLerp3(t, [3]int{0x2A, 0xF0, 0xE0}, [3]int{0x8B, 0x5C, 0xF6}, [3]int{0xE8, 0x52, 0xC8}),
-		Light: ckLerp3(t, [3]int{0x00, 0x70, 0x7A}, [3]int{0x6D, 0x28, 0xD9}, [3]int{0xA2, 0x1C, 0xAF}),
+		Dark:  ckLerp3(t, ckHexRGB(tokBrandStart.Dark), ckHexRGB(tokBrandMid.Dark), ckHexRGB(tokBrandEnd.Dark)),
+		Light: ckLerp3(t, ckHexRGB(tokBrandStart.Light), ckHexRGB(tokBrandMid.Light), ckHexRGB(tokBrandEnd.Light)),
 	}
+}
+
+// ckHexRGB reads a generated "#rrggbb" truecolor value; the build guarantees it.
+func ckHexRGB(c lipgloss.CompleteColor) [3]int {
+	var v [3]int
+	fmt.Sscanf(c.TrueColor, "#%02x%02x%02x", &v[0], &v[1], &v[2])
+	return v
 }
 
 func ckLerp3(t float64, from, mid, to [3]int) string {
