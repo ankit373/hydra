@@ -4,17 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra docs: CLI, desktop app, verification and integrations</title>
-  <meta name="description" content="Hydra docs: how Hydra picks the model best suited to each task and checks the answer. The CLI, the desktop app, the TUI, integrations with hosted, local and CLI models, and every command.">
+  <meta name="description" content="Hydra docs: how Hydra picks the model best suited to each task and can check the answer. The CLI, the desktop app, the TUI, integrations with hosted, local and CLI models, and every command.">
   <meta name="keywords" content="Hydra docs, hyctl, verified cascade gateway, LLM gateway, model routing, answer verification, OpenAI, Anthropic, Gemini, Ollama, provider-neutral">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/docs.html">
   <meta property="og:title" content="Hydra documentation">
-  <meta property="og:description" content="How Hydra picks the model best suited to each task and checks the answer: the CLI, the app, every integration, and a full command reference.">
+  <meta property="og:description" content="How Hydra picks the model best suited to each task and can check the answer: the CLI, the app, every integration, and a full command reference.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Hydra documentation">
-  <meta name="twitter:description" content="How Hydra picks the model best suited to each task and checks the answer: the CLI, the app and every integration.">
+  <meta name="twitter:description" content="How Hydra picks the model best suited to each task and can check the answer: the CLI, the app and every integration.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/docs.html">
@@ -26,7 +26,7 @@
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "Hydra Documentation",
-    "description": "How Hydra picks the model best suited to each task, checks the answer and escalates when the check fails: the CLI, the TUI cockpit, the desktop app, integrations, and a complete command reference.",
+    "description": "How Hydra picks the model best suited to each task and can check the answer: the CLI, the TUI cockpit, the desktop app, integrations, and a complete command reference.",
     "image": "https://hydra.uvansa.com/logo.png",
     "url": "https://hydra.uvansa.com/docs.html",
     "datePublished": "2026-07-25",
@@ -342,7 +342,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
     <!-- ══ OVERVIEW ══ -->
     <section class="doc" id="overview">
       <h2>Overview <span class="tagline">discover → route → check → observe</span></h2>
-      <p class="sum">Hydra picks the model best suited to each task, checks the answer, and escalates when the check fails. It <b>discovers</b> every model you can reach (hosted APIs, local servers, CLI agents), <b>routes</b> each request to a model measured capable at that task type (today the lowest-cost one that clears the bar, with stronger models as the fallback chain), <b>checks</b> the answer with verifiers when you ask it to, and <b>logs</b> every request. No single vendor is privileged.</p>
+      <p class="sum">Hydra picks the model best suited to each task, and can check the answer before you rely on it. It <b>discovers</b> every model you can reach (hosted APIs, local servers, CLI agents), <b>routes</b> each request to a model measured capable at that task type (today the lowest-cost one that clears the bar, with stronger models as the fallback chain), <b>checks</b> the answer with verifiers when you ask it to, and <b>logs</b> every request. No single vendor is privileged.</p>
       <div class="term">
         <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">the pipeline</span></div>
 <pre><span class="tf">   discover                 route                       execute + observe</span>
@@ -634,7 +634,7 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
         <div class="intg"><div class="nm"><span class="glyph" style="background:#6366f1">Ct</span>Continue</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Open-source assistant.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#FF9900">K</span>Amazon Kiro</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">AWS's agentic IDE.</div></div>
       </div>
-      <div class="callout">Hydra sends each request to a model measured capable at that task type, and escalates to a stronger one when the answer fails its check or the model fails.</div>
+      <div class="callout">Hydra sends each request to a model measured capable at that task type, and moves to another model when that model fails, or when the answer fails its check (with a <code>--confidence</code> target, or the validator <code>hyctl edit</code> runs).</div>
     </section>
 
     <section class="doc" id="providers">
@@ -897,7 +897,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
 </div>
 
 <footer>
-  <span>© Hydra · MIT. Hydra picks the model best suited to each task and checks the answer.</span>
+  <span>© Hydra · MIT. Hydra picks the model best suited to each task and can check the answer.</span>
   <span><a href="/">Home</a> · <a href="/first-principles.html">First principles</a> · <a href="/pricing.html">Pricing</a> · <a href="https://github.com/ankit373/hydra">GitHub</a></span>
 </footer>
 

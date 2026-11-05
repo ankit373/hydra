@@ -4,7 +4,11 @@
 ## What Hydra Is
 A **vendor-neutral verified cascade gateway** (RFC 0001, `docs/rfc/0001-verified-cascade-gateway.md`),
 shipped as one Go binary (`hyctl`) plus a desktop app. In plain words: **Hydra picks the model best
-suited to each task, checks the answer, and escalates when the check fails.** It is for a general
+suited to each task, and can check the answer before you rely on it.** Checking happens only with
+`--confidence`, with `hyctl edit`'s validator, or for a task type with a configured verifier where
+that is supported; a failed check moves to another model only when a better-measured one exists
+(ordinary fallback on a model *error* is separate and always on). Never write copy that says every
+answer is checked. It is for a general
 audience as well as developers: code is one task type among others (summarising, extracting,
 drafting, reviewing), and no vendor is the product's identity.
 

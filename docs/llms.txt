@@ -1,6 +1,6 @@
-# Hydra: picks the model best suited to each task, and checks the answer
+# Hydra: picks the model best suited to each task, and can check the answer before you rely on it
 
-> Hydra picks the model best suited to each task, checks the answer, and escalates when the check fails. Technically it is a verified cascade gateway: an open source Go binary (`hyctl`) that sits in front of any model from any provider (hosted APIs such as OpenAI, Anthropic, Gemini, Bedrock or Mistral, local servers such as Ollama or llama.cpp, and CLI agents), ranks each one on its measured pass rate for the task type, and falls back to the next model when one fails. With a target set (`hyctl dispatch --confidence 0.95`, or the validator `hyctl edit` runs on the file it wrote), it checks the answer: verifiers and independent models add evidence until the posterior probability of being correct, P(correct), clears the target, and otherwise it asks the next-best model. A plain `hyctl dispatch` runs no verifier. Code is one task type among several, with its own verifiers (tests, compile, lint). No vendor is privileged.
+> Hydra picks the model best suited to each task, and can check the answer before you rely on it. Technically it is a verified cascade gateway: an open source Go binary (`hyctl`) that sits in front of any model from any provider (hosted APIs such as OpenAI, Anthropic, Gemini, Bedrock or Mistral, local servers such as Ollama or llama.cpp, and CLI agents), ranks each one on its measured pass rate for the task type, and falls back to the next model when one fails. With a target set (`hyctl dispatch --confidence 0.95`, or the validator `hyctl edit` runs on the file it wrote), it checks the answer: verifiers and independent models add evidence until the posterior probability of being correct, P(correct), clears the target, and otherwise it asks the next-best model. A plain `hyctl dispatch` runs no verifier. Code is one task type among several, with its own verifiers (tests, compile, lint). No vendor is privileged.
 >
 > Today an unpinned request goes to the lowest-cost model that this machine has measured competent at the task type, with stronger models behind it as the fallback chain. A capability-first objective (`quality` / `balanced` / `cost`) is proposed in RFC 0001 (`docs/rfc/0001-verified-cascade-gateway.md`) and not yet shipped.
 
@@ -88,7 +88,7 @@ append-only ledger of what was touched, or fetch the model.
 
 ## Who It's For
 
-Anyone who sends work to AI models and wants each request answered by a model with a measured record on that kind of task, with the answer checked before it is trusted: summarising documents, extracting fields, drafting replies, reviewing code. Developers reach it through the `hyctl` CLI or its OpenAI-compatible endpoint (`hyctl serve`), which any tool or coding assistant can point at; everyone else through the desktop app.
+Anyone who sends work to AI models and wants each request answered by a model with a measured record on that kind of task, with the option to check the answer before relying on it: summarising documents, extracting fields, drafting replies, reviewing code. Developers reach it through the `hyctl` CLI or its OpenAI-compatible endpoint (`hyctl serve`), which any tool or coding assistant can point at; everyone else through the desktop app.
 
 ## Installation
 
