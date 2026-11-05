@@ -1,0 +1,551 @@
+{
+  "$extensions": {
+    "mode": "light",
+    "dev.hydra.leonardo": {
+      "background": "neutral",
+      "lightness": 98
+    }
+  },
+  "color": {
+    "$type": "color",
+    "surface": {
+      "base": {
+        "$description": "Page and window background. Opaque.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9686,
+            0.9725,
+            0.9882
+          ],
+          "hex": "#f7f8fc"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "background": true
+          }
+        }
+      },
+      "raised": {
+        "$description": "Raised regions: sidebars, headers, table heads.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9569,
+            0.9608,
+            0.9843
+          ],
+          "hex": "#f4f5fb"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 1.03
+          }
+        }
+      },
+      "card": {
+        "$description": "Cards and panels.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9333,
+            0.9412,
+            0.9725
+          ],
+          "hex": "#eef0f8"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 1.07
+          }
+        }
+      },
+      "overlay": {
+        "$description": "Popovers, input wells, selected rows: the highest surface.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9137,
+            0.9176,
+            0.9569
+          ],
+          "hex": "#e9eaf4"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 1.12
+          }
+        }
+      }
+    },
+    "border": {
+      "subtle": {
+        "$description": "Hairlines and dividers. Decorative, never the only boundary of a control.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8314,
+            0.8431,
+            0.9098
+          ],
+          "hex": "#d4d7e8"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 1.35
+          }
+        }
+      },
+      "default": {
+        "$description": "Card and control outlines.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7137,
+            0.7294,
+            0.8353
+          ],
+          "hex": "#b6bad5"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 1.8
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 8,
+            "ansi256": "146"
+          }
+        }
+      },
+      "strong": {
+        "$description": "Input and control borders that must read at 3:1 (WCAG 1.4.11).",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4941,
+            0.5137,
+            0.6627
+          ],
+          "hex": "#7e83a9"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 3.45
+          },
+          "dev.hydra.contrast": {
+            "min": 3
+          }
+        }
+      }
+    },
+    "text": {
+      "default": {
+        "$description": "Body text. In the TUI this is the terminal's own foreground.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1137,
+            0.1255,
+            0.2118
+          ],
+          "hex": "#1d2036"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 15
+          },
+          "dev.hydra.terminal": {
+            "ansi16": "default"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5,
+            "apca": 75
+          }
+        }
+      },
+      "muted": {
+        "$description": "Secondary text and labels.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3137,
+            0.3333,
+            0.4706
+          ],
+          "hex": "#505578"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 6.8
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 8,
+            "ansi256": "60"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5,
+            "apca": 60
+          }
+        }
+      },
+      "subtle": {
+        "$description": "Metadata and hints. Never the only carrier of meaning.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3843,
+            0.4039,
+            0.5529
+          ],
+          "hex": "#62678d"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "neutral",
+            "ratio": 5.1
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 8,
+            "ansi256": "60"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      },
+      "inverse": {
+        "$description": "Text on a saturated fill (accent or status background).",
+        "$value": "{color.surface.base}"
+      }
+    },
+    "accent": {
+      "default": {
+        "$description": "The single interactive accent: links, primary actions, live values, selection.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.4706,
+            0.4039
+          ],
+          "hex": "#007867"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "aqua",
+            "ratio": 5.1
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 6,
+            "ansi256": "23"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      },
+      "strong": {
+        "$description": "Emphasis: headings in data views, inline code.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.3765,
+            0.3255
+          ],
+          "hex": "#006053"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "aqua",
+            "ratio": 7
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 6,
+            "ansi256": "23"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      },
+      "secondary": {
+        "$description": "Secondary accent for tags and series that need a second hue. Not for actions.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4627,
+            0.302,
+            0.8667
+          ],
+          "hex": "#764ddd"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "violet",
+            "ratio": 5.1
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 5,
+            "ansi256": "62"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      }
+    },
+    "status": {
+      "success": {
+        "$description": "Succeeded, enforced, added. Pair with a glyph or word.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0941,
+            0.4745,
+            0.2784
+          ],
+          "hex": "#187947"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "green",
+            "ratio": 5.1
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 2,
+            "ansi256": "22"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      },
+      "warning": {
+        "$description": "Needs attention, waiting, degraded. Pair with a glyph or word.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5569,
+            0.3804,
+            0.0706
+          ],
+          "hex": "#8e6112"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "amber",
+            "ratio": 5.1
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 3,
+            "ansi256": "94"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      },
+      "danger": {
+        "$description": "Failed, blocked, removed. Pair with a glyph or word.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7569,
+            0.2118,
+            0.2745
+          ],
+          "hex": "#c13646"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "red",
+            "ratio": 5.1
+          },
+          "dev.hydra.terminal": {
+            "ansi16": 1,
+            "ansi256": "161"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      },
+      "info": {
+        "$description": "Neutral notices.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1765,
+            0.4157,
+            0.7137
+          ],
+          "hex": "#2d6ab6"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "blue",
+            "ratio": 5.1
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      }
+    },
+    "cost": {
+      "$description": "Cost bands are data, not status. They alias the status hues until charts move to the chart palette (Phase 4).",
+      "low": {
+        "$value": "{color.status.success}"
+      },
+      "mid": {
+        "$value": "{color.status.warning}"
+      },
+      "high": {
+        "$value": "{color.status.danger}"
+      }
+    },
+    "chart": {
+      "$description": "Categorical series in fixed order; never cycled. Validated with the dataviz palette validator against this theme.",
+      "series-1": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1647,
+            0.4706,
+            0.8392
+          ],
+          "hex": "#2a78d6"
+        }
+      },
+      "series-2": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9216,
+            0.4078,
+            0.2039
+          ],
+          "hex": "#eb6834"
+        }
+      },
+      "series-3": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1059,
+            0.6863,
+            0.4784
+          ],
+          "hex": "#1baf7a"
+        }
+      },
+      "series-4": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9294,
+            0.6314,
+            0
+          ],
+          "hex": "#eda100"
+        }
+      },
+      "series-5": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9098,
+            0.4824,
+            0.6431
+          ],
+          "hex": "#e87ba4"
+        }
+      },
+      "series-6": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.5137,
+            0
+          ],
+          "hex": "#008300"
+        }
+      },
+      "series-7": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3843,
+            0.3137,
+            0.8392
+          ],
+          "hex": "#6250d6"
+        }
+      },
+      "series-8": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8902,
+            0.2863,
+            0.2824
+          ],
+          "hex": "#e34948"
+        }
+      }
+    },
+    "focus": {
+      "ring": {
+        "$description": "Focus ring: 2px, 2px offset.",
+        "$value": "{color.accent.default}"
+      }
+    },
+    "brand": {
+      "$description": "Logo and wordmark gradient only.",
+      "start": {
+        "$value": "{palette.brand.cyan-deep}",
+        "$extensions": {
+          "dev.hydra.terminal": {
+            "ansi16": 6,
+            "ansi256": "23"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      },
+      "mid": {
+        "$value": "{palette.brand.violet-deep}",
+        "$extensions": {
+          "dev.hydra.terminal": {
+            "ansi16": 5,
+            "ansi256": "56"
+          }
+        }
+      },
+      "end": {
+        "$value": "{palette.brand.magenta-deep}",
+        "$extensions": {
+          "dev.hydra.terminal": {
+            "ansi16": 5,
+            "ansi256": "127"
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
+      }
+    }
+  }
+}
