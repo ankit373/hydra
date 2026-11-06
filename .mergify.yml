@@ -46,6 +46,9 @@ shared:
   main_head: &main_head 'head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+|release-please--.+)$'
 
   release_please: &release_please head~=^release-please--
+  # A fork can name a branch anything, so the bot and the repo are what identify release-please.
+  release_please_bot: &release_please_bot author=github-actions[bot]
+  same_repo: &same_repo -from-fork
   # release-please's PR is CHANGELOG + manifest only; anything else is not its PR.
   release_please_files: &release_please_files -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
 
@@ -78,12 +81,16 @@ defaults:
       body: pr-body
 
 queue_rules:
-  # release-please's own PR: CHANGELOG + manifest only, so it merges without the CI matrix.
+  # release-please's own PR. Merging it tags and publishes everywhere, so the full CI set
+  # must pass first; in queue_conditions, as merge_conditions would check a draft (#1353).
   - name: release-please
     queue_conditions:
       - base=main
       - *release_please
+      - *release_please_bot
+      - *same_repo
       - *release_please_files
+      - and: *ci
     merge_conditions: []
 
   # Promotion to main from a hand-built carry (commit-tree: release tree, main
@@ -236,6 +243,8 @@ pull_request_rules:
     conditions:
       - base=main
       - *release_please
+      - *release_please_bot
+      - *same_repo
       - *release_please_files
     actions:
       review:
