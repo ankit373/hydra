@@ -39,7 +39,8 @@ defaults:
       body: pr-body
 
 queue_rules:
-  # release-please's own PR: CHANGELOG + manifest only, so it merges without the CI matrix.
+  # release-please's own PR. Merging it tags and publishes everywhere, so the full CI set
+  # must pass first; in queue_conditions, as merge_conditions would check a draft (#1353).
   - name: release-please
     queue_conditions:
       - base=main
@@ -48,6 +49,7 @@ queue_rules:
       - author=github-actions[bot]
       - -from-fork
       - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+      - and: *ci
     merge_conditions: []
 
   # Promotion to main from a hand-built carry (commit-tree: release tree, main
