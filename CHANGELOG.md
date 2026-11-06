@@ -6,6 +6,13 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.6.1](https://github.com/ankit373/hydra/compare/v1.6.0...v1.6.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **ci:** gate the Mergify queues on the CLA as a queue condition, not on Mergify's own draft ([#1320](https://github.com/ankit373/hydra/issues/1320)) ([712a85d](https://github.com/ankit373/hydra/commit/712a85def601295329ed0b7ff14e7058437d7e70))
+
 ## [1.6.0](https://github.com/ankit373/hydra/compare/v1.5.0...v1.6.0) (2026-11-03)
 
 
