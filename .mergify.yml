@@ -19,6 +19,15 @@ shared:
     - check-success=YAML validation
     - check-success=Secret scan
 
+  # PRs into main also build what a release ships (ci.yml), since merging one publishes.
+  release_build: &release_build
+    - check-success=Release build (GoReleaser)
+    - check-success=Release desktop build / darwin/universal
+    - check-success=Release desktop build / windows/amd64
+    - check-success=Release desktop build / windows/arm64
+    - check-success=Release desktop build / linux/amd64
+    - check-success=Release desktop build / linux/arm64
+
   # Not in develop's branch protection, so the queues require it (bots pass it).
   cla: &cla check-success=Contributor has signed
 
@@ -91,6 +100,7 @@ queue_rules:
       - *same_repo
       - *release_please_files
       - and: *ci
+      - and: *release_build
     merge_conditions: []
 
   # Promotion to main from a hand-built carry (commit-tree: release tree, main
@@ -103,7 +113,9 @@ queue_rules:
       - author=ankit373
       - -draft
       - *promotion_shape
-    merge_conditions: *ci
+    merge_conditions:
+      - and: *ci
+      - and: *release_build
 
   # CLA sits in queue_conditions: merge_conditions run on Mergify's draft PR, whose
   # author (mergify[bot]) the CLA check would fail. Queue conditions hold while queued.
