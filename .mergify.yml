@@ -18,6 +18,15 @@ shared:
     - check-success=YAML validation
     - check-success=Secret scan
 
+  # PRs into main also build what a release ships (ci.yml), since merging one publishes.
+  release_build: &release_build
+    - check-success=Release build (GoReleaser)
+    - check-success=Release desktop build / darwin/universal
+    - check-success=Release desktop build / windows/amd64
+    - check-success=Release desktop build / windows/arm64
+    - check-success=Release desktop build / linux/amd64
+    - check-success=Release desktop build / linux/arm64
+
   # Not in develop's branch protection, so the queues require it (bots pass it).
   cla: &cla check-success=Contributor has signed
 
@@ -39,12 +48,15 @@ defaults:
       body: pr-body
 
 queue_rules:
-  # release-please's own PR: CHANGELOG + manifest only, so it merges without the CI matrix.
+  # release-please's own PR. Merging it tags and publishes everywhere, so the full CI set
+  # must pass first; in queue_conditions, as merge_conditions would check a draft (#1353).
   - name: release-please
     queue_conditions:
       - base=main
       - head~=^release-please--
       - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+      - and: *ci
+      - and: *release_build
     merge_conditions: []
 
   # Promotion to main from a hand-built carry (commit-tree: release tree, main
@@ -61,7 +73,9 @@ queue_rules:
           - and:
               - title~=^(feat|fix)\(release\)
               - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
-    merge_conditions: *ci
+    merge_conditions:
+      - and: *ci
+      - and: *release_build
 
   - name: release
     queue_conditions:
