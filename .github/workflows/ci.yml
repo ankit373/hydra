@@ -414,7 +414,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: true
+          # Uncached, like the release it rehearses.
+          cache: false
 
       # Not --snapshot, which swallowed the missing-tag error (#821). A local tag
       # like edge.yml's, never pushed; the -ci suffix cannot collide with a release.
@@ -429,7 +430,7 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Build every release archive
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           # Exact, like the release workflows (#821).
           version: "2.18.2"
