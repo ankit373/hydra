@@ -5,10 +5,19 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/ankit373/hydra/internal/cache"
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
@@ -98,7 +107,7 @@ func TestPrintServeBanner_SaysHowManyHeadsCanCarryTools(t *testing.T) {
 	}
 
 	var local bytes.Buffer
-	printServeBanner(&local, "127.0.0.1:8787", "STANDARD", false, true, heads)
+	printServeBanner(&local, "127.0.0.1:8787", "STANDARD", false, true, heads, 0)
 	out := local.String()
 	// Under --local the cloud head is not reachable, so it is not counted.
 	for _, want := range []string{"127.0.0.1:8787", "STANDARD", "1 of 1", "local only", "loopback only"} {
@@ -108,7 +117,7 @@ func TestPrintServeBanner_SaysHowManyHeadsCanCarryTools(t *testing.T) {
 	}
 
 	var all bytes.Buffer
-	printServeBanner(&all, "127.0.0.1:8787", "STANDARD", false, false, heads)
+	printServeBanner(&all, "127.0.0.1:8787", "STANDARD", false, false, heads, 0)
 	if !strings.Contains(all.String(), "1 of 2") {
 		t.Errorf("without --local both heads are reachable:\n%s", all.String())
 	}
@@ -116,7 +125,7 @@ func TestPrintServeBanner_SaysHowManyHeadsCanCarryTools(t *testing.T) {
 
 func TestPrintServeBanner_SaysWhenATokenIsRequired(t *testing.T) {
 	var buf bytes.Buffer
-	printServeBanner(&buf, "0.0.0.0:8787", "HARD", true, false, nil)
+	printServeBanner(&buf, "0.0.0.0:8787", "HARD", true, false, nil, 0)
 	if !strings.Contains(buf.String(), "bearer token required") {
 		t.Errorf("an exposed endpoint did not say it is authenticated:\n%s", buf.String())
 	}
@@ -240,5 +249,169 @@ func TestStreamEvents_MapsEachKind(t *testing.T) {
 	}
 	if got[1].Kind != serve.EventAttemptFailed || got[1].Reason != "EOF" || got[1].SpanID != "s1" {
 		t.Errorf("failure mapped as %+v", got[1])
+	}
+}
+
+// stubOllamaHeads serves three models from one Ollama stub: the names in fail answer 503,
+// the rest answer. It returns the models asked, in order, so a test can see who was tried.
+func stubOllamaHeads(t *testing.T, fail ...string) func() []string {
+	t.Helper()
+	var (
+		mu    sync.Mutex
+		asked []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			_, _ = w.Write([]byte(`{"models":[{"name":"alpha:1b","capabilities":["completion"]},` +
+				`{"name":"beta:1b","capabilities":["completion"]},{"name":"gamma:1b","capabilities":["completion"]}]}`))
+		case "/v1/chat/completions":
+			var body struct{ Model string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			mu.Lock()
+			asked = append(asked, body.Model)
+			mu.Unlock()
+			if slices.Contains(fail, body.Model) {
+				http.Error(w, `{"error":{"message":"overloaded"}}`, http.StatusServiceUnavailable)
+				return
+			}
+			_, _ = w.Write([]byte(`{"model":"` + body.Model + `","choices":[{"message":{"role":"assistant","content":"from ` +
+				body.Model + `"}}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("OLLAMA_HOST", srv.URL)
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(asked)
+	}
+}
+
+// G24: with --heads set, the router can neither choose, fall back to, nor advertise a head
+// outside the list. The listed heads fail, so the excluded one, live or as a cached answer,
+// is the only way to answer.
+func TestServeHeads_NoHeadOutsideTheList(t *testing.T) {
+	testutil.NewSandbox(t)
+	if err := config.Save(&config.Config{CacheAnswers: true}); err != nil {
+		t.Fatal(err)
+	}
+	asked := stubOllamaHeads(t, "alpha:1b", "beta:1b")
+	listed := []string{"ollama/alpha:1b", "ollama/beta:1b"}
+	const excluded = "ollama/gamma:1b"
+	store, err := cache.OpenDir(cache.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put(cache.Entry{Prompt: flattenConversation([]executor.Message{{Role: "user", Content: "hi"}}),
+		Response: "cached from gamma", Head: excluded}); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if err := restrictServeHeads(d, listed, true, false); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(serve.Handler(serveRouter{d: d, defaultEnum: "GRUNT"}, nil, ""))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/v1/models")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var models struct{ Data []serve.Model }
+	err = json.NewDecoder(resp.Body).Decode(&models)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	advertised := map[string]bool{}
+	for _, m := range models.Data {
+		advertised[m.ID] = true
+	}
+	if advertised[excluded] {
+		t.Errorf("--heads %v, yet %s was %s", listed, excluded, "advertised by /v1/models")
+	}
+	for _, id := range listed {
+		if !advertised[id] {
+			t.Errorf("--heads %v, yet %s was %s", listed, id, "missing from /v1/models")
+		}
+	}
+
+	for _, model := range []string{"hydra", excluded} {
+		resp, err := http.Post(srv.URL+"/v1/chat/completions", "application/json",
+			strings.NewReader(`{"model":"`+model+`","messages":[{"role":"user","content":"hi"}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("--heads %v, yet %s was %s", listed, excluded, "what answered model "+model)
+		}
+	}
+	got := asked()
+	if slices.Contains(got, "gamma:1b") {
+		t.Errorf("--heads %v, yet %s was %s", listed, excluded, fmt.Sprintf("sent a request (asked %v)", got))
+	}
+	if !slices.Contains(got, "alpha:1b") || !slices.Contains(got, "beta:1b") {
+		t.Errorf("the listed heads were not both tried, so nothing fell back: asked %v", got)
+	}
+}
+
+// serveUntil runs `hyctl serve args...` until it returns or the deadline cancels it, so a
+// refusal that never happens fails the test instead of serving for ever.
+func serveUntil(t *testing.T, args ...string) error {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := cmdServe()
+	cmd.SetArgs(append([]string{"--addr", "127.0.0.1:0"}, args...))
+	cmd.SilenceUsage, cmd.SilenceErrors = true, true
+	var err error
+	captureStdout(t, func() { err = cmd.ExecuteContext(ctx) })
+	return err
+}
+
+// Both spellings of the list refuse an id discovery did not find, before the server binds.
+// The ids carry a space after the comma, which is trimmed rather than made part of the id.
+func TestServeHeads_AnUnknownIdStopsStartup(t *testing.T) {
+	for _, spelling := range []string{"--heads", "[serve] heads"} {
+		t.Run(spelling, func(t *testing.T) {
+			testutil.NewSandbox(t)
+			stubOllamaHeads(t)
+			cfg := &config.Config{}
+			var args []string
+			if spelling == "--heads" {
+				args = []string{"--heads", "ollama/alpha:1b, ollama/nope"}
+			} else {
+				cfg.Serve.Heads = []string{"ollama/alpha:1b", " ollama/nope"}
+			}
+			if err := config.Save(cfg); err != nil {
+				t.Fatal(err)
+			}
+			err := serveUntil(t, args...)
+			if err == nil || !strings.Contains(err.Error(), `"ollama/nope"`) {
+				t.Errorf(`%s naming an unknown head: err = %v, want a startup refusal naming "ollama/nope"`, spelling, err)
+			}
+		})
+	}
+}
+
+// An explicit empty --heads clears the config list for one run, so the server starts.
+func TestServeHeads_AnEmptyFlagClearsTheConfigList(t *testing.T) {
+	testutil.NewSandbox(t)
+	stubOllamaHeads(t)
+	if err := config.Save(&config.Config{Serve: config.Serve{Heads: []string{"ollama/nope"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := serveUntil(t, "--heads", ""); err != nil {
+		t.Errorf(`--heads "" still applied [serve] heads: %v`, err)
 	}
 }

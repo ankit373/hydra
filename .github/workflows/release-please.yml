@@ -41,6 +41,10 @@ jobs:
     name: Publish everywhere
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    # A called workflow gets at most its caller's permissions, so npm's OIDC needs id-token here too.
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/publish.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}

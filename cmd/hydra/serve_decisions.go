@@ -23,7 +23,8 @@ import (
 // decisionRouter adapts decide.Router to the endpoint, opening one run per
 // request the way the chat path does.
 type decisionRouter struct {
-	router decide.Router
+	router   decide.Router
+	unlisted int // decision sources the serve allowlist dropped, which the banner reports
 }
 
 var _ serve.Decider = decisionRouter{}
@@ -35,9 +36,9 @@ func (r decisionRouter) Decide(ctx context.Context, c decide.Call) (decide.Outco
 	return r.router.Decide(ctx, c)
 }
 
-// newDecisionRouter builds the router over this machine's decision heads. --local
-// keeps only local ones, and policy.yaml's max_cost_usd is the budget, as for a dispatch.
-func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool) (decisionRouter, error) {
+// newDecisionRouter builds the router over this machine's decision heads. --local keeps only
+// local ones, allows applies the serve allowlist, and policy.yaml's max_cost_usd is the budget.
+func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, allows func(id string) bool) (decisionRouter, error) {
 	if !(confidence > 0 && confidence < 1) {
 		return decisionRouter{}, fmt.Errorf("--confidence must be in (0, 1), got %v", confidence)
 	}
@@ -46,11 +47,18 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool) 
 		return decisionRouter{}, fmt.Errorf("calibration load: %w", err)
 	}
 	var heads []provider.Head
+	unlisted := 0
 	for _, h := range executor.DecisionHeads(ctx) {
-		if localOnly && !h.LocalOnly {
-			continue
+		switch {
+		case localOnly && !h.LocalOnly:
+		case !allows(h.ID):
+			unlisted++
+		default:
+			heads = append(heads, h)
 		}
-		heads = append(heads, h)
+	}
+	if len(heads) > 0 {
+		unlisted = 0 // the banner reports an empty /v1/decisions, not a partial one
 	}
 	ceiling, _ := costCeiling(policy.ForFile(config.ScriptHome(), policy.Spec{}), false, 0)
 	return decisionRouter{router: decide.Router{
@@ -59,7 +67,7 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool) 
 		Ask:    executor.DecisionExecutor{},
 		Cal:    cal,
 		Target: trust.Target{Confidence: confidence, MaxCostUSD: ceiling},
-	}}, nil
+	}, unlisted: unlisted}, nil
 }
 
 // decisionPrice estimates one call from the input's size; decision sources bill input only.
