@@ -392,3 +392,49 @@ jobs:
     with:
       version: ci
       targets: '[{"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}]'
+
+  # A PR into main is what ships: merging it tags and publishes. So it builds what
+  # publish.yml builds, all 5 desktop targets and GoReleaser, before it can merge (#1353).
+  release-desktop:
+    name: Release desktop build
+    if: github.base_ref == 'main'
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ci
+
+  release-binaries:
+    name: Release build (GoReleaser)
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # Uncached, like the release it rehearses.
+          cache: false
+
+      # Not --snapshot, which swallowed the missing-tag error (#821). A local tag
+      # like edge.yml's, never pushed; the -ci suffix cannot collide with a release.
+      - name: Create the tag GoReleaser reads
+        id: ver
+        run: |
+          released=$(python3 -c 'import json; print(json.load(open(".release-please-manifest.json"))["."])')
+          tag="v${released}-ci.g$(git rev-parse --short HEAD)"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              tag -a "${tag}" -m "release build check"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Build every release archive
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          # Exact, like the release workflows (#821).
+          version: "2.18.2"
+          args: release --clean --skip=publish,sign,sbom,validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.tag }}
