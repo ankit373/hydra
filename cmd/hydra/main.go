@@ -706,34 +706,29 @@ func printBudgetStatus(names map[string]string) {
 	if err != nil {
 		return
 	}
-	var state struct {
-		ClaudePct        int                       `json:"claude_pct"`
-		ClaudePctHistory []int                     `json:"claude_pct_history"`
-		Budget           map[string]map[string]any `json:"budget"`
-	}
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return
-	}
+	state := budget.ParseState(raw)
 
-	// claude_pct block (orchestrator context window). When enough history has
-	// accumulated, show the rate-aware effective mode (first-passage risk), a
+	// The session quota with its rate-aware mode, labelled as it always was: a
 	// fast burn escalates above the static level band before it crosses a line.
-	if state.ClaudePct > 0 {
-		burnRate, risk := budget.RiskFromHistory(state.ClaudePctHistory)
-		eff := budget.EffectiveMode(state.ClaudePct, risk)
-		bar := budgetBar(state.ClaudePct)
+	for _, q := range state.Quotas {
+		pct, eff := q.Pct(), q.Mode()
+		if pct <= 0 {
+			continue
+		}
 		line := fmt.Sprintf("  %s  %s %3d%%  %s",
 			dimStyle.Render("Claude  :"),
-			bar, state.ClaudePct, budgetModeStyle(eff.String()).Render(eff.String()),
+			budgetBar(pct), pct, budgetModeStyle(eff.String()).Render(eff.String()),
 		)
-		if eff > budget.ModeFor(state.ClaudePct) {
+		if eff > budget.ModeFor(pct) {
+			burnRate, risk := q.Burn()
 			line += "  " + dimStyle.Render(fmt.Sprintf("↑ burning +%.0f%%/step, %.0f%% risk of 80%%",
 				burnRate, risk*100))
 		}
 		fmt.Println(line)
 	}
 
-	if len(state.Budget) == 0 {
+	models := state.Budget()
+	if len(models) == 0 {
 		return
 	}
 
@@ -747,8 +742,8 @@ func printBudgetStatus(names map[string]string) {
 		label string
 		id    string
 	}
-	rows := make([]row, 0, len(state.Budget))
-	for id := range state.Budget {
+	rows := make([]row, 0, len(models))
+	for id := range models {
 		// Discovery's display name where it has one, so this table names a head
 		// the way `probe` and the tier table above do (#714).
 		label := id
@@ -764,7 +759,7 @@ func printBudgetStatus(names map[string]string) {
 		return rows[i].id < rows[j].id
 	})
 	for _, r := range rows {
-		snap := state.Budget[r.id]
+		snap := models[r.id]
 		pct := int(toFloat(snap["pct"]))
 		used := int(toFloat(snap["used"]))
 		window := int(toFloat(snap["window"]))
