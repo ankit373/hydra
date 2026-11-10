@@ -48,3 +48,13 @@ fi
 
 sort -un -o shipped_prs.txt shipped_prs.txt
 echo "Shipped PRs: $(wc -l < shipped_prs.txt)"
+
+# Only a promotion (Release-As footer) leaves issues to sweep; a hotfix's Closes #n
+# fired on merge into main (#1351). --grep, since grep -q's early exit fails pipefail.
+promoted=false
+if [ -n "$(git log -1 --format=%H -E \
+  --grep="^Release-As:[[:space:]]*${tag#v}[[:space:]]*$" "refs/tags/${tag}")" ]; then
+  promoted=true
+fi
+echo "Promotion from develop: ${promoted}"
+echo "promoted=${promoted}" >> "${GITHUB_OUTPUT:-/dev/null}"
