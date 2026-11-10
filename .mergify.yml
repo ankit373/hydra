@@ -28,6 +28,14 @@ shared:
     - check-success=Release desktop build / linux/amd64
     - check-success=Release desktop build / linux/arm64
 
+  # Security and config gates (ci.yml). Not in any branch protection yet, so
+  # every queue requires them itself.
+  security: &security
+    - check-success=Go vulnerability scan
+    - check-success=Dependency review
+    - check-success=Workflow security
+    - check-success=Mergify config
+
   # Not in develop's branch protection, so the queues require it (bots pass it).
   cla: &cla check-success=Contributor has signed
 
@@ -61,7 +69,12 @@ shared:
   # release-please's PR is CHANGELOG + manifest only; anything else is not its PR.
   release_please_files: &release_please_files -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
 
-  back_merge: &back_merge head=chore/back-merge-main
+  # sync-develop.yml's PR, pinned to the bot and the repo since anyone can name a branch.
+  back_merge: &back_merge
+    and:
+      - head=chore/back-merge-main
+      - author=github-actions[bot]
+      - *same_repo
   human: &human -author~=\[bot\]$
   dependabot: &dependabot author=dependabot[bot]
   # Mergify's own draft and config PRs are not contributions; protections skip them.
@@ -84,6 +97,8 @@ defaults:
   queue_rule:
     merge_method: squash
     batch_size: 1
+    # About 1.5x the slowest CI run measured (29 min); auto sets no timeout until a queue has ~20 runs.
+    checks_timeout: 45 minutes
     # "title (#n)" feeds close-shipped-issues; the body carries the Release-As footer.
     commit_message_format:
       title: pr-title
@@ -101,6 +116,7 @@ queue_rules:
       - *release_please_files
       - and: *ci
       - and: *release_build
+      - and: *security
     merge_conditions: []
 
   # Promotion to main from a hand-built carry (commit-tree: release tree, main
@@ -116,6 +132,7 @@ queue_rules:
     merge_conditions:
       - and: *ci
       - and: *release_build
+      - and: *security
 
   # CLA sits in queue_conditions: merge_conditions run on Mergify's draft PR, whose
   # author (mergify[bot]) the CLA check would fail. Queue conditions hold while queued.
@@ -125,7 +142,9 @@ queue_rules:
       - -draft
       - *conventional
       - *cla
-    merge_conditions: *ci
+    merge_conditions:
+      - and: *ci
+      - and: *security
     # merge, not rebase: a Mergify rebase is an unsigned git push (#1079).
     update_method: merge
     # One fresh run for a flaky leg; a second red dequeues, so nothing merges around it.
@@ -138,6 +157,8 @@ queue_rules:
       - -draft
       - *conventional
       - *cla
+    # Branch protection supplies develop's 13 checks; these are on top of them.
+    merge_conditions: *security
     update_method: merge
     max_checks_retries: 1
     # Up to 3 PRs share one CI run when a backlog forms; a red batch is split to find the culprit.
@@ -152,8 +173,8 @@ priority_rules:
     conditions:
       - or:
           - head~=^hotfix/
+          # A label, not the title: only a maintainer can apply one, and this rule interrupts running checks.
           - label=security
-          - title~=^fix\(security\)
     priority: high
     allow_checks_interruption: true
 
@@ -182,7 +203,6 @@ merge_protections:
     if:
       - *not_mergify
       - *human
-      - -head=chore/back-merge-main
       - or:
           - base=develop
           - base~=^release/v
@@ -216,6 +236,18 @@ merge_protections:
       - *not_mergify
     success_conditions:
       - "#review-threads-unresolved=0"
+
+  # A merged workflow runs with the repo's token and secrets, and develop needs no review.
+  - name: Workflow changes need the maintainer
+    description: A change under .github/workflows/ needs ankit373's approval unless they wrote it.
+    if:
+      - files~=^\.github/workflows/
+      - -author=ankit373
+      - *not_mergify
+      # The back-merge only replays what already passed this gate on its way to main.
+      - not: *back_merge
+    success_conditions:
+      - approved-reviews-by=ankit373
 
   - name: Feature work targets develop
     description: feature, feat, chore and docs branches never go straight to main or a release.
@@ -322,7 +354,6 @@ pull_request_rules:
       - -closed
       - -draft
       - *human
-      - -head=chore/back-merge-main
       - not: *closes
     actions:
       comment:
