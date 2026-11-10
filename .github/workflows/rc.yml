@@ -6,13 +6,16 @@ on:
       - "release/v*"
   workflow_dispatch:
 
+# Write is granted per job, to the jobs that publish.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   rc:
     name: Build & publish RC release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       tag: ${{ steps.ver.outputs.tag }}
       version: ${{ steps.ver.outputs.version }}
@@ -26,7 +29,8 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: true
+          # No cache: a release builds only what it checked out, nothing another run saved.
+          cache: false
 
       - name: Compute RC version
         id: ver
@@ -62,7 +66,7 @@ jobs:
               tag -a "${{ steps.ver.outputs.tag }}" -m "RC ${{ steps.ver.outputs.sha }}"
 
       - name: Build RC binaries
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           # Exact, not latest or ~> v2: 2.17.1 and 2.18.1 disagree on whether a
           # missing tag is fatal, which killed 24 edge builds unnoticed (#821).
@@ -86,13 +90,13 @@ jobs:
       - name: Publish RC release
         run: |
           gh release create "${{ steps.ver.outputs.tag }}" dist/*.tar.gz dist/*.zip dist/checksums.txt \
-            --target "${{ github.sha }}" \
+            --target "$GITHUB_SHA" \
             --title "RC, ${{ steps.ver.outputs.version }}" \
-            --notes "$(cat <<'EOF'
-          > 🧪 **This is a release candidate**, built from \`${{ github.ref_name }}\` for UAT testing.
+            --notes "$(cat <<EOF
+          > 🧪 **This is a release candidate**, built from \`${GITHUB_REF_NAME}\` for UAT testing.
           > Do not use in production. Stable release pending sign-off.
 
-          **Branch**: \`${{ github.ref_name }}\`
+          **Branch**: \`${GITHUB_REF_NAME}\`
           **Commit**: \`${{ steps.ver.outputs.sha }}\`
           **Version**: \`${{ steps.ver.outputs.version }}\`
 
@@ -114,6 +118,8 @@ jobs:
   desktop:
     name: Desktop app
     needs: rc
+    permissions:
+      contents: write
     uses: ./.github/workflows/desktop-build.yml
     with:
       version: ${{ needs.rc.outputs.version }}
