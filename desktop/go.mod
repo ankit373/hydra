@@ -14,11 +14,9 @@ go 1.26.0
 // actions/setup-go reads this file (go-version-file: desktop/go.mod) to decide
 // what to install, and without a toolchain line it installed exactly go1.25.0
 //, confirmed from the real shipped v1.2.0-rc.2 binary's own `go version -m`
-// output, not assumed. govulncheck found 21 reachable stdlib CVEs; go1.26.4
-// (the root module's own pin) closed 20 of them, one, GO-2026-5856, an ECH
-// privacy leak in crypto/tls, needing 1.26.5. Went one further than matching
-// root rather than leave a known-fixed CVE open for no reason.
-toolchain go1.26.5
+// output, not assumed. Kept in step with the root module's pin; CI's
+// govulncheck job fails once either falls behind a stdlib fix.
+toolchain go1.26.10
 
 require (
 	github.com/ankit373/hydra v0.0.0
@@ -35,7 +33,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
-	github.com/klauspost/compress v1.19.0 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/labstack/echo/v4 v4.16.1 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect
