@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/build"
 	"github.com/ankit373/hydra/internal/osv"
 )
 
@@ -404,7 +405,7 @@ func maintenanceSignal(ctx context.Context, repoURL string) Signal {
 	if err != nil {
 		return Signal{Name: "maintenance recency", Available: false}
 	}
-	req.Header.Set("User-Agent", "hydra/1 (+https://github.com/ankit373/hydra)")
+	req.Header.Set("User-Agent", build.UserAgent())
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := httpClient.Do(req)

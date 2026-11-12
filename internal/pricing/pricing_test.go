@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -273,6 +274,28 @@ func TestFetchFromOpenRouter_Non200(t *testing.T) {
 	_, err := fetchFromOpenRouter(context.Background())
 	if err == nil {
 		t.Fatal("expected error on HTTP 503")
+	}
+}
+
+// The stub answers like OpenRouter's Cloudflare WAF, which 403s any User-Agent
+// containing "hydra" (#1370). The real block is OpenRouter's; this pins what we send.
+func TestFetchFromOpenRouter_UserAgentPassesTheWAF(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(strings.ToLower(r.UserAgent()), "hydra") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{
+			{"id": "free/model", "pricing": map[string]string{"prompt": "0", "completion": "0"}},
+		}})
+	}))
+	defer srv.Close()
+	orig := openRouterModelsURL
+	t.Cleanup(func() { openRouterModelsURL = orig })
+	openRouterModelsURL = srv.URL
+
+	if models, err := fetchFromOpenRouter(context.Background()); err != nil || len(models) != 1 {
+		t.Fatalf("fetch = (%d models, %v), want 1 model: the User-Agent is blocked", len(models), err)
 	}
 }
 
