@@ -65,16 +65,8 @@ func loadRules(home string) (*signals.Engine, error) {
 // msgs is the conversation when the caller has one, which today is `hyctl
 // serve`. Nil leaves the conversation signals absent, because a single-shot
 // dispatch is not a conversation of length zero (#1021).
-//
-// headID is Options.Head: a person or client pinned one head before routing
-// ever runs (hyctl serve, the desktop picker), which is the one moment a
-// per-head fact can be read without yet deciding which head gets the task.
-// Deriving it from whichever head selectHeads later picks would be circular,
-// since that pick itself can depend on this decision, which is also why
-// context.window_pct (see heuristic.go) stays absent rather than being read
-// the same way: this signal is only ever a fact about the pin, never about
-// the eventual candidate list. Empty leaves both budget.effective_context and
-// latency.p95_ms absent, same as no --file leaves graph.blast_radius absent.
+// headID is a head pinned before routing runs (Options.Head); reading the one
+// selectHeads later picks would be circular. Empty leaves the per-head signals absent.
 func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int, msgs []executor.Message, headID string) signals.Decision {
 	in := signals.Input{Prompt: prompt, BlastRadius: blastRadius}
 	// Always derivable from the prompt, so the caller is not asked for it, and
@@ -111,11 +103,8 @@ func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRad
 	return d.rules.Evaluate(in)
 }
 
-// findHead looks up a discovered head by id. Unlike pinHead it answers no
-// question about routability or local-only: those gate whether a dispatch may
-// use a head, this only reports what Hydra knows about one that is already
-// pinned, so a head that cannot run still gets an honest (absent) reading
-// rather than an error that would abort the whole dispatch over a signal.
+// findHead looks up a discovered head by id. Unlike pinHead it never errors on
+// an unroutable head: a signal must not abort the dispatch it describes.
 func (d *Dispatcher) findHead(id string) (provider.Head, bool) {
 	for _, h := range d.heads {
 		if h.ID == id {

@@ -78,13 +78,13 @@ func TestDecide_LatencyP95PresentWhenHeadPinnedAndRecorded(t *testing.T) {
 	}
 }
 
-// No rollup history at all (a fresh machine, or one that has never dispatched
+// No recorded latency at all (a fresh machine, or one that has never dispatched
 // to this head) must read as absent, not a latency of zero.
-func TestDecide_LatencyP95AbsentWithNoRollupHistory(t *testing.T) {
+func TestDecide_LatencyP95AbsentWithNoHistory(t *testing.T) {
 	d := &Dispatcher{heads: []provider.Head{{ID: "ollama/qwen3:8b"}}}
 	dec := d.Decide(context.Background(), "hello", "go", nil, nil, "ollama/qwen3:8b")
 	if _, ok := dec.Signals[signals.SigLatencyP95MS]; ok {
-		t.Error("latency.p95_ms read a value with no rollup history at all")
+		t.Error("latency.p95_ms read a value with no recorded latency at all")
 	}
 }
 

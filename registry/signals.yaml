@@ -41,8 +41,8 @@ keywords: []
 #   budget.effective_context    number  effective context window of the head
 #                                       this dispatch pinned (hyctl serve, the
 #                                       desktop picker); absent with no pin
-#   latency.p95_ms              number  that same head's recent p95 latency
-#                                       from the rollups; absent the same way
+#   latency.p95_ms              number  that same head's p95 latency over
+#                                       cost.jsonl; absent the same way
 #
 # A signal nothing measured is ABSENT, and a comparison against an absent
 # signal never matches, whatever the operator. `graph.blast_radius < 5` does

@@ -36,7 +36,6 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/retrieve"
-	"github.com/ankit373/hydra/internal/rollup"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/signals"
@@ -344,11 +343,10 @@ type Dispatcher struct {
 	// always falls through, which is what a machine with no rules file gets.
 	rules *signals.Engine
 
-	// latency indexes recent per-head wall-clock latency from the rollups,
-	// built once here rather than read per dispatch. Keyed by canonical head
-	// id via cost.ResolveHeadName, the one tool already built to turn a
-	// rollup row's raw model string back into one (#729).
-	latency map[string]*sketch.Sketch
+	// latency is per-head wall-clock latency from the cost log, built by
+	// loadLatency at most once and only when a rule reads latency.p95_ms.
+	latencyOnce sync.Once
+	latency     map[string]*sketch.Sketch
 
 	// recall indexes and vectorises prompts off the dispatch path. Built at
 	// most once, by recorder(), and drained by Close.
@@ -566,14 +564,6 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		cal = nil
 	}
 
-	// A rollup file that will not load must not stop a dispatch either: the
-	// same "degrade, say so" posture as cal just above. latency.p95_ms simply
-	// reads absent, same as a machine where nothing has rolled up yet.
-	rollupRows, err := rollup.Load(rollup.DefaultPath())
-	if err != nil {
-		log.Printf("⚠️  rollups unreadable (%v), latency.p95_ms will read absent", err)
-	}
-
 	prices := pricing.Load()
 	return &Dispatcher{
 		cfg:     cfg,
@@ -585,7 +575,6 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		health:  health.Open(health.DefaultPath()),
 		cal:     cal,
 		rules:   rules,
-		latency: latencyIndex(rollupRows),
 	}, nil
 }
 

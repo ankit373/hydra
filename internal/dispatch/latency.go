@@ -3,40 +3,50 @@
 package dispatch
 
 import (
+	"errors"
+	"log"
+
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/provider"
-	"github.com/ankit373/hydra/internal/rollup"
+	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/sketch"
 )
 
-// latencyIndex merges rollup rows into one sketch per head. A rollup row only
-// carries the raw model string it was logged under (rollup.Build keys on it,
-// not on the canonical head id), so cost.ResolveHeadName, the tool #729
-// already built for this exact ambiguity, is what turns it back into one.
-// A name nothing declares is dropped rather than guessed: merging it into the
-// wrong head's figure is worse than leaving that figure alone.
-func latencyIndex(rows []rollup.Row) map[string]*sketch.Sketch {
+// latencyIndex groups the cost log's wall_ms into one sketch per head, keyed by
+// cost.CanonicalKey (#729). Not rollups.jsonl: only `hyctl stats --latency`
+// rewrites that, so it can be weeks behind the log.
+func latencyIndex(rows []cost.Row) map[string]*sketch.Sketch {
 	idx := map[string]*sketch.Sketch{}
 	for _, r := range rows {
-		if r.Latency == nil || r.Latency.Count() == 0 {
-			continue
+		id := cost.CanonicalKey(r)
+		sk := idx[id]
+		if sk == nil {
+			sk = sketch.New(sketch.DefaultAlpha)
+			idx[id] = sk
 		}
-		id := cost.ResolveHeadName(r.Model)
-		if id == "" {
-			continue
-		}
-		if cur := idx[id]; cur != nil {
-			_ = cur.Merge(r.Latency) // rollup.Build always uses sketch.DefaultAlpha
-			continue
-		}
-		idx[id] = r.Latency.Clone()
+		sk.Add(float64(r.WallMS))
 	}
 	return idx
 }
 
-// latencyP95 is a head's recent p95 wall-clock latency in milliseconds, and
-// whether the rollups say anything about it at all.
+// loadLatency builds the index only when a rule reads the signal, so an empty
+// signals.yaml pays nothing. An unreadable log degrades to absent.
+func (d *Dispatcher) loadLatency() {
+	if d.latency != nil || !d.rules.ReadsAny(signals.SigLatencyP95MS) {
+		return
+	}
+	rows, err := cost.LoadRows(cost.DefaultLogPath())
+	if err != nil && !errors.Is(err, cost.ErrNoLog) {
+		log.Printf("⚠️  cost log unreadable (%v), latency.p95_ms will read absent", err)
+		return
+	}
+	d.latency = latencyIndex(rows)
+}
+
+// latencyP95 is a head's p95 wall-clock latency in milliseconds over the cost
+// log, and whether the log says anything about it at all.
 func (d *Dispatcher) latencyP95(h provider.Head) (float64, bool) {
+	d.latencyOnce.Do(d.loadLatency)
 	sk, ok := d.latency[h.ID]
 	if !ok || sk.Count() == 0 {
 		return 0, false

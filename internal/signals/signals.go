@@ -56,18 +56,12 @@ type Input struct {
 	// nine-line estimator, and so there is only ever one of them.
 	PromptTokens *int
 
-	// EffectiveContext is budget.EffectiveContext for the head this dispatch
-	// pinned (hyctl serve, the desktop head picker). Nil whenever no head was
-	// pinned yet, or the pinned head never reported a window. Unlike
-	// PromptTokens (demand) this is capacity, and unlike Turns/ToolLoop it is
-	// per-head rather than per-task, so it can only be read once a caller has
-	// already committed to one head before routing runs (see context.window_pct
-	// in Collect's doc comment for why it cannot be read any earlier).
+	// EffectiveContext is budget.EffectiveContext for the head pinned before
+	// routing ran. Nil with no pin, or when that head reported no window.
 	EffectiveContext *int
 
-	// LatencyP95MS is that same head's recent p95 wall-clock latency in
-	// milliseconds, read from the rollups rather than recomputed. Nil the
-	// same two ways: no head pinned, or the rollups say nothing about it.
+	// LatencyP95MS is that head's p95 wall-clock latency in ms over the cost
+	// log. Nil with no pin, or when the log has no row for it.
 	LatencyP95MS *float64
 }
 
