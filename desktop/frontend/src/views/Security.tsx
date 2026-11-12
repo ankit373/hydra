@@ -51,10 +51,10 @@ function findCheckStatus(checks: Check[], name: string): string | undefined {
 // 'partial' was dropped here and the donut's slices quietly stopped summing to
 // the category count (#753).
 const COVERAGE_SLICES: Record<CoverageStatus, Omit<DonutSegment, 'value'> | null> = {
-  enforced: { label: 'Enforced', colorVar: 'var(--hy-cheap)' },
-  configured: { label: 'Configured', colorVar: 'var(--hy-aqua)' },
-  partial: { label: 'Partial', colorVar: 'var(--hy-mid)' },
-  gap: { label: 'Gap', colorVar: 'var(--hy-expensive)' },
+  enforced: { label: 'Enforced', colorVar: 'var(--hy-color-status-success)' },
+  configured: { label: 'Configured', colorVar: 'var(--hy-color-accent-default)' },
+  partial: { label: 'Partial', colorVar: 'var(--hy-color-status-warning)' },
+  gap: { label: 'Gap', colorVar: 'var(--hy-color-status-danger)' },
   'n/a': null,
 }
 
@@ -75,9 +75,9 @@ function coverageSegments(categories: Category[]): DonutSegment[] {
 // separately instead of drawn into the same pie.
 function ledgerSegments(ledger: LedgerPanel): DonutSegment[] {
   return [
-    { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-cheap)' },
-    { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-expensive)' },
-    { label: 'Ask', value: ledger.asked, colorVar: 'var(--hy-mid)' },
+    { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-color-status-success)' },
+    { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-color-status-danger)' },
+    { label: 'Ask', value: ledger.asked, colorVar: 'var(--hy-color-status-warning)' },
   ]
 }
 
@@ -85,9 +85,9 @@ function actionSegments(actions: Action[]): DonutSegment[] {
   const counts = { now: 0, soon: 0, watch: 0 }
   for (const a of actions) counts[a.priority]++
   return [
-    { label: 'Now', value: counts.now, colorVar: 'var(--hy-expensive)' },
-    { label: 'Soon', value: counts.soon, colorVar: 'var(--hy-mid)' },
-    { label: 'Watch', value: counts.watch, colorVar: 'var(--hy-dim)' },
+    { label: 'Now', value: counts.now, colorVar: 'var(--hy-color-status-danger)' },
+    { label: 'Soon', value: counts.soon, colorVar: 'var(--hy-color-status-warning)' },
+    { label: 'Watch', value: counts.watch, colorVar: 'var(--hy-color-text-muted)' },
   ]
 }
 

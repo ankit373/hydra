@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -38,22 +38,18 @@
   }
   </script>
 
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/page-aliases.css">
 <style>
 @font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
   src:url("fonts/SpaceGrotesk.woff2") format("woff2");}
 @font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
   src:url("fonts/JetBrainsMono.woff2") format("woff2");}
 
-/* Tokens are copied from the same source the desktop app itself uses
-   (desktop/frontend/src/tokens.css) so this page and the app cannot drift
-   into looking like two different products. */
+/* Colours come from assets/tokens.css, generated from design/tokens like the
+   desktop app's, so this page and the app cannot drift apart. */
 :root{
   color-scheme:dark;
-  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
-  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
-  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
-  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
-  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
   --display:"Space Grotesk",system-ui,sans-serif;
@@ -81,7 +77,7 @@ h1,h2,h3{margin:0;text-wrap:balance;}
 a{color:var(--aqua);text-decoration:none;}
 a:hover{text-decoration:underline;}
 .mono{font-family:var(--mono);}
-.grad{background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));
+.grad{background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid),var(--magenta));
   -webkit-background-clip:text;background-clip:text;color:transparent;}
 
 /* ── top bar ─────────────────────────────────────────────────────────── */
@@ -107,7 +103,7 @@ a:hover{text-decoration:underline;}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:8px;
   font-family:var(--mono);font-size:13px;border:1px solid var(--line-2);color:var(--ink);transition:.15s;}
 .btn:hover{border-color:var(--aqua);text-decoration:none;transform:translateY(-1px);}
-.btn.primary{background:linear-gradient(90deg,var(--cyan),var(--violet));border:none;color:#06070F;font-weight:700;}
+.btn.primary{background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid));border:none;color:var(--hy-color-text-inverse);font-weight:700;}
 .btn.primary:hover{filter:brightness(1.12);}
 
 /* ── the app preview ─────────────────────────────────────────────────── */
@@ -117,7 +113,7 @@ a:hover{text-decoration:underline;}
 .win-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);
   background:rgba(10,12,24,.9);}
 .dot{width:10px;height:10px;border-radius:50%;background:#2a2f4a;}
-.dot.r{background:#FF5A6E;}.dot.y{background:#E0A93A;}.dot.g{background:#3FD98A;}
+.dot.r{background:var(--exp);}.dot.y{background:var(--mid);}.dot.g{background:var(--cheap);}
 .win-title{margin-left:10px;font-family:var(--mono);font-size:11px;color:var(--faint);}
 .win-body{display:grid;grid-template-columns:132px 1fr;min-height:376px;}
 .side{border-right:1px solid var(--line);padding:14px 10px;background:rgba(6,7,15,.5);}
@@ -260,7 +256,7 @@ table.mini td.n{text-align:right;color:var(--ink);}
 .dl .sz{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;}
 .dl .get{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line-2);border-radius:7px;
   padding:6px 14px;color:var(--aqua);white-space:nowrap;transition:.16s;}
-.dl .get:hover{background:var(--aqua);color:#06070F;text-decoration:none;border-color:var(--aqua);}
+.dl .get:hover{background:var(--aqua);color:var(--hy-color-text-inverse);text-decoration:none;border-color:var(--aqua);}
 .dl .sum{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap;}
 .dl .sum:hover{color:var(--aqua);}
 @media(max-width:760px){

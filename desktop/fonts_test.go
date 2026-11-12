@@ -24,6 +24,10 @@ func TestFontsDeclaredAreShipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read tokens.css: %v", err)
 	}
+	generated, err := os.ReadFile(filepath.Join("frontend", "src", "tokens.generated.css"))
+	if err != nil {
+		t.Fatalf("read tokens.generated.css: %v", err)
+	}
 
 	for _, f := range []struct{ family, file string }{
 		{"Space Grotesk", "SpaceGrotesk.woff2"},
@@ -55,9 +59,10 @@ func TestFontsDeclaredAreShipped(t *testing.T) {
 			}
 
 			// A shipped font nothing selects is dead weight, which is the
-			// same defect pointing the other way.
-			tok := regexp.MustCompile(`--hy-font-[a-z]+:\s*"` + regexp.QuoteMeta(f.family) + `"`)
-			if !tok.Match(css) {
+			// same defect pointing the other way. The mono family is a design
+			// token now, so the generated file tokens.css imports counts too.
+			tok := regexp.MustCompile(`--hy-font-[a-z-]+:\s*"` + regexp.QuoteMeta(f.family) + `"`)
+			if !tok.Match(css) && !tok.Match(generated) {
 				t.Errorf("no --hy-font-* token names %q, so nothing renders in it", f.family)
 			}
 		})

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,14 +39,11 @@
   }
   </script>
 
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/page-aliases.css">
 <style>
 :root{
   color-scheme:dark;
-  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
-  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
-  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
-  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
-  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
   --math:"Cambria Math","Latin Modern Math","STIX Two Math",Georgia,"Times New Roman",serif;
@@ -76,7 +73,7 @@ a{color:inherit;text-decoration:none;}
 :focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
 .mono{font-family:var(--mono);}
 .tnum{font-variant-numeric:tabular-nums;}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
+.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
   -webkit-background-clip:text;background-clip:text;color:transparent;}
 .accent{color:var(--aqua);}.cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
 .cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
@@ -86,7 +83,7 @@ a{color:inherit;text-decoration:none;}
   font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--line);}
 .topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
 .topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
@@ -157,7 +154,7 @@ a{color:inherit;text-decoration:none;}
 .viz .ctl label{display:flex;flex-direction:column;gap:6px;color:var(--dim);min-width:150px;}
 .viz .ctl label .v{color:var(--aqua);font-weight:600;}
 .viz .ctl input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;
-  background:linear-gradient(90deg,var(--cyan),var(--violet));outline:none;cursor:pointer;}
+  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid));outline:none;cursor:pointer;}
 .viz .ctl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
   background:var(--aqua);box-shadow:0 0 10px rgba(0,230,195,.7);cursor:pointer;}
 .viz .ctl input[type=range]::-moz-range-thumb{width:15px;height:15px;border:0;border-radius:50%;
@@ -180,7 +177,7 @@ figure.viz{margin:24px 0 8px;}
 footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
 .foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;}
 .foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
-  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
   -webkit-background-clip:text;background-clip:text;color:transparent;}
 .foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
 .foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
@@ -447,9 +444,12 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
 (function(){
   "use strict";
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var C = {bg:'#06070F',ink:'#E7E9F5',dim:'#9aa0c4',faint:'#5a5f85',
-           cyan:'#2AF0E0',aqua:'#00E6C3',violet:'#8B5CF6',magenta:'#E852C8',
-           cheap:'#3FD98A',mid:'#E0A93A',exp:'#FF5A6E'};
+  // Canvas colours read the generated tokens, so the drawing follows design/tokens.
+  var T=getComputedStyle(document.documentElement);
+  function tok(n){return T.getPropertyValue('--hy-color-'+n).trim();}
+  var C = {bg:tok('surface-base'),ink:tok('text-default'),dim:tok('text-muted'),faint:tok('text-subtle'),
+           cyan:tok('accent-strong'),aqua:tok('accent-default'),violet:tok('accent-secondary'),magenta:tok('brand-end'),
+           cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high')};
 
   // topbar shade + reveal on scroll
   var topbar = document.getElementById('topbar');
