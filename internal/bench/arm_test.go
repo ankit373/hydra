@@ -259,15 +259,21 @@ func TestDirect_AnUnpricedAnswerIsRecordedAtItsCeiling(t *testing.T) {
 	}
 }
 
-// A local error never left the machine: no retry, no fallback, no cost, and a
-// permanent failure rather than an unscored one.
+// A local error is a permanent failure, not retried or fallen back from. It is charged
+// its ceiling: a decode error or an empty answer after a billed 200 looks the same.
 func TestDirect_ALocalErrorFailsTheRowWithoutRetry(t *testing.T) {
 	exec := newFakeExec()
-	exec.set("bench/openrouter/m-front", "*", reply{err: errors.New("http exec: marshal request: unsupported value")})
+	exec.set("bench/openrouter/m-front", "*", reply{err: errors.New("http exec bench/openrouter/m-front: empty response")})
 	d, rs := fallbackArm(t, exec, nil)
-	att := callOne(t, d, "test/000")
-	if att.ErrKind != "local" || att.transient || len(att.Calls) != 1 || att.Calls[0].CostUSD != 0 || len(rs.waits) != 0 {
-		t.Fatalf("local error: %+v, waited %v", att, rs.waits)
+	it := fakeItems(1)["test/000"]
+	req, _ := fakeSuite{}.Prompt(it)
+	var spent []Call
+	att, err := d.Call(context.Background(), it, req, NewBudget(1, 0), func(c Call) error { spent = append(spent, c); return nil })
+	if err != nil || att.ErrKind != "local" || att.transient || len(att.Calls) != 1 || len(rs.waits) != 0 {
+		t.Fatalf("local error: %+v, err %v, waited %v", att, err, rs.waits)
+	}
+	if c := att.Calls[0]; c.CostUSD == 0 || c.PriceRef != "local-error" || len(spent) != 1 || spent[0] != c {
+		t.Fatalf("call %+v, spent %+v: want its ceiling, recorded once", c, spent)
 	}
 	if exec.count("bench/openrouter/m-mid") != 0 {
 		t.Fatal("a local error fell back to the next model")

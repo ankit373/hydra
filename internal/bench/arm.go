@@ -234,7 +234,9 @@ func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Bud
 
 // price records one provider call. A call that may have been billed costs its ceiling
 // until the provider's own token counts price it; one turned away (429, 503, 401, 403)
-// or that never left the machine costs nothing. perr: answered, but unpriceable.
+// costs nothing. A local error costs its ceiling too: the executor's error does not say
+// whether it came before the send or from a billed 200 (decode, empty answer).
+// perr: answered, but unpriceable.
 func (d *Direct) price(h provider.Head, model string, wc float64, resp *executor.Response, err error, killed bool) (Call, error) {
 	var se *executor.StatusError
 	switch {
@@ -254,7 +256,7 @@ func (d *Direct) price(h provider.Head, model string, wc float64, resp *executor
 		http.StatusUnauthorized, http.StatusForbidden}, se.Code):
 		return Call{Head: h.ID, PriceRef: "refused-unbilled"}, nil
 	case se == nil && !network(err):
-		return Call{Head: h.ID, PriceRef: "local-error"}, nil
+		return Call{Head: h.ID, CostUSD: wc, PriceRef: "local-error"}, nil
 	}
 	return Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"}, nil
 }
@@ -289,8 +291,8 @@ func network(err error) bool {
 }
 
 // transient is a failure that says nothing about the item: a network error, a 429 or
-// a 5xx. Its row is unscored and the pair is asked again on resume. A local error, a
-// request that never left the machine, is not: it fails the row and is not retried.
+// a 5xx. Its row is unscored and the pair is asked again on resume. A local error
+// (a bad request, a decode error, an empty answer) is not: it fails the row, no retry.
 func transient(err error) bool {
 	var se *executor.StatusError
 	if errors.As(err, &se) {

@@ -22,8 +22,9 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   no money. Exit 2 means the cap stopped the run; exit 4 means the provider broke the
   contract mid-run.
 - A 429, 5xx or network error is retried with backoff. If it still fails, the pair is
-  recorded as unscored, and the next `run` asks it again. A local error (one that never
-  left the machine) fails the pair, costs nothing, and is not retried. A run with any
+  recorded as unscored, and the next `run` asks it again. Any other error fails the pair
+  and is not retried. It is charged its ceiling, since the harness cannot tell a request
+  that never left the machine from a billed answer that failed to decode. A run with any
   pair still unscored is reported as INCOMPLETE, with counts but no paired statistics.
 - `--rerun` resumes the latest `-r<k>` while it is incomplete, and starts the next one
   only once it is done.
