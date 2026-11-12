@@ -88,9 +88,10 @@ These are checked by hand today. Mergify enforces only the approval and the hold
    `gh run watch $(gh run list --workflow release-please.yml -L1 --json databaseId -q '.[0].databaseId')`.
    If one channel fails, use "Re-run failed jobs". Do not re-dispatch publish.yml for a version
    that is partly published.
-6. Check every channel: `npm view hyctl version`, `pip index versions hyctl`,
-   `brew info ankit373/hydra/hyctl`, and `hyctl --version` after `install.sh`. If one is wrong,
-   go to section 5.
+6. release-smoke.yml runs after publish. It installs from brew, npm, pip, install.sh and the
+   release archive, and checks `hyctl --version` and an offline `hyctl --help`. If it fails it
+   opens a `release:blocked` issue and labels the next release PR; go to section 5. Run it by
+   hand with `gh workflow run release-smoke.yml -f tag=vX.Y.Z`.
 
 ### Large or major
 1. Pick the commit (usually main's head) and run `gh workflow run rc.yml -f sha=<sha>`. It tags

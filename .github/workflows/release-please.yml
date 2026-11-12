@@ -52,3 +52,17 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets: inherit
+  # Installs the release from every channel. It runs even when a publish job
+  # failed, since a half-published release is when a check matters most.
+  smoke:
+    name: Release smoke test
+    needs: [release-please, publish]
+    if: ${{ !cancelled() && needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+      expect_latest: true
