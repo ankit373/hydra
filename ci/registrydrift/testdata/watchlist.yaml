@@ -1,0 +1,6 @@
+upstream:
+  opus: anthropic/claude-opus-4.6
+  sonnet: anthropic/claude-sonnet-4.6
+  flash: google/gemini-3.8-flash
+  auto: openrouter/auto
+  gone: openai/gpt-retired

@@ -1,0 +1,75 @@
+name: Registry drift
+
+# Compares the registry with OpenRouter's public catalog and keeps one tracking
+# issue current: opened or updated on drift, closed on a clean run (#1361).
+# Reports only: pricing.yaml prices heads OpenRouter does not sell, so no bot edits it.
+
+on:
+  schedule:
+    # Mondays 03:30 UTC (09:00 IST). Schedules run from the default branch only.
+    - cron: "30 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: registry-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Check registry drift
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # open, edit and close the one tracking issue
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check against OpenRouter
+        run: |
+          go run ./ci/registrydrift -md drift.md -json drift.json
+          cat drift.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The issue is found by label and exact title, so a renamed or hand-made
+      # issue is never edited or closed by mistake.
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          label=registry-drift
+          title="Registry drift: upstream models or prices changed"
+          count=$(jq -r '.drift_count' drift.json)
+          issue=$(gh issue list --label "$label" --state open --limit 100 \
+            --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+
+          if [ "$count" -eq 0 ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "No drift on the latest check: $RUN_URL"
+            fi
+            echo "No drift."
+            exit 0
+          fi
+
+          printf '\n---\nUpdated by %s. Closes itself on the first clean run.\n' "$RUN_URL" >> drift.md
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --body-file drift.md
+            echo "Updated #$issue ($count findings)."
+          else
+            gh label create "$label" --color FBCA04 \
+              --description "Registry references drifted from upstream" --force
+            gh issue create --title "$title" --label "$label" \
+              --assignee "$OWNER" --body-file drift.md
+          fi
