@@ -416,10 +416,8 @@ func (s *Store) inScopeLocked(i int, q Query) bool {
 }
 
 // atLeastAsStrong reports whether an entry's head was at least as strong as
-// the one this query wants. Serving down is defensible; serving up defeats the
-// escalation workflow, where `--tier 2` after a weak answer must run a head.
-//
-// An unrecorded tier cannot be shown to clear a stated bar (#1156).
+// this query wants. Serving up defeats `--tier 2` escalation, and an
+// unrecorded tier cannot be shown to clear a stated bar (#1156).
 func atLeastAsStrong(entry, want int) bool {
 	if want <= 0 {
 		return true

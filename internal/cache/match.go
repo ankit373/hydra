@@ -51,12 +51,9 @@ func (q Query) Answer(response string) Entry {
 	}
 }
 
-// Key is a query's content address: everything that has to match exactly
-// before a stored answer may be served. Normalization happens here, so no
-// caller can key a raw prompt against a normalized one (#888).
-//
-// Length-prefixed rather than separated, since any separator byte is one a
-// prompt may itself contain and two fields would then address one entry.
+// Key is a query's content address, normalized here so no caller keys a raw
+// prompt against a normalized one. Length-prefixed: any separator byte could
+// appear in a prompt, making two field splits address one entry.
 func Key(q Query) string {
 	prompt, system := Normalize(q.Prompt), Normalize(q.System)
 	h := sha256.New()
