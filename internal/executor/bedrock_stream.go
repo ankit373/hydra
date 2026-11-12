@@ -12,7 +12,7 @@ import (
 )
 
 func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta OnDelta) (*Response, error) {
-	model := defaultModelFor("bedrock")
+	model := modelFor(req.Head)
 	body, err := bedrockBody(req)
 	if err != nil {
 		return nil, err

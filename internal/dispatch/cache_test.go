@@ -292,6 +292,42 @@ func TestDispatch_NeverCachesAToolLoop(t *testing.T) {
 	}
 }
 
+// The key does not see temperature, so a request that pins one must neither
+// be served a stored answer nor store its own for a later request.
+func TestDispatch_NeverCachesAPinnedTemperature(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	d := cachingDispatcher(t, s)
+	zero := 0.0
+	greedy := Options{Temperature: &zero}
+
+	for i := 0; i < 2; i++ {
+		r, err := d.Dispatch(context.Background(), "classify this", greedy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Cache != nil {
+			t.Fatalf("dispatch %d with a temperature was served from the cache", i+1)
+		}
+	}
+	if st, _ := cache.StoredStats(cache.Dir()); st.Entries != 0 {
+		t.Errorf("%d entries: a dispatch with a temperature stored its answer", st.Entries)
+	}
+
+	if _, err := d.Dispatch(context.Background(), "classify this", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := cache.StoredStats(cache.Dir()); st.Entries == 0 {
+		t.Fatal("test is inert: a plain dispatch stored nothing")
+	}
+	r, err := d.Dispatch(context.Background(), "classify this", greedy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Cache != nil {
+		t.Error("a dispatch with a temperature was served an answer stored without one")
+	}
+}
+
 // An answer carrying credential-shaped content is not stored: the egress gate
 // already classified it, and replaying it later would be a decision rather
 // than an accident.

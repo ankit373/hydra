@@ -39,6 +39,7 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/signals"
+	"github.com/ankit373/hydra/internal/sketch"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
 )
@@ -93,6 +94,11 @@ type Options struct {
 	// Resource to derive one from, leaves the pooled probe ranking standing.
 	Domain string
 
+	// Objective is what an unpinned dispatch optimises. Empty is the cost
+	// constraint, so a caller that names none routes exactly as before E1.
+	// Under quota pressure the governor routes it as ServedDefaultEnum instead.
+	Objective rank.Objective
+
 	// Messages is a whole conversation, when the caller has one, and Tools the
 	// functions a head may call. Both exist for `hyctl serve`: an agent loop
 	// sends its tool results back as further turns, which Prompt cannot carry.
@@ -113,6 +119,10 @@ type Options struct {
 	// MaxCostSource names where that ceiling came from, so a refusal says
 	// which of the flag and the policy file to change. Empty reads as the flag.
 	MaxCostSource string
+
+	// Temperature is passed to the head unchanged; nil means the provider
+	// default. CLI and agy heads ignore it.
+	Temperature *float64
 
 	// MaxMemoryMB and MaxCPUSeconds cap a dispatched subprocess's address
 	// space and CPU time, from policy.yaml's max_memory_mb/max_cpu_seconds.
@@ -191,10 +201,12 @@ type Result struct {
 	// Domain is the calibration domain the candidates were ranked for, and
 	// Scores why each ranks where it does. Both empty when nothing narrowed
 	// the ranking, which is when the pooled probe order stands unchanged.
-	// Populated on the --dry-run preview, whose whole job is to explain a
-	// choice before it costs anything.
 	Domain string
 	Scores map[string]rank.Score
+
+	// Objective is the one that ordered the candidates; empty when a tier, a
+	// head, the governor or the cache decided instead.
+	Objective rank.Objective
 
 	// Requirement is the confidence of correctness this task needed, and is
 	// set only when the cost constraint was the thing that ordered the
@@ -275,14 +287,23 @@ func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result
 		return nil, err
 	}
 	prompt := fmt.Sprintf("%s\n\nYou asked: %s\nThe user answered: %s", q.Prompt, q.Question, answer)
-	return d.Dispatch(ctx, prompt, Options{
+	return d.Dispatch(ctx, prompt, resumeOptions(q))
+}
+
+// resumeOptions is what a parked task is dispatched with once answered: what
+// it was parked under, with approval for the one head the human was shown.
+func resumeOptions(q pending.Question) Options {
+	return Options{
 		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
 		System: q.System, Enum: q.Enum, Resource: q.Resource,
+		Domain: q.Domain, Temperature: q.Temperature, NoCache: q.NoCache,
+		Objective:  rank.Objective(q.Objective),
+		MaxCostUSD: q.MaxCostUSD, MaxCostSource: q.MaxCostSource,
 		RunID: q.RunID, TaskID: q.TaskID,
 		AnsweredHead: q.Head,
 		// A2A context is already inside q.Prompt, Dispatch injected it before
 		// the gate parked the task, so naming the file again would double it.
-	})
+	}
 }
 
 // Decline refuses a parked task without running it.
@@ -338,9 +359,17 @@ type Dispatcher struct {
 	// order: a ranking basis that degrades has to degrade to the previous one.
 	cal *trust.Calibrator
 
+	// rng draws exploration; nil is the global source, which is today's.
+	rng *exploreRand
+
 	// rules turns signals into a routing action. Nil is a valid engine that
 	// always falls through, which is what a machine with no rules file gets.
 	rules *signals.Engine
+
+	// latency is per-head wall-clock latency from the cost log, built by
+	// loadLatency at most once and only when a rule reads latency.p95_ms.
+	latencyOnce sync.Once
+	latency     map[string]*sketch.Sketch
 
 	// recall indexes and vectorises prompts off the dispatch path. Built at
 	// most once, by recorder(), and drained by Close.
@@ -510,6 +539,14 @@ func cachedProbe(ctx context.Context) *probe.Result {
 	return probeCacheResult
 }
 
+// ForgetProbe drops the cached probe. A key saved in the desktop app changes
+// what discovery finds without touching HOME or PATH, which the cache keys on.
+func ForgetProbe() {
+	probeCacheMu.Lock()
+	defer probeCacheMu.Unlock()
+	probeCacheResult = nil
+}
+
 // PIILocalOnly reports whether cfg's pii policy forces local-only routing,
 // the config-level check for callers with no Dispatcher yet (the TUI's route
 // badge), so the rule is never restated (#597).
@@ -568,6 +605,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		budget:  budgetReg,
 		health:  health.Open(health.DefaultPath()),
 		cal:     cal,
+		rng:     newExploreRand(cfg.ExploreSeed),
 		rules:   rules,
 	}, nil
 }
@@ -579,7 +617,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Evaluated once, here or by the caller, never per fallback candidate.
 	dec := opts.Decision
 	if dec == nil {
-		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages)
+		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages, opts.Head)
 		dec = &computed
 	}
 	if err := applyDecision(*dec, &opts); err != nil {
@@ -606,6 +644,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	// Apply quota preservation, may downgrade tier or abort.
 	tier, q, mode := d.quotaMode(hint)
+	// Under quota pressure an objective route goes back to the pinned default it
+	// replaced, so the governor downgrades it exactly as it did before E1.
+	if hint == "" && opts.Head == "" && opts.Objective != "" && mode >= budget.ModeWarning {
+		opts.Enum, hint = ServedDefaultEnum, EnumToTier(ServedDefaultEnum)
+		tier, q, mode = d.quotaMode(hint)
+	}
+	// From here Objective is the one that orders the candidates, or none.
+	if tier != "" || opts.Head != "" {
+		opts.Objective = ""
+	}
 	if mode == budget.ModeEmergency {
 		tier = "10"
 		opts.LocalOnly = true
@@ -736,16 +784,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			ErrNoHeads, tierClause(tier), localOnly)
 	}
 
-	// With no tier pinned, prefer the cheapest head this machine has measured
-	// competent at this domain over the strongest one it has. A pinned tier is
-	// an instruction and is left exactly as it was resolved: one word must not
-	// route two ways (#782).
+	// With no tier pinned, the objective orders the candidates: the strongest
+	// measured head for quality, else the cheapest measured competent one. A
+	// pinned tier is an instruction and is left as resolved (#782).
 	var requirement float64
 	var scores map[string]rank.Score
-	if tier == "" && opts.Head == "" {
+	switch {
+	case tier != "" || opts.Head != "":
+		if opts.DryRun {
+			scores = d.explain(candidates, domain)
+		}
+	case opts.Objective == rank.Quality:
+		candidates, scores = rank.Strongest(candidates, d.explain(candidates, domain), d.price)
+	default:
 		candidates, scores, requirement = d.constrain(candidates, domain, requirementFor(class))
-	} else if opts.DryRun {
-		scores = d.explain(candidates, domain)
 	}
 
 	// Reorders candidates so the head to try first is at index 0 and reports
@@ -758,7 +810,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// see the evidence for is indistinguishable from an arbitrary one.
 		r := &Result{
 			Head: candidates[0], Fallbacks: candidates[1:],
-			Domain: domain, Scores: scores, Requirement: requirement,
+			Domain: domain, Scores: scores, Requirement: requirement, Objective: opts.Objective,
 		}
 		if cached.Found {
 			// Named, not served: a dry run runs nothing, including the cache,
@@ -781,11 +833,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// unrelated dispatch and no run had a tree at all (#864).
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID, SpanID: taskSpan,
-		Detail: opts.Enum,
+		Detail: opts.Enum, Meta: objectiveMeta(opts),
 	})
 
 	var lastErr error
 	var attempts []Attempt
+	// Refusals the request itself caused, against heads actually sent, so a
+	// run that sent nothing can say it was the request and not the heads.
+	var tooWarm, overCost, sent int
 	for i, h := range candidates {
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
@@ -835,6 +890,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			refuse("cannot carry tool definitions")
 			continue
 		}
+		// Skipped like the tools case, never sent and failed: the provider would
+		// answer 400, and the breaker would park a healthy head over it.
+		if limit := executor.MaxTemperature(h); opts.Temperature != nil && *opts.Temperature > limit {
+			refuse(fmt.Sprintf("accepts a temperature of at most %g, not %g", limit, *opts.Temperature))
+			tooWarm++
+			continue
+		}
 		// The egress gate, deliberately independent of the ledger's decision:
 		// the ledger answers who may act, this answers where content may go.
 		// The reroute above should already have made this unreachable for a
@@ -876,6 +938,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Prompt:   prompt, Head: h.ID, Resource: opts.Resource,
 				Enum: opts.Enum, TierHint: opts.TierHint, System: opts.System,
 				LocalOnly: localOnly, MaxTokens: opts.MaxTokens,
+				Domain: opts.Domain, Temperature: opts.Temperature,
+				MaxCostUSD: opts.MaxCostUSD, MaxCostSource: opts.MaxCostSource,
+				NoCache: opts.NoCache, Objective: string(opts.Objective),
 			}
 			// A question that cannot be stored has not been asked, so this
 			// fails the dispatch rather than proceeding unapproved.
@@ -923,9 +988,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					Agent: "hydra-dispatch", Tool: h.ID, Decision: ledger.Deny,
 					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, opts.MaxCostUSD),
 				})
+				overCost++
 				continue
 			}
 		}
+		sent++
 		started := time.Now()
 		exec := executor.For(h)
 		emit := func(kind StreamKind, text, reason string) {
@@ -949,6 +1016,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Prompt:        prompt,
 			Head:          h,
 			MaxTokens:     opts.MaxTokens,
+			Temperature:   opts.Temperature,
 			System:        opts.System,
 			Messages:      opts.Messages,
 			Tools:         opts.Tools,
@@ -996,7 +1064,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		d.health.Pass(h.ID)
-		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
+		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp,
+			Domain: domain, Scores: scores, Objective: opts.Objective}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
 		})
@@ -1046,8 +1115,27 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		Level: runlog.LevelError, Status: "failed",
 		Detail: fmt.Sprintf("all %d heads failed", len(candidates)),
 	})
+	switch n := len(candidates); {
+	case tooWarm == n && n > 0:
+		return nil, fmt.Errorf("%w: temperature %g is above what every candidate head accepts",
+			executor.ErrUnaskable, *opts.Temperature)
+	case sent == 0 && overCost > 0:
+		lastErr = overCeiling{lastErr}
+	}
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
+
+// ErrOverCostCeiling marks a dispatch that sent nothing and whose ceiling
+// refused at least one head that could otherwise have run: the ceiling, not a
+// head, is why there is no answer.
+var ErrOverCostCeiling = errors.New("no head was sent the request, and the cost ceiling refused at least one")
+
+// overCeiling grades an error as ErrOverCostCeiling without changing what it
+// says, so the CLI's message stays exactly what it was.
+type overCeiling struct{ err error }
+
+func (e overCeiling) Error() string   { return e.err.Error() }
+func (e overCeiling) Unwrap() []error { return []error{e.err, ErrOverCostCeiling} }
 
 // quotaMode reads state.json once and returns the (possibly downgraded) tier,
 // the governing quota and its mode. The mode is rate-aware, so a fast burn
@@ -1615,6 +1703,18 @@ func (d *Dispatcher) domainMeasurement(domain string) rank.Lookup {
 	}
 }
 
+// ServedDefaultEnum is the route an objective replaced on `hyctl serve`: what
+// the governor falls back to and whose cache threshold the objective route keeps.
+const ServedDefaultEnum = "STANDARD"
+
+// objectiveMeta names the objective that ordered a task, since its enum is empty.
+func objectiveMeta(opts Options) map[string]any {
+	if opts.Objective == "" {
+		return nil
+	}
+	return map[string]any{"objective": string(opts.Objective)}
+}
+
 // routingDomain is the calibration domain a dispatch routes for: what the
 // caller named, else the one derived from the file it acts on, the same
 // derivation hyctl edit and hyctl review record their outcomes under (#785).
@@ -1735,6 +1835,9 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 		"keep_prob": 1.0,
 		"span_id":   span,
 	}
+	if opts.Objective != "" {
+		dispatchEntry["objective"] = string(opts.Objective)
+	}
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
 	}
@@ -1771,6 +1874,10 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb
+		}
+		// enum is empty on an objective route, so this is what attributes it.
+		if opts.Objective != "" {
+			costEntry["objective"] = string(opts.Objective)
 		}
 		// The key the candidates were ranked on, from the one derivation that
 		// produced it, so a row cannot name a domain the routing did not use.
@@ -1818,6 +1925,9 @@ func dispatchMeta(opts Options, resp *executor.Response) map[string]any {
 	}
 	if opts.Enum != "" {
 		m["enum"] = opts.Enum
+	}
+	if opts.Objective != "" {
+		m["objective"] = string(opts.Objective)
 	}
 	if resp.TokensEstimated {
 		m["tokens_estimated"] = true

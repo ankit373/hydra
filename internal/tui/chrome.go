@@ -24,7 +24,7 @@ func (m Cockpit) header() string {
 	tabs := make([]string, len(ckViewNames))
 	for i, name := range ckViewNames {
 		if i == m.view {
-			tabs[i] = ckChipS.Render(name)
+			tabs[i] = ckActiveTab(name)
 		} else {
 			tabs[i] = ckTabS.Render(name)
 		}
@@ -34,12 +34,12 @@ func (m Cockpit) header() string {
 	if gap < 1 {
 		// Narrow: the chip alone would say nothing about the other views, so
 		// keep the position and the key that moves between them (#630).
-		full = ckChipS.Render(ckViewName(m.view)) +
+		full = ckActiveTab(ckViewName(m.view)) +
 			ckFaintS.Render(fmt.Sprintf(" %d/%d tab", m.view+1, ckViewCount()))
 		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
 	}
 	if gap < 1 {
-		full = ckChipS.Render(ckViewName(m.view))
+		full = ckActiveTab(ckViewName(m.view))
 		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
 	}
 	if gap < 1 {
@@ -87,9 +87,12 @@ func ckBandStyle(pct int) lipgloss.Style {
 func (m Cockpit) statusBar() string {
 	right := m.statusFact()
 	if m.flash != "" {
-		right = ckMidS.Render(m.flash)
+		right = ckMidS.Render(ckSafe(m.flash))
 	} else {
 		right = ckDimS.Render(right)
+	}
+	if m.mouseOff {
+		right = ckMidS.Render("select mode, ctrl+s ends") + ckDimS.Render(" · ") + right
 	}
 	shortcuts := ckAquaS.Render("?") + ckFaintS.Render(" shortcuts")
 
@@ -175,14 +178,22 @@ func ckWordmark(s string) string {
 	return b.String()
 }
 
-// ckLerpHex blends cyan → violet → magenta across t∈[0,1].
-func ckLerpHex(t float64) lipgloss.Color {
-	var a, b [3]int
+// ckLerpHex blends cyan → violet → magenta across t∈[0,1], with a darker
+// ramp of the same hues for light backgrounds.
+func ckLerpHex(t float64) lipgloss.AdaptiveColor {
+	return lipgloss.AdaptiveColor{
+		Dark:  ckLerp3(t, [3]int{0x2A, 0xF0, 0xE0}, [3]int{0x8B, 0x5C, 0xF6}, [3]int{0xE8, 0x52, 0xC8}),
+		Light: ckLerp3(t, [3]int{0x00, 0x70, 0x7A}, [3]int{0x6D, 0x28, 0xD9}, [3]int{0xA2, 0x1C, 0xAF}),
+	}
+}
+
+func ckLerp3(t float64, from, mid, to [3]int) string {
+	a, b := from, mid
 	if t < 0.5 {
-		a, b, t = [3]int{0x2A, 0xF0, 0xE0}, [3]int{0x8B, 0x5C, 0xF6}, t/0.5
+		t = t / 0.5
 	} else {
-		a, b, t = [3]int{0x8B, 0x5C, 0xF6}, [3]int{0xE8, 0x52, 0xC8}, (t-0.5)/0.5
+		a, b, t = mid, to, (t-0.5)/0.5
 	}
 	l := func(x, y int) int { return int(float64(x) + float64(y-x)*t) }
-	return lipgloss.Color(fmt.Sprintf("#%02X%02X%02X", l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2])))
+	return fmt.Sprintf("#%02X%02X%02X", l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2]))
 }

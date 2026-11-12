@@ -12,6 +12,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/pending"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -273,5 +274,33 @@ func TestDecline_UnknownTaskIsNotFound(t *testing.T) {
 	testutil.NewSandbox(t)
 	if err := Decline("nope", ""); !errors.Is(err, pending.ErrNotFound) {
 		t.Errorf("want ErrNotFound, got %v", err)
+	}
+}
+
+// A served request parked on an Ask must resume on what it was parked under:
+// dropping the ceiling on resume lifts a client's spending limit, and dropping
+// the class or temperature answers a different request than the one approved.
+func TestResume_DispatchesWithWhatTheTaskWasParkedUnder(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	askPolicy(t, "gated")
+	warm := 0.3
+	parked := Options{
+		Domain: "classification.banking77", Temperature: &warm, NoCache: true,
+		MaxCostUSD: 0.25, MaxCostSource: "X-Hydra-Max-Cost-USD",
+		RunID: "run-rt", TaskID: "task-rt", Objective: rank.Quality,
+	}
+	if _, err := liveDispatcher(echoHead(t, s, "gated", 95)).Dispatch(context.Background(), "classify", parked); err == nil {
+		t.Fatal("the task was not parked")
+	}
+	q, err := pending.Load("task-rt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resumeOptions(q)
+	if got.Domain != parked.Domain || got.Temperature == nil || *got.Temperature != warm || !got.NoCache ||
+		got.MaxCostUSD != parked.MaxCostUSD || got.MaxCostSource != parked.MaxCostSource || got.AnsweredHead != "gated" ||
+		got.Objective != parked.Objective {
+		t.Errorf("resume would dispatch with Domain=%q Temperature=%s NoCache=%v MaxCostUSD=%v from %q head=%q objective=%q, want what was parked",
+			got.Domain, showTemp(got.Temperature), got.NoCache, got.MaxCostUSD, got.MaxCostSource, got.AnsweredHead, got.Objective)
 	}
 }

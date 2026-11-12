@@ -1,0 +1,10 @@
+{"data": [
+  {"id": "anthropic/claude-opus-4.6", "expiration_date": null,
+   "pricing": {"prompt": "0.000005", "completion": "0.000025"}},
+  {"id": "anthropic/claude-sonnet-4.6", "expiration_date": null,
+   "pricing": {"prompt": "0.000003", "completion": "0.000015"}},
+  {"id": "google/gemini-3.8-flash", "expiration_date": "2026-12-31",
+   "pricing": {"prompt": "0.0000003", "completion": "0.0000025"}},
+  {"id": "openrouter/auto", "expiration_date": null,
+   "pricing": {"prompt": "-1", "completion": "-1"}}
+]}

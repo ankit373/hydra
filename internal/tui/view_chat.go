@@ -20,8 +20,8 @@ import (
 var ckFileRe = regexp.MustCompile(`[\w/]+\.(go|ts|js|py|rs|java)`)
 
 // chatKey handles keys while the chat view is active. Typing always wins on a
-// non-empty input; the letter commands (?, m, a/d/x/o) fire only from an empty
-// one, the same discipline '?' set in phase 1. Pending states are modal.
+// non-empty input; ?, m and e fire only from an empty one and never change a
+// file. Pending states are modal.
 func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.th()
 	switch {
@@ -33,6 +33,8 @@ func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.confirmKey(msg)
 	case t.planWait != nil:
 		return m.planKey(msg)
+	case t.undoAsk != nil:
+		return m.undoAskKey(msg)
 	}
 	switch msg.Type {
 	case tea.KeyShiftTab:
@@ -53,13 +55,11 @@ func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		return m.submit()
 	case tea.KeyBackspace:
-		if n := len(t.input); n > 0 {
-			t.input = t.input[:n-1]
-		}
+		t.input = ckDropLastGrapheme(t.input)
 	case tea.KeySpace:
 		t.input += " "
 	case tea.KeyRunes:
-		// Pasted text is literal input: a paste starting with m/a/d/x/o must
+		// Pasted text is literal input: a paste starting with ? m or e must
 		// type, not fire the letter commands.
 		if t.input == "" && len(msg.Runes) == 1 && !msg.Paste {
 			switch msg.Runes[0] {
@@ -76,13 +76,8 @@ func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					t.scroll = 0 // back to live, the expanded text is at the tail
 					return m, nil
 				}
-			case 'a', 'd', 'x', 'o':
-				if nm, cmd, ok := m.resultKey(msg.Runes[0]); ok {
-					return nm, cmd
-				}
 			}
 		}
-		t.discardArm = false // any typing disarms the pending discard confirm
 		t.input += string(msg.Runes)
 	}
 	return m, nil
@@ -155,6 +150,21 @@ func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 		th.log = append(th.log, ckDimS.Render("unknown command "+t))
 		return m, nil
 	case strings.HasPrefix(lt, "/"):
+		if r, ok := ckResultCmds[lt]; ok {
+			if th.exec != nil {
+				m.flash = t + " waits until the running task finishes · esc cancels it"
+				return m, nil
+			}
+			nm, cmd, handled := m.resultKey(r)
+			if !handled {
+				what := "no finished edit on this thread to act on"
+				if r == 'a' {
+					what = "no isolated worktree on this thread to apply"
+				}
+				th.log = append(th.log, ckDimS.Render(t+": "+what))
+			}
+			return nm, cmd
+		}
 		if ckIsMode(lt[1:]) {
 			m.mode = lt[1:]
 			th.log = append(th.log, ckDimS.Render("mode → ")+ckCyanS.Render(m.mode))
@@ -418,7 +428,9 @@ func (m Cockpit) inputBar(w int) string {
 		body = ckAquaS.Render(string(f)+" ") + ckInkS.Render(t.exec.Stage()) +
 			ckDimS.Render(fmt.Sprintf(" · %.1fs · ", elapsed.Seconds())) + ckFaintS.Render("esc cancels")
 	case t.confirm != nil:
-		body = ckMidS.Render(t.confirm.question)
+		body = ckMidS.Render(ckSafe(t.confirm.question))
+	case t.undoAsk != nil:
+		body = ckMidS.Render(ckSafe(t.undoAsk.question))
 	case t.planWait != nil:
 		body = ckCyanS.Render("plan ready, enter/y runs it · esc discards")
 	case t.queued != nil:
@@ -426,7 +438,7 @@ func (m Cockpit) inputBar(w int) string {
 	case t.input == "":
 		body = ckFaintS.Render("what do you need done?, enter runs it")
 	default:
-		body = ckInkS.Render(t.input) + ckAquaS.Render("▏")
+		body = ckInkS.Render(ckSafe(t.input)) + ckAquaS.Render("▏")
 	}
 	line := chip + " " + body
 

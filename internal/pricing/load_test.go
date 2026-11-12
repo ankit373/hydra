@@ -90,8 +90,8 @@ func TestLoad_NoCacheStillPricesEveryTier(t *testing.T) {
 	}
 	// Models are absent on this first call, the fetch is in the background,
 	// and arrive on the next one.
-	if len(db.Models()) != 0 {
-		t.Errorf("Models() = %v with no cache, want none until the fetch lands", db.Models())
+	if len(db.Models()) != 0 || !db.FetchedAt().IsZero() {
+		t.Errorf("Models() = %v, FetchedAt %v with no cache, want none until the fetch lands", db.Models(), db.FetchedAt())
 	}
 	drainBackgroundFetch(t, "bg/model")
 	if _, ok := Load().ModelPrice("bg/model"); !ok {
@@ -116,6 +116,10 @@ func TestLoad_FreshCacheIsOverlaidAndNotRefetched(t *testing.T) {
 	}
 	if p.InputPerMillion != 3 || p.OutputPerMillion != 15 {
 		t.Errorf("ModelPrice = %+v, want the cached rates", p)
+	}
+	// The fetch date is what dates a benchmark's price snapshot.
+	if age := time.Since(db.FetchedAt()); age < time.Hour || age > time.Hour+time.Minute {
+		t.Errorf("FetchedAt is %v old, want the cache's hour", age)
 	}
 
 	// A fresh cache must not trigger a background refresh. Give any goroutine

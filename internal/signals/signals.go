@@ -55,6 +55,14 @@ type Input struct {
 	// rather than computed, so this package still imports no executor for a
 	// nine-line estimator, and so there is only ever one of them.
 	PromptTokens *int
+
+	// EffectiveContext is budget.EffectiveContext for the head pinned before
+	// routing ran. Nil with no pin, or when that head reported no window.
+	EffectiveContext *int
+
+	// LatencyP95MS is that head's p95 wall-clock latency in ms over the cost
+	// log. Nil with no pin, or when the log has no row for it.
+	LatencyP95MS *float64
 }
 
 // Keyword is a named set of phrases, declared in signals.yaml, that becomes
@@ -111,6 +119,9 @@ const (
 	SigConversationToolLoop = "conversation.tool_loop"
 
 	SigContextPromptTokens = "context.prompt_tokens"
+
+	SigBudgetEffectiveContext = "budget.effective_context"
+	SigLatencyP95MS           = "latency.p95_ms"
 )
 
 // CorpusSignals are the ones whose value costs an embedding call, so a
@@ -147,6 +158,9 @@ func SchemaFor(keywords []Keyword) Schema {
 		SigConversationToolLoop: KindBool,
 
 		SigContextPromptTokens: KindNumber,
+
+		SigBudgetEffectiveContext: KindNumber,
+		SigLatencyP95MS:           KindNumber,
 	}
 	for _, d := range policy.DetectorNames() {
 		sc[PIISignal(d)] = KindBool
@@ -219,6 +233,12 @@ func Collect(in Input, keywords []Keyword) Set {
 	}
 	if in.PromptTokens != nil {
 		vals[SigContextPromptTokens] = float64(*in.PromptTokens)
+	}
+	if in.EffectiveContext != nil {
+		vals[SigBudgetEffectiveContext] = float64(*in.EffectiveContext)
+	}
+	if in.LatencyP95MS != nil {
+		vals[SigLatencyP95MS] = *in.LatencyP95MS
 	}
 
 	lower := strings.ToLower(in.Prompt)

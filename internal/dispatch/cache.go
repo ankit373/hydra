@@ -64,7 +64,7 @@ func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options,
 			vec = v
 		}
 	}
-	out := st.Lookup(cacheQuery(prompt, opts, tier), vec, cache.Threshold(d.cfg, opts.Enum))
+	out := st.Lookup(cacheQuery(prompt, opts, tier), vec, cache.Threshold(d.cfg, cacheEnum(opts)))
 	if out.Found && !d.Allows(out.Hit.Head) {
 		// An answer from a head outside the serve allowlist is one this server may not give.
 		return cache.Outcome{}, true
@@ -77,6 +77,15 @@ func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options,
 // what the run wants on the way in, and what actually answered on the way out.
 func cacheQuery(prompt string, opts Options, tier int) cache.Query {
 	return cache.Query{Prompt: prompt, System: opts.System, MaxTokens: opts.MaxTokens, Tier: tier}
+}
+
+// cacheEnum is the enum whose threshold admits a near match. An objective route
+// keeps the threshold of the pinned default it replaced, never the looser global.
+func cacheEnum(opts Options) string {
+	if opts.Enum == "" && opts.Objective != "" {
+		return ServedDefaultEnum
+	}
+	return opts.Enum
 }
 
 // recordLookup folds a consulted lookup into the tallies. Misses included, or
@@ -92,7 +101,10 @@ func (d *Dispatcher) recordLookup(out cache.Outcome) {
 // rule applied on one side only lets a prompt into the store that can never be
 // served from it, or worse, the other way around.
 func admission(opts Options, class *policy.Classification) cache.Request {
-	req := cache.Request{Pinned: opts.Head != "", NoCache: opts.NoCache, Tools: carriesTools(opts)}
+	// The key does not cover temperature, so a pinned greedy run could be
+	// served a sampled answer, or store one that a later greedy run receives.
+	noCache := opts.NoCache || opts.Temperature != nil
+	req := cache.Request{Pinned: opts.Head != "", NoCache: noCache, Tools: carriesTools(opts)}
 	if class != nil {
 		req.PII, req.Injection = class.PII, class.FlagReason != ""
 	}
