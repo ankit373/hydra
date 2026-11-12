@@ -856,6 +856,7 @@ hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is 
 # Serve the router to anything that speaks OpenAI
 hyctl serve                             # OpenAI-compatible endpoint, loopback only
 #   the `model` field is the routing instruction: `hydra`, `hydra/hard`, `hydra/t4`, or a head id.
+#   `hydra` routes by --objective (quality by default, or cost); `hydra/standard` or --enum STANDARD keeps the old route.
 #   streams as server-sent events, and passes tool calls through on every dialect it speaks.
 hyctl serve --task-class classification.banking77   # class for requests that send no X-Hydra-Task-Class
 #   X-Hydra-Task-Class routes on that class (and enables temperature); X-Hydra-Max-Cost-USD only lowers the ceiling.
