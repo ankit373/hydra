@@ -508,7 +508,7 @@ func TestRemember_DoesNotStoreATruncatedAnswer(t *testing.T) {
 		Head:     provider.Head{ID: "h1", Name: "h1", CapScore: 90},
 		Response: &executor.Response{Output: "SIMPLE, MOD", Truncated: true},
 	}
-	d.remember(context.Background(), task, Options{}, &policy.Classification{}, r, 0)
+	d.remember(context.Background(), task, Options{}, &policy.Classification{}, r)
 	if n := st.Stat().Entries; n != 0 {
 		t.Errorf("%d entries after a capped answer, want 0", n)
 	}
@@ -516,7 +516,7 @@ func TestRemember_DoesNotStoreATruncatedAnswer(t *testing.T) {
 	// The control: the same answer uncapped is exactly what the cache is for,
 	// so the refusal has to be about the flag and nothing else.
 	r.Response.Truncated = false
-	d.remember(context.Background(), task, Options{}, &policy.Classification{}, r, 0)
+	d.remember(context.Background(), task, Options{}, &policy.Classification{}, r)
 	if n := st.Stat().Entries; n != 1 {
 		t.Errorf("%d entries after a complete answer, want 1", n)
 	}

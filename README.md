@@ -856,6 +856,8 @@ hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is 
 hyctl serve                             # OpenAI-compatible endpoint, loopback only
 #   the `model` field is the routing instruction: `hydra`, `hydra/hard`, `hydra/t4`, or a model id.
 #   `hydra` takes --enum (STANDARD); --objective quality|cost or X-Hydra-Objective opts into routing by objective.
+#   a class with [[serve.verifiers]] in config.toml (class, kind = "match", id, then a labels file or a pattern)
+#   has each buffered answer on an objective route (opt-in) checked, and escalates to a model measured better in that class, at most --max-escalations (2).
 #   streams as server-sent events, and passes tool calls through on every dialect it speaks.
 hyctl serve --task-class classification.banking77   # class for requests that send no X-Hydra-Task-Class
 #   X-Hydra-Task-Class routes on that class (and enables temperature); X-Hydra-Max-Cost-USD only lowers the ceiling.

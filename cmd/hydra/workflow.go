@@ -107,16 +107,13 @@ func (r dispatchRouter) Route(ctx context.Context, prompt, enum string) (workflo
 		}
 		return workflow.StepResult{}, err
 	}
-	out := workflow.StepResult{
-		Output: res.Output,
-		Head:   res.Head.ID,
-		Model:  res.Head.Name,
-		Tier:   rank.UITier(res.Head),
-	}
-	if res.Response != nil {
-		out.CostUSD = r.d.EstimateCost(out.Tier, res.Response.InputTokens, res.Response.OutputTokens)
-	}
-	return out, nil
+	return workflow.StepResult{
+		Output:  res.Output,
+		Head:    res.Head.ID,
+		Model:   res.Head.Name,
+		Tier:    rank.UITier(res.Head),
+		CostUSD: res.CostUSD,
+	}, nil
 }
 
 func cmdWorkflow() *cobra.Command {

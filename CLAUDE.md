@@ -89,6 +89,8 @@ internal/serve/         ← OpenAI-compatible endpoint in front of the router, s
                           `POST /v1/decisions` and `/v1/systemone`, each answered in its own shape.
 internal/decide/        ← Routes one decision: the first source answers alone when it clears the
                           target, otherwise the SPRT asks on. Logs a `KindDecision` span per answer.
+                          `Cascade` is the chat path's twin: a served class's answer is checked by its
+                          `[[serve.verifiers]]` and a head measured in class to beat it asked, on the same rules.
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
