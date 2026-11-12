@@ -137,14 +137,7 @@ func TestRender_NamesTheMissingBase(t *testing.T) {
 // The suite must route the same way twice and reach every SPRT outcome it was
 // written for, or a diff of two runs reports noise as a regression.
 func TestRunSuite_IsDeterministicAndExercisesEveryPath(t *testing.T) {
-	saved := os.Environ()
-	t.Cleanup(func() {
-		os.Clearenv()
-		for _, kv := range saved {
-			k, v, _ := strings.Cut(kv, "=")
-			_ = os.Setenv(k, v)
-		}
-	})
+	before := os.Environ()
 	first, err := runSuite(context.Background(), suiteJSON)
 	if err != nil {
 		t.Fatal(err)
@@ -152,6 +145,9 @@ func TestRunSuite_IsDeterministicAndExercisesEveryPath(t *testing.T) {
 	second, err := runSuite(context.Background(), suiteJSON)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if after := os.Environ(); !reflect.DeepEqual(before, after) {
+		t.Error("runSuite left the environment changed, so the next run starts from a broken one")
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("two runs disagree:\n%+v\n%+v", first, second)

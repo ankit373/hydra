@@ -16,17 +16,18 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	// The same discovery hyctl registers; env and port find nothing in the sandbox.
+	"github.com/ankit373/hydra/internal/policy"
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 	_ "github.com/ankit373/hydra/internal/provider/env"
 	_ "github.com/ankit373/hydra/internal/provider/port"
-	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/swarm"
@@ -95,6 +96,7 @@ func runSuite(ctx context.Context, raw []byte) (Report, error) {
 		return Report{}, err
 	}
 	defer os.RemoveAll(root)
+	defer restoreEnv(os.Environ())
 	if err := sandbox(root, s); err != nil {
 		return Report{}, err
 	}
@@ -124,15 +126,16 @@ func runSuite(ctx context.Context, raw []byte) (Report, error) {
 }
 
 func sandbox(root string, s Suite) error {
-	home, hydra, bin := filepath.Join(root, "home"), filepath.Join(root, "hydra"), filepath.Join(root, "bin")
-	for _, dir := range []string{home, hydra, bin} {
+	home, hydra, bin, tmp := filepath.Join(root, "home"), filepath.Join(root, "hydra"),
+		filepath.Join(root, "bin"), filepath.Join(root, "tmp")
+	for _, dir := range []string{home, hydra, bin, tmp} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 	}
 	// Windows cannot open a socket without SYSTEMROOT, and it names no credential.
 	env := map[string]string{"HOME": home, "USERPROFILE": home, "HYDRA_HOME": hydra, "PATH": bin,
-		"SYSTEMROOT": os.Getenv("SYSTEMROOT")}
+		"TMPDIR": tmp, "TMP": tmp, "TEMP": tmp, "SYSTEMROOT": os.Getenv("SYSTEMROOT")}
 	os.Clearenv()
 	for k, v := range deadAddresses {
 		env[k] = v
@@ -156,6 +159,15 @@ func sandbox(root string, s Suite) error {
 		return err
 	}
 	return seed(s.Calibration)
+}
+
+// restoreEnv puts the caller's environment back, so a second run starts clean.
+func restoreEnv(saved []string) {
+	os.Clearenv()
+	for _, kv := range saved {
+		k, v, _ := strings.Cut(kv, "=")
+		_ = os.Setenv(k, v)
+	}
 }
 
 // fakeOllama answers discovery on loopback, so the suite has local heads at
