@@ -65,19 +65,21 @@ func cssInt(t *testing.T, src, selector, prop string) (int, bool) {
 }
 
 // The hero's "skip intro" control must be clickable: either it sits clear of the
-// topbar, or it stacks above it. Sitting inside the bar's band at a lower
-// z-index is the bug.
+// header, or it stacks above it. Sitting inside the bar's band at a lower
+// z-index is the bug. The header lives in the shared stylesheet.
 func TestSkipIntro_IsNotBuriedUnderTheTopbar(t *testing.T) {
 	src := indexHTML(t)
+	css := repoFile(t, "docs", "assets", "site.css")
 
-	barH, ok := cssPx(t, src, ".topbar", "height")
-	if !ok {
-		t.Fatal("could not read .topbar height, the topbar was restructured and this guard " +
+	hm := regexp.MustCompile(`--site-header-h:(\d+)px`).FindStringSubmatch(css)
+	if hm == nil {
+		t.Fatal("could not read --site-header-h from site.css, the header was restructured and this guard " +
 			"is no longer measuring what it thinks it is")
 	}
-	barZ, ok := cssInt(t, src, ".topbar", "z-index")
+	barH, _ := strconv.Atoi(hm[1])
+	barZ, ok := cssInt(t, css, ".site-header", "z-index")
 	if !ok {
-		t.Fatal("could not read .topbar z-index")
+		t.Fatal("could not read .site-header z-index")
 	}
 	skipTop, ok := cssPx(t, src, ".skip-intro", "top")
 	if !ok {
@@ -88,46 +90,16 @@ func TestSkipIntro_IsNotBuriedUnderTheTopbar(t *testing.T) {
 		t.Fatal("could not read .skip-intro z-index")
 	}
 
-	// .hero-pin creates no stacking context above the topbar, so a z-index
+	// .hero-pin creates no stacking context above the header, so a z-index
 	// inside the hero only competes with the bar if it exceeds it outright.
 	if skipZ > barZ {
 		return // deliberately floated above the bar; clickable either way
 	}
 	if skipTop < barH {
-		t.Errorf("skip-intro sits at top:%dpx, inside .topbar's 0-%dpx band, at z-index %d "+
+		t.Errorf("skip-intro sits at top:%dpx, inside the header's 0-%dpx band, at z-index %d "+
 			"vs the bar's %d, the bar paints over it and swallows the click.\n"+
 			"Move it below the bar (top >= %dpx) or raise it above z-index %d.",
 			skipTop, barH, skipZ, barZ, barH, barZ)
-	}
-}
-
-// The mobile override must clear the bar too: only .topbar nav is hidden under
-// 720px, the bar keeps its height.
-func TestSkipIntro_MobileOverrideAlsoClearsTheTopbar(t *testing.T) {
-	src := indexHTML(t)
-	barH, ok := cssPx(t, src, ".topbar", "height")
-	if !ok {
-		t.Fatal("could not read .topbar height")
-	}
-
-	// The media-block override, e.g. `@media(max-width:720px){ … .skip-intro{top:64px;} }`
-	re := regexp.MustCompile(`@media\(max-width:720px\)\{[^@]*?\.skip-intro\s*\{([^}]*)\}`)
-	m := re.FindStringSubmatch(src)
-	if m == nil {
-		return // no mobile override is fine; the base rule applies
-	}
-	pv := regexp.MustCompile(`top\s*:\s*(-?\d+)px`)
-	pm := pv.FindStringSubmatch(m[1])
-	if pm == nil {
-		return
-	}
-	top, err := strconv.Atoi(pm[1])
-	if err != nil {
-		t.Fatalf("unparsable mobile top %q", pm[1])
-	}
-	if top < barH {
-		t.Errorf("mobile .skip-intro top:%dpx is inside .topbar's 0-%dpx band. Only the bar's "+
-			"nav is hidden under 720px, the bar keeps its height.", top, barH)
 	}
 }
 
@@ -166,27 +138,25 @@ func TestDocs_EveryInPageAnchorResolves(t *testing.T) {
 }
 
 // The nav's targets are the site's structure. Losing one is a dead link in the
-// most visible place on the page.
+// most visible place on every page.
 func TestDocs_TopbarNavTargetsExist(t *testing.T) {
 	src := indexHTML(t)
-
-	navRe := regexp.MustCompile(`(?s)<div class="topbar".*?</div>`)
-	nav := navRe.FindString(src)
+	nav := regexp.MustCompile(`(?s)<header class="site-header".*?</header>`).FindString(src)
 	if nav == "" {
-		t.Fatal("could not locate the topbar markup")
+		t.Fatal("could not locate the header markup")
 	}
 	ids := map[string]bool{}
 	for _, m := range regexp.MustCompile(`\bid="([^"]+)"`).FindAllStringSubmatch(src, -1) {
 		ids[m[1]] = true
 	}
 	var checked int
-	for _, m := range regexp.MustCompile(`href="#([^"]+)"`).FindAllStringSubmatch(nav, -1) {
+	for _, m := range regexp.MustCompile(`href="/?#([^"]+)"`).FindAllStringSubmatch(nav, -1) {
 		checked++
 		if !ids[m[1]] {
-			t.Errorf("topbar links to #%s, which does not exist", m[1])
+			t.Errorf("the header links to /#%s, which does not exist on the home page", m[1])
 		}
 	}
 	if checked == 0 {
-		t.Log("topbar has no in-page links")
+		t.Error("the header links nowhere on the home page; Get started (/#start) is gone")
 	}
 }

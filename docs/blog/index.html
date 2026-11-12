@@ -33,131 +33,117 @@
   </script>
 
 <link rel="stylesheet" href="../assets/tokens.css">
-<link rel="stylesheet" href="../assets/page-aliases.css">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js"></script>
 <style>
 :root{
-  color-scheme:dark;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-  --maxw:1180px;
   /* per-topic accent, shared by the filter chips and the cards they govern */
-  --t-security:var(--magenta);--t-competitive:var(--violet);--t-frontier:var(--cyan);--t-engineering:var(--cheap);
+  --t-security:var(--hy-color-brand-end);--t-competitive:var(--hy-color-accent-secondary);
+  --t-frontier:var(--hy-color-accent-strong);--t-engineering:var(--hy-color-cost-low);
 }
-@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("/fonts/SpaceGrotesk.woff2") format("woff2");}
-@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("/fonts/JetBrainsMono.woff2") format("woff2");}
-*{box-sizing:border-box;}
-html{scroll-behavior:smooth;}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-h1,h2{margin:0;text-wrap:balance;font-family:"Space Grotesk",var(--sans);}
-a{color:inherit;text-decoration:none;}
-::selection{background:rgba(0,230,195,.28);color:#fff;}
-.mono{font-family:var(--mono);}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
+h1,h2{font-family:var(--site-display);}
 
-.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
-  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
-  border-bottom:1px solid var(--line);}
-.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
-.topbar .grow{flex:1;}
-.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
-.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
-
-.hero{position:relative;padding-top:64px;padding-bottom:8px;overflow:hidden;}
+.hero{position:relative;padding-top:var(--hy-space-16);padding-bottom:var(--hy-space-2);overflow:hidden;}
 .hero::before{content:"";position:absolute;inset:-30% -10% auto;height:440px;z-index:0;
-  background:radial-gradient(50% 50% at 75% 10%,rgba(139,92,246,.20),transparent 70%),
-             radial-gradient(40% 40% at 10% 15%,rgba(42,240,224,.12),transparent 70%);
+  background:radial-gradient(50% 50% at 75% 10%,color-mix(in srgb,var(--hy-color-brand-mid) 20%,transparent),transparent 70%),
+             radial-gradient(40% 40% at 10% 15%,color-mix(in srgb,var(--hy-color-accent-strong) 12%,transparent),transparent 70%);
   filter:blur(6px);pointer-events:none;}
 .hero>*{position:relative;z-index:1;}
-.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--aqua);margin-bottom:16px;}
-.hero h1{font-size:clamp(34px,6vw,58px);line-height:1.04;letter-spacing:-.5px;font-weight:750;}
-.hero p{font-size:17px;color:var(--dim);max-width:620px;margin:18px 0 0;}
+.hero h1{font-size:clamp(var(--hy-font-size-3xl),6vw,58px);line-height:1.04;letter-spacing:-.5px;font-weight:750;}
+.hero p{font-size:var(--hy-font-size-lg);color:var(--hy-color-text-muted);max-width:620px;margin:var(--hy-space-4) 0 0;}
 
-/* ── ticker: a visible claim that every post below is backed by a number,
-   before the reader has opened any of them ── */
-.ticker{margin-top:40px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
-  padding:14px 0;overflow:hidden;position:relative;}
+/* ticker: every post below is backed by a number, shown before any is opened */
+.ticker{margin-top:var(--hy-space-8);border-top:1px solid var(--hy-color-border-subtle);border-bottom:1px solid var(--hy-color-border-subtle);
+  padding:var(--hy-space-3) 0;overflow:hidden;position:relative;}
 .ticker::before,.ticker::after{content:"";position:absolute;top:0;bottom:0;width:60px;z-index:2;pointer-events:none;}
-.ticker::before{left:0;background:linear-gradient(90deg,var(--bg),transparent);}
-.ticker::after{right:0;background:linear-gradient(270deg,var(--bg),transparent);}
+.ticker::before{left:0;background:linear-gradient(90deg,var(--hy-color-surface-base),transparent);}
+.ticker::after{right:0;background:linear-gradient(270deg,var(--hy-color-surface-base),transparent);}
 .ticker-track{display:flex;gap:40px;white-space:nowrap;width:max-content;animation:scroll-left 42s linear infinite;}
-.ticker-track span{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:var(--faint);display:inline-flex;align-items:center;gap:10px;}
-.ticker-track span b{color:var(--ink);font-weight:700;}
-.ticker-track span i{width:4px;height:4px;border-radius:50%;background:var(--line-2);}
+.ticker-track span{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);letter-spacing:.04em;
+  color:var(--hy-color-text-subtle);display:inline-flex;align-items:center;gap:var(--hy-space-2);}
+.ticker-track span b{color:var(--hy-color-text-default);font-weight:700;}
+.ticker-track span i{width:4px;height:4px;border-radius:50%;background:var(--hy-color-border-strong);}
 @keyframes scroll-left{from{transform:translateX(0);}to{transform:translateX(-50%);}}
 @media(prefers-reduced-motion:reduce){.ticker-track{animation:none;}}
 
-/* ── topic filter chips ── */
-.filters{display:flex;flex-wrap:wrap;gap:10px;padding:32px 0 8px;}
-.chip{font-family:var(--mono);font-size:12px;letter-spacing:.03em;padding:7px 14px;border-radius:20px;
-  border:1px solid var(--line);background:rgba(20,22,44,.5);color:var(--dim);cursor:pointer;
-  transition:.15s;display:inline-flex;align-items:center;gap:7px;}
-.chip i{width:7px;height:7px;border-radius:50%;background:var(--faint);}
-.chip:hover{border-color:var(--line-2);color:var(--ink);}
-.chip.active{color:var(--ink);border-color:var(--chip-c,var(--aqua));background:color-mix(in srgb,var(--chip-c,var(--aqua)) 12%,transparent);}
-.chip.active i{background:var(--chip-c,var(--aqua));box-shadow:0 0 8px var(--chip-c,var(--aqua));}
+/* topic filter chips; they need script, so without it every post simply shows */
+.filters{display:flex;flex-wrap:wrap;gap:var(--hy-space-2);padding:var(--hy-space-8) 0 var(--hy-space-2);}
+html:not(.js) .filters{display:none;}
+.chip{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.03em;min-height:32px;
+  padding:var(--hy-space-1) var(--hy-space-3);border-radius:20px;border:1px solid var(--hy-color-border-subtle);
+  background:color-mix(in srgb,var(--hy-color-surface-overlay) 50%,transparent);color:var(--hy-color-text-muted);cursor:pointer;
+  transition:color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast);
+  display:inline-flex;align-items:center;gap:var(--hy-space-2);}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--hy-color-text-subtle);}
+.chip:hover{border-color:var(--hy-color-border-strong);color:var(--hy-color-text-default);}
+.chip[aria-pressed="true"]{color:var(--hy-color-text-default);border-color:var(--chip-c,var(--hy-color-accent-default));
+  background:color-mix(in srgb,var(--chip-c,var(--hy-color-accent-default)) 12%,transparent);}
+.chip[aria-pressed="true"] i{background:var(--chip-c,var(--hy-color-accent-default));box-shadow:0 0 8px var(--chip-c,var(--hy-color-accent-default));}
 
-/* ── featured card ── */
-.featured{display:block;margin-top:28px;padding:32px;border-radius:20px;position:relative;overflow:hidden;
-  border:1px solid var(--line-2);background:linear-gradient(165deg,rgba(32,22,54,.7),rgba(10,11,22,.9));
-  box-shadow:0 30px 90px rgba(0,0,0,.45);transition:border-color .2s,transform .2s;}
-.featured:hover{border-color:var(--aqua);transform:translateY(-2px);}
-.featured .fk{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--aqua);margin-bottom:14px;}
-.featured .ftitle{font-size:clamp(22px,3.4vw,32px);font-weight:750;letter-spacing:-.3px;font-family:"Space Grotesk",var(--sans);max-width:760px;}
-.featured .fdek{color:var(--dim);font-size:15.5px;margin-top:14px;max-width:680px;}
-.featured .fmeta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-top:18px;display:flex;flex-wrap:wrap;gap:4px 12px;}
-.kpis{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px;}
-.kpi{border:1px solid var(--line);border-radius:12px;padding:12px 16px;background:rgba(6,7,15,.4);min-width:110px;}
-.kpi .n{font-family:var(--mono);font-weight:700;font-size:20px;color:var(--ink);}
-.kpi .t{font-size:11px;color:var(--faint);margin-top:2px;}
-.featured .read{margin-top:20px;font-family:var(--mono);font-size:12.5px;color:var(--aqua);display:flex;align-items:center;gap:6px;}
+/* featured card */
+.featured{display:block;margin-top:var(--hy-space-6);padding:var(--hy-space-8);border-radius:20px;position:relative;overflow:hidden;
+  border:1px solid var(--hy-color-border-strong);
+  background:linear-gradient(165deg,color-mix(in srgb,var(--hy-color-brand-mid) 14%,var(--hy-color-surface-overlay)),var(--hy-color-surface-raised));
+  box-shadow:0 30px 90px color-mix(in srgb,var(--hy-color-surface-base) 45%,transparent);
+  transition:border-color var(--hy-motion-duration-base),transform var(--hy-motion-duration-base);}
+.featured:hover{border-color:var(--hy-color-accent-default);transform:translateY(-2px);}
+.featured .fk{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--hy-color-accent-default);margin-bottom:var(--hy-space-3);}
+.featured .ftitle{font-size:clamp(var(--hy-font-size-xl),3.4vw,var(--hy-font-size-2xl));font-weight:750;letter-spacing:-.3px;
+  font-family:var(--site-display);max-width:760px;}
+.featured .fdek{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);margin:var(--hy-space-3) 0 0;max-width:680px;}
+.featured .fmeta{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);
+  margin-top:var(--hy-space-4);display:flex;flex-wrap:wrap;gap:var(--hy-space-1) var(--hy-space-3);}
+.kpis{display:flex;flex-wrap:wrap;gap:var(--hy-space-3);margin-top:var(--hy-space-6);}
+.kpi{border:1px solid var(--hy-color-border-subtle);border-radius:12px;padding:var(--hy-space-3) var(--hy-space-4);
+  background:color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent);min-width:110px;}
+.kpi .n{font-family:var(--hy-font-family-mono);font-weight:700;font-size:var(--hy-font-size-xl);color:var(--hy-color-text-default);}
+.kpi .t{font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-top:2px;}
+.featured .read{margin-top:var(--hy-space-4);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);
+  color:var(--hy-color-accent-default);display:flex;align-items:center;gap:var(--hy-space-1);}
 
-/* ── card grid ── */
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;padding:28px 0 90px;}
-@media(max-width:760px){.grid{grid-template-columns:1fr;}}
-.card{display:flex;flex-direction:column;padding:24px;border-radius:16px;border:1px solid var(--line);
-  background:rgba(14,15,28,.55);border-top:3px solid var(--card-c,var(--line-2));
-  transition:transform .18s,border-color .18s,box-shadow .18s;}
-.card:hover{transform:translateY(-3px);border-color:var(--line-2);
-  box-shadow:0 16px 46px rgba(0,0,0,.4),0 0 0 1px var(--card-c,transparent);}
-.card:hover .title{color:var(--card-c,var(--aqua));}
-.card .meta{font-family:var(--mono);font-size:11px;color:var(--faint);margin-bottom:10px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;}
-.card .topic{font-weight:700;color:var(--card-c,var(--aqua));text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;}
-.card .title{font-size:19px;font-weight:700;letter-spacing:-.2px;line-height:1.3;transition:color .15s;}
-.card .dek{color:var(--dim);font-size:14px;margin-top:10px;flex:1;}
-.card .foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);}
-.card .read{font-family:var(--mono);font-size:12px;color:var(--card-c,var(--aqua));}
-.card .evid{font-family:var(--mono);font-size:10.5px;color:var(--faint);display:flex;gap:7px;}
+/* card grid */
+.post-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--hy-space-4);padding:var(--hy-space-6) 0 var(--hy-space-16);}
+@media(max-width:760px){.post-grid{grid-template-columns:1fr;}}
+.post-card{display:flex;flex-direction:column;padding:var(--hy-space-6);border-radius:16px;border:1px solid var(--hy-color-border-subtle);
+  background:color-mix(in srgb,var(--hy-color-surface-card) 55%,transparent);border-top:3px solid var(--card-c,var(--hy-color-border-strong));
+  transition:transform var(--hy-motion-duration-base),border-color var(--hy-motion-duration-base),box-shadow var(--hy-motion-duration-base);}
+.post-card:hover{transform:translateY(-3px);border-color:var(--hy-color-border-strong);border-top-color:var(--card-c,var(--hy-color-border-strong));
+  box-shadow:0 16px 46px color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent),0 0 0 1px var(--card-c,transparent);}
+.post-card:hover .title{color:var(--card-c,var(--hy-color-accent-default));}
+.post-card .meta{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);
+  margin-bottom:var(--hy-space-2);display:flex;flex-wrap:wrap;gap:var(--hy-space-1) var(--hy-space-2);align-items:center;}
+.post-card .topic{font-weight:700;color:var(--card-c,var(--hy-color-accent-default));text-transform:uppercase;letter-spacing:.06em;}
+.post-card .title{font-size:var(--hy-font-size-lg);font-weight:700;letter-spacing:-.2px;line-height:1.3;
+  transition:color var(--hy-motion-duration-fast);}
+.post-card .dek{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-md);margin:var(--hy-space-2) 0 0;flex:1;}
+.post-card .foot{display:flex;align-items:center;justify-content:space-between;gap:var(--hy-space-2);margin-top:var(--hy-space-4);
+  padding-top:var(--hy-space-3);border-top:1px solid var(--hy-color-border-subtle);}
+.post-card .read{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--card-c,var(--hy-color-accent-default));}
+.post-card .evid{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);display:flex;gap:var(--hy-space-2);}
 .hidden{display:none !important;}
-
-footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
-.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-.foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
-.foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
-.foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <a class="mark" href="/">HYDRA</a>
-  <span class="pill">blog</span>
-  <span class="grow"></span>
-  <a class="ghost" href="/">← home</a>
-</div>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header" id="topbar">
+  <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+  <span class="site-tag">blog</span>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <nav class="site-nav" id="site-nav" aria-label="Main">
+    <a href="/#start">Get started</a>
+    <a href="/docs.html">Docs</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/first-principles.html">First principles</a>
+    <a href="/blog/" aria-current="page">Blog</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
+  </nav>
+  <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
+</header>
 
-<header class="hero wrap">
+<main id="main">
+<div class="hero wrap">
   <div class="eyebrow">research notes</div>
   <h1>Field notes from<br><span class="grad">building Hydra.</span></h1>
   <p>Where AI is actually heading, checked against real papers and our own roadmap, sources and math shown, not just conclusions.</p>
@@ -184,16 +170,16 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 <!-- /GENERATED:TICKER -->
     </div>
   </div>
-</header>
+</div>
 
-<main class="wrap">
-  <div class="filters" id="filters">
-    <button class="chip active" data-topic="all"><i></i>All posts</button>
+<div class="wrap">
+  <div class="filters" id="filters" role="group" aria-label="Filter posts by topic">
+    <button class="chip" type="button" data-topic="all" aria-pressed="true"><i></i>All posts</button>
 <!-- GENERATED:FILTERS -->
-    <button class="chip" data-topic="security" style="--chip-c:var(--t-security)"><i></i>Security research</button>
-    <button class="chip" data-topic="competitive" style="--chip-c:var(--t-competitive)"><i></i>Competitive research</button>
-    <button class="chip" data-topic="frontier" style="--chip-c:var(--t-frontier)"><i></i>Frontier AI</button>
-    <button class="chip" data-topic="engineering" style="--chip-c:var(--t-engineering)"><i></i>Engineering</button>
+    <button class="chip" type="button" data-topic="security" aria-pressed="false" style="--chip-c:var(--t-security)"><i></i>Security research</button>
+    <button class="chip" type="button" data-topic="competitive" aria-pressed="false" style="--chip-c:var(--t-competitive)"><i></i>Competitive research</button>
+    <button class="chip" type="button" data-topic="frontier" aria-pressed="false" style="--chip-c:var(--t-frontier)"><i></i>Frontier AI</button>
+    <button class="chip" type="button" data-topic="engineering" aria-pressed="false" style="--chip-c:var(--t-engineering)"><i></i>Engineering</button>
 <!-- /GENERATED:FILTERS -->
   </div>
 
@@ -213,33 +199,33 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
   </a>
 <!-- /GENERATED:FEATURED -->
 
-  <div class="grid" id="grid">
+  <div class="post-grid" id="grid">
 <!-- GENERATED:GRID -->
-    <a class="card" data-topic="competitive" style="--card-c:var(--t-competitive)" href="/blog/jev-already-inbuilt.html">
+    <a class="post-card" data-topic="competitive" style="--card-c:var(--t-competitive)" href="/blog/jev-already-inbuilt.html">
       <div class="meta"><span class="topic">Competitive research</span><span>·</span><span>Oct 3, 2026</span></div>
       <div class="title">TypeSafe's Jev Drew Offers at a $10B Valuation. We Shipped the Same Idea in September.</div>
       <p class="dek">A "decision model" that answers typed questions with calibrated confidence instead of generating text. Hydra's own trust, entity and classify packages already cover the same ground, measured against a held-out probe set, not a vendor benchmark.</p>
       <div class="foot"><span class="read">12 min read →</span><span class="evid">⊢5 ▣3 ○4</span></div>
     </a>
-    <a class="card" data-topic="security" style="--card-c:var(--t-security)" href="/blog/trusted-because-of-where-it-sat.html">
+    <a class="post-card" data-topic="security" style="--card-c:var(--t-security)" href="/blog/trusted-because-of-where-it-sat.html">
       <div class="meta"><span class="topic">Security research</span><span>·</span><span>Oct 2, 2026</span></div>
       <div class="title">Trusted Because of Where It Sat, Not Because of What It Did</div>
       <p class="dek">Two remote code executions in the most deployed LLM gateway, six model incidents at OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two answers came back Partial.</p>
       <div class="foot"><span class="read">11 min read →</span><span class="evid">every CVE checked at source</span></div>
     </a>
-    <a class="card" data-topic="engineering" style="--card-c:var(--t-engineering)" href="/blog/a-test-that-cannot-fail.html">
+    <a class="post-card" data-topic="engineering" style="--card-c:var(--t-engineering)" href="/blog/a-test-that-cannot-fail.html">
       <div class="meta"><span class="topic">Engineering</span><span>·</span><span>Sep 18, 2026</span></div>
       <div class="title">A Test That Passes Under the Bug It Exists to Catch</div>
       <p class="dek">A green test means the behaviour is correct, or it means the test cannot tell the difference. Five that were asserting nothing, three of them mine, and the habit that catches them.</p>
       <div class="foot"><span class="read">7 min read →</span><span class="evid">five real examples</span></div>
     </a>
-    <a class="card" data-topic="engineering" style="--card-c:var(--t-engineering)" href="/blog/twenty-four-green-builds.html">
+    <a class="post-card" data-topic="engineering" style="--card-c:var(--t-engineering)" href="/blog/twenty-four-green-builds.html">
       <div class="meta"><span class="topic">Engineering</span><span>·</span><span>Sep 9, 2026</span></div>
       <div class="title">Twenty-Four Green Builds That Shipped Nothing</div>
       <p class="dek">Our release channel was dead for twenty-four consecutive builds while every pull request stayed green. The mechanism is boring, general, and probably in your pipeline too.</p>
       <div class="foot"><span class="read">8 min read →</span><span class="evid">every number measured</span></div>
     </a>
-    <a class="card" data-topic="frontier" style="--card-c:var(--t-frontier)" href="/blog/the-diagnosis-is-unanimous.html">
+    <a class="post-card" data-topic="frontier" style="--card-c:var(--t-frontier)" href="/blog/the-diagnosis-is-unanimous.html">
       <div class="meta"><span class="topic">Frontier AI</span><span>·</span><span>Aug 9, 2026</span></div>
       <div class="title">The Diagnosis Is Unanimous. The Cure Isn't.</div>
       <p class="dek">A blind read of the AI research frontier, the papers, the arguments, the money, with the actual math shown. Checked against Hydra's own roadmap only at the very end.</p>
@@ -247,18 +233,22 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     </a>
 <!-- /GENERATED:GRID -->
   </div>
+</div>
 </main>
 
-<footer>
-  <div class="foot">
+<footer class="site-footer">
+  <div class="wrap">
     <div>
-      <a class="mark" href="/">HYDRA</a>
-      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it.</p>
+      <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Free and open source, MIT licensed.</p>
     </div>
-    <nav>
+    <nav aria-label="Footer">
       <a href="/">Home</a>
       <a href="/docs.html">Docs</a>
+      <a href="/app.html">Desktop app</a>
+      <a href="/pricing.html">Pricing</a>
       <a href="/first-principles.html">First principles</a>
+      <a href="/blog/">Blog</a>
       <a href="https://github.com/ankit373/hydra">GitHub</a>
       <a href="/llms.txt">llms.txt</a>
     </nav>
@@ -267,16 +257,14 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 
 <script>
 (function(){
-  var chips = document.querySelectorAll('.chip');
-  var cards = document.querySelectorAll('[data-topic]:not(.chip)');
+  var chips = document.querySelectorAll('#filters .chip');
+  var posts = document.querySelectorAll('#main [data-topic]:not(.chip)');
   chips.forEach(function(chip){
     chip.addEventListener('click', function(){
-      chips.forEach(function(c){ c.classList.remove('active'); });
-      chip.classList.add('active');
+      chips.forEach(function(c){ c.setAttribute('aria-pressed', String(c === chip)); });
       var topic = chip.getAttribute('data-topic');
-      cards.forEach(function(card){
-        var show = topic === 'all' || card.getAttribute('data-topic') === topic;
-        card.classList.toggle('hidden', !show);
+      posts.forEach(function(p){
+        p.classList.toggle('hidden', topic !== 'all' && p.getAttribute('data-topic') !== topic);
       });
     });
   });

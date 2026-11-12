@@ -1,0 +1,61 @@
+/* A blog post printed as a research paper: serif type, a letterhead and a numbered footer.
+   A printed page is black on white whatever the screen theme, so this is the one stylesheet
+   with fixed colours; the colour guard exempts this file by name (docs_tokens_test.go).
+   Pages link it last, after their own <style>, with media="print", so plain source order
+   wins over the screen rules instead of an !important contest across files. */
+
+@media print {
+  @page{size:A4;margin:20mm 18mm 22mm;
+    @bottom-center{content:"Hydra Research \2014  page " counter(page) " of " counter(pages);
+      font-family:"Courier New",monospace;font-size:8pt;color:#555;}}
+
+  /* The screen tokens, re-pointed at ink on paper. :is() lifts this over tokens.css's theme selectors. */
+  :root:is([data-theme],:not([data-theme])){color-scheme:light;
+    --hy-color-surface-base:#fff;--hy-color-surface-raised:#fff;--hy-color-surface-card:#f6f6f8;
+    --hy-color-surface-overlay:#f6f6f8;
+    --hy-color-border-subtle:#d8d8e2;--hy-color-border-default:#d8d8e2;--hy-color-border-strong:#b9b9ca;
+    --hy-color-text-default:#131320;--hy-color-text-muted:#44445a;--hy-color-text-subtle:#6b6b80;
+    --hy-color-accent-default:#0a6b76;--hy-color-accent-strong:#0a6b76;--hy-color-accent-secondary:#5b3fae;
+    --hy-color-brand-start:#0a6b76;--hy-color-brand-mid:#5b3fae;--hy-color-brand-end:#9c2d7a;
+    --hy-color-status-success:#1e7a46;--hy-color-status-warning:#8a5a00;--hy-color-status-danger:#9c1d2e;}
+
+  html,body{background:#fff;color:var(--hy-color-text-default);font-size:11.5pt;}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none !important;text-shadow:none !important;filter:none !important;}
+  .site-header,.skip-link,.pdf-btn,.progress-bar,.rail,.series,.page-toc,.legend{display:none !important;}
+  a{color:inherit;text-decoration:underline;text-decoration-color:var(--hy-color-border-strong);}
+  .wrap,article,main{max-width:none !important;}
+  article{padding:0 !important;}
+  .pillar{border-top:1px solid var(--hy-color-border-subtle) !important;padding:16pt 0 !important;}
+  .pillar.first{border-top:none !important;}
+  h1,h2,h3{font-family:Georgia,"Times New Roman",serif !important;color:#000 !important;}
+  .grad{-webkit-text-fill-color:#000 !important;background:none !important;color:#000 !important;}
+  p,li,blockquote{font-family:Georgia,"Times New Roman",serif !important;orphans:3;widows:3;}
+  .mono,.kicker,.eyebrow,code{font-family:"Courier New",monospace !important;}
+  .hero{padding-top:0 !important;max-width:none !important;}
+  .hero::before{display:none !important;}
+  .hero>*{max-width:none !important;}
+  .paper-head{display:flex !important;justify-content:space-between;align-items:baseline;gap:12pt;
+    border-bottom:2pt solid #000;padding-bottom:8pt;margin-bottom:20pt;font-family:"Courier New",monospace;
+    font-size:8.5pt;letter-spacing:.04em;text-transform:uppercase;color:#000;}
+  .eyebrow{color:#000 !important;font-weight:700;}
+  .byline,.meta{color:#333 !important;}
+
+  /* Small boxes stay whole; a whole .pillar kept on one page left large blank pages. */
+  .eq,.work,.callout,.flagbox,.redbox,.statpair .box,.slopecard,.matchrow .c,.trow,.refs li{break-inside:avoid;
+    border-color:#999 !important;background:#fafafa !important;}
+  .callout{background:#eef5f1 !important;border-color:#1e7a46 !important;}
+  .flagbox{background:#fdf6ea !important;border-color:#8a5a00 !important;}
+  .redbox{background:#fdf0f1 !important;border-color:#9c1d2e !important;}
+  .matchrow .c:first-child{background:#fdf6ea !important;}
+  .matchgrid.risk .matchrow .c:first-child{background:#fdf0f1 !important;}
+  .matchrow .c:last-child{background:#eef9f5 !important;}
+  .divtrack{background:#e4e4ea !important;}
+  .divtrack .fill.pos{background:#1e7a46 !important;}
+  .divtrack .fill.neg{background:#9c1d2e !important;}
+  .barchart .col .b.a{background:#c9c3ec !important;}
+  .barchart .col .b.b{background:#0a6b76 !important;}
+  sup.cite a,.refs a{color:#000 !important;text-decoration:none;}
+  .site-footer{border-top:1px solid #999;margin-top:24pt;padding:16pt 0 0 !important;}
+  .site-footer .wrap{max-width:none !important;}
+  .site-footer .site-logo{-webkit-text-fill-color:#000 !important;background:none !important;color:#000 !important;}
+}

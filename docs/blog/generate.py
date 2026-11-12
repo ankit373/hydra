@@ -5,7 +5,8 @@ from docs/blog/posts.json, the single source of truth for post metadata.
 Adding a post: append an object to posts.json (see existing entries for the
 shape), then run this script. Nothing else needs hand-editing. Adding a new
 *topic* (not just a new post under an existing one) needs one line in TOPICS
-below, picking its accent color deliberately.
+below and a --t-<topic> accent in index.html's style, set to a token role from
+docs/assets/tokens.css (never a colour literal).
 
 Usage: python3 docs/blog/generate.py [--check]
   --check   exit 1 if regenerating would change either file, without writing
@@ -59,7 +60,8 @@ def render_ticker(posts):
 def render_filters(posts):
     used = [t for t in TOPICS if any(p["topic"] == t for p in posts)]
     lines = [
-        f'    <button class="chip" data-topic="{t}" style="--chip-c:{TOPICS[t][1]}"><i></i>{TOPICS[t][0]}</button>'
+        f'    <button class="chip" type="button" data-topic="{t}" aria-pressed="false" style="--chip-c:{TOPICS[t][1]}">'
+        f'<i></i>{TOPICS[t][0]}</button>'
         for t in used
     ]
     return "\n" + "\n".join(lines) + "\n"
@@ -90,7 +92,7 @@ def render_grid(posts):
         if p.get("featured"):
             continue
         label, color = TOPICS[p["topic"]]
-        cards.append(f"""    <a class="card" data-topic="{p['topic']}" style="--card-c:{color}" href="{p['url']}">
+        cards.append(f"""    <a class="post-card" data-topic="{p['topic']}" style="--card-c:{color}" href="{p['url']}">
       <div class="meta"><span class="topic">{label}</span><span>·</span><span>{p['date_human']}</span></div>
       <div class="title">{p['title']}</div>
       <p class="dek">{p['dek']}</p>
