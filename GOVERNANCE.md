@@ -59,4 +59,5 @@ this is a small project and sunlight is the only mechanism it has.
 
 MIT for the code ([LICENSE](LICENSE)). Contributions are accepted under the
 [CLA](CLA.md), which is a deliberate choice explained in that file, including why it is a CLA
-rather than the DCO most comparable projects use.
+rather than the DCO most comparable projects use. Contributors sign it once, through CLA Assistant
+on their first pull request. [CONTRIBUTORS.md](CONTRIBUTORS.md) thanks them; it is not a gate.
