@@ -174,6 +174,9 @@ func TestRunSuite_IsDeterministicAndExercisesEveryPath(t *testing.T) {
 		}
 		if r.SPRT != nil {
 			seen[r.SPRT.Decision] = true
+			if r.SPRT.Correct && r.SPRT.Decision != "accept" {
+				t.Errorf("%s counted correct on %q: only an accepted candidate is verified", r.ID, r.SPRT.Decision)
+			}
 		}
 	}
 	for _, want := range []string{"accept", "stopped_on_budget", noEvidence} {

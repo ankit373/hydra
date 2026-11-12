@@ -290,12 +290,14 @@ func ensemble(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal 
 	if err != nil {
 		return &SPRT{Decision: "error"}
 	}
+	// A candidate stopped on budget goes to a human, so it was never verified.
+	accepted := res.Decision == trust.DecisionAccept
 	return &SPRT{
 		Decision:   res.Decision.String(),
 		Samples:    res.Samples,
 		Confidence: round(res.Confidence, 4),
 		SpentUSD:   round(res.SpentUSD, 6),
-		Correct:    p.Expected != "" && trust.TextEquivalence(res.Candidate, p.Expected),
+		Correct:    accepted && p.Expected != "" && trust.TextEquivalence(res.Candidate, p.Expected),
 	}
 }
 
