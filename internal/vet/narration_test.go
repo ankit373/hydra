@@ -156,3 +156,36 @@ func TestReviewFile_StaysUnreadableAfterOneRetryAndSpendsNoMore(t *testing.T) {
 		t.Errorf("cost = %v, want 0.02: both failed attempts still spent and must be reported", out.CostUSD)
 	}
 }
+
+// ensembleNarratesRouter answers like a recorded --confidence ensemble whose
+// accepted reply narrated. Re-asking it would sample every head again on a
+// fresh budget and record a second run, so it must be asked exactly once.
+type ensembleNarratesRouter struct{ alwaysNarratesRouter }
+
+func (r *ensembleNarratesRouter) Review(ctx context.Context, p, d, res string) (Answer, error) {
+	a, err := r.alwaysNarratesRouter.Review(ctx, p, d, res)
+	a.TaskHash, a.Samples = "abc123", 3
+	return a, err
+}
+
+func TestReviewFile_DoesNotReaskARecordedEnsemble(t *testing.T) {
+	dir := gitRepo(t)
+	write(t, dir, "a.go", "package p\n")
+	spec := &Spec{
+		Mode: "workspace", Repository: dir,
+		Reviewable: []File{{Path: "a.go"}},
+		Groups:     []Group{{Files: []string{"a.go"}, Rule: "r"}},
+	}
+	router := &ensembleNarratesRouter{}
+
+	res, err := Run(context.Background(), router, spec, RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := router.callCount(); got != 1 {
+		t.Fatalf("called the ensemble %d times, want 1: a re-ask samples every head again", got)
+	}
+	if out := res.Files[0]; !out.Unparsed || out.TaskHash != "abc123" {
+		t.Fatalf("want unreadable with the first run's task hash kept, got %+v", out)
+	}
+}

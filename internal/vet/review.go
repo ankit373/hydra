@@ -347,12 +347,13 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 	}
 
 	found, discarded, parsed := parseFindings(ans.Output, path, ans.Head)
-	if !parsed {
+	if !parsed && ans.TaskHash == "" {
 		// A reply with no parseable findings at all is narration, not a
 		// malformed answer: an agentic CLI given a single-shot review prompt
 		// reliably opens by describing a tool step it cannot take. Worth
 		// exactly one stricter re-ask, never a second, so a head that truly
 		// cannot do this is reported honestly rather than paid for again (#1049).
+		// Not for a recorded ensemble: that re-asks every head on a fresh budget.
 		if retry, rerr := r.Review(ctx, prompt+"\n\n"+narrationContract, domain, path); rerr == nil {
 			rfound, rdiscarded, rparsed := parseFindings(retry.Output, path, retry.Head)
 			ans = mergeRetry(ans, retry)
