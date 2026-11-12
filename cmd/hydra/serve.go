@@ -19,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/serve"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // serveRouter adapts the real router to serve.Router. internal/serve does not
@@ -27,13 +28,20 @@ import (
 type serveRouter struct {
 	d           *dispatch.Dispatcher
 	defaultEnum string
-	localOnly   bool
+	// defaultClass is --task-class, the class an unpinned request naming none
+	// routes for. Empty leaves such a request routing exactly as before E1.
+	defaultClass string
+	localOnly    bool
 }
 
 func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer, error) {
-	tier, enum, head, err := routeToDispatch(req.Route, r.defaultEnum)
+	opts, ev, err := r.options(req)
 	if err != nil {
 		return serve.Answer{}, err
+	}
+	// Before dispatch, because a stream's headers leave with its first frame.
+	if ev != nil && req.OnEvent != nil {
+		req.OnEvent(serve.Event{Kind: serve.EventEvidence, Evidence: ev})
 	}
 
 	// One run per request. A server's unit of work is the request, not the
@@ -41,34 +49,80 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	// ever-growing run, and `hyctl trace view` with no argument showed that
 	// instead of the last request (#1149).
 	prompt := flattenConversation(req.Messages)
-	taskID := runid.New()
-	runlog.DeclareRun(req.RequestID, taskID, prompt)
-	defer runlog.FinishRun(req.RequestID, taskID)
+	opts.TaskID = runid.New()
+	runlog.DeclareRun(req.RequestID, opts.TaskID, prompt)
+	defer runlog.FinishRun(req.RequestID, opts.TaskID)
 
-	res, err := r.d.Dispatch(ctx, prompt, dispatch.Options{
-		TierHint:   tier,
-		Enum:       enum,
-		Head:       head,
-		LocalOnly:  r.localOnly,
-		MaxTokens:  req.MaxTokens,
-		Messages:   req.Messages,
-		Tools:      req.Tools,
-		ToolChoice: req.ToolChoice,
-		OnStream:   streamEvents(req.OnEvent),
-		RunID:      req.RequestID,
-		TaskID:     taskID,
-	})
+	res, err := r.d.Dispatch(ctx, prompt, opts)
 	if err != nil {
+		// Every head over the client's own ceiling is the request's limit, not
+		// a failed head, so it must stay out of the 5xx retry class.
+		if errors.Is(err, dispatch.ErrOverCostCeiling) && opts.MaxCostSource == serve.MaxCostHeader {
+			return serve.Answer{}, gradedError{serve.ErrBadRequest, err}
+		}
 		return serve.Answer{}, callerError(err)
 	}
 
-	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name}
+	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: ev}
 	if res.Response != nil {
 		ans.ToolCalls = res.Response.ToolCalls
 		ans.FinishReason = res.Response.FinishReason
 		ans.InputTokens, ans.OutputTokens = res.Response.InputTokens, res.Response.OutputTokens
 	}
 	return ans, nil
+}
+
+// options is the one translation of a served request into what the router is
+// asked, plus the class it routes for, nil when it routes for none.
+func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Evidence, error) {
+	tier, enum, head, err := routeToDispatch(req.Route, r.defaultEnum)
+	if err != nil {
+		return dispatch.Options{}, nil, err
+	}
+	opts := dispatch.Options{
+		TierHint:    tier,
+		Enum:        enum,
+		Head:        head,
+		LocalOnly:   r.localOnly,
+		MaxTokens:   req.MaxTokens,
+		Temperature: req.Temperature,
+		Messages:    req.Messages,
+		Tools:       req.Tools,
+		ToolChoice:  req.ToolChoice,
+		OnStream:    streamEvents(req.OnEvent),
+		RunID:       req.RequestID,
+	}
+	opts.MaxCostUSD, opts.MaxCostSource = requestCeiling(req.MaxCostUSD)
+
+	// A class is reported only where it routes. A pinned head is the client's
+	// choice of model, so a class can neither reorder nor be claimed for it.
+	var ev *serve.Evidence
+	switch {
+	case req.Route.Head != "":
+	case req.TaskClass != "":
+		ev = &serve.Evidence{TaskClass: req.TaskClass, TaskClassBasis: "header"}
+	case r.defaultClass != "" && req.Route == (serve.Route{}):
+		ev = &serve.Evidence{TaskClass: r.defaultClass, TaskClassBasis: "route"}
+	}
+	if ev != nil {
+		// The cache key does not cover the class, so a class-routed answer
+		// must neither be served from nor stored for an unclassed request.
+		opts.Domain, opts.NoCache = ev.TaskClass, true
+	}
+	return opts, ev, nil
+}
+
+// requestCeiling is the lower of the client's and the policy's, read per request
+// so a policy edit applies without a restart. A request that set none keeps
+// the no-ceiling it had before E1, so the header can only lower.
+func requestCeiling(client float64) (float64, string) {
+	if client <= 0 {
+		return 0, ""
+	}
+	if policyUSD, from := servePolicyCeiling(); policyUSD > 0 && policyUSD < client {
+		return policyUSD, from
+	}
+	return client, serve.MaxCostHeader
 }
 
 // streamEvents adapts the router's events to the endpoint's, and is nil when
@@ -208,6 +262,7 @@ func flattenConversation(msgs []executor.Message) string {
 func cmdServe() *cobra.Command {
 	var (
 		addr, token, enum string
+		taskClass         string
 		localOnly         bool
 		confidence        float64
 		heads             []string
@@ -247,6 +302,13 @@ func cmdServe() *cobra.Command {
 			if !dispatch.IsKnownEnum(enum) {
 				return fmt.Errorf("unknown enum %q", enum)
 			}
+			defaultClass := ""
+			if taskClass != "" {
+				var err error
+				if defaultClass, err = trust.TaskClass(taskClass); err != nil {
+					return fmt.Errorf("--task-class: %w", err)
+				}
+			}
 
 			d, err := dispatch.New(ctx)
 			if err != nil {
@@ -265,7 +327,7 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
+			r := serveRouter{d: d, defaultEnum: enum, defaultClass: defaultClass, localOnly: localOnly}
 			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
@@ -275,6 +337,7 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&addr, "addr", "127.0.0.1:8787", "address to bind")
 	f.StringVar(&token, "token", "", "bearer token required of every request (or HYDRA_SERVE_TOKEN)")
 	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
+	f.StringVar(&taskClass, "task-class", "", "dotted task class for a request that names none, e.g. classification.banking77")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
 	f.StringSliceVar(&heads, "heads", nil, "route among only these head ids (default [serve] heads in config.toml; "+
