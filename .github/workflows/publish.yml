@@ -41,6 +41,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Build provenance: id-token signs it, attestations stores it.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -77,6 +80,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
+      # Signed provenance for every file in checksums.txt (archives and SBOMs),
+      # checked by `gh attestation verify` in release-smoke.yml. Only for a build
+      # this run made: a skipped build would claim files an earlier run built.
+      - name: Attest build provenance
+        if: ${{ steps.check.outputs.has_assets == '0' }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: dist/checksums.txt
 
   homebrew:
     name: Homebrew tap
