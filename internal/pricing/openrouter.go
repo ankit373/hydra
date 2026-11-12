@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/build"
 )
 
 // openRouterModelsURL is a var so tests can override it with httptest.Server.
@@ -49,7 +51,7 @@ func fetchFromOpenRouter(ctx context.Context) (map[string]ModelPrice, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "hydra/1 (+https://github.com/ankit373/hydra)")
+	req.Header.Set("User-Agent", build.UserAgent())
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
