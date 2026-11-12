@@ -39,6 +39,7 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/signals"
+	"github.com/ankit373/hydra/internal/sketch"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
 )
@@ -342,6 +343,11 @@ type Dispatcher struct {
 	// always falls through, which is what a machine with no rules file gets.
 	rules *signals.Engine
 
+	// latency is per-head wall-clock latency from the cost log, built by
+	// loadLatency at most once and only when a rule reads latency.p95_ms.
+	latencyOnce sync.Once
+	latency     map[string]*sketch.Sketch
+
 	// recall indexes and vectorises prompts off the dispatch path. Built at
 	// most once, by recorder(), and drained by Close.
 	recallOnce sync.Once
@@ -579,7 +585,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Evaluated once, here or by the caller, never per fallback candidate.
 	dec := opts.Decision
 	if dec == nil {
-		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages)
+		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages, opts.Head)
 		dec = &computed
 	}
 	if err := applyDecision(*dec, &opts); err != nil {

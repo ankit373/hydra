@@ -124,11 +124,11 @@ func TestApplyDecision_RequireConfidenceIsNotDispatchsToApply(t *testing.T) {
 // A dispatcher with no engine still decides, and decides to change nothing.
 func TestDecide_NilDispatcherAndNilEngineFallThrough(t *testing.T) {
 	var d *Dispatcher
-	if got := d.Decide(context.Background(), "hello", "go", nil, nil); got.Fired() {
+	if got := d.Decide(context.Background(), "hello", "go", nil, nil, ""); got.Fired() {
 		t.Fatalf("a nil dispatcher fired a rule: %+v", got)
 	}
 	d2 := &Dispatcher{}
-	if got := d2.Decide(context.Background(), "hello", "go", nil, nil); got.Fired() {
+	if got := d2.Decide(context.Background(), "hello", "go", nil, nil, ""); got.Fired() {
 		t.Fatalf("an engineless dispatcher fired a rule: %+v", got)
 	}
 }
@@ -255,7 +255,7 @@ func TestDecide_CalibratedTracksRealObservations(t *testing.T) {
 	}
 
 	// The signal reaches the decision, and an empty domain reads as the default.
-	dec := d.Decide(context.Background(), "hello", "go", nil, nil)
+	dec := d.Decide(context.Background(), "hello", "go", nil, nil, "")
 	if v, ok := dec.Signals[signals.SigTrustCalibrated]; !ok || v != true {
 		t.Fatalf("the calibrated signal did not reach the decision: %v %v", v, ok)
 	}
