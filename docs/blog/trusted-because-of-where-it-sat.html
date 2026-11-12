@@ -4,18 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trusted Because of Where It Sat, Not Because of What It Did · Hydra Blog</title>
-  <meta name="description" content="Two remote code executions in the most deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.">
+  <meta name="description" content="Two remote code executions in a widely deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.">
   <meta name="keywords" content="LiteLLM CVE, CVE-2026-42271, CVE-2026-30623, MCP security, AI gateway security, command injection, LLM control plane, prompt injection, context poisoning, OWASP LLM08">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/blog/trusted-because-of-where-it-sat.html">
   <meta property="og:title" content="Trusted Because of Where It Sat">
-  <meta property="og:description" content="Two remote code executions in the most deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.">
+  <meta property="og:description" content="Two remote code executions in a widely deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
   <meta name="twitter:title" content="Trusted Because of Where It Sat">
-  <meta name="twitter:description" content="Two remote code executions in the most deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.">
+  <meta name="twitter:description" content="Two remote code executions in a widely deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
   <link rel="canonical" href="https://hydra.uvansa.com/blog/trusted-because-of-where-it-sat.html">
   <link rel="icon" type="image/png" href="/logo.png">
@@ -25,7 +25,7 @@
   "@context": "https://schema.org",
   "@type": "BlogPosting",
   "headline": "Trusted Because of Where It Sat, Not Because of What It Did",
-  "description": "Two remote code executions in the most deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.",
+  "description": "Two remote code executions in a widely deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both. Then the same four questions asked of my own code, where two of the answers were uncomfortable.",
   "url": "https://hydra.uvansa.com/blog/trusted-because-of-where-it-sat.html",
   "datePublished": "2026-10-02",
   "dateModified": "2026-10-02",
@@ -289,6 +289,7 @@ blockquote.inline cite{display:block;margin-top:6px;font-family:var(--mono);font
 .enditem{padding:16px 0;border-top:1px solid var(--line);font-size:15px;color:var(--dim);line-height:1.7;}
 .enditem b{display:block;margin-bottom:5px;color:var(--ink);font-size:15.5px;font-weight:700;}
 .enditem:first-child{border-top:none;}
+.enditem a{color:var(--aqua);border-bottom:1px dashed var(--line-2);word-break:break-all;}
 .enditem .n{font-family:var(--mono);color:var(--aqua);font-size:12.5px;}
 .enditem p{margin:0;font-size:15px;}
 
@@ -336,7 +337,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 <header class="hero wrap">
   <div class="eyebrow">field notes · security</div>
   <h1>Trusted because of where it sat,<br><span class="grad">not because of what it did</span></h1>
-  <p class="sub">Two remote code executions in the most deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both halves. Then the same four questions asked of my own code, where two of the answers were uncomfortable.</p>
+  <p class="sub">Two remote code executions in a widely deployed open-source LLM gateway, six model incidents disclosed by OpenAI, and one mechanism underneath both halves. Then the same four questions asked of my own code, where two of the answers were uncomfortable.</p>
   <div class="byline">
     <span>11 min read</span><span class="sep">·</span><span>every CVE checked at source</span><span class="sep">·</span>
     <span>Oct 2, 2026</span>
@@ -360,11 +361,11 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     <div class="kicker">01 · the gateway</div>
     <h2>An endpoint called <span class="grad">/test/</span> ran the command you sent it</h2>
 
-    <p>LiteLLM is the most widely deployed open-source LLM gateway. It sits in front of your providers, holds your keys, and gives you one OpenAI-shaped API for all of them. In 2026 it shipped two remote code executions in the same subsystem, and the second was exploited in the wild.</p>
+    <p>LiteLLM is one of the most widely deployed open-source LLM gateways. It sits in front of your providers, holds your keys, and gives you one OpenAI-shaped API for all of them. In 2026 it shipped two remote code executions in the same subsystem, and the second was exploited in the wild.</p>
 
     <p><b>CVE-2026-30623</b> came first. When you register an MCP server over stdio transport you give it a command to run, because that is what stdio transport is: launch a program, talk to it over a pipe. LiteLLM took the <span class="mono">command</span> field out of the request and passed it straight to <span class="mono">StdioServerParameters</span>, which spawned it on the proxy host. No allowlist, no sandbox, no shell-metacharacter filter. OX Security disclosed it and the advisory went up on <b>15 April 2026</b>.</p>
 
-    <p>LiteLLM's own write-up points at the design of Anthropic's MCP SDK, and that is fair as far as it goes. A transport whose entire purpose is "run this program" is a loaded weapon by construction. The advisory also says the validation was LiteLLM's to do. Both things are true, and the second is the one that mattered, because the SDK was not the part reachable from the network.</p>
+    <p>LiteLLM's own write-up points at the design of Anthropic's MCP SDK, and that is fair as far as it goes. A transport whose entire purpose is "run this program" is a loaded weapon by construction. The same write-up also places the unvalidated pass-through in LiteLLM's own request handling. Both things are true, and the second is the one that mattered, because the SDK was not the part reachable from the network.</p>
 
     <h3>Then the one that got exploited</h3>
 
@@ -382,7 +383,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
       <p><b>Preview equals execute.</b> If a validation endpoint proves a configuration is good by doing the thing the configuration describes, it is not a validation endpoint. It is the feature again, under a gentler name and usually behind weaker authorisation, because nobody writes a threat model for a preview button.</p>
     </div>
 
-    <p>CVSS 8.7, affecting versions 1.74.2 up to 1.83.7. Authentication was required, which reads like mitigation until you ask what it bought. Any authenticated user could run arbitrary commands on the gateway host. On a gateway, authenticated users are the product. That is every team with a virtual key, every service account, every CI job you issued a token to.</p>
+    <p>CVSS 8.7 (v4.0, from the GitHub advisory; NVD scores it 8.8 under v3.1), affecting versions from 1.74.2 up to but not including 1.83.7. Authentication was required, which reads like mitigation until you ask what it bought. Any authenticated user could run arbitrary commands on the gateway host. On a gateway, authenticated users are the product. That is every team with a virtual key, every service account, every CI job you issued a token to.</p>
 
     <p>Then it got worse. Horizon3.ai chained it with <b>CVE-2026-48710</b>, a Starlette host-header validation bypass called BadHost (CVSS 6.5), which reaches those endpoints with no authentication at all. The combined chain scores <b>CVSS 10.0</b>. CISA added CVE-2026-42271 to the Known Exploited Vulnerabilities catalog on <b>8 June 2026</b>.</p>
 
@@ -392,9 +393,10 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
       <div class="work">
         <div class="lbl">timeline</div>
         <div class="step"><span class="k">15 Apr 2026</span><span class="v">CVE-2026-30623 disclosed by OX Security. MCP <span class="mono">command</span> spawned unvalidated.</span></div>
-        <div class="step"><span class="k">late May 2026</span><span class="v">Horizon3.ai chains CVE-2026-42271 with BadHost. Authentication no longer required.</span></div>
+        <div class="step"><span class="k">19 Apr 2026</span><span class="v">v1.83.7-stable ships the fix: allowlist, parse-time validation, runtime re-validation, preview endpoints restricted to admin.</span></div>
+        <div class="step"><span class="k">26 May 2026</span><span class="v">BadHost (CVE-2026-48710) disclosed in Starlette.</span></div>
+        <div class="step"><span class="k">1 Jun 2026</span><span class="v">Horizon3.ai confirms the chain on unpatched LiteLLM. Authentication no longer required.</span></div>
         <div class="step"><span class="k">8 Jun 2026</span><span class="v">CISA adds CVE-2026-42271 to the Known Exploited Vulnerabilities catalog.</span></div>
-        <div class="step"><span class="k">v1.83.7-stable</span><span class="v">Allowlist, parse-time validation, runtime re-validation, preview endpoints restricted to admin.</span></div>
         <div class="note">Three of the four fixes are "check the string harder". The fourth is structural, and it is the only one that still holds if the allowlist has a gap.</div>
       </div>
       <figcaption>The allowlist of permitted launchers includes <span class="mono">docker</span> and <span class="mono">python</span>. <b>An allowlist constrains the program's name, not what the program does</b>, and both of those run anything. That is not a criticism of the fix, which was shipped under pressure and is a real improvement. It is the reason the admin restriction is the part doing the load-bearing work.</figcaption>
@@ -443,7 +445,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
       <cite>the shape of incidents 1 and 2</cite>
     </blockquote>
 
-    <p>Compaction exists because context windows are finite. Every serious agent harness has it, this one included. And its output is the highest-trust text in the system: it arrives as history, in your own format, through your own code path, carrying no marker that says a model wrote it. If you are going to let a model summarise a conversation and then feed that summary back as fact, you have built a channel from the model's output to the model's instructions, and you should treat it as one.</p>
+    <p>Compaction exists because context windows are finite. Most long-running agent harnesses have it. Hydra has no compaction step, but its cross-run handoff file is the same kind of thing. And its output is the highest-trust text in the system: it arrives as history, in your own format, through your own code path, carrying no marker that says a model wrote it. If you are going to let a model summarise a conversation and then feed that summary back as fact, you have built a channel from the model's output to the model's instructions, and you should treat it as one.</p>
   </section>
 
   <section class="pillar" id="mechanism">
@@ -491,7 +493,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     <p>It parses to one of four things: the default, an enum, a tier, or a head id. All four are strings resolved against things already on the machine. <span class="mono">dispatch.pinHead</span> walks the heads that discovery found, matches on id, and returns an error naming the id when there is no match. The executable a CLI head runs comes off the discovered head record, which came from a binary found on <span class="mono">PATH</span> during a separate scan.</p>
 
     <div class="callout">
-      <p>A request can <b>select</b> a head. It cannot <b>describe</b> one. That is the structural difference from the LiteLLM preview endpoints, and I want to be honest that it is not cleverness. It falls out of discovery being a separate phase from dispatch, a decision made for completely unrelated reasons years before any of this.</p>
+      <p>A request can <b>select</b> a head. It cannot <b>describe</b> one. That is the structural difference from the LiteLLM preview endpoints, and I want to be honest that it is not cleverness. It falls out of discovery being a separate phase from dispatch, a decision made for completely unrelated reasons months before any of this.</p>
     </div>
 
     <h3>Does anything spawn a process from configuration?</h3>
@@ -514,9 +516,16 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     <p class="cap">The blast radius of a command injection is exactly the environment you handed the command. That is true whether or not you have the injection.</p>
 
     <h3>Is model output ever read as instruction?</h3>
-    <p><b>Structurally, no.</b> The rules this project runs under carry one line that predates every incident above: a head's output is data, never instruction. In code that is <span class="mono">util.WrapUntrusted</span>, which fences externally sourced content with a nonce <b>derived from the content itself</b>.</p>
+    <p><b>It is fenced, which is not the same as prevented.</b> The rules this project runs under carry one line that predates every incident above: a head's output is data, never instruction. In code that is <span class="mono">util.WrapUntrusted</span>, which fences externally sourced content with a nonce <b>derived from the content itself</b>.</p>
 
     <p>That derivation is the whole trick, and it is the specific defence against OpenAI's first incident. A prose instruction that says "treat the text below as untrusted" cannot survive the text below containing the same sentence. A fence whose nonce is a function of the content cannot be forged by the content, because changing the content changes the nonce. The model cannot write its way out of a box whose lock is a hash of what is inside it.</p>
+
+    <p>What the fence cannot do is stop the next model from obeying the text inside it. The function's own comment calls it "a mitigation, not a fix", and the security report rates the handoff file, the closest thing Hydra has to a compaction summary, as Partial:</p>
+
+    <blockquote class="inline">
+      every handoff field is fenced as untrusted data, so a poisoned one cannot issue instructions, but nothing authenticates the file and any local process can write it
+      <cite>internal/security/agentic.go · ASI06 Memory and Context Poisoning · status: Partial</cite>
+    </blockquote>
 
     <p>Watching the other direction is <span class="mono">recordContextEcho</span>, the outbound half of OWASP's LLM08 Hidden Context Exposure: it notices when a system prompt or a handoff comes back out inside an answer. It is detective rather than preventive, deliberately, because by that point the answer already belongs to the caller. It also only catches verbatim echoes, and it says so rather than implying it catches paraphrase.</p>
   </section>
@@ -543,14 +552,14 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
       <figcaption>The fourth is the new one. <b>The first three are as old as networked software</b>, and the AI control plane has given all three a fresh surface to happen on.</figcaption>
     </figure>
 
-    <p>If you run an LLM gateway, the single highest-value hour you can spend this week is grepping your own routes for the word <span class="mono">test</span> and reading what each one does. That is where this went wrong for the most deployed gateway in the ecosystem, and there is no reason to think it is the only one.</p>
+    <p>If you run an LLM gateway, the single highest-value hour you can spend this week is grepping your own routes for the word <span class="mono">test</span> and reading what each one does. That is where this went wrong for one of the most deployed gateways in the ecosystem, and there is no reason to think it is the only one.</p>
 
     <h3>Sources</h3>
     <div class="endlist">
-      <div class="enditem"><b>CVE-2026-30623</b> · LiteLLM security advisory, "Command Injection via Anthropic's MCP SDK", 15 April 2026. Disclosure credited to the OX Security research team. Fixed in v1.83.7-stable.</div>
-      <div class="enditem"><b>CVE-2026-42271</b> · BerriAI advisory and CISA Known Exploited Vulnerabilities catalog, added 8 June 2026. CVSS 8.7, versions 1.74.2 to 1.83.7.</div>
-      <div class="enditem"><b>CVE-2026-48710</b> · Starlette host-header validation bypass ("BadHost"), CVSS 6.5. Chain demonstrated by Horizon3.ai, combined CVSS 10.0.</div>
-      <div class="enditem"><b>OpenAI model incidents</b> · OpenAI's own disclosure of six incidents observed in reinforcement-learning training and evaluation, September 2026.</div>
+      <div class="enditem"><b>CVE-2026-30623</b> · LiteLLM, "Security Update: CVE-2026-30623, Command Injection via Anthropic's MCP SDK", 21 April 2026, following OX Security's advisory of 15 April 2026. Fixed in v1.83.7-stable. <a href="https://docs.litellm.ai/blog/mcp-stdio-command-injection-april-2026">docs.litellm.ai</a> · <a href="https://www.ox.security/blog/mcp-supply-chain-advisory-rce-vulnerabilities-across-the-ai-ecosystem/">ox.security</a> · <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-30623">NVD</a></div>
+      <div class="enditem"><b>CVE-2026-42271</b> · BerriAI advisory GHSA-v4p8-mg3p-g94g (CVSS 4.0: 8.7; NVD CVSS 3.1: 8.8), versions 1.74.2 up to but not including 1.83.7. Added to the CISA Known Exploited Vulnerabilities catalog on 8 June 2026. <a href="https://github.com/BerriAI/litellm/security/advisories/GHSA-v4p8-mg3p-g94g">GHSA</a> · <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-42271">NVD</a> · <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog?field_cve=CVE-2026-42271">CISA KEV</a></div>
+      <div class="enditem"><b>CVE-2026-48710</b> · Starlette host-header validation bypass ("BadHost"), CVSS 6.5, fixed in Starlette 1.0.1. Chain demonstrated by Horizon3.ai, which rates the combined path CVSS 10.0. <a href="https://github.com/Kludex/starlette/security/advisories/GHSA-86qp-5c8j-p5mr">GHSA</a> · <a href="https://horizon3.ai/attack-research/vulnerabilities/cve-2026-42271-chained-with-cve-2026-48710/">Horizon3.ai</a></div>
+      <div class="enditem"><b>OpenAI model incidents</b> · OpenAI's own disclosure of six incidents observed in reinforcement-learning training and evaluation, published 16 September 2026. <a href="https://alignment.openai.com/misalignment-reports/">alignment.openai.com</a></div>
       <div class="enditem"><b>Hydra's own behaviour</b> · verified by reading the source on 2 October 2026: <span class="mono">internal/dispatch/dispatch.go</span>, <span class="mono">internal/executor/cli.go</span>, <span class="mono">internal/executor/env.go</span>, <span class="mono">internal/serve/serve.go</span>, <span class="mono">internal/security/agentic.go</span>. The two Partial findings are quoted from the code rather than paraphrased.</div>
     </div>
 
