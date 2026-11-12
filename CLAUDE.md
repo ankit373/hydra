@@ -129,7 +129,9 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           measured about work like this, the prompt's dominant script and
                           language, its shape as counts of questions/list items/code
                           fences/ordered steps, the conversation's turns and whether it is
-                          already in a tool loop, and estimated prompt tokens)
+                          already in a tool loop, estimated prompt tokens, and for a
+                          head pinned before routing its reported context window and
+                          p95 latency over cost.jsonl)
                           combined by priority-ordered rules
                           into an action: pin a tier/enum, force local-only, raise the
                           confidence bar, or refuse. Ships EMPTY, so routing is unchanged
