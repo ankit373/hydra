@@ -36,7 +36,7 @@ func TestAppendScore_AttachesToAnExistingSpan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := Scores(events, span)
+	got := ScoresBySpan(events)[span]
 	if len(got) != 1 {
 		t.Fatalf("got %d scores, want 1", len(got))
 	}
@@ -65,7 +65,7 @@ func TestAppendScore_ResolvesAUniquePrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Stored against the full id, not the prefix, or nothing would find it.
-	if len(Scores(events, span)) != 1 {
+	if len(ScoresBySpan(events)[span]) != 1 {
 		t.Fatal("a prefix-addressed score did not attach to the full span id")
 	}
 }
@@ -124,7 +124,7 @@ func TestAppendScore_RefusesAMeaninglessScore(t *testing.T) {
 
 // Several verdicts on one span must all survive, in order: a test result and a
 // lint result are separate facts.
-func TestScores_KeepsEveryVerdictInOrder(t *testing.T) {
+func TestScoresBySpan_KeepsEveryVerdictInOrder(t *testing.T) {
 	t.Setenv("HYDRA_HOME", t.TempDir())
 	span := seedSpan(t, "r1", "h1")
 	other := seedSpan(t, "r1", "h2")
@@ -142,7 +142,7 @@ func TestScores_KeepsEveryVerdictInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := Scores(events, span)
+	got := ScoresBySpan(events)[span]
 	if len(got) != 2 {
 		t.Fatalf("got %d scores for the first span, want 2", len(got))
 	}
@@ -150,7 +150,7 @@ func TestScores_KeepsEveryVerdictInOrder(t *testing.T) {
 		t.Fatalf("scores are out of append order: %+v", got)
 	}
 	// A score on one span must not read back against another.
-	if len(Scores(events, other)) != 1 {
+	if len(ScoresBySpan(events)[other]) != 1 {
 		t.Fatal("scores leaked between spans")
 	}
 }

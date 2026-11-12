@@ -1,0 +1,43 @@
+{
+  "model": "gpt-6-luna",
+  "input": "I was charged twice for my subscription this month. Please refund the extra charge.",
+  "questions": [
+    {
+      "type": "predicate",
+      "instructions": "Is this message about billing?"
+    },
+    {
+      "type": "choice",
+      "instructions": "What is the tone of this message?",
+      "choices": [
+        {
+          "value": "angry",
+          "description": "An upset or hostile message"
+        },
+        {
+          "value": "calm",
+          "description": "A neutral or polite message"
+        },
+        {
+          "value": "excited",
+          "description": "An enthusiastic or eager message"
+        }
+      ]
+    },
+    {
+      "type": "score",
+      "instructions": "How urgent is this message?",
+      "levels": [
+        {
+          "label": "Can wait"
+        },
+        {
+          "label": "Needs attention this week"
+        },
+        {
+          "label": "Needs attention today"
+        }
+      ]
+    }
+  ]
+}

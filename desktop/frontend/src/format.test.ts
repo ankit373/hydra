@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calibrationLabel, calibrationStrength, calibrationWidthPct, contextHeadroom, contextModeText, costBand } from './format'
+import { calibrationLabel, calibrationStrength, calibrationWidthPct, contextHeadroom, contextModeText, contextWindow, costBand } from './format'
 
 describe('costBand does not alarm about sub-cent spend', () => {
   // The real defect (#594): $0.0009 was the largest figure in the table, so
@@ -118,5 +118,27 @@ describe('contextModeText', () => {
   // An unrecognised band must still render something truthful.
   it('falls back to the raw value it was given', () => {
     expect(contextModeText('something-new')).toBe('something-new')
+  })
+})
+
+describe('contextWindow', () => {
+  // 32768/1000 rounds to 33, a number no model card has ever carried.
+  it('quotes a binary window the way its server does', () => {
+    expect(contextWindow(32768)).toBe('32K')
+    expect(contextWindow(131072)).toBe('128K')
+  })
+
+  it('quotes a decimal window the way its vendor does', () => {
+    expect(contextWindow(200000)).toBe('200K')
+    expect(contextWindow(1000000)).toBe('1000K')
+  })
+
+  // Neither divisor fits, so it rounds and the un-round result says so.
+  it('rounds a window that is neither', () => {
+    expect(contextWindow(8192 + 3)).toBe('8K')
+  })
+
+  it('says nothing rather than zero when the window is unknown', () => {
+    expect(contextWindow(0)).toBe('—')
   })
 })

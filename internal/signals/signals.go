@@ -44,6 +44,17 @@ type Input struct {
 	// zero would fire exactly the rules written to catch failing work.
 	CorpusPassRate *float64
 	CorpusSupport  *int
+
+	// Turns and ToolLoop describe the conversation a caller already has, which
+	// today is `hyctl serve`. Nil for a single-shot dispatch: no conversation
+	// and a conversation of length zero are different facts (#1021).
+	Turns    *int
+	ToolLoop *bool
+
+	// PromptTokens is executor.EstimateTokens applied by the caller. Passed in
+	// rather than computed, so this package still imports no executor for a
+	// nine-line estimator, and so there is only ever one of them.
+	PromptTokens *int
 }
 
 // Keyword is a named set of phrases, declared in signals.yaml, that becomes
@@ -87,6 +98,19 @@ const (
 	SigCorpusKnown     = "corpus.known"
 	SigCorpusPassRate  = "corpus.pass_rate"
 	SigCorpusSupport   = "corpus.support"
+
+	SigLanguageScript = "language.script"
+	SigLanguageCode   = "language.code"
+
+	SigStructureQuestions    = "structure.questions"
+	SigStructureListItems    = "structure.list_items"
+	SigStructureCodeFences   = "structure.code_fences"
+	SigStructureOrderedSteps = "structure.ordered_steps"
+
+	SigConversationTurns    = "conversation.turns"
+	SigConversationToolLoop = "conversation.tool_loop"
+
+	SigContextPromptTokens = "context.prompt_tokens"
 )
 
 // CorpusSignals are the ones whose value costs an embedding call, so a
@@ -110,6 +134,19 @@ func SchemaFor(keywords []Keyword) Schema {
 		SigCorpusKnown:     KindBool,
 		SigCorpusPassRate:  KindNumber,
 		SigCorpusSupport:   KindNumber,
+
+		SigLanguageScript: KindString,
+		SigLanguageCode:   KindString,
+
+		SigStructureQuestions:    KindNumber,
+		SigStructureListItems:    KindNumber,
+		SigStructureCodeFences:   KindNumber,
+		SigStructureOrderedSteps: KindBool,
+
+		SigConversationTurns:    KindNumber,
+		SigConversationToolLoop: KindBool,
+
+		SigContextPromptTokens: KindNumber,
 	}
 	for _, d := range policy.DetectorNames() {
 		sc[PIISignal(d)] = KindBool
@@ -155,6 +192,33 @@ func Collect(in Input, keywords []Keyword) Set {
 		vals[SigCorpusKnown] = true
 		vals[SigCorpusPassRate] = *in.CorpusPassRate
 		vals[SigCorpusSupport] = float64(*in.CorpusSupport)
+	}
+
+	// Absent rather than empty when the prompt carries no letters at all: an
+	// empty script is "nothing to read", and a rule comparing against "" would
+	// match it, which is #848 in a string.
+	if sc := DominantScript(in.Prompt); sc != "" {
+		vals[SigLanguageScript] = sc
+	}
+	if code := LanguageCode(in.Prompt); code != "" {
+		vals[SigLanguageCode] = code
+	}
+
+	// Always present: a count of zero questions is a reading, not an absence.
+	shape := Shape(in.Prompt)
+	vals[SigStructureQuestions] = float64(shape.Questions)
+	vals[SigStructureListItems] = float64(shape.ListItems)
+	vals[SigStructureCodeFences] = float64(shape.CodeFences)
+	vals[SigStructureOrderedSteps] = shape.OrderedSteps
+
+	if in.Turns != nil {
+		vals[SigConversationTurns] = float64(*in.Turns)
+	}
+	if in.ToolLoop != nil {
+		vals[SigConversationToolLoop] = *in.ToolLoop
+	}
+	if in.PromptTokens != nil {
+		vals[SigContextPromptTokens] = float64(*in.PromptTokens)
 	}
 
 	lower := strings.ToLower(in.Prompt)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -170,6 +171,8 @@ func toInstalledServers(servers map[string]clientServerConfig, client, scope str
 			Package: resolvePackage(cfg.Command, cfg.Args),
 		})
 	}
+	// Map order is random; sorted so scan and audit output diff cleanly run to run.
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 

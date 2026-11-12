@@ -10,7 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+
+	"github.com/ankit373/hydra/internal/stats"
 )
 
 //go:embed probeset.jsonl
@@ -92,18 +93,14 @@ func (r Report) FalsePositiveHigh() float64 {
 	return hi
 }
 
-// wilson returns the 95% score interval for k successes in n trials.
+// wilson returns the 95% score interval for k successes in n trials. Counts that
+// cannot be a measurement read as no evidence, the whole range, so nothing is eligible on them.
 func wilson(k, n int) (lo, hi float64) {
-	if n == 0 {
+	lo, hi, err := stats.Wilson(k, n, 1.959964)
+	if err != nil {
 		return 0, 1
 	}
-	const z = 1.959964
-	fn := float64(n)
-	p := float64(k) / fn
-	d := 1 + z*z/fn
-	centre := (p + z*z/(2*fn)) / d
-	spread := z * math.Sqrt(p*(1-p)/fn+z*z/(4*fn*fn)) / d
-	return math.Max(0, centre-spread), math.Min(1, centre+spread)
+	return lo, hi
 }
 
 // Eligible reports whether this head may be asked in earnest.
