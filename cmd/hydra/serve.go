@@ -17,6 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/serve"
 )
 
@@ -25,7 +26,6 @@ import (
 // meet, the same seam internal/workflow and internal/vet use.
 type serveRouter struct {
 	d           *dispatch.Dispatcher
-	runID       string
 	defaultEnum string
 	localOnly   bool
 }
@@ -36,7 +36,16 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		return serve.Answer{}, err
 	}
 
-	res, err := r.d.Dispatch(ctx, flattenConversation(req.Messages), dispatch.Options{
+	// One run per request. A server's unit of work is the request, not the
+	// process: one run per session gave a long-lived server a single
+	// ever-growing run, and `hyctl trace view` with no argument showed that
+	// instead of the last request (#1149).
+	prompt := flattenConversation(req.Messages)
+	taskID := runid.New()
+	runlog.DeclareRun(req.RequestID, taskID, prompt)
+	defer runlog.FinishRun(req.RequestID, taskID)
+
+	res, err := r.d.Dispatch(ctx, prompt, dispatch.Options{
 		TierHint:   tier,
 		Enum:       enum,
 		Head:       head,
@@ -46,8 +55,8 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		Tools:      req.Tools,
 		ToolChoice: req.ToolChoice,
 		OnStream:   streamEvents(req.OnEvent),
-		RunID:      r.runID,
-		TaskID:     runid.New(),
+		RunID:      req.RequestID,
+		TaskID:     taskID,
 	})
 	if err != nil {
 		return serve.Answer{}, callerError(err)
@@ -200,6 +209,8 @@ func cmdServe() *cobra.Command {
 	var (
 		addr, token, enum string
 		localOnly         bool
+		confidence        float64
+		heads             []string
 	)
 
 	cmd := &cobra.Command{
@@ -208,6 +219,9 @@ func cmdServe() *cobra.Command {
 		Long: "Serves POST /v1/chat/completions and GET /v1/models, so any tool that speaks\n" +
 			"OpenAI routes through Hydra: policy, fallback, per-domain calibration and spend\n" +
 			"logging all apply the way they do to `hyctl dispatch`.\n\n" +
+			"POST /v1/decisions and /v1/systemone take typed questions in either wire format and\n" +
+			"ask the decision sources in order: one when its answer clears --confidence, more\n" +
+			"through the SPRT when not. X-Hydra-Decision-Sources and -Confidence say which.\n\n" +
 			"The model field is the routing instruction. `hydra` takes the default enum,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
@@ -218,7 +232,8 @@ func cmdServe() *cobra.Command {
 			"other people's model servers.",
 		Example: "  hyctl serve\n" +
 			"  hyctl serve --enum SIMPLE --local\n" +
-			"  hyctl serve --addr 0.0.0.0:8788 --token \"$HYDRA_SERVE_TOKEN\"\n\n" +
+			"  hyctl serve --addr 0.0.0.0:8788 --token \"$HYDRA_SERVE_TOKEN\"\n" +
+			"  hyctl serve --heads ollama/qwen3:8b,env/openai\n\n" +
 			"  # point open-code-review at it\n" +
 			"  OCR_LLM_URL=http://127.0.0.1:8787/v1 OCR_LLM_MODEL=hydra ocr review",
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -238,14 +253,21 @@ func cmdServe() *cobra.Command {
 				return fmt.Errorf("dispatcher init: %w", err)
 			}
 			defer d.Close()
+			if err := restrictServeHeads(d, heads, c.Flags().Changed("heads"), localOnly); err != nil {
+				return err
+			}
 
 			ln, err := serve.Listen(addr, token)
 			if err != nil {
 				return err
 			}
-			r := serveRouter{d: d, runID: runid.New(), defaultEnum: enum, localOnly: localOnly}
-			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads())
-			return serve.Serve(ctx, ln, serve.Handler(r, token))
+			decider, err := newDecisionRouter(ctx, confidence, localOnly, d.Allows)
+			if err != nil {
+				return err
+			}
+			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
+			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
+			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
 
@@ -254,10 +276,27 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&token, "token", "", "bearer token required of every request (or HYDRA_SERVE_TOKEN)")
 	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
+	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
+	f.StringSliceVar(&heads, "heads", nil, "route among only these head ids (default [serve] heads in config.toml; "+
+		"--heads \"\" clears it). Embedding models stay available to the cache and recall, listed or not; "+
+		"decision sources are not heads it can name, so with a list set /v1/decisions has none")
 	return cmd
 }
 
-func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head) {
+// restrictServeHeads applies the allowlist before the server binds, so a typo is a
+// startup error rather than a server quietly routing to heads the operator excluded.
+func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string, flagSet, localOnly bool) error {
+	ids := d.ServeHeads()
+	if flagSet {
+		ids = flagHeads
+	}
+	if err := d.RestrictHeads(ids, localOnly); err != nil {
+		return fmt.Errorf("head allowlist: %w", err)
+	}
+	return nil
+}
+
+func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head, unlistedDecisions int) {
 	// Over the heads this server can actually reach. Counting all 16 on a
 	// --local endpoint advertised ten that no request could ever route to
 	// (#1147).
@@ -287,6 +326,10 @@ func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, 
 	fmt.Fprintf(w, "  auth              %s\n", auth)
 	if localOnly {
 		fmt.Fprintf(w, "  heads             local only\n")
+	}
+	if unlistedDecisions > 0 {
+		fmt.Fprintf(w, "  decisions         none: --heads names no decision source, so /v1/decisions has none (%d dropped)\n",
+			unlistedDecisions)
 	}
 	// "can be sent tools", which is a property of the dialect, not a promise
 	// that the model will answer with a structured call: measured here, Ollama

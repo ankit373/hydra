@@ -147,6 +147,10 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		return nil, &NoEvidenceError{Domain: task.Domain, Sources: sourceIDs(sources)}
 	}
 	A := math.Log((1 - alpha) / alpha)
+	// At or below even odds the cutoff would accept with no evidence, since Λ starts at 0.
+	if cfg.accept > 0.5 {
+		A = logit(cfg.accept)
+	}
 
 	order := sampleOrder(sources, cal, task.Domain)
 
@@ -315,6 +319,7 @@ type runConfig struct {
 	equiv             AnswerEquivalence
 	allowUncalibrated bool
 	observe           Observer
+	accept            float64
 }
 
 // AllowNoEvidence runs the ensemble even when no source can move the
@@ -324,6 +329,12 @@ type runConfig struct {
 // the refusal.
 func AllowNoEvidence() RunOption {
 	return func(c *runConfig) { c.allowUncalibrated = true }
+}
+
+// withAcceptThreshold stops once the leader's confidence reaches th.accept instead of
+// Wald's bound. The zero threshold, which is what no data gives, changes nothing.
+func withAcceptThreshold(th threshold) RunOption {
+	return func(c *runConfig) { c.accept = th.accept }
 }
 
 // ErrNoEvidence is returned when no source carries diagnostic power for the
@@ -456,3 +467,6 @@ func normalizeAnswer(s string) string {
 
 // sigmoid maps the log-odds Λ back to a probability for display.
 func sigmoid(x float64) float64 { return 1 / (1 + math.Exp(-x)) }
+
+// logit is sigmoid's inverse: the log-odds of a probability.
+func logit(p float64) float64 { return math.Log(p / (1 - p)) }

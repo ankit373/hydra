@@ -970,6 +970,8 @@ var apiKeyEnvs = func() map[string][]string {
 		},
 		"cohere":    {"COHERE_API_KEY"},
 		"replicate": {"REPLICATE_API_TOKEN"},
+		// The variable TypeSafe's own SDK reads; only the decision head uses it.
+		"typesafe": {"TYPESAFE_API_KEY"},
 		// The variable LiteLLM's own client reads, so a machine already set up
 		// to talk to a proxy needs nothing new.
 		"litellm": {"LITELLM_PROXY_API_KEY"},

@@ -10,11 +10,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // A validator killed mid-run exits non-zero exactly like a validator that
@@ -23,8 +24,9 @@ import (
 // distinction the dispatch above it already draws for a deadline (#424).
 func TestEdit_CancelledValidatorIsNotAValidationFailure(t *testing.T) {
 	repo := editSandbox(t, marked("package main\n\nfunc main() {}\n"))
-	tmpl, pidFile := hangingValidator(t)
+	tmpl, fifo := testutil.HangingValidator(t)
 	writeWorkspaceYAML(t, repo, tmpl)
+	stalled := testutil.HeadAnswered(t, "cody")
 
 	file := filepath.Join(repo, "a.go")
 	original := "package main\n\nfunc main() {}\n"
@@ -32,26 +34,26 @@ func TestEdit_CancelledValidatorIsNotAValidationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The pid file is the synchronisation point, not a timer: the validator
-	// records its child before blocking, so cancelling on that is deterministic
-	// however long the head above it took.
+	// The fifo is the synchronisation point: the validator blocks handing over
+	// its child's pid until the test reads it, however long the head took.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	done := make(chan []Result, 1)
+	done := make(chan batchOutcome, 1)
 	go func() {
 		results, _ := Run(ctx, []Task{{Label: "cancel", Enum: "MODERATE", File: file, Prompt: "x"}}, Options{})
 		done <- results
 	}()
 
-	helper := readHelperPID(t, pidFile)
+	helper := testutil.AwaitValidator(t, fifo, done, stalled)
 	cancel()
 
-	var results []Result
+	var results batchOutcome
 	select {
 	case results = <-done:
-	case <-time.After(cancelBudget):
+	case <-time.After(testutil.CancelBudget):
 		_ = syscall.Kill(helper, syscall.SIGKILL)
-		t.Fatalf("the batch did not return within %v of cancellation: the kill never reached the validator's process group", cancelBudget)
+		const why = "the kill never reached the validator's process group"
+		t.Fatalf("the batch did not return within %v of cancellation: %s", testutil.CancelBudget, why)
 	}
 	if len(results) != 1 {
 		t.Fatalf("got %d results, want 1", len(results))
@@ -73,10 +75,21 @@ func TestEdit_CancelledValidatorIsNotAValidationFailure(t *testing.T) {
 	if raw, _ := os.ReadFile(file); string(raw) != original {
 		t.Errorf("the file was left in its unvalidated state: %q", raw)
 	}
-	if !processGone(helper, 5*time.Second) {
+	if !testutil.ProcessGone(helper, 5*time.Second) {
 		_ = syscall.Kill(helper, syscall.SIGKILL) // never leak it past the test
 		t.Errorf("helper %d outlived the validator that spawned it", helper)
 	}
+}
+
+// batchOutcome prints each result's JSON, which is what names why a batch ended.
+type batchOutcome []Result
+
+func (b batchOutcome) String() string {
+	parts := make([]string, len(b))
+	for i, r := range b {
+		parts[i] = string(r.raw)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 // The unit contract the reporting above rests on. Both cancellation shapes are
@@ -84,7 +97,7 @@ func TestEdit_CancelledValidatorIsNotAValidationFailure(t *testing.T) {
 // max_wall_seconds refusing, a cancel is the operator interrupting.
 func TestRunValidate_CancellationIsNotAnExitCode(t *testing.T) {
 	t.Run("cancel", func(t *testing.T) {
-		tmpl, pidFile := hangingValidator(t)
+		tmpl, fifo := testutil.HangingValidator(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -98,15 +111,16 @@ func TestRunValidate_CancellationIsNotAnExitCode(t *testing.T) {
 			done <- result{rc, err}
 		}()
 
-		helper := readHelperPID(t, pidFile)
+		helper := testutil.AwaitValidator(t, fifo, done, nil)
 		cancel()
 
 		var got result
 		select {
 		case got = <-done:
-		case <-time.After(cancelBudget):
+		case <-time.After(testutil.CancelBudget):
 			_ = syscall.Kill(helper, syscall.SIGKILL)
-			t.Fatalf("the validator did not return within %v of cancellation: the kill never reached its process group", cancelBudget)
+			const why = "the kill never reached its process group"
+			t.Fatalf("the validator did not return within %v of cancellation: %s", testutil.CancelBudget, why)
 		}
 		if !errors.Is(got.err, context.Canceled) {
 			t.Fatalf("err = %v, want context.Canceled; a killed validator must not read as a verdict", got.err)
@@ -114,7 +128,7 @@ func TestRunValidate_CancellationIsNotAnExitCode(t *testing.T) {
 		if got.rc != 0 {
 			t.Errorf("rc = %d alongside a cancellation, want 0: a non-zero code here is a rejection the validator never made", got.rc)
 		}
-		if !processGone(helper, 5*time.Second) {
+		if !testutil.ProcessGone(helper, 5*time.Second) {
 			_ = syscall.Kill(helper, syscall.SIGKILL)
 			t.Errorf("helper %d outlived the cancelled validator", helper)
 		}
@@ -124,7 +138,7 @@ func TestRunValidate_CancellationIsNotAnExitCode(t *testing.T) {
 	// above already pins down, and reading the child's pid after the deadline
 	// has killed it races a validator that may not have started yet.
 	t.Run("deadline", func(t *testing.T) {
-		tmpl, _ := hangingValidator(t)
+		tmpl, _ := testutil.HangingValidator(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
 
@@ -136,59 +150,4 @@ func TestRunValidate_CancellationIsNotAnExitCode(t *testing.T) {
 			t.Errorf("rc = %d past the deadline, want 0", rc)
 		}
 	})
-}
-
-// cancelBudget bounds how long a cancelled validator may take to return. The
-// process-group kill is immediate; without it Run blocks until the child the
-// validator spawned closes the pipe, which is what this catches.
-const cancelBudget = 10 * time.Second
-
-// hangingValidator is a validator that records a child's pid and then blocks
-// for far longer than any test will wait, so "the child died" cannot be
-// confused with "the child finished".
-//
-// A script rather than an inline `sh -c`: the template is split on whitespace,
-// which would fragment a shell one-liner. Absolute paths and builtins only,
-// because the test sandbox strips PATH to its own bin directory and dash will
-// not resolve a bare `sleep` there (#738).
-func hangingValidator(t *testing.T) (template, pidFile string) {
-	t.Helper()
-	dir := t.TempDir()
-	pidFile = filepath.Join(dir, "helper.pid")
-	script := filepath.Join(dir, "validate.sh")
-	body := "#!/bin/sh\n/bin/sleep 300 &\necho $! > " + pidFile + "\n/bin/sleep 300\n"
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return script + " {file}", pidFile
-}
-
-// readHelperPID waits for the validator to record its child, so a test never
-// races the process it is about to cancel.
-func readHelperPID(t *testing.T, path string) int {
-	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		if raw, err := os.ReadFile(path); err == nil {
-			if pid, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil && pid > 0 {
-				return pid
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("the validator never ran: nothing recorded a pid to %s", path)
-	return 0
-}
-
-// processGone reports whether the pid has left the table. Signal 0 checks for
-// existence without delivering anything.
-func processGone(pid int, within time.Duration) bool {
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
-		if syscall.Kill(pid, 0) == syscall.ESRCH {
-			return true
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return false
 }

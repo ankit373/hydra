@@ -226,13 +226,13 @@ func TestExtractContent_MarkerHandling(t *testing.T) {
 	cases := []struct {
 		name, in, want string
 	}{
-		{"both markers", markerStart + "\nhello\n" + markerEnd, "hello"},
-		{"with surrounding prose", "sure!\n" + markerStart + "\nhello\n" + markerEnd + "\ndone", "hello"},
-		{"empty body", markerStart + "\n" + markerEnd, ""},
+		{"both markers", tm.start + "\nhello\n" + tm.end, "hello"},
+		{"with surrounding prose", "sure!\n" + tm.start + "\nhello\n" + tm.end + "\ndone", "hello"},
+		{"empty body", tm.start + "\n" + tm.end, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := strings.TrimSpace(extractContent(tc.in)); got != tc.want {
+			if got := strings.TrimSpace(extractContent(tc.in, tm)); got != tc.want {
 				t.Errorf("extractContent(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})

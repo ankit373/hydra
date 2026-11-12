@@ -1,0 +1,22 @@
+{
+  "budget": {
+    "ollama/qwen3:8b": {
+      "mode": "normal",
+      "pct": 3,
+      "source": "estimate",
+      "updated_at": "2026-10-30T09:41:57Z",
+      "used": 1180,
+      "window": 40960
+    }
+  },
+  "claude_pct": 72,
+  "claude_pct_history": [
+    70,
+    71,
+    71,
+    72
+  ],
+  "last_model": "qwen3:8b",
+  "last_status": "ok",
+  "last_tier": 10
+}

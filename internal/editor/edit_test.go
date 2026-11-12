@@ -69,12 +69,14 @@ func editSandbox(t *testing.T, reply string) string {
 	return cwd
 }
 
-func marked(content string) string {
-	return "<<<HYDRA_FILE_START>>>\n" + content + "\n<<<HYDRA_FILE_END>>>"
+// marked frames content as a head's answer to an edit of a file holding current.
+func marked(current, content string) string {
+	m := markersFor(current)
+	return m.start + "\n" + content + "\n" + m.end
 }
 
 func TestEdit_WritesTheContentAndRecordsTheEdit(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	repo := editSandbox(t, marked("package main\n", "package main\n\nfunc main() {}"))
 	file := filepath.Join(repo, "main.go")
 	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -144,7 +146,7 @@ func TestEdit_WritesTheContentAndRecordsTheEdit(t *testing.T) {
 // the concrete "excessive agency" containment: a head may be trusted in
 // general but still denied write access to a specific subtree.
 func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	repo := editSandbox(t, marked(newFileBlock, "package main\n\nfunc main() {}"))
 	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Resource: "**/secrets/**", Decision: ledger.Deny}}})
 
 	blocked := filepath.Join(repo, "secrets", "key.go")
@@ -193,7 +195,7 @@ func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 }
 
 func TestEdit_CreatesAFileThatDoesNotExistYet(t *testing.T) {
-	repo := editSandbox(t, marked("brand new"))
+	repo := editSandbox(t, marked(newFileBlock, "brand new"))
 	file := filepath.Join(repo, "sub", "new.txt")
 
 	res, err := Edit(context.Background(), Request{
@@ -217,7 +219,7 @@ func TestEdit_CreatesAFileThatDoesNotExistYet(t *testing.T) {
 // An empty replacement must leave the file byte-identical. This is the worst
 // outcome the edit path can produce.
 func TestEdit_EmptyReplacementLeavesTheFileUntouched(t *testing.T) {
-	repo := editSandbox(t, marked(""))
+	repo := editSandbox(t, marked("package main\n\n// do not lose me\n", ""))
 	file := filepath.Join(repo, "keep.go")
 	original := "package main\n\n// do not lose me\n"
 	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
@@ -251,7 +253,7 @@ func TestEdit_EmptyReplacementLeavesTheFileUntouched(t *testing.T) {
 }
 
 func TestEdit_RefusesBeforeDispatching(t *testing.T) {
-	repo := editSandbox(t, marked("x"))
+	repo := editSandbox(t, marked(newFileBlock, "x"))
 
 	tests := []struct {
 		name    string
@@ -285,7 +287,7 @@ func TestEdit_RefusesBeforeDispatching(t *testing.T) {
 // registered workspace (#598), accepted under the root, still refused for
 // denied globs and for paths outside it.
 func TestEdit_RootScopesAHydraWorktree(t *testing.T) {
-	editSandbox(t, marked("package wt"))
+	editSandbox(t, marked("package old\n", "package wt"))
 	wt := t.TempDir() // stands in for ~/.hydra/worktrees/t1-xxxx
 
 	file := filepath.Join(wt, "a.go")
@@ -336,7 +338,7 @@ func TestEdit_FailedValidationRollsBack(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the workspace validator template is a POSIX command line here")
 	}
-	repo := editSandbox(t, marked("will not validate"))
+	repo := editSandbox(t, marked("package main\n", "will not validate"))
 	writeWorkspaceYAML(t, repo, "/usr/bin/false {file}")
 
 	file := filepath.Join(repo, "a.go")
@@ -366,7 +368,7 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the workspace validator template is a POSIX command line here")
 	}
-	repo := editSandbox(t, marked("validated"))
+	repo := editSandbox(t, marked("package main\n", "validated"))
 	writeWorkspaceYAML(t, repo, "/usr/bin/true {file}")
 
 	file := filepath.Join(repo, "a.go")
@@ -406,7 +408,7 @@ func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
 		{"fail", "/usr/bin/false {file}"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := editSandbox(t, marked("content"))
+			repo := editSandbox(t, marked("package main\n", "content"))
 			writeWorkspaceYAML(t, repo, tt.validator)
 			file := filepath.Join(repo, "a.go")
 			if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
@@ -441,7 +443,7 @@ func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
 // the baseline. So the workspace is declared git:"false" here, which is the
 // path a user outside a repository is on.
 func TestEdit_BackupIsCreatedForNonGitWorkspacesAndIsNotWorldReadable(t *testing.T) {
-	repo := editSandbox(t, marked("new content"))
+	repo := editSandbox(t, marked("const apiKey = \"sk-live\"\n", "new content"))
 	writeWorkspaceYAML(t, repo, "")
 
 	file := filepath.Join(repo, "secretish.go")
@@ -879,9 +881,10 @@ func TestEdit_MarkerParseFailedOnANewFile(t *testing.T) {
 // A model that echoes the terminator back inside its content would write it
 // into the file, and the next edit would parse against it.
 func TestEdit_TerminatorLeakageIsRefused(t *testing.T) {
-	repo := editSandbox(t, "line one\n<<<HYDRA_FILE_END>>>\n<<<HYDRA_FILE_END>>>")
-	file := filepath.Join(repo, "a.go")
 	original := "package main\n"
+	end := markersFor(original).end
+	repo := editSandbox(t, "line one\n"+end+"\n"+end)
+	file := filepath.Join(repo, "a.go")
 	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -900,7 +903,7 @@ func TestEdit_TerminatorLeakageIsRefused(t *testing.T) {
 // A write that cannot land must be reported as write_failed and must not
 // consume the backup, the file is unchanged, so its baseline still applies.
 func TestEdit_UnwritableTargetIsReportedNotSilent(t *testing.T) {
-	repo := editSandbox(t, marked("new content"))
+	repo := editSandbox(t, marked(newFileBlock, "new content"))
 
 	// The target path's parent is a file, so no temp file can be created
 	// beside it and the rename can never happen.
@@ -1025,7 +1028,7 @@ func TestDiffStats_UsesGitInARepository(t *testing.T) {
 // #998 validatorPassed was initialised true and never touched, so "nothing ran"
 // and "ran and passed" rendered identically.
 func TestEdit_AnExtensionWithNoValidatorReportsNoVerdict(t *testing.T) {
-	repo := editSandbox(t, marked("some notes"))
+	repo := editSandbox(t, marked("notes\n", "some notes"))
 	writeWorkspaceYAML(t, repo, "") // no validators block at all
 
 	file := filepath.Join(repo, "a.txt")
@@ -1052,7 +1055,7 @@ func TestEdit_AnExtensionWithNoValidatorReportsNoVerdict(t *testing.T) {
 // was told "validation_failed: " with no cause. Reachable for Go for the first
 // time now that Go has a validator at all (#998).
 func TestEdit_AMissingValidatorBinaryNamesItself(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n"))
+	repo := editSandbox(t, marked("package main\n", "package main\n"))
 	// No fake gofmt on the sandbox PATH, so the shipped template cannot start.
 
 	file := filepath.Join(repo, "a.go")
