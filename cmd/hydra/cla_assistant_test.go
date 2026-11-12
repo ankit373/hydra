@@ -3,8 +3,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -13,13 +11,64 @@ import (
 )
 
 // The CLA is signed once through CLA Assistant, which posts the license/cla status.
-// These pin that the queue waits on it and that the old checkbox gate is gone.
+// cla.yml mirrors it as "Contributor has signed" until main's Mergify reads license/cla
+// (step 2 of #1380). These pin the bridge and that the checkbox gate is gone.
 
-const claStatus = "check-success=license/cla"
+const claCondition = "check-success=Contributor has signed"
 
-// Both contributor queues require license/cla in queue_conditions: merge_conditions
-// run on Mergify's draft PR, where the status would judge the batch, not the author.
-func TestCLA_ContributorQueuesRequireLicenseCLA(t *testing.T) {
+type ghWorkflow struct {
+	On          map[string]any `yaml:"on"`
+	Permissions map[string]any `yaml:"permissions"`
+	Jobs        map[string]struct {
+		Name        string            `yaml:"name"`
+		If          string            `yaml:"if"`
+		Permissions map[string]string `yaml:"permissions"`
+		Steps       []struct {
+			Uses string `yaml:"uses"`
+			Run  string `yaml:"run"`
+		} `yaml:"steps"`
+	} `yaml:"jobs"`
+}
+
+func parseWorkflow(t *testing.T, name string) ghWorkflow {
+	t.Helper()
+	var w ghWorkflow
+	if err := yaml.Unmarshal([]byte(workflowFile(t, name)), &w); err != nil {
+		t.Fatalf("parsing %s: %v", name, err)
+	}
+	if len(w.Jobs) == 0 {
+		t.Fatalf("%s has no jobs; this test no longer checks what it thinks", name)
+	}
+	return w
+}
+
+// checkNarrow fails on anything beyond {} at the top, the allowed job grants, a
+// checkout, or an expression interpolated into run:.
+func checkNarrow(t *testing.T, name string, w ghWorkflow, allowed map[string]string) {
+	t.Helper()
+	if w.Permissions == nil || len(w.Permissions) != 0 {
+		t.Errorf("%s: top-level permissions = %v, want {}", name, w.Permissions)
+	}
+	for id, job := range w.Jobs {
+		for k, v := range job.Permissions {
+			if allowed[k] != v {
+				t.Errorf("%s job %s grants %s: %s; only %v is needed", name, id, k, v, allowed)
+			}
+		}
+		for _, s := range job.Steps {
+			if strings.HasPrefix(s.Uses, "actions/checkout") {
+				t.Errorf("%s job %s checks out code; it only calls the API", name, id)
+			}
+			if strings.Contains(s.Run, "${{") {
+				t.Errorf("%s job %s interpolates an expression into run:; pass it through env", name, id)
+			}
+		}
+	}
+}
+
+// Both contributor queues require the CLA in queue_conditions: merge_conditions run
+// on Mergify's draft PR, which mergify[bot] authors, not the contributor.
+func TestCLA_ContributorQueuesRequireTheCLACheck(t *testing.T) {
 	want := map[string]bool{"develop": false, "release": false}
 	for _, r := range mergifyConfig(t)["queue_rules"].([]any) {
 		rule := r.(map[string]any)
@@ -28,37 +77,46 @@ func TestCLA_ContributorQueuesRequireLicenseCLA(t *testing.T) {
 			continue
 		}
 		for _, c := range conditionStrings(rule["queue_conditions"]) {
-			if strings.ReplaceAll(c, " ", "") == claStatus {
+			if c == claCondition {
 				want[name] = true
 			}
 		}
 		for _, c := range conditionStrings(rule["merge_conditions"]) {
-			if strings.Contains(c, "license/cla") {
-				t.Errorf("queue %q requires license/cla in merge_conditions; the draft PR would be judged, not the author", name)
+			if c == claCondition {
+				t.Errorf("queue %q requires the CLA in merge_conditions; the draft PR would be judged, not the author", name)
 			}
 		}
 	}
 	for name, ok := range want {
 		if !ok {
-			t.Errorf("queue %q does not require %s in queue_conditions", name, claStatus)
+			t.Errorf("queue %q does not require %s in queue_conditions", name, claCondition)
 		}
 	}
 }
 
-// The home-grown gate is gone: no workflow, no Mergify condition and no template checkbox.
-func TestCLA_NoCheckboxGateRemains(t *testing.T) {
-	entries, err := os.ReadDir(filepath.Join("..", "..", ".github", "workflows"))
-	if err != nil {
-		t.Fatal(err)
+// cla.yml passes on CLA Assistant's license/cla status alone: no checkbox, no roster.
+func TestCLA_WorkflowMirrorsLicenseCLA(t *testing.T) {
+	w := parseWorkflow(t, "cla.yml")
+	checkNarrow(t, "cla.yml", w, map[string]string{"statuses": "read"})
+	job, ok := w.Jobs["signed"]
+	if !ok || job.Name != "Contributor has signed" {
+		t.Fatalf("cla.yml no longer reports \"Contributor has signed\", which main's Mergify config requires")
 	}
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".yml") && strings.Contains(workflowFile(t, e.Name()), "Contributor has signed") {
-			t.Errorf("%s still reports \"Contributor has signed\"; CLA Assistant's license/cla replaced it", e.Name())
+	var script string
+	for _, s := range job.Steps {
+		script += s.Run
+	}
+	if !strings.Contains(script, `"license/cla"`) || !strings.Contains(script, "/status") {
+		t.Error("cla.yml does not read the license/cla commit status")
+	}
+	for _, old := range []string{"CONTRIBUTORS.md", "BODY", "[xX]"} {
+		if strings.Contains(script, old) {
+			t.Errorf("cla.yml still reads %q; the checkbox and roster gate is gone", old)
 		}
 	}
-	if strings.Contains(repoFile(t, ".mergify.yml"), "Contributor has signed") {
-		t.Error(".mergify.yml still waits on \"Contributor has signed\", which nothing reports")
-	}
+}
+
+func TestCLA_TemplateHasNoCheckbox(t *testing.T) {
 	box := regexp.MustCompile(`(?im)^\s*-\s*\[[ xX]\].*\bCLA\b`)
 	if box.MatchString(repoFile(t, ".github", "PULL_REQUEST_TEMPLATE.md")) {
 		t.Error("the PR template still has a CLA checkbox; signing is through CLA Assistant")
@@ -66,50 +124,16 @@ func TestCLA_NoCheckboxGateRemains(t *testing.T) {
 }
 
 // cla-approve-runs.yml holds actions: write and runs on every status, so pin its
-// trigger, its permissions, and that it never checks out or interpolates PR data.
+// trigger, its condition and its permissions.
 func TestCLA_ApproveRunsWorkflowStaysNarrow(t *testing.T) {
-	raw := workflowFile(t, "cla-approve-runs.yml")
-	var w struct {
-		On          map[string]any `yaml:"on"`
-		Permissions map[string]any `yaml:"permissions"`
-		Jobs        map[string]struct {
-			If          string            `yaml:"if"`
-			Permissions map[string]string `yaml:"permissions"`
-			Steps       []struct {
-				Uses string `yaml:"uses"`
-				Run  string `yaml:"run"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
-	}
-	if err := yaml.Unmarshal([]byte(raw), &w); err != nil {
-		t.Fatalf("parsing cla-approve-runs.yml: %v", err)
-	}
+	w := parseWorkflow(t, "cla-approve-runs.yml")
 	if _, ok := w.On["status"]; !ok || len(w.On) != 1 {
 		t.Errorf("triggers = %v, want only status", w.On)
 	}
-	if w.Permissions == nil || len(w.Permissions) != 0 {
-		t.Errorf("top-level permissions = %v, want {}", w.Permissions)
-	}
-	if len(w.Jobs) == 0 {
-		t.Fatal("no jobs; this test no longer checks what it thinks")
-	}
-	allowed := map[string]string{"actions": "write", "pull-requests": "read"}
+	checkNarrow(t, "cla-approve-runs.yml", w, map[string]string{"actions": "write", "pull-requests": "read"})
 	for id, job := range w.Jobs {
 		if !strings.Contains(job.If, "'license/cla'") || !strings.Contains(job.If, "'success'") {
 			t.Errorf("job %s runs on any status: if = %q", id, job.If)
-		}
-		for k, v := range job.Permissions {
-			if allowed[k] != v {
-				t.Errorf("job %s grants %s: %s; only %v is needed", id, k, v, allowed)
-			}
-		}
-		for _, s := range job.Steps {
-			if strings.HasPrefix(s.Uses, "actions/checkout") {
-				t.Errorf("job %s checks out code; it only calls the API", id)
-			}
-			if strings.Contains(s.Run, "${{") {
-				t.Errorf("job %s interpolates an expression into run:; pass it through env", id)
-			}
 		}
 	}
 }

@@ -33,7 +33,8 @@ on your first pull request, and never again:
 1. Open your pull request. [CLA Assistant](https://cla-assistant.io/ankit373/hydra) comments with
    a link to sign.
 2. Follow the link and sign with your GitHub account. The `license/cla` check turns green, and it
-   covers all your future pull requests too.
+   covers all your future pull requests too. If the `Contributor has signed` check already failed,
+   re-run it or push again.
 
 CI on a pull request from a fork starts once you have signed, so sign first if you are waiting on
 checks. Bot pull requests (Dependabot, release-please, Mergify) are exempt.
