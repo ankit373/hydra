@@ -298,10 +298,9 @@ that cannot go red is not a gate.
 A PR touching `internal/`, `registry/`, `go.mod` or `go.sum` gets one comment
 showing how its routing decisions moved. The whole of `internal/` because the
 harness imports about 40 of its packages, and any of them can move a decision.
-It is
-`ci/benchdiff` routing `ci/benchdiff/suite.json` on the PR's base and head:
-the chosen head, tier, fallback depth and estimated cost per prompt, plus the
-SPRT outcome and whether its answer matches the expected one.
+It is `ci/benchdiff` routing `ci/benchdiff/suite.json` on the PR's base and
+head: the chosen head, tier, fallback depth and estimated cost per prompt, plus
+the SPRT outcome and whether its answer matches the expected one.
 
 It needs no keys and no network. The environment is cleared, the CLI heads are
 fake binaries a dry run never executes, the local head is a fake Ollama on
