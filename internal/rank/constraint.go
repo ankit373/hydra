@@ -3,7 +3,9 @@
 package rank
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -50,7 +52,7 @@ func Cheapest(heads []provider.Head, scores map[string]Score, price Price, requi
 		if known {
 			sc.CostUSD = usd
 		}
-		sc.Clears = known && sc.InDomain >= MinCommitments && float64(sc.Effective) >= bar
+		sc.Clears = known && sc.Measured() && float64(sc.Effective) >= bar
 		out[h.ID] = sc
 		if sc.Clears {
 			cleared = append(cleared, h)
@@ -76,4 +78,62 @@ func cheaperFirst(a, b provider.Head, scores map[string]Score) bool {
 		return sa.Effective > sb.Effective
 	}
 	return a.ID < b.ID
+}
+
+// Objective is what an unpinned route optimises. The zero value is the cost
+// constraint, so a caller that names none routes exactly as before E1.
+type Objective string
+
+const (
+	Quality Objective = "quality"
+	Cost    Objective = "cost"
+)
+
+// ParseObjective accepts "", "quality" or "cost" in any case; "" means unset.
+func ParseObjective(s string) (Objective, error) {
+	switch o := Objective(strings.ToLower(strings.TrimSpace(s))); o {
+	case "", Quality, Cost:
+		return o, nil
+	}
+	return "", fmt.Errorf("unknown objective %q; accepted: %s, %s", s, Quality, Cost)
+}
+
+// Strongest orders candidates by in-domain competence, then known price (an
+// unknown one last), then id: a total order, so equal inputs route equally.
+// Nil scores fall back to the declared ones. Fills Score.CostUSD like Cheapest.
+func Strongest(heads []provider.Head, scores map[string]Score, price Price) ([]provider.Head, map[string]Score) {
+	if scores == nil {
+		scores = Scores(heads, nil)
+	}
+	out := make(map[string]Score, len(scores))
+	for id, sc := range scores {
+		out[id] = sc
+	}
+	priced := make(map[string]bool, len(heads))
+	for _, h := range heads {
+		if price == nil {
+			break
+		}
+		if usd, known := price(h); known {
+			sc := out[h.ID]
+			sc.CostUSD = usd
+			out[h.ID], priced[h.ID] = sc, true
+		}
+	}
+	ordered := append([]provider.Head(nil), heads...)
+	sort.Slice(ordered, func(i, j int) bool {
+		a, b := ordered[i], ordered[j]
+		sa, sb := out[a.ID], out[b.ID]
+		if sa.Effective != sb.Effective {
+			return sa.Effective > sb.Effective
+		}
+		if priced[a.ID] != priced[b.ID] {
+			return priced[a.ID]
+		}
+		if sa.CostUSD != sb.CostUSD {
+			return sa.CostUSD < sb.CostUSD
+		}
+		return a.ID < b.ID
+	})
+	return ordered, out
 }

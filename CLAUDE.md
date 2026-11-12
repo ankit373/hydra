@@ -405,6 +405,9 @@ hyctl vet --local --json                   # local Heads only, machine-readable
 # Expose the router as an OpenAI-compatible endpoint. The model field routes:
 # `hydra`, `hydra/<enum>`, `hydra/t<N>`, or a head id. Loopback unless --token.
 hyctl serve ; hyctl serve --enum SIMPLE --local
+# Opt-in routing by objective (quality becomes the default in v2.0.0; until then an
+# implicit-default `hydra` request gets RFC 9745 Deprecation + Link and one stderr line)
+hyctl serve --objective quality ; hyctl serve --objective cost   # or X-Hydra-Objective per request
 hyctl serve --addr 0.0.0.0:8788 --token "$HYDRA_SERVE_TOKEN"
 # Typed decisions on the same server; X-Hydra-Domain picks the calibration domain
 hyctl serve --confidence 0.9   # POST /v1/decisions or /v1/systemone

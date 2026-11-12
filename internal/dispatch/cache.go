@@ -62,12 +62,21 @@ func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options,
 			vec = v
 		}
 	}
-	out := st.Lookup(prompt, vec, cache.Threshold(d.cfg, opts.Enum))
+	out := st.Lookup(prompt, vec, cache.Threshold(d.cfg, cacheEnum(opts)))
 	if out.Found && !d.Allows(out.Hit.Head) {
 		// An answer from a head outside the serve allowlist is one this server may not give.
 		return cache.Outcome{}, true
 	}
 	return out, true
+}
+
+// cacheEnum is the enum whose threshold admits a near match. An objective route
+// keeps the threshold of the pinned default it replaced, never the looser global.
+func cacheEnum(opts Options) string {
+	if opts.Enum == "" && opts.Objective != "" {
+		return ServedDefaultEnum
+	}
+	return opts.Enum
 }
 
 // recordLookup folds a consulted lookup into the tallies. Misses included, or
