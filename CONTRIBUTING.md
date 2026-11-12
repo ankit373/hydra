@@ -337,6 +337,9 @@ Keep the first line under 72 characters. Add a body paragraph if the *why* is no
 - `registry/models.yaml`, add new models here. Include `pool`, `token_limit`, and `pricing_key`.
 - `registry/domains.yaml`, maps task domains to enum keys. Keep entries alphabetically sorted.
 - Always validate YAML syntax: `yq '.' registry/models.yaml > /dev/null`.
+- `registry/pricing.yaml`, a tier priced at a model's list rate gets a line in `ci/registry-drift.yaml`
+  naming that OpenRouter model, so the weekly drift check can compare them. Run it locally with
+  `go run ./ci/registrydrift`; it prints a report and changes nothing.
 
 ---
 
