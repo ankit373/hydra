@@ -9,6 +9,12 @@ on:
 
 permissions: {}
 
+# Two finished bench runs for one head (a re-run, say) must not both find no
+# comment and both post one, so runs for the same branch queue here.
+concurrency:
+  group: bench-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
 jobs:
   comment:
     name: Post routing diff
@@ -45,8 +51,10 @@ jobs:
           zwsp=$'\xe2\x80\x8b'
           body=$(sed "s/@/@$zwsp/g; s/#\([0-9]\)/#$zwsp\1/g" out/comment.md | head -c 60000)
           case "$body" in "$marker"*) ;; *) echo "::error::comment lacks the marker"; exit 1 ;; esac
-          id=$(gh api --paginate "repos/$REPO/issues/$pr/comments" \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n1)
+          # Captured, then cut: a failed list must fail the step, not post a duplicate.
+          ids=$(gh api --paginate "repos/$REPO/issues/$pr/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+          id=${ids%%$'\n'*}
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
           else
