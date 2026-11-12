@@ -116,12 +116,11 @@ hydra yet: rehearse it before you need it.
 npm and PyPI never allow a version to be reused. The fix is always a new patch release.
 
 1. Open a `release:blocked` issue and put `release:blocked` on the release PR. The train holds.
-2. Take the bad version off the defaults:
-   - `gh release edit vBAD --prerelease`, so it is no longer "latest" for install.sh;
-   - `gh release edit vGOOD --latest`;
-   - `npm deprecate hyctl@BAD "<reason>; use GOOD"` and `npm dist-tag add hyctl@GOOD latest`;
-   - yank BAD on PyPI (web UI);
-   - `scripts/update-tap-formula.sh vGOOD`.
+2. Take the bad version off the defaults with rollback.yml: a dry run first
+   (`gh workflow run rollback.yml -f tag=vBAD -f reason="..."`), then again with
+   `-f dry_run=false`. It moves GitHub's latest, npm's `latest` dist-tag and the tap formula back
+   to the previous stable release, and deprecates the npm version. Yank BAD on PyPI by hand (web
+   UI). RUNBOOK-rollback.md has the details.
 3. Land the fix as `fix(...)`. The release PR becomes a patch. Release it through the fast lane.
 4. Close the `release:blocked` issue once the new release checks out on every channel.
 
