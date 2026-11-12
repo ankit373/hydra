@@ -157,6 +157,9 @@ smoke_archive() {
     return 1
   fi
   echo "checksum ok: $name"
+  # Provenance: signed by this repo's publish workflow, not just a matching hash.
+  gh attestation verify "$work/$name" --repo "$REPO" \
+    --signer-workflow "$REPO/.github/workflows/publish.yml"
 
   mkdir -p "$work/x"
   if [ "$ext" = zip ]; then
