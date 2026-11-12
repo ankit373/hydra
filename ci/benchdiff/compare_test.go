@@ -114,6 +114,66 @@ func TestCompare_SmallMovesDoNotGate(t *testing.T) {
 	}
 }
 
+// Exactly on the bar is not over it: both compare in the units the comment
+// prints, where 1.1-1.0 is 10.0%, not 10.000000000000009%.
+func TestCompare_ExactlyOnTheBarDoesNotGate(t *testing.T) {
+	base := report(routed("a", "x", 1.0), ensembled("b", 1, true, 0),
+		ensembled("c", 1, true, 0), ensembled("d", 1, true, 0), ensembled("e", 1, true, 0),
+		ensembled("f", 1, true, 0), ensembled("g", 1, true, 0), ensembled("h", 1, true, 0),
+		ensembled("i", 1, true, 0), ensembled("j", 1, true, 0), ensembled("k", 1, true, 0))
+	head := report(routed("a", "y", 1.1), ensembled("b", 2, true, 0),
+		ensembled("c", 1, true, 0), ensembled("d", 1, true, 0), ensembled("e", 1, true, 0),
+		ensembled("f", 1, true, 0), ensembled("g", 1, true, 0), ensembled("h", 1, true, 0),
+		ensembled("i", 1, true, 0), ensembled("j", 1, true, 0), ensembled("k", 1, true, 0))
+	d, err := compare(base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Gate) != 0 {
+		t.Fatalf("a rise of exactly the bar gated: %v", d.Gate)
+	}
+}
+
+// hyctl dispatch refuses when the ensemble has no evidence, so the bench must too.
+func TestCompare_NoEvidenceCountsAsRefused(t *testing.T) {
+	base := report(ensembled("a", 1, false, 0))
+	h := ensembled("a", 0, false, 0)
+	h.SPRT.Decision = noEvidence
+	d, err := compare(base, report(h))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Head.Refused != 1 {
+		t.Errorf("head refused %d, want 1", d.Head.Refused)
+	}
+	if gate := strings.Join(d.Gate, "\n"); !strings.Contains(gate, "refused on head (no_evidence)") {
+		t.Errorf("a new no_evidence did not gate: %v", d.Gate)
+	}
+}
+
+// A suite edit is part of the PR, so its text must not break the table.
+func TestRender_EscapesSuiteText(t *testing.T) {
+	d, err := compare(report(), report(routed("a|b`c", "x|y", 0)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if md := render(d, "s", ""); !strings.Contains(md, "| `a\\|b'c` | (not in suite) | x\\|y T7,") {
+		t.Fatalf("suite text not escaped:\n%s", md)
+	}
+}
+
+func TestSplitEnv_KeepsWindowsDriveEntries(t *testing.T) {
+	for kv, want := range map[string][2]string{
+		"=C:=C:\\dir": {"=C:", "C:\\dir"},
+		"HOME=/h=x":   {"HOME", "/h=x"},
+		"EMPTY=":      {"EMPTY", ""},
+	} {
+		if k, v := splitEnv(kv); k != want[0] || v != want[1] {
+			t.Errorf("splitEnv(%q) = %q, %q, want %q, %q", kv, k, v, want[0], want[1])
+		}
+	}
+}
+
 func TestCompare_RefusesMismatchedSchemas(t *testing.T) {
 	if _, err := compare(Report{Schema: 1}, Report{Schema: 2}); err == nil {
 		t.Fatal("compared two report shapes")
@@ -150,7 +210,9 @@ func TestCompare_SpendFromAFreeBaseGates(t *testing.T) {
 }
 
 // The suite must route the same way twice and reach every SPRT outcome it was
-// written for, or a diff of two runs reports noise as a regression.
+// written for, or a diff of two runs reports noise as a regression. Both runs
+// share one process, so caches are warm for the second; CI's base and head
+// runs are separate processes, which this does not cover.
 func TestRunSuite_IsDeterministicAndExercisesEveryPath(t *testing.T) {
 	before := os.Environ()
 	first, err := runSuite(context.Background(), suiteJSON)
@@ -183,5 +245,9 @@ func TestRunSuite_IsDeterministicAndExercisesEveryPath(t *testing.T) {
 		if !seen[want] {
 			t.Errorf("no prompt reached SPRT %q", want)
 		}
+	}
+	// One prompt flipping must not be the whole verifier signal.
+	if n := totals(first).Correct; n < 2 {
+		t.Errorf("%d prompts verified correct, want at least 2", n)
 	}
 }

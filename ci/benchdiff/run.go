@@ -158,9 +158,19 @@ func sandbox(root string, s Suite) error {
 func restoreEnv(saved []string) {
 	os.Clearenv()
 	for _, kv := range saved {
-		k, v, _ := strings.Cut(kv, "=")
+		k, v := splitEnv(kv)
 		_ = os.Setenv(k, v)
 	}
+}
+
+// splitEnv cuts at the first '=' after index 0, as syscall.Clearenv does:
+// Windows keeps "=C:=C:\dir" entries whose name starts with '='.
+func splitEnv(kv string) (string, string) {
+	i := strings.Index(kv[min(1, len(kv)):], "=") + 1
+	if i <= 0 {
+		return kv, ""
+	}
+	return kv[:i], kv[i+1:]
 }
 
 // fakeOllama answers discovery on loopback, so the suite has local heads at

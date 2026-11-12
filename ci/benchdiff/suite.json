@@ -9,7 +9,9 @@
     {"head": "ollama/qwen2.5-coder:7b", "domain": "go", "tp": 60, "fp": 40, "tn": 20, "fn": 20},
     {"head": "claude", "domain": "py", "tp": 96, "fp": 4, "tn": 0, "fn": 0},
     {"head": "ollama/qwen2.5-coder:7b", "domain": "py", "tp": 97, "fp": 3, "tn": 0, "fn": 0},
-    {"head": "flash-high", "domain": "ts", "tp": 45, "fp": 5, "tn": 0, "fn": 0}
+    {"head": "flash-high", "domain": "ts", "tp": 45, "fp": 5, "tn": 0, "fn": 0},
+    {"head": "claude", "domain": "rs", "tp": 92, "fp": 8, "tn": 38, "fn": 6},
+    {"head": "codex", "domain": "rs", "tp": 90, "fp": 10, "tn": 36, "fn": 7}
   ],
   "prompts": [
     {"id": "unpinned", "prompt": "add pagination to the users list"},
@@ -29,6 +31,8 @@
     {"id": "domain-ts", "prompt": "type this fetch wrapper", "domain": "ts"},
     {"id": "sprt-agree", "prompt": "does this Go loop capture the variable per iteration", "domain": "go",
      "confidence": 0.9, "answer": "yes", "expected": "yes"},
+    {"id": "sprt-agree-rs", "prompt": "does this Rust borrow outlive the guard", "domain": "rs",
+     "confidence": 0.9, "answer": "no", "expected": "no"},
     {"id": "sprt-split", "prompt": "is this mutex held across the channel send", "domain": "go",
      "confidence": 0.95, "answer": "no", "answers": {"claude": "yes", "codex": "yes"}, "expected": "yes"},
     {"id": "sprt-pinned", "prompt": "is this slice aliasing safe", "enum": "STANDARD", "domain": "go",

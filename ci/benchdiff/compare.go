@@ -51,6 +51,18 @@ type SPRT struct {
 	Correct    bool    `json:"correct,omitempty"`
 }
 
+// refused is why the user gets no answer: no head, or, as hyctl dispatch
+// returns noEvidenceError, an ensemble that had no evidence to decide on.
+func (r Result) refused() string {
+	if r.Refused != "" {
+		return r.Refused
+	}
+	if r.SPRT != nil && r.SPRT.Decision == noEvidence {
+		return noEvidence
+	}
+	return ""
+}
+
 // escalated: the ensemble needed more than one head to reach its decision.
 func (s *SPRT) escalated() bool { return s != nil && s.Samples > 1 }
 
@@ -65,7 +77,7 @@ func totals(r Report) Totals {
 	for _, x := range r.Results {
 		t.Prompts++
 		t.CostUSD += x.CostUSD
-		if x.Refused != "" {
+		if x.refused() != "" {
 			t.Refused++
 		}
 		if x.SPRT == nil {
@@ -122,11 +134,11 @@ func compare(base, head Report) (Diff, error) {
 		if b == nil {
 			continue
 		}
-		if b.Refused == "" && h.Refused != "" {
-			d.Gate = append(d.Gate, fmt.Sprintf("`%s` routed on base and is refused on head (%s)", h.ID, h.Refused))
+		if b.refused() == "" && h.refused() != "" {
+			d.Gate = append(d.Gate, fmt.Sprintf("`%s` routed on base and is refused on head (%s)", md(h.ID), md(h.refused())))
 		}
 		if b.SPRT != nil && b.SPRT.Correct && (h.SPRT == nil || !h.SPRT.Correct) {
-			d.Gate = append(d.Gate, fmt.Sprintf("`%s` verified correct on base, not on head", h.ID))
+			d.Gate = append(d.Gate, fmt.Sprintf("`%s` verified correct on base, not on head", md(h.ID)))
 		}
 	}
 	for _, r := range base.Results {
@@ -139,11 +151,12 @@ func compare(base, head Report) (Diff, error) {
 	case d.Base.Prompts == 0 || head <= base:
 	case base == 0:
 		d.Gate = append(d.Gate, fmt.Sprintf("estimated cost rose from $0 to $%.6f", head))
-	case (head-base)/base > maxCostRise:
+	case round(100*(head-base)/base, 1) > 100*maxCostRise:
 		d.Gate = append(d.Gate, fmt.Sprintf("estimated cost rose %s, over the %+.0f%% bar",
 			pct(base, head), maxCostRise*100))
 	}
-	if rise, ok := d.escalationRise(); ok && rise > maxEscalationRise {
+	// Both bars compare in the 0.1 units the comment prints, so "+10.0%" never gates.
+	if rise, ok := d.escalationRise(); ok && round(100*rise, 1) > 100*maxEscalationRise {
 		d.Gate = append(d.Gate, fmt.Sprintf("escalation rate rose %+.1f pp, over the %+.0f pp bar",
 			rise*100, maxEscalationRise*100))
 	}
@@ -208,7 +221,7 @@ func render(d Diff, suite, note string) string {
 		fmt.Fprintf(&b, "<details open><summary>Decision changes (%d)</summary>\n\n", len(d.Changes))
 		b.WriteString("| prompt | base | head |\n|---|---|---|\n")
 		for _, c := range d.Changes {
-			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", c.ID, side(c.Base), side(c.Head))
+			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", md(c.ID), side(c.Base), side(c.Head))
 		}
 		b.WriteString("\n</details>\n\n")
 	}
@@ -227,8 +240,11 @@ func side(r *Result) string {
 	if r == nil {
 		return "(not in suite)"
 	}
-	return cell(*r)
+	return md(cell(*r))
 }
+
+// md keeps suite-controlled text from breaking out of a table cell or code span.
+var md = strings.NewReplacer("|", `\|`, "`", "'", "\n", " ").Replace
 
 func ratio(n, of int) string {
 	if of == 0 {
