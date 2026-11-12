@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/classify"
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
@@ -59,14 +62,37 @@ func loadRules(home string) (*signals.Engine, error) {
 // blastRadius is the caller's, because the caller is the one that already
 // loaded the code graph for --file; nil leaves the signal absent rather than
 // zero, and zero dependents is a real reading.
-func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int) signals.Decision {
+// msgs is the conversation when the caller has one, which today is `hyctl
+// serve`. Nil leaves the conversation signals absent, because a single-shot
+// dispatch is not a conversation of length zero (#1021).
+// headID is a head pinned before routing runs (Options.Head); reading the one
+// selectHeads later picks would be circular. Empty leaves the per-head signals absent.
+func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int, msgs []executor.Message, headID string) signals.Decision {
 	in := signals.Input{Prompt: prompt, BlastRadius: blastRadius}
+	// Always derivable from the prompt, so the caller is not asked for it, and
+	// executor.EstimateTokens stays the only estimator in the tree.
+	tokens := executor.EstimateTokens(prompt)
+	in.PromptTokens = &tokens
+	if msgs != nil {
+		turns, loop := conversationShape(msgs)
+		in.Turns, in.ToolLoop = &turns, &loop
+	}
 	if d == nil {
 		return (*signals.Engine)(nil).Evaluate(in)
 	}
 	if d.cal != nil {
 		cal := d.calibratedIn(domain)
 		in.Calibrated = &cal
+	}
+	if headID != "" {
+		if h, ok := d.findHead(headID); ok {
+			if eff, ok := budget.EffectiveContext(h); ok {
+				in.EffectiveContext = &eff
+			}
+			if p95, ok := d.latencyP95(h); ok {
+				in.LatencyP95MS = &p95
+			}
+		}
 	}
 	// Only when a rule asks. The lookup costs an embedding call and a pass over
 	// the corpus, and #750 removed a per-dispatch HTTP call for good reason; an
@@ -75,6 +101,32 @@ func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRad
 		in.CorpusPassRate, in.CorpusSupport = d.corpusEvidence(ctx, prompt)
 	}
 	return d.rules.Evaluate(in)
+}
+
+// findHead looks up a discovered head by id. Unlike pinHead it never errors on
+// an unroutable head: a signal must not abort the dispatch it describes.
+func (d *Dispatcher) findHead(id string) (provider.Head, bool) {
+	for _, h := range d.heads {
+		if h.ID == id {
+			return h, true
+		}
+	}
+	return provider.Head{}, false
+}
+
+// conversationShape reads the two facts vLLM SR's `conversation` family routes
+// on. A turn is a user message, the usual meaning; a tool loop is any tool
+// result or tool call already in the history.
+func conversationShape(msgs []executor.Message) (turns int, toolLoop bool) {
+	for _, m := range msgs {
+		if strings.EqualFold(m.Role, "user") {
+			turns++
+		}
+		if strings.EqualFold(m.Role, "tool") || len(m.ToolCalls) > 0 {
+			toolLoop = true
+		}
+	}
+	return turns, toolLoop
 }
 
 // corpusEvidence asks internal/classify what the verified examples say about

@@ -30,6 +30,8 @@ import type {
 } from '../types'
 import { clockTime, coverageBand, costBand, toSecurityCSV } from '../format'
 import { MCPServers } from './MCPServers'
+import { PageHeader } from './PageHeader'
+import { Tabs } from './Tabs'
 import {
   CategoryGrid,
   CoverageHistory,
@@ -66,15 +68,16 @@ function coverageSegments(categories: Category[]): DonutSegment[] {
   })
 }
 
-// Allowed/Denied are mutually exclusive (Decision is one or the other) and
+// Allowed/Denied/Ask are mutually exclusive (a Decision is exactly one) and
 // sum to Total, a real part-to-whole pie. Flagged is a different,
 // independent dimension (a flagged event can be either allowed or denied),
-// so it can't be a third slice without double-counting; it's called out
+// so it can't be a further slice without double-counting; it's called out
 // separately instead of drawn into the same pie.
 function ledgerSegments(ledger: LedgerPanel): DonutSegment[] {
   return [
     { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-cheap)' },
     { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-expensive)' },
+    { label: 'Ask', value: ledger.asked, colorVar: 'var(--hy-mid)' },
   ]
 }
 
@@ -93,19 +96,16 @@ export function Security({ data }: { data: SecurityReport }) {
 
   return (
     <>
-      <header className="view__head">
-        <div className="sec-headrow">
-          <div>
-            <h1 className="view__title">Audit</h1>
-            <p className="view__sub">
-              What the agents on this machine did, and whether you need to act today.
-            </p>
-          </div>
+      <PageHeader
+        title="Audit"
+        subtitle="What the agents on this machine did, and whether you need to act today."
+        provenance={auditProvenance(data)}
+        actions={
           <button className="sec-export" onClick={() => downloadSecurityCSV(data)}>
             Export CSV
           </button>
-        </div>
-      </header>
+        }
+      />
 
       {!data.integrityIntact && (
         <div className="error">
@@ -114,24 +114,20 @@ export function Security({ data }: { data: SecurityReport }) {
         </div>
       )}
 
-      <div className="tabs">
-        <button
-          className="tab"
-          aria-current={tab === 'overview' ? 'page' : undefined}
-          onClick={() => setTab('overview')}
-        >
-          Overview
-        </button>
-        <button
-          className="tab"
-          aria-current={tab === 'detailed' ? 'page' : undefined}
-          onClick={() => setTab('detailed')}
-        >
-          Detailed
-        </button>
-      </div>
+      <Tabs
+        label="How much of the audit to show"
+        panelID="audit-panel"
+        current={tab}
+        onSelect={setTab}
+        tabs={[
+          { id: 'overview', label: 'Overview' },
+          { id: 'detailed', label: 'Detailed' },
+        ]}
+      />
 
-      {tab === 'overview' ? <Hero data={data} /> : <Detailed data={data} />}
+      <div id="audit-panel" role="tabpanel">
+        {tab === 'overview' ? <Hero data={data} /> : <Detailed data={data} />}
+      </div>
     </>
   )
 }
@@ -349,9 +345,9 @@ function Hero({ data }: { data: SecurityReport }) {
           )}
         </div>
         <div className="card sec-top__risk">
-          <div className="card__label">Blocked · flagged</div>
+          <div className="card__label">Blocked · awaiting · flagged</div>
           <div className="card__value--sm">
-            {data.ledger.denied} blocked · {data.ledger.flagged} flagged
+            {data.ledger.denied} blocked · {data.ledger.asked} awaiting · {data.ledger.flagged} flagged
           </div>
           {data.riskHistory && data.riskHistory.length >= 2 ? (
             <div className="sec-hero__history">
@@ -459,23 +455,30 @@ type DetailTab = (typeof DETAIL_TABS)[number]['id']
 // Sub-tabs rather than one long scroll: these are five different questions
 // (what's covered / is the policy sound / did data leak / what was attempted /
 // show me the rows), and stacking them made the view read as a list of lists.
+/** What the report rests on. A coverage percentage over a truncated or
+ *  unchained log is a different claim from one over a whole log, and the
+ *  report already knows which it has. */
+function auditProvenance(data: SecurityReport): string {
+  const parts = [`${data.ledger.total} ledger events`]
+  if (data.truncated) parts.push('partial log, not the whole one')
+  if (!data.integrityIntact) parts.push('chain broken')
+  if (data.attestation?.generatedAt) parts.push(`as of ${data.attestation.generatedAt.slice(0, 10)}`)
+  return parts.join(' · ')
+}
+
 function Detailed({ data }: { data: SecurityReport }) {
   const [tab, setTab] = useState<DetailTab>('register')
   return (
     <>
-      <div className="tabs">
-        {DETAIL_TABS.map((t) => (
-          <button
-            key={t.id}
-            className="tab"
-            aria-current={tab === t.id ? 'page' : undefined}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Audit detail"
+        panelID="audit-detail"
+        current={tab}
+        onSelect={setTab}
+        tabs={DETAIL_TABS}
+      />
 
+      <div id="audit-detail" role="tabpanel">
       {tab === 'register' && <RegisterTable register={data.register} />}
 
       {tab === 'coverage' && (
@@ -519,6 +522,7 @@ function Detailed({ data }: { data: SecurityReport }) {
       {tab === 'mcp' && <MCPServers />}
       {tab === 'evidence' && <EvidenceView events={data.events ?? []} truncated={!!data.truncated} />}
       {tab === 'attest' && <AttestationView a={data.attestation} />}
+      </div>
     </>
   )
 }

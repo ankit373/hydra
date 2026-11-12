@@ -108,6 +108,14 @@ var tuningVars = []string{
 	"LLAMA_ARG_HOST",
 	"LLAMA_ARG_PORT",
 	"HYDRA_LMSTUDIO_HOST",
+	"HYDRA_SGLANG_HOST",
+}
+
+// decisionVars are a decision API's key and model. Kept apart from APIKeyVars,
+// which mirrors the chat heads' env provider exactly.
+var decisionVars = []string{
+	"TYPESAFE_API_KEY",
+	"TYPESAFE_DEFAULT_MODEL",
 }
 
 // deadAddressVars are the subset whose value is an address to dial.
@@ -120,6 +128,7 @@ var deadAddressVars = map[string]string{
 	// because it was the one service a sandbox could not point away from the
 	// developer's machine (#988).
 	"HYDRA_LMSTUDIO_HOST": "http://127.0.0.1:1",
+	"HYDRA_SGLANG_HOST":   "http://127.0.0.1:1",
 }
 
 // Blocking outbound HTTP has to happen at package load, not per test.
@@ -202,6 +211,9 @@ func NewSandbox(t *testing.T) *Sandbox {
 	t.Setenv("HOME", s.Home)
 	t.Setenv("USERPROFILE", s.Home)
 	t.Setenv("HYDRA_HOME", s.HydraHome)
+	// keystore.BackendEnv: stored keys go to a file under HydraHome, never the
+	// developer's real Keychain.
+	t.Setenv("HYDRA_KEYSTORE", "file")
 
 	// An empty PATH would make exec.LookPath fail for a different reason on
 	// each OS; one empty directory makes "not found" mean exactly that.
@@ -211,6 +223,9 @@ func NewSandbox(t *testing.T) *Sandbox {
 		t.Setenv(v, "")
 	}
 	for _, v := range ModelPinVars {
+		t.Setenv(v, "")
+	}
+	for _, v := range decisionVars {
 		t.Setenv(v, "")
 	}
 	for _, v := range tuningVars {
@@ -348,14 +363,20 @@ func EchoScript(reply string) string {
 }
 
 // escapeBatch quotes the characters cmd.exe interprets before echo sees them.
-// The caret must be escaped first, or it would double-escape everything after.
+// Inside double quotes cmd prints a caret literally, so only % is escaped there.
 func escapeBatch(s string) string {
-	return strings.NewReplacer(
-		"^", "^^",
-		"<", "^<",
-		">", "^>",
-		"&", "^&",
-		"|", "^|",
-		"%", "%%",
-	).Replace(s)
+	var b strings.Builder
+	quoted := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			quoted = !quoted
+		case r == '%':
+			b.WriteRune('%')
+		case !quoted && strings.ContainsRune("^<>&|", r):
+			b.WriteRune('^')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

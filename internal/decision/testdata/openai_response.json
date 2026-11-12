@@ -1,0 +1,65 @@
+{
+  "model": "gpt-6-luna",
+  "answers": [
+    {
+      "type": "predicate",
+      "name": null,
+      "probability": 0.98
+    },
+    {
+      "type": "choice",
+      "name": null,
+      "choice": "calm",
+      "probabilities": [
+        {
+          "value": "angry",
+          "probability": 0.15
+        },
+        {
+          "value": "calm",
+          "probability": 0.8
+        },
+        {
+          "value": "excited",
+          "probability": 0.05
+        }
+      ],
+      "confidence": 0.7
+    },
+    {
+      "type": "score",
+      "name": null,
+      "score": 1.7,
+      "probabilities": [
+        {
+          "value": 0,
+          "label": "Can wait",
+          "probability": 0.1
+        },
+        {
+          "value": 1,
+          "label": "Needs attention this week",
+          "probability": 0.1
+        },
+        {
+          "value": 2,
+          "label": "Needs attention today",
+          "probability": 0.8
+        }
+      ],
+      "confidence": 0.55
+    }
+  ],
+  "usage": {
+    "input_tokens": 42,
+    "input_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0
+    },
+    "output_tokens": 0,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 42
+  }
+}

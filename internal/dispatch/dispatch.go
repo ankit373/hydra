@@ -39,6 +39,7 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/signals"
+	"github.com/ankit373/hydra/internal/sketch"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
 )
@@ -48,6 +49,27 @@ import (
 // CLI-flavored string (backtick-quoted `hyctl probe`, etc.) never has to leak
 // into a GUI caller that has no terminal to point at (#452).
 var ErrNoHeads = errors.New("no dispatchable heads")
+
+// ErrHeadUnknown and ErrHeadUnusable separate the two ways a *named* head
+// fails from the general "nothing was available". A caller that picked the
+// head is owed a different answer from one whose fallback chain ran out, and
+// over an API the difference is whether retrying can ever work: an unknown id
+// is 404 and an unusable one 400, where exhaustion really is a 5xx. Both wrap
+// ErrNoHeads as well, so every existing errors.Is keeps its meaning.
+var (
+	ErrHeadUnknown  = errors.New("unknown head")
+	ErrHeadUnusable = errors.New("head cannot be used")
+)
+
+// headErr carries that kind without touching the message, which is what the
+// operator reads and is already the right words (#676).
+type headErr struct {
+	kind error
+	msg  error
+}
+
+func (e headErr) Error() string   { return e.msg.Error() }
+func (e headErr) Unwrap() []error { return []error{e.msg, e.kind} }
 
 // Options controls dispatch behaviour.
 type Options struct {
@@ -92,6 +114,18 @@ type Options struct {
 	// MaxCostSource names where that ceiling came from, so a refusal says
 	// which of the flag and the policy file to change. Empty reads as the flag.
 	MaxCostSource string
+
+	// Temperature is passed to the head unchanged; nil means the provider
+	// default. CLI and agy heads ignore it.
+	Temperature *float64
+
+	// MaxMemoryMB and MaxCPUSeconds cap a dispatched subprocess's address
+	// space and CPU time, from policy.yaml's max_memory_mb/max_cpu_seconds.
+	// 0 means no ceiling, same spelling MaxCostUSD already uses. Applied by
+	// sandbox.WithLimits inside the executor, not here: this only carries the
+	// numbers from policy to the process that will actually run.
+	MaxMemoryMB   int
+	MaxCPUSeconds int
 
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
@@ -246,14 +280,22 @@ func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result
 		return nil, err
 	}
 	prompt := fmt.Sprintf("%s\n\nYou asked: %s\nThe user answered: %s", q.Prompt, q.Question, answer)
-	return d.Dispatch(ctx, prompt, Options{
+	return d.Dispatch(ctx, prompt, resumeOptions(q))
+}
+
+// resumeOptions is what a parked task is dispatched with once answered: what
+// it was parked under, with approval for the one head the human was shown.
+func resumeOptions(q pending.Question) Options {
+	return Options{
 		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
 		System: q.System, Enum: q.Enum, Resource: q.Resource,
+		Domain: q.Domain, Temperature: q.Temperature, NoCache: q.NoCache,
+		MaxCostUSD: q.MaxCostUSD, MaxCostSource: q.MaxCostSource,
 		RunID: q.RunID, TaskID: q.TaskID,
 		AnsweredHead: q.Head,
 		// A2A context is already inside q.Prompt, Dispatch injected it before
 		// the gate parked the task, so naming the file again would double it.
-	})
+	}
 }
 
 // Decline refuses a parked task without running it.
@@ -313,6 +355,11 @@ type Dispatcher struct {
 	// always falls through, which is what a machine with no rules file gets.
 	rules *signals.Engine
 
+	// latency is per-head wall-clock latency from the cost log, built by
+	// loadLatency at most once and only when a rule reads latency.p95_ms.
+	latencyOnce sync.Once
+	latency     map[string]*sketch.Sketch
+
 	// recall indexes and vectorises prompts off the dispatch path. Built at
 	// most once, by recorder(), and drained by Close.
 	recallOnce sync.Once
@@ -336,16 +383,89 @@ type Dispatcher struct {
 	// rule reads a corpus signal.
 	corpusLoad sync.Once
 	corpusData *classify.Corpus
+
+	// allowed is `hyctl serve --heads`, nil when unset. Kept beside heads because a
+	// cached answer can name a head discovery no longer finds.
+	allowed    map[string]bool
+	discovered []provider.Head // heads before RestrictHeads, nil when it never narrowed them
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
+// ServeHeads is config.toml's `[serve] heads`, read from the config New already loaded.
+func (d *Dispatcher) ServeHeads() []string { return d.cfg.Serve.Heads }
+
+// Allows reports whether head id may answer here: any head, unless RestrictHeads set a list.
+func (d *Dispatcher) Allows(id string) bool { return d.allowed == nil || d.allowed[id] }
+
+// RestrictHeads routes among only the named heads, in CapScore order; embedding lookups keep
+// the whole discovery. It refuses an unknown, repeated or unroutable id (an embedding-only one
+// may be listed), or a list with no routable head, or no local one under localOnly.
+func (d *Dispatcher) RestrictHeads(ids []string, localOnly bool) error {
+	byID := make(map[string]provider.Head, len(d.heads))
+	for _, h := range d.heads {
+		byID[h.ID] = h
+	}
+	want := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if want[id] {
+			return fmt.Errorf("head %q is listed twice", id)
+		}
+		h, ok := byID[id]
+		if !ok {
+			return fmt.Errorf("no discovered head with id %q; run `hyctl probe` to see what this machine has", id)
+		}
+		if why := executor.Unroutable(h); why != "" && !embeddingOnly(h) {
+			return fmt.Errorf("head %q cannot be routed: %s", id, why)
+		}
+		want[id] = true
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	// A new slice: d.heads may be the probe cache's own, shared across New calls.
+	kept := make([]provider.Head, 0, len(want))
+	routable := 0
+	for _, h := range d.heads {
+		if !want[h.ID] {
+			continue
+		}
+		kept = append(kept, h)
+		if executor.Unroutable(h) == "" && (h.LocalOnly || !localOnly) {
+			routable++
+		}
+	}
+	switch {
+	case routable > 0:
+		d.discovered, d.heads, d.allowed = d.heads, kept, want
+		return nil
+	case localOnly:
+		return errors.New("no listed head is a routable local head, and this server is local-only (--local)")
+	}
+	return errors.New("no listed head can be routed")
+}
+
+func embeddingOnly(h provider.Head) bool { return h.Meta["embedding_only"] == "true" }
+
+// embedHeads is what an embedder is resolved from: the whole discovery, since an allowlist
+// names heads to route among, and embed_model may name one it left off.
+func (d *Dispatcher) embedHeads() []provider.Head {
+	if d.discovered != nil {
+		return d.discovered
+	}
+	return d.heads
+}
+
 // Embedder resolves the machine's embedding model once, for a caller that
 // needs a vector rather than an answer. Never nil; with no model on the machine
 // it reports itself unavailable, so callers keep one code path.
 func (d *Dispatcher) Embedder() embed.Embedder {
-	d.corpusOnce.Do(func() { d.corpusEmb = embed.Resolve(d.heads, d.cfg.EmbedModel) })
+	d.corpusOnce.Do(func() { d.corpusEmb = embed.Resolve(d.embedHeads(), d.cfg.EmbedModel) })
 	return d.corpusEmb
 }
 
@@ -406,6 +526,14 @@ func cachedProbe(ctx context.Context) *probe.Result {
 	probeCacheAt = time.Now()
 	probeCacheEnv = env
 	return probeCacheResult
+}
+
+// ForgetProbe drops the cached probe. A key saved in the desktop app changes
+// what discovery finds without touching HOME or PATH, which the cache keys on.
+func ForgetProbe() {
+	probeCacheMu.Lock()
+	defer probeCacheMu.Unlock()
+	probeCacheResult = nil
 }
 
 // PIILocalOnly reports whether cfg's pii policy forces local-only routing,
@@ -477,7 +605,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Evaluated once, here or by the caller, never per fallback candidate.
 	dec := opts.Decision
 	if dec == nil {
-		computed := d.Decide(ctx, prompt, opts.Domain, nil)
+		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages, opts.Head)
 		dec = &computed
 	}
 	if err := applyDecision(*dec, &opts); err != nil {
@@ -492,7 +620,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	defer func() { _ = d.health.Flush() }()
 
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
-	// tier ("expert") is otherwise opaque to claudeMode's Atoi, which left the
+	// tier ("expert") is otherwise opaque to quotaMode's Atoi, which left the
 	// whole token-preservation table inert for every non-numeric hint (#165).
 	// A hint that is invalid on its face, an unknown name or an out-of-range
 	// number, is rejected here, before routability ever enters the picture, so
@@ -502,21 +630,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return nil, err
 	}
 
-	// Apply claude% preservation, may downgrade tier or abort.
-	tier, mode, pct := d.claudeMode(hint)
-	switch mode {
-	case "emergency":
-		log.Printf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", pct)
+	// Apply quota preservation, may downgrade tier or abort.
+	tier, q, mode := d.quotaMode(hint)
+	if mode == budget.ModeEmergency {
 		tier = "10"
 		opts.LocalOnly = true
-	case "critical":
-		log.Printf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", pct)
-	case "warning":
-		log.Printf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", pct)
-	case "caution":
-		log.Printf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", pct)
-	case "compact":
-		log.Printf("ℹ️  Claude at %d%%, Consider running /compact.", pct)
+	}
+	if line := governorLog(q, mode, hint, tier); line != "" {
+		log.Print(line)
 	}
 
 	// Inject A2A handoff context into prompt if provided. --a2a names a file the
@@ -689,6 +810,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	var lastErr error
 	var attempts []Attempt
+	// Refusals the request itself caused, against heads actually sent, so a
+	// run that sent nothing can say it was the request and not the heads.
+	var tooWarm, overCost, sent int
 	for i, h := range candidates {
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
@@ -738,6 +862,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			refuse("cannot carry tool definitions")
 			continue
 		}
+		// Skipped like the tools case, never sent and failed: the provider would
+		// answer 400, and the breaker would park a healthy head over it.
+		if limit := executor.MaxTemperature(h); opts.Temperature != nil && *opts.Temperature > limit {
+			refuse(fmt.Sprintf("accepts a temperature of at most %g, not %g", limit, *opts.Temperature))
+			tooWarm++
+			continue
+		}
 		// The egress gate, deliberately independent of the ledger's decision:
 		// the ledger answers who may act, this answers where content may go.
 		// The reroute above should already have made this unreachable for a
@@ -779,6 +910,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Prompt:   prompt, Head: h.ID, Resource: opts.Resource,
 				Enum: opts.Enum, TierHint: opts.TierHint, System: opts.System,
 				LocalOnly: localOnly, MaxTokens: opts.MaxTokens,
+				Domain: opts.Domain, Temperature: opts.Temperature,
+				MaxCostUSD: opts.MaxCostUSD, MaxCostSource: opts.MaxCostSource,
+				NoCache: opts.NoCache,
 			}
 			// A question that cannot be stored has not been asked, so this
 			// fails the dispatch rather than proceeding unapproved.
@@ -826,9 +960,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					Agent: "hydra-dispatch", Tool: h.ID, Decision: ledger.Deny,
 					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, opts.MaxCostUSD),
 				})
+				overCost++
 				continue
 			}
 		}
+		sent++
 		started := time.Now()
 		exec := executor.For(h)
 		emit := func(kind StreamKind, text, reason string) {
@@ -849,13 +985,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			onDelta = func(d string) { emit(StreamDelta, d, "") }
 		}
 		resp, err := executor.Stream(ctx, exec, executor.Request{
-			Prompt:     prompt,
-			Head:       h,
-			MaxTokens:  opts.MaxTokens,
-			System:     opts.System,
-			Messages:   opts.Messages,
-			Tools:      opts.Tools,
-			ToolChoice: opts.ToolChoice,
+			Prompt:        prompt,
+			Head:          h,
+			MaxTokens:     opts.MaxTokens,
+			Temperature:   opts.Temperature,
+			System:        opts.System,
+			Messages:      opts.Messages,
+			Tools:         opts.Tools,
+			ToolChoice:    opts.ToolChoice,
+			MaxMemoryMB:   opts.MaxMemoryMB,
+			MaxCPUSeconds: opts.MaxCPUSeconds,
 		}, onDelta)
 		if err != nil {
 			lastErr = err
@@ -879,7 +1018,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// Parks the head so the rest of this run, and the next one, skip
 			// it. A missing binary or an unknown model opens the breaker at
 			// once; anything that might not recur gets a second chance first.
-			d.health.Fail(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now())
+			// A rate limit is neither, and carries the wait the server asked
+			// for, which is a better number than ours (#1096).
+			stated, _ := health.StatedWait(err)
+			d.health.FailFor(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now(), stated)
 			// A failed candidate is part of the run's shape: it is why the
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
@@ -944,31 +1086,46 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		Level: runlog.LevelError, Status: "failed",
 		Detail: fmt.Sprintf("all %d heads failed", len(candidates)),
 	})
+	switch n := len(candidates); {
+	case tooWarm == n && n > 0:
+		return nil, fmt.Errorf("%w: temperature %g is above what every candidate head accepts",
+			executor.ErrUnaskable, *opts.Temperature)
+	case sent == 0 && overCost > 0:
+		lastErr = overCeiling{lastErr}
+	}
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
 
-// claudeMode reads claude_pct from state.json and returns the (possibly downgraded) tier,
-// mode string, and raw percentage. The mode is rate-aware: a fast burn (high
-// first-passage risk toward the 80% line) escalates the mode above its static
-// level band, so the tier downgrades earlier. With no history the effective mode
-// equals ModeFor(pct), identical to the prior behavior.
-func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
-	pct = readClaudePct()
-	_, risk := budget.RiskFromHistory(readClaudePctHistory())
-	mode = budget.EffectiveMode(pct, risk).String()
-	tier = tierHint
+// ErrOverCostCeiling marks a dispatch that sent nothing and whose ceiling
+// refused at least one head that could otherwise have run: the ceiling, not a
+// head, is why there is no answer.
+var ErrOverCostCeiling = errors.New("no head was sent the request, and the cost ceiling refused at least one")
+
+// overCeiling grades an error as ErrOverCostCeiling without changing what it
+// says, so the CLI's message stays exactly what it was.
+type overCeiling struct{ err error }
+
+func (e overCeiling) Error() string   { return e.err.Error() }
+func (e overCeiling) Unwrap() []error { return []error{e.err, ErrOverCostCeiling} }
+
+// quotaMode reads state.json once and returns the (possibly downgraded) tier,
+// the governing quota and its mode. The mode is rate-aware, so a fast burn
+// downgrades before the static band would; no quota at all is ModeNormal.
+func (d *Dispatcher) quotaMode(tierHint string) (string, budget.Quota, budget.Mode) {
+	raw, _ := os.ReadFile(filepath.Join(config.Dir(), "logs", "state.json"))
+	q, mode, _ := budget.Governing(budget.ParseState(raw).Quotas)
 
 	// Convert tier hint to int so we can downgrade numerically.
 	t, err := strconv.Atoi(tierHint)
 	if err != nil {
-		return tier, mode, pct
+		return tierHint, q, mode
 	}
 	switch mode {
-	case "critical":
+	case budget.ModeCritical:
 		t += 2
-	case "emergency":
+	case budget.ModeEmergency:
 		t = 10
-	case "warning":
+	case budget.ModeWarning:
 		t++
 	}
 	// Only escalation overflow reaches this, resolveTierHint already rejects
@@ -977,63 +1134,32 @@ func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct 
 	if t > maxTier {
 		t = maxTier
 	}
-	return strconv.Itoa(t), mode, pct
+	return strconv.Itoa(t), q, mode
 }
 
-func readClaudePct() int {
-	statePath := filepath.Join(config.Dir(), "logs", "state.json")
-	raw, err := os.ReadFile(statePath)
-	if err != nil {
-		return 0
+// governorLog keeps the wording users already know; session:claude-code is the
+// only scope at checkpoint A. A downgrade is claimed only when the tier moved.
+func governorLog(q budget.Quota, mode budget.Mode, fromTier, toTier string) string {
+	moved := fromTier != toTier
+	switch mode {
+	case budget.ModeEmergency:
+		return fmt.Sprintf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", q.Pct())
+	case budget.ModeCritical:
+		if moved {
+			return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", q.Pct())
+		}
+		return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%. Run /compact NOW.", q.Pct())
+	case budget.ModeWarning:
+		if moved {
+			return fmt.Sprintf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", q.Pct())
+		}
+		return fmt.Sprintf("🟠 WARNING: Claude at %d%%. Run /compact now.", q.Pct())
+	case budget.ModeCaution:
+		return fmt.Sprintf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", q.Pct())
+	case budget.ModeCompact:
+		return fmt.Sprintf("ℹ️  Claude at %d%%, Consider running /compact.", q.Pct())
 	}
-	var s struct {
-		ClaudePct int `json:"claude_pct"`
-	}
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return 0
-	}
-	return s.ClaudePct
-}
-
-// readClaudePctHistory reads the bounded claude_pct trajectory from state.json.
-// A missing file or field yields nil, so callers get no rate signal.
-func readClaudePctHistory() []int {
-	statePath := filepath.Join(config.Dir(), "logs", "state.json")
-	raw, err := os.ReadFile(statePath)
-	if err != nil {
-		return nil
-	}
-	var s struct {
-		History []int `json:"claude_pct_history"`
-	}
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return nil
-	}
-	return s.History
-}
-
-// asInt coerces a value decoded from JSON (numbers arrive as float64) to an int.
-func asInt(v any) int {
-	switch x := v.(type) {
-	case float64:
-		return int(x)
-	case int:
-		return x
-	}
-	return 0
-}
-
-// asIntSlice coerces a JSON-decoded array (elements arrive as float64) to []int.
-func asIntSlice(v any) []int {
-	raw, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]int, 0, len(raw))
-	for _, e := range raw {
-		out = append(out, asInt(e))
-	}
-	return out
+	return ""
 }
 
 // handoffFiles is the file set a handoff records, so the next agent's
@@ -1246,24 +1372,29 @@ func (d *Dispatcher) blockedHeads(localOnly bool) string {
 // the caller is a person who picked it from a list and is owed an answer
 // about that model rather than a different one (#676).
 func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
+	if !d.Allows(id) {
+		return provider.Head{}, headErr{ErrHeadUnknown, fmt.Errorf(
+			"%w: %q is outside this server's `hyctl serve --heads` allowlist", ErrNoHeads, id)}
+	}
 	for _, h := range d.heads {
 		if h.ID != id {
 			continue
 		}
 		if localOnly && !h.LocalOnly {
-			return provider.Head{}, fmt.Errorf(
+			return provider.Head{}, headErr{ErrHeadUnusable, fmt.Errorf(
 				"%w: %s is not a local head, and this run is local-only "+
 					"(policy or --local); choose a local model or lift the restriction",
-				ErrNoHeads, h.Name)
+				ErrNoHeads, h.Name)}
 		}
 		if why := executor.Unroutable(h); why != "" {
-			return provider.Head{}, fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)
+			return provider.Head{}, headErr{ErrHeadUnusable,
+				fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)}
 		}
 		return h, nil
 	}
-	return provider.Head{}, fmt.Errorf(
+	return provider.Head{}, headErr{ErrHeadUnknown, fmt.Errorf(
 		"%w: no discovered head with id %q; run `hyctl probe` to see what this machine has",
-		ErrNoHeads, id)
+		ErrNoHeads, id)}
 }
 
 // selectHeads returns heads to try, in order of preference.
@@ -1589,14 +1720,9 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	existing["last_status"] = "ok"
 	existing["last_tier"] = rank.UITier(r.Head)
 
-	// Append the current orchestrator claude_pct (written by the orchestrator,
-	// e.g. `jq '.claude_pct = 52'`) to a bounded history, so `hyctl status` can
-	// compute a rate-aware first-passage risk from the session trajectory rather
-	// than reacting only to the instantaneous level.
-	if pct := asInt(existing["claude_pct"]); pct > 0 {
-		existing["claude_pct_history"] = budget.AppendPctHistory(
-			asIntSlice(existing["claude_pct_history"]), pct, budget.MaxPctHistory)
-	}
+	// Mirror the orchestrator's session level into its bounded history, so
+	// `hyctl status` and the governor see the trajectory, not only the level.
+	budget.MirrorLegacyHistory(existing)
 
 	// Persist per-model budget snapshots so the TUI and status command can read
 	// them. Merge into whatever is already on disk instead of replacing it, each

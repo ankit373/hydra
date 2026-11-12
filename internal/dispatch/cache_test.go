@@ -12,6 +12,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -242,6 +243,88 @@ func TestAdmission_IsTheSameDecisionInBothDirections(t *testing.T) {
 	}
 	if ok, reason := cache.Servable(admission(Options{}, &policy.Classification{})); !ok {
 		t.Errorf("an ordinary dispatch was refused: %s", reason)
+	}
+}
+
+// Each way a request can carry tools the key does not see (#1222).
+func TestAdmission_RefusesAToolBearingRequest(t *testing.T) {
+	cases := map[string]Options{
+		"tool definitions": {Tools: []executor.ToolDef{{Type: "function", Function: executor.ToolFunction{Name: "read_file"}}}},
+		"tool result":      {Messages: []executor.Message{{Role: "tool", ToolCallID: "c1", Content: "ok"}}},
+		"assistant call":   {Messages: []executor.Message{{Role: "assistant", ToolCalls: []executor.ToolCall{{ID: "c1"}}}}},
+	}
+	for name, opts := range cases {
+		if ok, _ := cache.Servable(admission(opts, nil)); ok {
+			t.Errorf("%s: admitted", name)
+		}
+	}
+	plain := Options{Messages: []executor.Message{{Role: "user", Content: "hi"}, {Role: "assistant", Content: "hello"}}}
+	if ok, reason := cache.Servable(admission(plain, nil)); !ok {
+		t.Errorf("a conversation with no tools was refused: %s", reason)
+	}
+}
+
+// Through Dispatch, so a lookup-only or store-only wiring fails: the tool turn
+// must neither be served nor leave an entry a plain dispatch could hit.
+func TestDispatch_NeverCachesAToolLoop(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	d := cachingDispatcher(t, s)
+	loop := Options{Messages: []executor.Message{
+		{Role: "user", Content: "list the files"},
+		{Role: "tool", ToolCallID: "c1", Content: "a.go b.go"},
+	}}
+
+	for i := 0; i < 2; i++ {
+		r, err := d.Dispatch(context.Background(), "list the files", loop)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Cache != nil {
+			t.Fatalf("dispatch %d of a tool loop was served from the cache", i+1)
+		}
+	}
+	r, err := d.Dispatch(context.Background(), "list the files", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Cache != nil {
+		t.Error("a plain dispatch was served the answer a tool loop stored")
+	}
+}
+
+// The key does not see temperature, so a request that pins one must neither
+// be served a stored answer nor store its own for a later request.
+func TestDispatch_NeverCachesAPinnedTemperature(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	d := cachingDispatcher(t, s)
+	zero := 0.0
+	greedy := Options{Temperature: &zero}
+
+	for i := 0; i < 2; i++ {
+		r, err := d.Dispatch(context.Background(), "classify this", greedy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Cache != nil {
+			t.Fatalf("dispatch %d with a temperature was served from the cache", i+1)
+		}
+	}
+	if st, _ := cache.StoredStats(cache.Dir()); st.Entries != 0 {
+		t.Errorf("%d entries: a dispatch with a temperature stored its answer", st.Entries)
+	}
+
+	if _, err := d.Dispatch(context.Background(), "classify this", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := cache.StoredStats(cache.Dir()); st.Entries == 0 {
+		t.Fatal("test is inert: a plain dispatch stored nothing")
+	}
+	r, err := d.Dispatch(context.Background(), "classify this", greedy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Cache != nil {
+		t.Error("a dispatch with a temperature was served an answer stored without one")
 	}
 }
 

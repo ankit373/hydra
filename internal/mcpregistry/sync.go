@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/ankit373/hydra/internal/build"
 )
 
 // registryServersURL is a var so tests can override it with httptest.Server.
@@ -79,7 +81,7 @@ func fetchPage(ctx context.Context, url string) (*serverListResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "hydra/1 (+https://github.com/ankit373/hydra)")
+	req.Header.Set("User-Agent", build.UserAgent())
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -97,6 +99,12 @@ func fetchPage(ctx context.Context, url string) (*serverListResponse, error) {
 		return nil, fmt.Errorf("mcp registry parse: %w", err)
 	}
 	return &out, nil
+}
+
+// Synced reports whether `hyctl mcp registry sync` has written a cache.
+func Synced() bool {
+	_, err := os.Stat(cachePath())
+	return err == nil
 }
 
 // LoadCache reads the local sync cache. Returns an error wrapping

@@ -49,6 +49,8 @@ floor internal/config               84
 floor internal/cache                85
 floor internal/classify             82
 floor internal/cost                 91
+floor internal/decide               96
+floor internal/decision             93
 floor internal/diff                 92
 floor internal/dispatch             89
 floor internal/editor               86
@@ -71,6 +73,9 @@ floor internal/glob                 96
 floor internal/graph                88
 floor internal/ground               95
 floor internal/health               82
+# The Keychain binding (ring_os.go) is darwin/windows-only, so Linux measures
+# the logic it wraps through a fake and the file store, not the binding itself.
+floor internal/keystore             84
 floor internal/ledger               86
 # internal/mcpregistry talks to two external APIs (OSV.dev, GitHub) and reads
 # five clients' config files, so its remaining uncovered lines are the
@@ -101,12 +106,19 @@ floor internal/retrieve             85
 floor internal/rollup               80
 floor internal/runid                96
 floor internal/runlog               85
-floor internal/sandbox              86
+# #1053 added platform-conditional rlimit code: rlimit_mem_linux.go's real
+# Setrlimit call is exercised here, but rlimit_mem_darwin.go's, and every
+# EPERM/LookPath/exec-failure branch this platform's memory path can't
+# reach, are not. Measured 78.6% on the failing CI run (35628073650), which
+# is what this gate actually enforces; darwin measures a few points either
+# side of that depending on which branches its own build compiles in.
+floor internal/sandbox              77
 floor internal/security             85
 floor internal/shellpath            84
-floor internal/signals              90
+floor internal/signals              92
 floor internal/serve                 88
 floor internal/sketch               91
+floor internal/stats                95
 floor internal/swarm                89
 floor internal/sysinfo              82
 floor internal/testutil             81

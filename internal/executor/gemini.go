@@ -186,13 +186,6 @@ func geminiToolConfig(raw json.RawMessage) (map[string]any, error) {
 	return nil, fmt.Errorf("gemini: tool_choice %s has no equivalent", raw)
 }
 
-// geminiCallID mints the id an OpenAI client needs to send a result back.
-// Gemini issues none, so this is Hydra's, derived from the call's name and its
-// position in the answer so that one answer reads the same twice.
-func geminiCallID(name string, nth int) string {
-	return fmt.Sprintf("call_%s_%d", name, nth)
-}
-
 // geminiFinish translates a finishReason.
 //
 // Gemini reports STOP whether or not it called a function, so a tool call is
@@ -225,7 +218,7 @@ func geminiParts(parts []geminiPart) (string, []ToolCall) {
 		}
 		name := p.FunctionCall.Name
 		calls = append(calls, ToolCall{
-			ID: geminiCallID(name, len(calls)), Type: "function", Index: len(calls),
+			ID: toolCallID(name, len(calls)), Type: "function", Index: len(calls),
 			Function: ToolCallFunction{Name: name, Arguments: toolArguments(p.FunctionCall.Args)},
 		})
 	}

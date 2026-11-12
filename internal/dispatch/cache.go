@@ -32,7 +32,7 @@ func (d *Dispatcher) answerCache() (*cache.Store, embed.Embedder) {
 		}
 		d.answers = st
 		if st != nil {
-			d.answerEmb = embed.Resolve(d.heads, d.cfg.EmbedModel)
+			d.answerEmb = embed.Resolve(d.embedHeads(), d.cfg.EmbedModel)
 		}
 	})
 	return d.answers, d.answerEmb
@@ -62,7 +62,12 @@ func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options,
 			vec = v
 		}
 	}
-	return st.Lookup(prompt, vec, cache.Threshold(d.cfg, opts.Enum)), true
+	out := st.Lookup(prompt, vec, cache.Threshold(d.cfg, opts.Enum))
+	if out.Found && !d.Allows(out.Hit.Head) {
+		// An answer from a head outside the serve allowlist is one this server may not give.
+		return cache.Outcome{}, true
+	}
+	return out, true
 }
 
 // recordLookup folds a consulted lookup into the tallies. Misses included, or
@@ -78,11 +83,28 @@ func (d *Dispatcher) recordLookup(out cache.Outcome) {
 // rule applied on one side only lets a prompt into the store that can never be
 // served from it, or worse, the other way around.
 func admission(opts Options, class *policy.Classification) cache.Request {
-	req := cache.Request{Pinned: opts.Head != "", NoCache: opts.NoCache}
+	// The key does not cover temperature, so a pinned greedy run could be
+	// served a sampled answer, or store one that a later greedy run receives.
+	noCache := opts.NoCache || opts.Temperature != nil
+	req := cache.Request{Pinned: opts.Head != "", NoCache: noCache, Tools: carriesTools(opts)}
 	if class != nil {
 		req.PII, req.Injection = class.PII, class.FlagReason != ""
 	}
 	return req
+}
+
+// carriesTools reports tool definitions, a tool result, or an assistant turn
+// that called one: anything the cache key does not see.
+func carriesTools(opts Options) bool {
+	if len(opts.Tools) > 0 {
+		return true
+	}
+	for _, m := range opts.Messages {
+		if m.Role == "tool" || m.ToolCallID != "" || len(m.ToolCalls) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // cacheResult is a hit dressed as a dispatch outcome, with the head that

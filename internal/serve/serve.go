@@ -4,9 +4,7 @@ package serve
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,14 +16,27 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/runid"
 )
 
 // ErrBadRequest marks a caller's mistake, so a routing key the router cannot
 // resolve answers 400 rather than reading as Hydra having failed.
 var ErrBadRequest = errors.New("bad request")
 
+// ErrNotFound marks a model the client named that does not exist here, which
+// OpenAI answers 404 with code model_not_found. Separate from ErrBadRequest
+// because the remedies differ, and separate from a 5xx because 5xx is in the
+// SDKs' default retry class: a client that picked a bad model would otherwise
+// retry it twice before showing the user an upstream failure (#1145).
+var ErrNotFound = errors.New("not found")
+
 // hydraModel is the routing prefix the model field uses.
 const hydraModel = "hydra"
+
+// RequestIDHeader carries the identifier this request is traceable by. The
+// convention OpenAI and the common gateways already set, so a client that logs
+// response headers needs no Hydra-specific code to keep the thread (#1149).
+const RequestIDHeader = "X-Request-Id"
 
 // maxBody bounds one request. An agent loop's prompt grows with every tool
 // result, so this is generous, but unbounded is a memory exhaustion away.
@@ -47,6 +58,19 @@ type Request struct {
 	MaxTokens  int
 	Route      Route
 
+	// TaskClass is the class the client named, already validated; empty when
+	// it named none, so the router can tell a choice from its own default.
+	TaskClass string
+	// Temperature is nil when the client left it to the provider.
+	Temperature *float64
+	// MaxCostUSD is the client's ceiling for this request; 0 means none.
+	MaxCostUSD float64
+
+	// RequestID is what this request is traceable by. serve mints it and the
+	// router adopts it as the run id, so the value a client is handed back is
+	// one `hyctl trace view` resolves rather than an unrelated random (#1149).
+	RequestID string
+
 	// OnEvent is set only when the client asked for a stream. A router that
 	// ignores it still answers correctly: its whole output then arrives when
 	// Chat returns, and serve sends it as one delta.
@@ -62,6 +86,7 @@ type Answer struct {
 	Model        string
 	InputTokens  int
 	OutputTokens int
+	Evidence     *Evidence
 }
 
 // Model is one entry in the /v1/models listing.
@@ -79,8 +104,8 @@ type Router interface {
 }
 
 // Handler is the OpenAI-compatible surface: the two endpoints every client
-// touches, and nothing else.
-func Handler(r Router, token string) http.Handler {
+// touches, plus the two decision endpoints d answers.
+func Handler(r Router, d Decider, token string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/models", guard(token, func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
@@ -96,6 +121,8 @@ func Handler(r Router, token string) http.Handler {
 		}
 		chat(w, req, r)
 	}))
+	mux.HandleFunc("/v1/decisions", guard(token, decisions(d, decisionsShape)))
+	mux.HandleFunc("/v1/systemone", guard(token, decisions(d, systemOneShape)))
 	return mux
 }
 
@@ -138,21 +165,32 @@ type chatRequest struct {
 	} `json:"stream_options"`
 	Tools      []executor.ToolDef `json:"tools"`
 	ToolChoice json.RawMessage    `json:"tool_choice"`
+	// Raw until the class header opts in: serve ignored it before E1, so an
+	// unreadable value must not fail a request that never asked for it.
+	Temperature json.RawMessage `json:"temperature"`
+}
+
+// readBody reads one request within maxBody, saying why when it cannot.
+func readBody(req *http.Request) ([]byte, int, error) {
+	raw, err := io.ReadAll(io.LimitReader(req.Body, maxBody+1))
+	if err != nil {
+		return nil, http.StatusBadRequest, errors.New("could not read the request body")
+	}
+	if len(raw) > maxBody {
+		return nil, http.StatusRequestEntityTooLarge, fmt.Errorf("request exceeds %d bytes", maxBody)
+	}
+	return raw, http.StatusOK, nil
 }
 
 func chat(w http.ResponseWriter, req *http.Request, r Router) {
-	raw, err := io.ReadAll(io.LimitReader(req.Body, maxBody+1))
+	raw, status, err := readBody(req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "could not read the request body")
-		return
-	}
-	if len(raw) > maxBody {
-		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request exceeds %d bytes", maxBody))
+		writeError(w, status, err.Error())
 		return
 	}
 
 	var in chatRequest
-	if err := json.Unmarshal(raw, &in); err != nil {
+	if err = json.Unmarshal(raw, &in); err != nil {
 		writeError(w, http.StatusBadRequest, "could not parse the request as JSON: "+err.Error())
 		return
 	}
@@ -160,32 +198,40 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 		writeError(w, http.StatusBadRequest, "messages is empty, so there is nothing to answer")
 		return
 	}
-	route, err := parseRoute(in.Model)
+	base, err := parseTarget(req.Header, in)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	// Before anything is written, so it is on an error response too: a client
+	// that got a 502 is exactly the one that needs to find the trace.
+	base.RequestID = runid.New()
+	w.Header().Set(RequestIDHeader, base.RequestID)
+
 	if in.Stream {
-		streamChat(w, req, r, in, route)
+		streamChat(w, req, r, in, base)
 		return
 	}
 
-	ans, err := r.Chat(req.Context(), request(in, route, nil))
+	ans, err := r.Chat(req.Context(), request(in, base, nil))
 	if err != nil {
-		status := http.StatusBadGateway
-		if errors.Is(err, ErrBadRequest) {
-			status = http.StatusBadRequest
-		}
-		writeError(w, status, err.Error())
+		writeError(w, statusFor(err), err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":      "chatcmpl-" + randomID(),
+	body := map[string]any{
+		// The same value as the header, and a run id, so a client that logged
+		// only the body can still run `hyctl trace view <id>` (#1149).
+		"id":      base.RequestID,
 		"object":  "chat.completion",
 		"created": time.Now().Unix(),
-		"model":   firstNonEmpty(ans.Model, ans.Head, in.Model),
+		// The head *id*, not its display name: this value is what a client
+		// echoes back on the next turn and what it groups logs by, so it has
+		// to be something /v1/models advertises and parseRoute resolves.
+		// "Qwen2.5-Coder:7b (Ollama)" is neither, and round-tripped to a
+		// 502 (#1145).
+		"model": firstNonEmpty(ans.Head, ans.Model, in.Model),
 		"choices": []map[string]any{{
 			"index": 0,
 			"message": executor.Message{
@@ -200,16 +246,44 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 			"completion_tokens": ans.OutputTokens,
 			"total_tokens":      ans.InputTokens + ans.OutputTokens,
 		},
-	})
+	}
+	writeEvidence(w, body, ans.Evidence)
+	writeJSON(w, http.StatusOK, body)
+}
+
+// parseTarget reads what a request asks of the router beyond its conversation:
+// the route, the class the client named, its ceiling and its temperature.
+func parseTarget(h http.Header, in chatRequest) (Request, error) {
+	route, err := parseRoute(in.Model)
+	if err != nil {
+		return Request{}, err
+	}
+	class, err := explicitClass(h)
+	if err != nil {
+		return Request{}, err
+	}
+	ceiling, err := maxCost(h)
+	if err != nil {
+		return Request{}, err
+	}
+	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling}
+	// Temperature is opt-in with the class header: serve ignored it before E1,
+	// and a client that never asked for the new contract must not get a 400.
+	if class != "" {
+		if out.Temperature, err = temperature(in.Temperature); err != nil {
+			return Request{}, err
+		}
+	}
+	return out, nil
 }
 
 // streamChat answers as server-sent events.
-func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatRequest, route Route) {
+func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatRequest, base Request) {
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
-	st := newStreamer(w, in.Model)
-	ans, err := r.Chat(ctx, request(in, route, func(e Event) { st.event(e, cancel) }))
+	st := newStreamer(w, in.Model, base.RequestID)
+	ans, err := r.Chat(ctx, request(in, base, func(e Event) { st.event(e, cancel) }))
 	st.done = true
 
 	switch {
@@ -219,11 +293,7 @@ func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatReque
 	case err != nil && !st.started():
 		// Nothing has reached the client, so an error is still a real status
 		// code rather than a 200 carrying bad news.
-		status := http.StatusBadGateway
-		if errors.Is(err, ErrBadRequest) {
-			status = http.StatusBadRequest
-		}
-		writeError(w, status, err.Error())
+		writeError(w, statusFor(err), err.Error())
 	case err != nil:
 		st.fail(err.Error())
 	default:
@@ -233,15 +303,13 @@ func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatReque
 
 // request is the one derivation of what the router is asked, so the streamed
 // and buffered paths cannot come to disagree about it.
-func request(in chatRequest, route Route, on func(Event)) Request {
-	return Request{
-		Messages:   in.Messages,
-		Tools:      in.Tools,
-		ToolChoice: in.ToolChoice,
-		MaxTokens:  firstPositive(in.MaxCompletionTokens, in.MaxTokens),
-		Route:      route,
-		OnEvent:    on,
-	}
+func request(in chatRequest, base Request, on func(Event)) Request {
+	base.Messages = in.Messages
+	base.Tools = in.Tools
+	base.ToolChoice = in.ToolChoice
+	base.MaxTokens = firstPositive(in.MaxCompletionTokens, in.MaxTokens)
+	base.OnEvent = on
+	return base
 }
 
 // parseRoute reads the model field as a routing instruction, which makes any
@@ -320,6 +388,21 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
+// statusFor grades a router failure. Only a head that actually failed is a
+// 5xx; a model the client named that does not exist, or cannot be used here,
+// is the client's own mistake and must not land in a retry class, since the
+// OpenAI SDKs retry 5xx by default and that retry can never succeed (#1145).
+func statusFor(err error) int {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, ErrBadRequest):
+		return http.StatusBadRequest
+	default:
+		return http.StatusBadGateway
+	}
+}
+
 func errorType(status int) string {
 	switch {
 	case status == http.StatusUnauthorized:
@@ -329,14 +412,6 @@ func errorType(status int) string {
 	default:
 		return "invalid_request_error"
 	}
-}
-
-func randomID() string {
-	var b [12]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 16)
-	}
-	return hex.EncodeToString(b[:])
 }
 
 func cutPrefixFold(s, prefix string) (string, bool) {

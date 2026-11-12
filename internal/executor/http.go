@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/awsconf"
+	"github.com/ankit373/hydra/internal/keystore"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -89,6 +90,19 @@ func (e *HTTPExecutor) Execute(ctx context.Context, req Request) (*Response, err
 		}
 		return e.executeOpenAICompatible(ctx, req, cfg)
 	}
+}
+
+// MaxTemperature is the highest temperature h's dialect accepts. Anthropic,
+// Cohere and Bedrock's Converse cap it at 1 where OpenAI and Gemini take 2;
+// CLI and agy heads ignore it, so any value is theirs to drop.
+func MaxTemperature(h provider.Head) float64 {
+	if _, ok := For(h).(*HTTPExecutor); ok {
+		switch h.Provider {
+		case "anthropic", "cohere", "bedrock":
+			return 1
+		}
+	}
+	return 2
 }
 
 // SupportsHTTP reports whether Hydra can execute the head over HTTP today.
@@ -164,6 +178,17 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 	// what say it replied rather than said nothing.
 	answer.ToolCalls = cr.Choices[0].Message.ToolCalls
 	answer.FinishReason = cr.Choices[0].FinishReason
+	// Some servers report a model's tool call as ordinary message text, and the
+	// client then sees a JSON blob where a call should be and the agent loop
+	// stops. Only when the server reported none, so a server that structures
+	// its calls is never second-guessed (#1147).
+	if len(answer.ToolCalls) == 0 {
+		if calls, ok := RecoverToolCalls(answer.Output, req.Tools); ok {
+			answer.ToolCalls, answer.ToolCallsRecovered = calls, true
+			answer.Output = ""
+			answer.FinishReason = "tool_calls"
+		}
+	}
 	return answer, nil
 }
 
@@ -886,7 +911,12 @@ func joinCohereBlocks(blocks []struct {
 
 func httpStatusError(headID string, resp *http.Response) error {
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return fmt.Errorf("http exec %s: status %d, %s", headID, resp.StatusCode, string(b))
+	return &StatusError{
+		HeadID:     headID,
+		Code:       resp.StatusCode,
+		Body:       string(b),
+		RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()),
+	}
 }
 
 // modelFor prefers the model the discovering provider named, which is what
@@ -954,6 +984,8 @@ var apiKeyEnvs = func() map[string][]string {
 		},
 		"cohere":    {"COHERE_API_KEY"},
 		"replicate": {"REPLICATE_API_TOKEN"},
+		// The variable TypeSafe's own SDK reads; only the decision head uses it.
+		"typesafe": {"TYPESAFE_API_KEY"},
 		// The variable LiteLLM's own client reads, so a machine already set up
 		// to talk to a proxy needs nothing new.
 		"litellm": {"LITELLM_PROXY_API_KEY"},
@@ -963,8 +995,10 @@ var apiKeyEnvs = func() map[string][]string {
 	return envs
 }()
 
+// apiKeyFor reads through keystore.Lookup, so a key saved in the desktop app
+// reaches an HTTP head while an exported one still wins.
 func apiKeyFor(providerID string) string {
-	return firstEnv(apiKeyEnvs[providerID]...)
+	return keystore.Lookup(apiKeyEnvs[providerID]...)
 }
 
 func azureEndpoint() string   { return firstEnv("AZURE_OPENAI_ENDPOINT") }

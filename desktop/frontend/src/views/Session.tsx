@@ -4,6 +4,8 @@ import { clockTime, ms, pct, usdExact } from '../format'
 import { SessionGraph } from './SessionGraph'
 import { Code } from './Code'
 import { TierTrack } from './TierTrack'
+import { PageHeader } from './PageHeader'
+import { Tabs } from './Tabs'
 
 export function Session({
   session,
@@ -30,20 +32,21 @@ export function Session({
 
   return (
     <>
-      <header className="view__head">
-        <div className="view__headrow">
-          <button className="back" onClick={onBack}>
-            ← Activity
-          </button>
-          <h1 className="view__title">
-            <span className={session.goal ? 'session__goal' : 'session__id'}>
-              {session.goal || session.runId}
-            </span>
+      <PageHeader
+        title={session.goal || session.runId}
+        // The run id is provenance, not a subtitle: it is how you find this run
+        // again in the logs, and it sits in the same slot every view uses for
+        // "what this rests on".
+        provenance={session.goal ? session.runId : undefined}
+        actions={
+          <>
             {session.live && <span className="session__live">live</span>}
-          </h1>
-        </div>
-        {session.goal && <p className="view__sub session__id">{session.runId}</p>}
-      </header>
+            <button className="pagehead__btn" onClick={onBack}>
+              ← Activity
+            </button>
+          </>
+        }
+      />
 
       {session.error && <div className="error">unreadable: {session.error}</div>}
 
@@ -63,34 +66,21 @@ export function Session({
             </p>
           )}
 
-          <div className="tabs">
-            <button
-              className="tab"
-              aria-current={tab === 'timeline' ? 'page' : undefined}
-              onClick={() => setTab('timeline')}
-            >
-              Timeline
-            </button>
-            <button
-              className="tab"
-              aria-current={tab === 'code' ? 'page' : undefined}
-              onClick={() => setTab('code')}
-            >
-              Code
-            </button>
-            {/* Graph appears only when a list genuinely cannot show the shape.
-                Drawing a graph of a straight line is worse than a list. */}
-            {session.nonLinear && (
-              <button
-                className="tab"
-                aria-current={tab === 'graph' ? 'page' : undefined}
-                onClick={() => setTab('graph')}
-              >
-                Graph
-              </button>
-            )}
-          </div>
+          <Tabs
+            label="What this run did"
+            panelID="session-panel"
+            current={tab}
+            onSelect={setTab}
+            tabs={[
+              { id: 'timeline', label: 'Timeline', count: session.timeline.length },
+              { id: 'code', label: 'Code', count: edits.length },
+              // Graph appears only when a list genuinely cannot show the shape.
+              // Drawing a graph of a straight line is worse than a list.
+              ...(session.nonLinear ? [{ id: 'graph' as const, label: 'Graph' }] : []),
+            ]}
+          />
 
+          <div id="session-panel" role="tabpanel">
           {tab === 'code' ? (
             <Code
               runID={session.runId}
@@ -111,6 +101,7 @@ export function Session({
               <Timeline entries={session.timeline} />
             </>
           )}
+          </div>
         </>
       )}
     </>

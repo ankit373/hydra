@@ -42,7 +42,30 @@ const (
 	// Fatal is a missing binary or a model the provider does not have. Retrying
 	// it in a second only produces the same error, so it opens on first sight.
 	Fatal
+	// RateLimited is a head that works and is busy. Neither of the others fits:
+	// it will recur until a stated time and then stop, and it is the only kind
+	// where the server tells us when that is, so the wait is its number rather
+	// than ours (#1096).
+	RateLimited
 )
+
+// statedWait is what an error carrying a server-stated wait looks like.
+// Declared here rather than imported so internal/executor and this package do
+// not have to know about each other.
+type statedWait interface {
+	RateLimitRetryAfter() (time.Duration, bool)
+}
+
+// StatedWait reports the wait a server asked for, when the error carries one.
+// A rate limit with no stated time answers true with a zero duration: the head
+// is busy rather than broken even when nobody said for how long.
+func StatedWait(err error) (time.Duration, bool) {
+	var sw statedWait
+	if errors.As(err, &sw) {
+		return sw.RateLimitRetryAfter()
+	}
+	return 0, false
+}
 
 type entry struct {
 	Reason   string    `json:"reason"`
@@ -104,6 +127,16 @@ func (s *Store) Blocked(id string, now time.Time) (string, bool) {
 
 // Fail records a failed execution and parks the head if it has earned it.
 func (s *Store) Fail(id, reason string, k Kind, now time.Time) {
+	s.FailFor(id, reason, k, now, 0)
+}
+
+// FailFor is Fail with a wait the server asked for. A stated wait replaces the
+// backoff entirely, in both directions: it parks on the first 429 rather than
+// after two, because the server asked and ignoring it is what sends the next
+// dispatch to a weaker head, and it does not double on repeat, because each
+// 429 restates the answer and compounding ours on top is how a head that said
+// two seconds sat out for thirty minutes (#1096).
+func (s *Store) FailFor(id, reason string, k Kind, now time.Time, stated time.Duration) {
 	if s == nil {
 		return
 	}
@@ -118,7 +151,10 @@ func (s *Store) Fail(id, reason string, k Kind, now time.Time) {
 	e.Reason = reason
 	e.Kind = k
 	e.LastFail = now
-	if k == Fatal || e.Failures >= softFailuresBeforeOpen {
+	switch {
+	case k == RateLimited && stated > 0:
+		e.RetryAt = now.Add(min(stated, maxCooldown))
+	case k == Fatal || e.Failures >= softFailuresBeforeOpen:
 		e.RetryAt = now.Add(cooldown(e.Failures))
 	}
 	s.dirty = true
@@ -211,6 +247,12 @@ func Classify(err error) Kind {
 	}
 	if errors.Is(err, exec.ErrNotFound) {
 		return Fatal
+	}
+	// Before the substring pass: a rate limit says what it is structurally, and
+	// a 429 body is attacker-adjacent text that can contain a fatal signal word
+	// by accident.
+	if _, ok := StatedWait(err); ok {
+		return RateLimited
 	}
 	msg := strings.ToLower(err.Error())
 	for _, s := range fatalSignals {

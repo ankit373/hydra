@@ -8,6 +8,7 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -199,9 +200,12 @@ func NewCockpit() Cockpit {
 		auditIgnored: map[string]bool{},
 	}
 	m.runsToday = ckLoadRuns(time.Now().UTC())
-	// The route badge mirrors what dispatch will enforce; with no config there
-	// is no pii policy to mirror.
-	if cfg, err := config.Load(); err == nil {
+	// The route preview mirrors what dispatch will enforce; with no config
+	// there is no pii policy to mirror. Only a preview: ckRealDispatchStage
+	// re-reads the policy off the dispatcher, so this value is additive and
+	// never the authority.
+	cfg, cfgErr := config.Load()
+	if cfgErr == nil {
 		m.piiLocal = dispatch.PIILocalOnly(cfg)
 	}
 	if cwd, err := os.Getwd(); err == nil {
@@ -223,6 +227,11 @@ func NewCockpit() Cockpit {
 			ckDimS.Render("Type a task and press enter. shift+tab mode · ctrl+t thread · ? shortcuts · :q quits."),
 		}
 	}
+	// A cockpit that cannot dispatch must say so before a prompt is composed,
+	// not after. Every other line above describes a scan, which succeeds on a
+	// machine where `dispatch.New` will fail outright (#1112).
+	t.log = append(t.log, ckConfigLines(cfgErr)...)
+
 	if stale := ckStaleWorktrees(); len(stale) > 0 {
 		t.log = append(t.log,
 			ckMidS.Render(fmt.Sprintf("⚠ %d stale worktree%s from a previous session under %s:",
@@ -442,4 +451,37 @@ func CockpitSnapshot() string {
 	g.glossary = true
 	b.WriteString(label("GLOSSARY (?)") + "\n" + g.View())
 	return b.String()
+}
+
+// ckConfigLines reports a config that will stop every dispatch, in the opening
+// log rather than at the first prompt.
+//
+// The two failures have different remedies and are never collapsed: an absent
+// config is answered by the wizard, and an unreadable one must not be, because
+// `hyctl init` would overwrite the file holding the answer (#1030).
+func ckConfigLines(err error) []string {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, config.ErrNotFound):
+		return []string{
+			ckMidS.Render("⚠ No config yet, so nothing can be dispatched."),
+			ckDimS.Render("  Run `hyctl init` to choose a Cortex. Everything else below still reads."),
+		}
+	default:
+		return []string{
+			ckMidS.Render("⚠ Hydra cannot read its config, so nothing can be dispatched."),
+			ckDimS.Render("  " + truncate(parseReason(err), 110)),
+			ckDimS.Render("  Fix " + config.Path() + ". Do not run `hyctl init`, it would overwrite it."),
+		}
+	}
+}
+
+// parseReason drops the path config.Load prefixes its error with, because the
+// line below already names the file and the part worth reading, the line and
+// key, is at the far end of the string. Truncating from the left kept the path
+// twice and lost the reason. An unrecognised prefix is left whole, so a change
+// to that wrapping degrades to the full error rather than to nothing.
+func parseReason(err error) string {
+	return strings.TrimPrefix(err.Error(), fmt.Sprintf("config %s is not readable: ", config.Path()))
 }

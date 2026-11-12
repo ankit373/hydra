@@ -36,6 +36,9 @@ var (
 	// ErrNoSteps refuses a workflow with nothing to run, which would otherwise
 	// persist and report success having done nothing.
 	ErrNoSteps = errors.New("a workflow needs at least one step")
+	// ErrAlreadyRunning refuses a second runner over a live workflow: both
+	// would dispatch every remaining step (#1162).
+	ErrAlreadyRunning = errors.New("workflow is already running")
 )
 
 // Status is where a step or a whole workflow has got to.
@@ -82,6 +85,15 @@ type Workflow struct {
 	Status  Status `json:"status"`
 	RunID   string `json:"run_id,omitempty"`
 	Steps   []Step `json:"steps"`
+
+	// What the run was started under, persisted so a resume continues it
+	// rather than inventing new settings: the record carried none, so a
+	// resumed workflow ran with no system prompt and no --local at all
+	// (#1168, #1161). A nil MaxCostUSD is "no explicit ceiling", which
+	// policy.yaml then decides, and is why it is a pointer.
+	System     string   `json:"system,omitempty"`
+	LocalOnly  bool     `json:"local_only,omitempty"`
+	MaxCostUSD *float64 `json:"max_cost_usd,omitempty"`
 }
 
 // Observed is the status to show a reader. The stored one, except that a run
@@ -274,6 +286,23 @@ func Load(id string) (Workflow, error) {
 		return Workflow{}, fmt.Errorf("workflow %s is incomplete (no id or no steps); it is not resumable, inspect %s", id, path)
 	}
 	return w, nil
+}
+
+// Exists reports whether an id already has a stored record. `run --id` of one
+// overwrote it and corrupted the trace of whatever was using it; resume
+// continues a stored workflow and rm replaces it (#1168).
+func Exists(id string) (bool, error) {
+	path, err := Path(id)
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // List returns every stored workflow, newest first.

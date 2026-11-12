@@ -322,6 +322,37 @@ export interface InstallResult {
   error?: string
 }
 
+/** One provider a pasted key can enable. The key never crosses the bridge;
+ *  hint is its last four characters. */
+export interface ProviderKey {
+  provider: string
+  label: string
+  keyUrl: string
+  envVar: string
+  /** 'stored' (saved by the app), 'environment' (exported outside Hydra, wins) or '' (none). */
+  source: '' | 'stored' | 'environment'
+  hint?: string
+  /** The store holds a key, in use or not, so a shadowed one can still be removed. */
+  saved: boolean
+}
+
+export interface ProviderKeys {
+  keys: ProviderKey[]
+  /** Where saved keys live, in words: "the macOS Keychain". */
+  store: string
+  error?: string
+}
+
+/** One cheap call made with a provider's key. */
+export interface KeyTest {
+  ok: boolean
+  /** The provider took the key, though the account may have refused the request (credit, rate limit). */
+  accepted: boolean
+  model?: string
+  reply?: string
+  error?: string
+}
+
 /** 'partial' is a mechanism that is detective rather than preventive. It never
  *  counts as covered: a control whose own implementation documents it as
  *  evadable is evidence for an audit trail, not a defence. */
@@ -396,6 +427,8 @@ export interface LedgerPanel {
   total: number
   allowed: number
   denied: number
+  /** Permission withheld pending a human; counted apart from denied. */
+  asked: number
   flagged: number
 }
 
@@ -556,6 +589,8 @@ export interface RuleStat {
   index: number
   summary: string
   decision: string
+  /** The data-sensitivity tag the rule is scoped to. Absent when it matches any. */
+  classification?: string
   hits: number
   /** Never matched anything recorded. */
   dead: boolean
@@ -893,4 +928,33 @@ export interface ModelRegistry {
   found: boolean
   error?: string
   pools: Pool[]
+}
+
+/** The config the app may change. A narrow slice of config.Config: the switches
+ *  internal/config argues should be decided rather than inherited. */
+export interface Settings {
+  path: string
+  /** False when a config exists and does not parse, where rendering defaults
+   *  would invite saving over the only record of what was meant. */
+  readable: boolean
+  error?: string
+  /** Separates "never configured" from "configured", which otherwise read the
+   *  same once both render as defaults. */
+  exists: boolean
+  cortex: string
+  skills: string[]
+  piiLocalOnly: boolean
+  strictEgress: boolean
+  capturePayloads: boolean
+  payloadBudgetMb: number
+  captureEmbeddings: boolean
+  embedModel: string
+  embedBudgetMb: number
+  cacheAnswers: boolean
+  cacheThreshold: number
+  cacheBudgetMb: number
+  exploreRate: number
+  /** Read-only here: editing an allowlist needs the catalogue in front of you,
+   *  which is the Models view's job. */
+  openRouterModels: string[]
 }

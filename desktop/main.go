@@ -37,7 +37,7 @@ import (
 	// the same four for the same reason.
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
-	_ "github.com/ankit373/hydra/internal/provider/env"
+	"github.com/ankit373/hydra/internal/provider/env"
 	_ "github.com/ankit373/hydra/internal/provider/port"
 )
 
@@ -48,6 +48,11 @@ func main() {
 	// Before anything discovers heads. launchd starts this process with a PATH
 	// that contains no CLI head at all (#689).
 	shellpath.Adopt()
+	// Keys saved in Settings, which is the only place a Finder-launched app
+	// can get one. A failure is logged and the Providers view reports it too.
+	if err := env.LoadStoredKeys(); err != nil {
+		log.Printf("hydradesk: stored API keys: %v", err)
+	}
 
 	a := api.New()
 
