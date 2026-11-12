@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/awsconf"
+	"github.com/ankit373/hydra/internal/keystore"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -89,6 +90,19 @@ func (e *HTTPExecutor) Execute(ctx context.Context, req Request) (*Response, err
 		}
 		return e.executeOpenAICompatible(ctx, req, cfg)
 	}
+}
+
+// MaxTemperature is the highest temperature h's dialect accepts. Anthropic,
+// Cohere and Bedrock's Converse cap it at 1 where OpenAI and Gemini take 2;
+// CLI and agy heads ignore it, so any value is theirs to drop.
+func MaxTemperature(h provider.Head) float64 {
+	if _, ok := For(h).(*HTTPExecutor); ok {
+		switch h.Provider {
+		case "anthropic", "cohere", "bedrock":
+			return 1
+		}
+	}
+	return 2
 }
 
 // SupportsHTTP reports whether Hydra can execute the head over HTTP today.
@@ -981,8 +995,10 @@ var apiKeyEnvs = func() map[string][]string {
 	return envs
 }()
 
+// apiKeyFor reads through keystore.Lookup, so a key saved in the desktop app
+// reaches an HTTP head while an exported one still wins.
 func apiKeyFor(providerID string) string {
-	return firstEnv(apiKeyEnvs[providerID]...)
+	return keystore.Lookup(apiKeyEnvs[providerID]...)
 }
 
 func azureEndpoint() string   { return firstEnv("AZURE_OPENAI_ENDPOINT") }

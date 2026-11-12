@@ -322,6 +322,37 @@ export interface InstallResult {
   error?: string
 }
 
+/** One provider a pasted key can enable. The key never crosses the bridge;
+ *  hint is its last four characters. */
+export interface ProviderKey {
+  provider: string
+  label: string
+  keyUrl: string
+  envVar: string
+  /** 'stored' (saved by the app), 'environment' (exported outside Hydra, wins) or '' (none). */
+  source: '' | 'stored' | 'environment'
+  hint?: string
+  /** The store holds a key, in use or not, so a shadowed one can still be removed. */
+  saved: boolean
+}
+
+export interface ProviderKeys {
+  keys: ProviderKey[]
+  /** Where saved keys live, in words: "the macOS Keychain". */
+  store: string
+  error?: string
+}
+
+/** One cheap call made with a provider's key. */
+export interface KeyTest {
+  ok: boolean
+  /** The provider took the key, though the account may have refused the request (credit, rate limit). */
+  accepted: boolean
+  model?: string
+  reply?: string
+  error?: string
+}
+
 /** 'partial' is a mechanism that is detective rather than preventive. It never
  *  counts as covered: a control whose own implementation documents it as
  *  evadable is evidence for an audit trail, not a defence. */
