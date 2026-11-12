@@ -1,0 +1,7 @@
+models:
+  - id: opus
+    model_flag: "claude-opus-4-6-thinking"
+    upstream: anthropic/claude-sonnet-4.6
+    notes: internal/trust
+  - id: old
+    upstream: anthropic/claude-2

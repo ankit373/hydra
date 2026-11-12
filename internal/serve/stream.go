@@ -13,7 +13,7 @@ import (
 
 // EventKind names what happened while the router worked.
 //
-// Two, and no success kind: Chat returning an Answer is the success signal.
+// No success kind: Chat returning an Answer is the success signal.
 // This mirrors internal/dispatch's own stream contract, which feeds it, without
 // importing dispatch, so this package stays testable with no model.
 type EventKind int
@@ -26,6 +26,9 @@ const (
 	// func(string): a head can stream 200 tokens and then fail, and SSE has no
 	// way to take them back.
 	EventAttemptFailed
+	// EventEvidence carries what the router resolved before it dispatched, so
+	// a stream can echo it in its headers, which leave with the first frame.
+	EventEvidence
 )
 
 // Event is one thing that happened while the router worked.
@@ -41,6 +44,8 @@ type Event struct {
 	// SpanID identifies the attempt, so an abandoned partial stays reachable
 	// as `hyctl trace view <run-id> --span <id>`.
 	SpanID string
+	// Evidence is set on EventEvidence only.
+	Evidence *Evidence
 }
 
 // streamer writes one answer as server-sent events.
@@ -54,11 +59,12 @@ type streamer struct {
 	id    string
 	asked string // the model the client named, until a head is known
 
-	model   string
-	open    bool // the role chunk has gone out
-	sent    bool // at least one content delta has gone out
-	aborted bool
-	done    bool // Chat has returned; a late event writes nothing
+	model    string
+	evidence *Evidence
+	open     bool // the role chunk has gone out
+	sent     bool // at least one content delta has gone out
+	aborted  bool
+	done     bool // Chat has returned; a late event writes nothing
 }
 
 func newStreamer(w http.ResponseWriter, asked, id string) *streamer {
@@ -72,6 +78,9 @@ func (s *streamer) event(e Event, cancel func()) {
 		return
 	}
 	switch e.Kind {
+	case EventEvidence:
+		s.evidence = e.Evidence
+
 	case EventDelta:
 		if e.Text == "" {
 			return
@@ -104,6 +113,9 @@ func (s *streamer) finish(ans Answer, usage bool) {
 	s.done = true
 	if s.aborted {
 		return
+	}
+	if s.evidence == nil {
+		s.evidence = ans.Evidence
 	}
 	s.begin(ans.Head, ans.Model)
 
@@ -162,6 +174,7 @@ func (s *streamer) begin(head, model string) {
 	// A buffering proxy would hold every frame until the answer finished,
 	// which is the one thing a stream must not do.
 	h.Set("X-Accel-Buffering", "no")
+	setEvidenceHeaders(h, s.evidence)
 	s.w.WriteHeader(http.StatusOK)
 
 	role := "assistant"

@@ -83,7 +83,10 @@ func (d *Dispatcher) recordLookup(out cache.Outcome) {
 // rule applied on one side only lets a prompt into the store that can never be
 // served from it, or worse, the other way around.
 func admission(opts Options, class *policy.Classification) cache.Request {
-	req := cache.Request{Pinned: opts.Head != "", NoCache: opts.NoCache, Tools: carriesTools(opts)}
+	// The key does not cover temperature, so a pinned greedy run could be
+	// served a sampled answer, or store one that a later greedy run receives.
+	noCache := opts.NoCache || opts.Temperature != nil
+	req := cache.Request{Pinned: opts.Head != "", NoCache: noCache, Tools: carriesTools(opts)}
 	if class != nil {
 		req.PII, req.Injection = class.PII, class.FlagReason != ""
 	}

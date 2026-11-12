@@ -21,10 +21,10 @@ Hydra itself is free. The underlying models charge per token:
 
 | Model | Tier | Input cost | Output cost | Notes |
 |-------|------|-----------|-------------|-------|
-| Claude Opus 4.7 | 1 | ~$15/M tokens | ~$75/M tokens | Anthropic |
-| Claude Sonnet 4.6 | 2-3 | ~$3/M tokens | ~$15/M tokens | Anthropic |
-| Gemini 2.5 Pro | 4-5 | ~$1.25/M tokens | ~$10/M tokens | Google |
-| Gemini 3.8 Flash | 7-9 | $0.075-0.30/M tokens | $0.63-2.50/M tokens | Google, via Antigravity |
+| Claude Opus 4.6 | 1-2 | ~$5/M tokens | ~$25/M tokens | Anthropic |
+| Claude Sonnet 4.6 | 3 | ~$3/M tokens | ~$15/M tokens | Anthropic |
+| Gemini 3.1 Pro | 5-6 | $1.25-2.00/M tokens | $5-12/M tokens | Google, via Antigravity |
+| Gemini 3.8 Flash | 7-9 | $0.075-0.825/M tokens | $0.63-4.13/M tokens | Google, via Antigravity |
 | Qwen3 (local) | 9-10 | $0 | $0 | Ollama, runs locally |
 
 Run `hyctl pricing list` for live rates fetched from OpenRouter.
@@ -39,7 +39,8 @@ Run `hyctl pricing list` for live rates fetched from OpenRouter.
 | Architecture decision | ~$0.020 | ~$0.020 | 0% |
 | **Typical 50-call session** | **~$0.22** | **~$0.04** | **~82%** |
 
-Pricing based on OpenRouter rates as of June 2026.
+Computed in June 2026 with Opus at $15/$75. At the current $5/$25 the all-Claude
+baseline is a third of this, so the real savings are lower.
 
 ## Enterprise / Commercial Support
 
