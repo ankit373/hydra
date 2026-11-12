@@ -1,0 +1,123 @@
+name: Release smoke test
+
+# Installs a published release the way users do, from every channel, and checks
+# that hyctl runs and reports the tag (scripts/release-smoke.sh). Runs after
+# publish from release-please.yml, or by hand for any tag.
+#
+# On a failure it opens an issue labelled release:blocked and puts the same label
+# on the open release PR, so Mergify will not land the next release until
+# someone looks (RELEASING.md section 5). It cannot unpublish anything.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      expect_latest:
+        description: "Also fail if the tag is not the latest release"
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to check (e.g. v1.7.0)"
+        required: true
+        type: string
+      expect_latest:
+        description: "Also fail if the tag is not the latest release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Scripts read these as variables, never spliced into them as ${{ }}.
+env:
+  RELEASE_TAG: ${{ inputs.tag }}
+  SMOKE_EXPECT_LATEST: ${{ inputs.expect_latest }}
+
+jobs:
+  install:
+    name: ${{ matrix.channel }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    # Ten tries 30 s apart for registry lag, plus the install itself.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { channel: brew, os: macos-latest }
+          - { channel: npm, os: ubuntu-latest }
+          - { channel: npm, os: macos-latest }
+          - { channel: npm, os: windows-latest }
+          - { channel: pip, os: ubuntu-latest }
+          - { channel: pip, os: macos-latest }
+          - { channel: pip, os: windows-latest }
+          - { channel: install.sh, os: ubuntu-latest }
+          - { channel: install.sh, os: macos-latest }
+          - { channel: archive, os: ubuntu-latest }
+          - { channel: archive, os: macos-latest }
+          - { channel: archive, os: windows-latest }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        if: matrix.channel == 'npm'
+        with:
+          node-version: "24"
+
+      - uses: actions/setup-python@v7
+        if: matrix.channel == 'pip'
+        with:
+          python-version: "3.12"
+
+      - name: Install and run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ matrix.channel }}
+        run: ./scripts/release-smoke.sh "$CHANNEL" "$RELEASE_TAG"
+
+  hold:
+    name: Hold the next release
+    needs: install
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open an issue and hold the release PR
+        run: |
+          title="Release smoke test failed for $RELEASE_TAG"
+          open=$(gh issue list --state open --label release:blocked --search "\"$title\" in:title" \
+                   --json number -q '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$title" --label release:blocked --body "$(cat <<EOF
+          Installing $RELEASE_TAG from at least one channel failed: $RUN_URL
+
+          The open release PR has \`release:blocked\`, so the next release waits.
+          If $RELEASE_TAG has to come off the defaults, see RELEASING.md section 5.
+          Close this issue and remove the label from the release PR once a fixed
+          release passes this test.
+          EOF
+          )"
+          fi
+
+          for pr in $(gh pr list --state open --label "autorelease: pending" --json number -q '.[].number'); do
+            gh pr edit "$pr" --add-label release:blocked
+            echo "held release PR #$pr"
+          done
