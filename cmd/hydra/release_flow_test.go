@@ -194,7 +194,7 @@ func replaceFirst(line, version string) string {
 func TestReleasePlease_BumpsEveryDocsVersionPin(t *testing.T) {
 	const next = "99.88.77"
 	pins := regexp.MustCompile(`(?:HYDRA_VERSION=v|releases/download/v|hydra-desktop_v|links pinned to v|"softwareVersion":\s*"|Release&nbsp;: <span class="g">v)(\d+\.\d+\.\d+)`)
-	assets := regexp.MustCompile(`releases/download/v(\d+\.\d+\.\d+)/\n?hydra-desktop_v(\d+\.\d+\.\d+)_`)
+	assets := regexp.MustCompile(`releases/download/v(\d+\.\d+\.\d+)/(?:\r?\n)?hydra-desktop_v(\d+\.\d+\.\d+)_`)
 
 	listed := map[string]bool{}
 	for _, pkg := range loadReleasePleaseConfig(t).Packages {

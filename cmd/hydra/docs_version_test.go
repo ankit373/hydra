@@ -118,7 +118,7 @@ func cmpSemver(a, b string) int {
 // The URL is split after the tag so release-please bumps both (browsers drop the newline).
 func TestDocs_AssetNamesMatchTheirTag(t *testing.T) {
 	src := repoFile(t, "docs", "app.html")
-	rx := regexp.MustCompile(`releases/download/v(\d+\.\d+\.\d+)/\n?hydra-desktop_v(\d+\.\d+\.\d+)_`)
+	rx := regexp.MustCompile(`releases/download/v(\d+\.\d+\.\d+)/(?:\r?\n)?hydra-desktop_v(\d+\.\d+\.\d+)_`)
 
 	ms := rx.FindAllStringSubmatch(src, -1)
 	if len(ms) == 0 {
