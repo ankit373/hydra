@@ -6,10 +6,12 @@ package env
 
 import (
 	"context"
-	"os"
+	"errors"
+	"fmt"
 
 	"github.com/ankit373/hydra/internal/awsconf"
 	"github.com/ankit373/hydra/internal/capabilities"
+	"github.com/ankit373/hydra/internal/keystore"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -70,16 +72,12 @@ func (k keySpec) detected() bool {
 	if k.detect != nil {
 		return k.detect()
 	}
+	// keystore.Lookup, not os.Getenv: a key saved in the app counts too.
 	if k.anyOf {
-		for _, v := range k.envVars {
-			if os.Getenv(v) != "" {
-				return true
-			}
-		}
-		return false
+		return keystore.Lookup(k.envVars...) != ""
 	}
 	for _, v := range k.envVars {
-		if os.Getenv(v) == "" {
+		if keystore.Lookup(v) == "" {
 			return false
 		}
 	}
@@ -104,4 +102,55 @@ var knownKeys = []keySpec{
 	{envVars: []string{"PERPLEXITY_API_KEY"}, providerID: "perplexity"},
 	{envVars: []string{"COHERE_API_KEY"}, providerID: "cohere"},
 	{envVars: []string{"REPLICATE_API_TOKEN"}, providerID: "replicate"},
+}
+
+// KeyVar is a provider whose whole credential is one key, which is what a
+// person can paste. Bedrock and Azure need more than a key and stay env-only.
+type KeyVar struct {
+	Provider string
+	// Var is where a pasted key is filed and exported; Vars is every variable
+	// discovery accepts for it, Var first (Google reads two).
+	Var  string
+	Vars []string
+}
+
+// KeyVars lists them in discovery order.
+func KeyVars() []KeyVar {
+	var out []KeyVar
+	for _, k := range knownKeys {
+		if k.detect == nil && (k.anyOf || len(k.envVars) == 1) {
+			out = append(out, KeyVar{Provider: k.providerID, Var: k.envVars[0], Vars: k.envVars})
+		}
+	}
+	return out
+}
+
+// LoadStoredKeys makes each stored provider key visible to keystore.Lookup,
+// which discovery and the executors read through. An exported variable still
+// wins, and only KeyVars names are loaded, whatever the store holds.
+func LoadStoredKeys() error {
+	stored, err := keystore.Names()
+	if err != nil {
+		return err
+	}
+	allowed := map[string]bool{}
+	for _, kv := range KeyVars() {
+		allowed[kv.Var] = true
+	}
+	var errs []error
+	for _, name := range stored {
+		if !allowed[name] {
+			continue
+		}
+		v, err := keystore.Get(name)
+		if errors.Is(err, keystore.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+			continue
+		}
+		keystore.Load(name, v)
+	}
+	return errors.Join(errs...)
 }

@@ -211,6 +211,9 @@ func NewSandbox(t *testing.T) *Sandbox {
 	t.Setenv("HOME", s.Home)
 	t.Setenv("USERPROFILE", s.Home)
 	t.Setenv("HYDRA_HOME", s.HydraHome)
+	// keystore.BackendEnv: stored keys go to a file under HydraHome, never the
+	// developer's real Keychain.
+	t.Setenv("HYDRA_KEYSTORE", "file")
 
 	// An empty PATH would make exec.LookPath fail for a different reason on
 	// each OS; one empty directory makes "not found" mean exactly that.
