@@ -1251,11 +1251,15 @@ the API key, and a test suite Hydra runs does not see it.
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh
 ```
 
+<!-- x-release-please-start-version: release-please bumps the pinned version below. -->
+
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications`, or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
 Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.7.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
+
+<!-- x-release-please-end -->
 
 **Or take the artifact directly**, from the
 [releases page](https://github.com/ankit373/hydra/releases/latest):

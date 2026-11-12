@@ -7,7 +7,7 @@ name: Desktop app build
 #                  compiled at all: the `desktop` job in ci.yml is scoped to
 #                  ./api/... because main.go imports Wails, so without this the
 #                  Wails wiring is verified by nobody (#227).
-#   rc.yml       → full matrix, uploaded, so UAT tests the real app
+#   rc.yml       → full matrix, uploaded, so an RC carries the real app
 #   publish.yml  → full matrix, uploaded, so stable releases carry it
 #
 # Cross-compiling is not possible: each platform links its own webview
@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      ref:
+        description: "Commit to build. Defaults to the commit that triggered the caller."
+        required: false
+        type: string
+        default: ""
       targets:
         description: "JSON array of build targets. Defaults to every platform."
         required: false
@@ -80,6 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Go

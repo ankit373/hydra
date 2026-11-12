@@ -7,9 +7,9 @@
 Closes #<!-- issue number -->
 
 <!--
-The keyword does not fire on a develop-targeted PR: GitHub only honours it into
-the default branch. close-shipped-issues.yml reads it back out of this body at
-release time, so a PR with no keyword is an issue that never closes.
+GitHub closes the issue when this merges into main. This body also becomes the
+squash commit body: a BREAKING CHANGE: or Release-As: line here changes the next
+version, so leave those out unless you mean them (RELEASING.md).
 -->
 
 ## Type of change

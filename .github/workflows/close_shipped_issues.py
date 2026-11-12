@@ -1,8 +1,9 @@
-"""Close the issues whose PRs shipped in a release. Driven by close-shipped-issues.yml.
+"""Close the issues whose PRs shipped in a release. Backfill, run by hand through
+close-shipped-issues.yml.
 
 Reads shipped_prs.txt (the numbers in the release's commit subjects), works out what
-each one closes, and closes those issues. GitHub's own link API is empty for
-develop-targeted PRs, so a PR body is the only surviving record of what it closes.
+each one closes, and closes those issues. GitHub's own link API was empty for the old
+develop-targeted PRs, so a PR body is the only surviving record of what they close.
 """
 
 import json

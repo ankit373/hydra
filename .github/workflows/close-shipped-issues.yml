@@ -1,10 +1,9 @@
 name: Close shipped issues
 
-# GitHub only fires a closing keyword on merges into the default branch, and every
-# feature PR here targets develop, so `Closes #n` links but never closes (#217).
-# This closes them at release time instead.
-#
-# Called by release-please.yml and release.yml; workflow_dispatch backfills a tag.
+# Backfill only. PRs merge into main now, so `Closes #n` closes the issue on merge.
+# This used to close them at release time, when feature PRs targeted develop and
+# the keyword never fired (#217). No release workflow calls it any more: on main
+# its lineage walk would cover every PR ever merged. Run it by hand for a tag.
 
 on:
   workflow_call:

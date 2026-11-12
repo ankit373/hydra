@@ -1,6 +1,7 @@
 # Merge queue for hydra: every PR lands through here, never via the merge button.
-# develop/release PRs merge on green; main only on a maintainer's @mergifyio queue.
-# Mergify reads this file from main only: a change here is live once a release carries it.
+# Feature PRs merge into main on green. release-please's PR merges only once the
+# maintainer approves it (RELEASING.md). develop is kept until no open PR targets it.
+# Mergify reads this file from main only: a change here is live once it merges.
 
 shared:
   # main and release/v* require no checks in GitHub, so the queue requires them.
@@ -38,13 +39,13 @@ shared:
 
   # cla.yml mirrors CLA Assistant's license/cla under this name, which main's config still
   # requires. Step 2 (#1380) points this at license/cla once main has this file.
-  # Not in develop's branch protection, so the queues require it (bots pass it).
+  # Not in any branch protection, so the queues require it (bots pass it).
   cla: &cla check-success=Contributor has signed
 
   # release-please derives the bump and changelog from this, so it gates the queue.
   conventional: &conventional 'title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
 
-  # close-shipped-issues.yml reads this back at release time; without it the issue never closes (#217).
+  # GitHub closes the issue when the PR merges into main; without it the issue stays open (#217).
   closes: &closes 'body~=(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #\d+'
 
   # A squash leaves release-please nothing to bump without this footer (v1.1.0, #219).
@@ -61,22 +62,18 @@ shared:
           - title~=^(feat|fix)\(release\)
           - *release_as
 
-  # The only branches that may land on main: the promotions plus release-please.
-  main_head: &main_head 'head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+|release-please--.+)$'
-
   release_please: &release_please head~=^release-please--
   # A fork can name a branch anything, so the bot and the repo are what identify release-please.
   release_please_bot: &release_please_bot author=github-actions[bot]
   same_repo: &same_repo -from-fork
-  # release-please's PR is CHANGELOG + manifest only; anything else is not its PR.
-  release_please_files: &release_please_files -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+  # release-please's PR touches CHANGELOG, the manifest and the extra-files in
+  # release-please-config.json (the docs version pins); anything else is not its PR.
+  release_please_files: &release_please_files -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json|README\.md|docs/app\.html|docs/index\.html)$)
 
-  # sync-develop.yml's PR, pinned to the bot and the repo since anyone can name a branch.
-  back_merge: &back_merge
-    and:
-      - head=chore/back-merge-main
-      - author=github-actions[bot]
-      - *same_repo
+  # A release waits while any of these is on its PR (RELEASING.md).
+  release_not_held: &release_not_held
+    - label!=release:hold
+    - label!=release:blocked
   human: &human -author~=\[bot\]$
   dependabot: &dependabot author=dependabot[bot]
   # Mergify's own draft and config PRs are not contributions; protections skip them.
@@ -101,7 +98,7 @@ defaults:
     batch_size: 1
     # About 1.5x the slowest CI run measured (29 min); auto sets no timeout until a queue has ~20 runs.
     checks_timeout: 45 minutes
-    # "title (#n)" feeds close-shipped-issues; the body carries the Release-As footer.
+    # The changelog takes "title (#n)"; release-please reads footers such as Release-As from the body.
     commit_message_format:
       title: pr-title
       body: pr-body
@@ -109,6 +106,8 @@ defaults:
 queue_rules:
   # release-please's own PR. Merging it tags and publishes everywhere, so the full CI set
   # must pass first; in queue_conditions, as merge_conditions would check a draft (#1353).
+  # The maintainer's approval is the release decision. Queue conditions hold while queued,
+  # so a hold label or a dismissed approval (release-please pushed new commits) dequeues it.
   - name: release-please
     queue_conditions:
       - base=main
@@ -116,6 +115,9 @@ queue_rules:
       - *release_please_bot
       - *same_repo
       - *release_please_files
+      - approved-reviews-by=ankit373
+      - and: *release_not_held
+      - and: *not_held
       - and: *ci
       - and: *release_build
       - and: *security
@@ -151,6 +153,26 @@ queue_rules:
     update_method: merge
     # One fresh run for a flaky leg; a second red dequeues, so nothing merges around it.
     max_checks_retries: 1
+
+  # Every other PR into main. After release-please, promote and release, so those
+  # match first. Pinned off the release-please bot by author, not by branch name: its
+  # PR must never land without the approval its own queue asks for.
+  - name: main
+    queue_conditions:
+      - base=main
+      - -draft
+      - *conventional
+      - *cla
+      - -author=github-actions[bot]
+    merge_conditions:
+      - and: *ci
+      - and: *release_build
+      - and: *security
+    update_method: merge
+    max_checks_retries: 1
+    batch_size:
+      min: 1
+      max: 3
 
   # develop's 13 required checks are injected from branch protection.
   - name: develop
@@ -201,11 +223,12 @@ merge_protections:
       - *conventional
 
   - name: Closes keyword
-    description: close-shipped-issues.yml closes the issue from this at release time.
+    description: GitHub closes the issue from this when the PR merges into main.
     if:
       - *not_mergify
       - *human
       - or:
+          - base=main
           - base=develop
           - base~=^release/v
           - head~=^hotfix/
@@ -239,63 +262,56 @@ merge_protections:
     success_conditions:
       - "#review-threads-unresolved=0"
 
-  # A merged workflow runs with the repo's token and secrets, and develop needs no review.
+  # A merged workflow runs with the repo's token and secrets, and main needs no review from others.
   - name: Workflow changes need the maintainer
     description: A change under .github/workflows/ needs ankit373's approval unless they wrote it.
     if:
       - files~=^\.github/workflows/
       - -author=ankit373
       - *not_mergify
-      # The back-merge only replays what already passed this gate on its way to main.
-      - not: *back_merge
     success_conditions:
       - approved-reviews-by=ankit373
 
-  - name: Feature work targets develop
-    description: feature, feat, chore and docs branches never go straight to main or a release.
+  - name: Feature work targets main
+    description: feature, feat, chore and docs branches never go to a release branch.
     if:
       - head~=^(feature|feat|chore|docs)/
     success_conditions:
-      - base=develop
+      - base~=^(main|develop)$
 
-  # A release-branch fix during UAT is a fix/ branch into release/vX.Y.Z (CLAUDE.md, Step 6).
-  - name: Fixes target develop or a release branch
-    description: fix branches go to develop, or to a release branch under UAT.
+  # A fix for a release branch is a fix/ branch into release/vX.Y or release/vX.Y.Z (RELEASING.md).
+  - name: Fixes target main or a release branch
+    description: fix branches go to main, or to a release branch.
     if:
       - head~=^fix/
     success_conditions:
-      - base~=^(develop|release/v\d+\.\d+\.\d+)$
-
-  - name: Only promotions reach main
-    description: main takes release/vX.Y.Z-to-main, hotfix/* and release-please, nothing else.
-    if:
-      - base=main
-      - *not_mergify
-    success_conditions:
-      - *main_head
+      - base~=^(main|develop|release/v\d+\.\d+(\.\d+)?)$
 
 pull_request_rules:
   # Opt-in, like vLLM's `ready`: matching on author alone would queue every stale open PR.
   - name: Queue PRs labelled ready
     conditions:
-      - base~=^(develop|release/v.+)$
+      - base~=^(main|develop|release/v.+)$
       - -draft
       - label=ready
       - and: *not_held
     actions:
       queue:
 
-  - name: Approve and queue release-please's PR
+  # Never an approval from Mergify: the maintainer's own approval is what releases.
+  - name: Queue release-please's PR once the maintainer approves it
     conditions:
       - base=main
       - *release_please
       - *release_please_bot
       - *same_repo
       - *release_please_files
+      - approved-reviews-by=ankit373
+      - -closed
+      - -draft
+      - and: *release_not_held
+      - and: *not_held
     actions:
-      review:
-        type: APPROVE
-        message: Generated release diff only (CHANGELOG + manifest).
       queue:
 
   # main needs one review and the maintainer cannot approve their own PR, so the
@@ -312,30 +328,17 @@ pull_request_rules:
         type: APPROVE
         message: Maintainer's promotion; it ships only when they comment @mergifyio queue.
 
-  # Patch and minor bumps are routine; the develop queue still waits for every check.
+  # Patch and minor bumps are routine; the queue still waits for every check.
   - name: Queue Dependabot patch and minor bumps
     conditions:
       - *dependabot
-      - base=develop
+      - base~=^(main|develop)$
       - -draft
       - "#dependabot-update-type>=1"
       - -dependabot-update-type=version-update:semver-major
       - and: *not_held
     actions:
       queue:
-
-  # Security updates ignore dependabot.yml's target-branch and open against main.
-  - name: Dependabot PR to main
-    conditions:
-      - *dependabot
-      - base=main
-      - -closed
-    actions:
-      comment:
-        message: |
-          This Dependabot PR targets `main`, which only takes release carries, hotfixes and release-please.
-          Land the same bump on `develop` instead (e.g. `@dependabot recreate` after retargeting, or a
-          `chore/<n>-security-bumps-on-develop` PR) and close this one. It ships with the next release.
 
   # Hygiene bots, modelled on vLLM's: they comment and label; the protections above block.
   - name: Conventional title missing
@@ -352,7 +355,7 @@ pull_request_rules:
 
   - name: Closes keyword missing
     conditions:
-      - base=develop
+      - base~=^(main|develop)$
       - -closed
       - -draft
       - *human
@@ -360,21 +363,8 @@ pull_request_rules:
     actions:
       comment:
         message: |
-          @{{author}}, add `Closes #<issue>` to the description. On develop it does not close anything at merge;
-          close-shipped-issues.yml reads it back at release time, so without it the issue stays open for ever (#217).
-
-  - name: Disallowed branch to main
-    conditions:
-      - base=main
-      - -closed
-      - *not_mergify
-      - -author=dependabot[bot]
-      - not: *main_head
-    actions:
-      comment:
-        message: |
-          @{{author}}, `main` only takes `release/vX.Y.Z-to-main`, `hotfix/*` and release-please PRs.
-          Retarget this PR to `develop`; it reaches main with the next release.
+          @{{author}}, add `Closes #<issue>` to the description. GitHub closes the issue when this merges
+          into main, so without it the issue stays open for ever (#217).
 
   - name: Release PR missing Release-As footer
     conditions:

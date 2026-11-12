@@ -115,9 +115,10 @@ func cmpSemver(a, b string) int {
 
 // An asset URL names the version twice, in the tag and in the filename. They
 // have drifted apart before, and a mismatched pair 404s while looking right.
+// The URL is split after the tag so release-please bumps both (browsers drop the newline).
 func TestDocs_AssetNamesMatchTheirTag(t *testing.T) {
 	src := repoFile(t, "docs", "app.html")
-	rx := regexp.MustCompile(`releases/download/v(\d+\.\d+\.\d+)/hydra-desktop_v(\d+\.\d+\.\d+)_`)
+	rx := regexp.MustCompile(`releases/download/v(\d+\.\d+\.\d+)/(?:\r?\n)?hydra-desktop_v(\d+\.\d+\.\d+)_`)
 
 	ms := rx.FindAllStringSubmatch(src, -1)
 	if len(ms) == 0 {
