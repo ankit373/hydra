@@ -68,31 +68,49 @@ func carryShapedRepo(t *testing.T) string {
 	run(origin, "checkout", "-q", "main")
 	tree := run(origin, "rev-parse", "release/v1.0.0^{tree}")
 	head := run(origin, "rev-parse", "HEAD")
-	carry := run(origin, "commit-tree", tree, "-p", head, "-m", "chore(release): v1.0.0 (#99)")
+	carry := run(origin, "commit-tree", tree, "-p", head,
+		"-m", "chore(release): v1.0.0 (#99)", "-m", "Release-As: 1.0.0")
 	run(origin, "reset", "-q", "--hard", carry)
 	// A lightweight tag through update-ref, so no local tag config applies.
 	run(origin, "update-ref", "refs/tags/v1.0.0", carry)
+
+	// A hotfix merged straight into main: no release branch, no Release-As.
+	commit("fix(ci): a hotfix (#100)")
+	run(origin, "update-ref", "refs/tags/v1.0.1", "HEAD")
 
 	clone := filepath.Join(t.TempDir(), "clone")
 	run(t.TempDir(), "clone", "-q", origin, clone)
 	return clone
 }
 
-func shippedNumbers(t *testing.T, repo string) []string {
+// runLineage runs the script for tag and returns what it wrote to $GITHUB_OUTPUT.
+func runLineage(t *testing.T, repo, tag string) string {
 	t.Helper()
 	script, err := filepath.Abs(filepath.Join("..", "..", ".github", "workflows", "shipped_lineage.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(script, "v1.0.0")
+	output := filepath.Join(t.TempDir(), "github_output")
+	cmd := exec.Command(script, tag)
 	cmd.Dir = repo
+	cmd.Env = append(os.Environ(), "GITHUB_OUTPUT="+output)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("shipped_lineage.sh: %v\n%s", err, out)
 	}
+	raw, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("the script wrote no $GITHUB_OUTPUT:\n%s", out)
+	}
+	return string(raw)
+}
+
+func shippedNumbers(t *testing.T, repo string) []string {
+	t.Helper()
+	runLineage(t, repo, "v1.0.0")
 	raw, err := os.ReadFile(filepath.Join(repo, "shipped_prs.txt"))
 	if err != nil {
-		t.Fatalf("the script wrote no shipped_prs.txt:\n%s", out)
+		t.Fatal("the script wrote no shipped_prs.txt")
 	}
 	return strings.Fields(string(raw))
 }
@@ -132,5 +150,20 @@ func TestShippedLineage_StopsAtThePreviousRelease(t *testing.T) {
 	got := strings.Join(shippedNumbers(t, repo), " ")
 	if strings.Contains(" "+got+" ", " 10 ") {
 		t.Errorf("#10 shipped in the previous release and this sweep claims it: got %q", got)
+	}
+}
+
+// Only a promotion leaves issues for the sweep; a hotfix's PR targeted main, so
+// Closes #n already closed them, and a strict sweep failed v1.6.1 for it (#1351).
+func TestShippedLineage_StrictOnlyForAPromotion(t *testing.T) {
+	repo := carryShapedRepo(t)
+
+	for tag, want := range map[string]string{
+		"v1.0.0": "promoted=true",
+		"v1.0.1": "promoted=false",
+	} {
+		if got := runLineage(t, repo, tag); !strings.Contains(got, want+"\n") {
+			t.Errorf("%s: want %q in $GITHUB_OUTPUT, got %q", tag, want, got)
+		}
 	}
 }
