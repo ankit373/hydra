@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra Documentation, CLI, TUI, Trust &amp; Integrations</title>
-  <meta name="description" content="Hydra docs: the CLI, the TUI cockpit, integrations (Claude Code, Codex, Gemini, Ollama…), and every command, what it does, how it works, and how to use it.">
-  <meta name="keywords" content="Hydra docs, hyctl tui, hyctl dispatch, Claude Code integration, Codex, Ollama, LM Studio, LLM router documentation, provider-neutral AI orchestration">
+  <title>Hydra docs: CLI, desktop app, verification and integrations</title>
+  <meta name="description" content="Hydra docs: how Hydra picks the model best suited to each task and can check the answer. The CLI, the desktop app, the TUI, integrations with hosted, local and CLI models, and every command.">
+  <meta name="keywords" content="Hydra docs, hyctl, verified cascade gateway, LLM gateway, model routing, answer verification, OpenAI, Anthropic, Gemini, Ollama, provider-neutral">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/docs.html">
-  <meta property="og:title" content="Documentation, Hydra">
-  <meta property="og:description" content="The CLI, the TUI cockpit, the app, and every integration, with visuals. Plus a full command reference.">
+  <meta property="og:title" content="Hydra documentation">
+  <meta property="og:description" content="How Hydra picks the model best suited to each task and can check the answer: the CLI, the app, every integration, and a full command reference.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Documentation, Hydra">
-  <meta name="twitter:description" content="The CLI, the TUI cockpit, the app, and every integration, with visuals.">
+  <meta name="twitter:title" content="Hydra documentation">
+  <meta name="twitter:description" content="How Hydra picks the model best suited to each task and can check the answer: the CLI, the app and every integration.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/docs.html">
@@ -26,7 +26,7 @@
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "Hydra Documentation",
-    "description": "The CLI, the TUI cockpit, the desktop app, integrations, and a complete command reference for Hydra.",
+    "description": "How Hydra picks the model best suited to each task and can check the answer: the CLI, the TUI cockpit, the desktop app, integrations, and a complete command reference.",
     "image": "https://hydra.uvansa.com/logo.png",
     "url": "https://hydra.uvansa.com/docs.html",
     "datePublished": "2026-07-25",
@@ -308,7 +308,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
       <a href="#review"><code>hyctl review</code></a>
       <a href="#parallel"><code>hyctl parallel</code></a>
 
-      <div class="grp" data-grp>Trust &amp; graph</div>
+      <div class="grp" data-grp>Verification &amp; graph</div>
       <a href="#trust"><code>hyctl trust</code></a>
       <a href="#graph-blast"><code>graph blast</code></a>
       <a href="#graph-parallel"><code>graph parallel</code></a>
@@ -326,7 +326,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
       <a href="#models"><code>hyctl models</code></a>
 
       <div class="grp" data-grp>Concepts</div>
-      <a href="#tiers">Tiers &amp; CapScore</a>
+      <a href="#tiers">Routing levels &amp; CapScore</a>
       <a href="#governor">Budget governor</a>
       <a href="#policy">PII / local-only</a>
       <a href="#a2a">A2A handoffs</a>
@@ -341,18 +341,18 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
     <!-- ══ OVERVIEW ══ -->
     <section class="doc" id="overview">
-      <h2>Overview <span class="tagline">discover → route → observe</span></h2>
-      <p class="sum">Hydra <b>discovers</b> every head on your machine, <b>routes</b> each task to the cheapest one that clears the bar (with automatic fallback), and <b>logs</b> every dispatch. One provider-neutral control plane; no single vendor is privileged.</p>
+      <h2>Overview <span class="tagline">discover → route → check → observe</span></h2>
+      <p class="sum">Hydra picks the model best suited to each task, and can check the answer before you rely on it. It <b>discovers</b> every model you can reach (hosted APIs, local servers, CLI agents), <b>routes</b> each request to a model measured capable at that task type (today the lowest-cost one that clears the bar, with stronger models as the fallback chain), <b>checks</b> the answer with verifiers when you ask it to, and <b>logs</b> every request. No single vendor is privileged.</p>
       <div class="term">
         <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">the pipeline</span></div>
 <pre><span class="tf">   discover                 route                       execute + observe</span>
 <span class="ta">┌───────────┐</span>   <span class="tv">┌────────────────┐</span>   <span class="tc">┌──────────────┐</span>
-<span class="ta">│ PATH scan │</span>─┐ <span class="tv">│ policy gate    │</span>   <span class="tc">│ CLI heads    │</span>  <span class="tf">claude·codex·cursor</span>
-<span class="ta">│ env keys  │</span>─┼▶<span class="tv">│ CapScore→tier  │</span>─▶ <span class="tc">│ API heads    │</span>  <span class="tf">openai·gemini·groq</span>
-<span class="ta">│ port scan │</span>─┘ <span class="tv">│ fallback chain │</span>   <span class="tc">│ local heads  │</span>  <span class="tf">ollama·lm studio</span>
+<span class="ta">│ PATH scan │</span>─┐ <span class="tv">│ policy gate    │</span>   <span class="tc">│ CLI agents   │</span>  <span class="tf">claude·codex·cursor</span>
+<span class="ta">│ env keys  │</span>─┼▶<span class="tv">│ capability rank│</span>─▶ <span class="tc">│ API models   │</span>  <span class="tf">openai·gemini·groq</span>
+<span class="ta">│ port scan │</span>─┘ <span class="tv">│ fallback chain │</span>   <span class="tc">│ local models │</span>  <span class="tf">ollama·lm studio</span>
 <span class="ta">└───────────┘</span>   <span class="tv">└────────────────┘</span>   <span class="tc">└──────────────┘</span>
                           <span class="tf">│</span>                        <span class="tf">│</span>
-                    <span class="tf">~1.1µs/decision</span>          <span class="tg">cost.jsonl · calibration · trust</span></pre>
+                    <span class="tf">~1.1µs/decision</span>          <span class="tg">cost.jsonl · calibration · verdicts</span></pre>
       </div>
     </section>
 
@@ -382,7 +382,7 @@ go build -o hyctl ./cmd/hydra</pre>
     <!-- ══ CLI ══ -->
     <section class="doc" id="cli">
       <h2>The CLI <span class="badge ship">shipped</span> <span class="tagline">the whole interface</span></h2>
-      <p class="sum">Everything Hydra does runs through the single <span class="fx">hyctl</span> binary, dispatch, discovery, trust, graph, cost. Scriptable, CI-friendly, zero daemon.</p>
+      <p class="sum">Everything Hydra does runs through the single <span class="fx">hyctl</span> binary: requests, discovery, verification, graph and cost. Scriptable, CI-friendly, zero daemon.</p>
       <div class="term">
         <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">hyctl dispatch --dry-run "add pagination"</span></div>
 <pre><span class="td">  prompt</span> <span class="ta">→</span> <span class="ta">STANDARD</span> <span class="ta">→</span> <span class="td">T5</span>
@@ -513,11 +513,11 @@ MODE                 <span class="tf">│</span>                                
       </div>
 
       <div class="sub"><div class="lbl">How it works</div>
-        <p><b>Chat</b> executes: the route line names the tier, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each head at its routing tier, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
+        <p><b>Chat</b> executes: the route line names the routing level, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each model at its routing level, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
       </div>
       <div class="sub"><div class="lbl">Streaming</div>
-        <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow head and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
-        <p>When a head gives up part-way through, its partial output <b>collapses to one dim line</b> naming the head and the reason, so it cannot be mistaken for the answer, and <span class="fx">e</span> expands it again. The text is kept, not re-fetched. Only plain routing streams: a swarm has several heads answering at once and consensus picks by judge after N replies, so neither has a single stream to show.</p>
+        <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow model and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
+        <p>When a model gives up part-way through, its partial output <b>collapses to one dim line</b> naming the model and the reason, so it cannot be mistaken for the answer, and <span class="fx">e</span> expands it again. The text is kept, not re-fetched. Only plain routing streams: a swarm has several models answering at once and consensus picks by judge after N replies, so neither has a single stream to show.</p>
       </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
         <pre>hyctl tui
@@ -532,7 +532,7 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
       <h2>The desktop app <span class="badge ship">download</span> <span class="tagline">point-and-click cockpit</span></h2>
       <p class="sum">A native window over the same engine, Wails v2 + React, in <span class="fx">desktop/</span>. It opens on the chat, with the other views behind an icon rail. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b>: the views swap live.</p>
       <div class="appwin">
-        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app, Usage</span></div>
+        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra · Usage</span></div>
         <div class="appbody">
           <div class="appnav" id="appNav" role="tablist">
             <div class="item on" data-av="av-dash" data-title="Usage" role="tab" tabindex="0"><span class="dot"></span>Usage</div>
@@ -564,7 +564,7 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
               <div class="pane" id="av-tree">
                 <div class="ah">supervision tree</div>
                 <div class="apptree mono">
-                  <div><span style="color:var(--violet)">orchestrator</span> <span style="color:var(--faint)">T1 · cortex · you · 0.71</span></div>
+                  <div><span style="color:var(--violet)">orchestrator</span> <span style="color:var(--faint)">main model · you · 0.71</span></div>
                   <div>├─ design <span style="color:var(--faint)">T3 · agy · claude · returned · 0.93</span></div>
                   <div>├─ <span style="color:var(--aqua)">token-rotation</span> <span style="color:var(--faint)">T3 · agy · claude · running · 0.88</span></div>
                   <div>│&nbsp;&nbsp;├─ worker-1 <span style="color:var(--faint)">T6 · gemini pro · 0.91</span></div>
@@ -610,21 +610,21 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
     <!-- ══ INTEGRATIONS ══ -->
     <section class="doc" id="integrations">
       <h2>How discovery works <span class="tagline">no plugins, no config</span></h2>
-      <p class="sum">Hydra finds every head on your machine across <b>three channels</b> in under two seconds, scores each with a CapScore, and routes across all of them. Provider-neutral: it routes <i>away</i> from expensive heads, never toward a favored vendor.</p>
+      <p class="sum">Hydra finds every model on your machine across <b>three channels</b> in under two seconds, scores each with a CapScore, and routes across all of them. Provider-neutral: it routes <i>away</i> from expensive models, never toward a favored vendor.</p>
       <div class="chan-flow">
         <div class="chan"><span class="cnt">13+</span><h4>PATH scan</h4><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs, Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
-        <div class="chan"><span class="cnt">14</span><h4>Env vars</h4><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable head.</p></div>
+        <div class="chan"><span class="cnt">14</span><h4>Env vars</h4><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable model.</p></div>
         <div class="chan"><span class="cnt">2</span><h4>Port scan</h4><div class="how">localhost servers</div><p>Queries Ollama (11434), LM Studio (1234), a LiteLLM proxy (4000) and a llama.cpp server (8080), and enumerates every model each one serves.</p></div>
       </div>
     </section>
 
     <section class="doc" id="agents">
       <h2>Coding agents &amp; CLIs <span class="tagline">discovered on $PATH</span></h2>
-      <p class="sum">Whatever agent you drive Hydra with becomes the <b>orchestrator</b>; the rest are interchangeable <b>heads</b>. Hydra shells out to each through its native executor.</p>
+      <p class="sum">Whatever agent you drive Hydra with becomes the <b>orchestrator</b>; the rest are interchangeable <b>sources</b> it can send work to. Hydra shells out to each through its native executor.</p>
       <div class="intg-grid">
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">C</span>Claude Code</div><div class="meta">cli · <span class="tier">expert · T1</span></div><div class="desc">Anthropic's agent, top reasoning tier.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#00E6C3">A</span>Antigravity (agy)</div><div class="meta">cli · <span class="tier">expert · T1-T3</span></div><div class="desc">Claude-family tier registry; a first-class head.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#412991">Cx</span>OpenAI Codex</div><div class="meta">cli · <span class="tier">complex · T2</span></div><div class="desc">Strong code generation.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">C</span>Claude Code</div><div class="meta">cli · <span class="tier">expert</span></div><div class="desc">Anthropic's agent, top reasoning routing level.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#00E6C3">A</span>Antigravity (agy)</div><div class="meta">cli · <span class="tier">expert</span></div><div class="desc">Claude-family model registry; a first-class model.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#412991">Cx</span>OpenAI Codex</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Strong code generation.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Cu</span>Cursor</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">IDE agent, routable from Hydra.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">W</span>Windsurf</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Agentic IDE.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#4285F4">G</span>Gemini CLI</div><div class="meta">cli · <span class="tier">standard-complex</span></div><div class="desc">Google's coding CLI.</div></div>
@@ -634,12 +634,12 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
         <div class="intg"><div class="nm"><span class="glyph" style="background:#6366f1">Ct</span>Continue</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Open-source assistant.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#FF9900">K</span>Amazon Kiro</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">AWS's agentic IDE.</div></div>
       </div>
-      <div class="callout">Hydra never does work itself that a cheaper head can handle, it delegates down the tier ladder and only escalates when quality demands it.</div>
+      <div class="callout">Hydra sends each request to a model measured capable at that task type, and moves to another model when that model fails, or when the answer fails its check (with a <code>--confidence</code> target, or the validator <code>hyctl edit</code> runs).</div>
     </section>
 
     <section class="doc" id="providers">
       <h2>API providers <span class="tagline">discovered from env keys</span></h2>
-      <p class="sum">Set a provider's API key and it becomes a routable head automatically, through the OpenAI-compatible or provider-native HTTP executor. No config file to touch.</p>
+      <p class="sum">Set a provider's API key and it becomes a routable model automatically, through the OpenAI-compatible or provider-native HTTP executor. No config file to touch.</p>
       <div class="pill-row">
         <span class="chip">Anthropic</span><span class="chip">OpenAI</span><span class="chip">OpenRouter</span><span class="chip">Google AI</span>
         <span class="chip">Groq</span><span class="chip">Together</span><span class="chip">Fireworks</span><span class="chip">Mistral</span>
@@ -647,40 +647,40 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
         <span class="chip">Perplexity</span><span class="chip">Cohere</span><span class="chip">Replicate</span>
       </div>
       <div class="sub"><div class="lbl">Add one</div><pre>export ANTHROPIC_API_KEY=sk-…      <span class="c"># then:</span>
-hyctl probe                        <span class="c"># it shows up as a scored head</span></pre></div>
-      <div class="sub"><div class="lbl">Route <i>within</i> OpenRouter</div><p>A key alone gives one head routing to one model. Hydra already prices and scores OpenRouter's whole catalogue, so naming models turns each into its own head the router chooses between. Admission is explicit: enumerating hundreds would bury this list. Naming nothing changes nothing.</p><pre><span class="c"># ~/.hydra/config.toml</span>
+hyctl probe                        <span class="c"># it shows up as a scored model</span></pre></div>
+      <div class="sub"><div class="lbl">Route <i>within</i> OpenRouter</div><p>A key alone gives one routing choice: a single model. Hydra already prices and scores OpenRouter's whole catalogue, so naming models turns each into its own routing choice the router chooses between. Admission is explicit: enumerating hundreds would bury this list. Naming nothing changes nothing.</p><pre><span class="c"># ~/.hydra/config.toml</span>
 [openrouter]
-models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span class="fx">hyctl probe</span> then lists one head per model and says how much of the catalogue is enabled ("2 of 423"). A name the catalogue does not hold is shown as not routable with the reason, never dropped.</p></div>
+models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span class="fx">hyctl probe</span> then lists one entry per model and says how much of the catalogue is enabled ("2 of 423"). A name the catalogue does not hold is shown as not routable with the reason, never dropped.</p></div>
     </section>
 
     <section class="doc" id="local">
       <h2>Local runtimes <span class="tagline">the free floor</span></h2>
       <p class="sum">Local models are the <b>terminal fallback</b>: always available, always $0, and where PII-flagged prompts are pinned so sensitive data never leaves the machine.</p>
       <div class="intg-grid">
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple-local · T8-T10</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple-local</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">LM</span>LM Studio</div><div class="meta">port 1234 · <span class="tier">simple-local</span></div><div class="desc">Local server; models discovered and routed.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">Li</span>LiteLLM</div><div class="meta">port 4000 · <span class="tier">per-model tier</span></div><div class="desc">One head per model the proxy fronts. Local only where the upstream itself is local, so a proxy forwarding to OpenAI is never priced or governed as local.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#22c55e">Lc</span>llama.cpp</div><div class="meta">port 8080 · <span class="tier">simple-local · T10</span></div><div class="desc">One head per loaded model, and the server is identified by its own <span class="fx">build_info</span> rather than assumed from the port, so an unrelated service on 8080 is never offered to the router.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">Li</span>LiteLLM</div><div class="meta">port 4000 · <span class="tier">per-model</span></div><div class="desc">One entry per model the proxy fronts. Local only where the upstream itself is local, so a proxy forwarding to OpenAI is never priced or governed as local.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#22c55e">Lc</span>llama.cpp</div><div class="meta">port 8080 · <span class="tier">simple-local</span></div><div class="desc">One entry per loaded model, and the server is identified by its own <span class="fx">build_info</span> rather than assumed from the port, so an unrelated service on 8080 is never offered to the router.</div></div>
       </div>
     </section>
 
     <!-- ══ INIT ══ -->
     <section class="doc" id="init">
       <h2><span class="cmd">hyctl init</span> <span class="tagline">first-run wizard</span></h2>
-      <p class="sum">Scans your machine, ranks every model, and walks you through picking a <b>Cortex</b> (orchestrator), a local model calibrated to your real free RAM, and whether you handle sensitive data. Writes <span class="fx">~/.hydra/config.toml</span>.</p>
+      <p class="sum">Scans your machine, ranks every model, and walks you through picking your <b>main model</b> (the orchestrator), a local model calibrated to your real free RAM, and whether you handle sensitive data. Writes <span class="fx">~/.hydra/config.toml</span>.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl init</pre></div>
     </section>
 
     <section class="doc" id="probe">
-      <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every head</span></h2>
-      <p class="sum">Runs the three discovery channels concurrently and lists every head with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same head: it differs in accuracy, VRAM and tokens/sec. <code>--json</code> also carries the model's architectural context ceiling, which is what caps the window the budget governor holds a local head to.</p>
+      <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every model</span></h2>
+      <p class="sum">Runs the three discovery channels concurrently and lists every model with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same model: it differs in accuracy, VRAM and tokens/sec. <code>--json</code> also carries the model's architectural context ceiling, which is what caps the window the budget governor holds a local model to.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl probe</pre></div>
     </section>
 
     <section class="doc" id="status">
       <h2><span class="cmd">hyctl status</span> <span class="tagline">live state</span></h2>
-      <p class="sum">The heads that <b>can actually run</b>, budget bars, and the <b>rate-aware</b> governor.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>Head list comes from live discovery, grouped by the tier each head would route at, so it cannot drift from the router; anything discovery found but nothing can drive is counted, not listed. The governor models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
+      <p class="sum">The models that <b>can actually run</b>, budget bars, and the <b>rate-aware</b> governor.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Model list comes from live discovery, grouped by the routing level each model would route at, so it cannot drift from the router; anything discovery found but nothing can drive is counted, not listed. The governor models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl status</pre></div>
       <a class="more" href="#governor">How the governor decides →</a>
     </section>
@@ -688,9 +688,9 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span 
     <!-- ══ DISPATCH ══ -->
     <section class="doc" id="dispatch">
       <h2><span class="cmd">hyctl dispatch</span> <span class="tagline">the router</span></h2>
-      <p class="sum">Routes a prompt to the <b>cheapest head that clears the bar</b>, with automatic fallback. The core command.</p>
+      <p class="sum">Sends a request to a model <b>measured capable at its task type</b>, with automatic fallback. Today that is the lowest-cost model that clears the bar. The core command.</p>
       <div class="sub"><div class="lbl">How it works</div>
-        <p>1 · classify → enum/tier · 2 · <b>policy gate</b> (PII can block before any network call) · 3 · select highest-CapScore available head at/under tier · 4 · execute · 5 · on failure fall down the chain to local Qwen · 6 · log tokens + cost. ~1.1µs of decision overhead.</p>
+        <p>1 · classify → enum/routing level · 2 · <b>policy gate</b> (PII can block before any network call) · 3 · select highest-CapScore available model at/under routing level · 4 · execute · 5 · on failure fall down the chain to local Qwen · 6 · log tokens + cost. ~1.1µs of decision overhead.</p>
       </div>
       <div class="sub"><div class="lbl">Usage</div>
         <pre>hyctl dispatch <span class="s">"refactor auth to JWT refresh"</span>
@@ -700,8 +700,8 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       </div>
       <div class="sub"><div class="lbl">Streaming</div>
         <p>On a terminal the answer is drawn <b>as it arrives</b>: a spinner covers the wait before the first token, then tokens append, then the token counts, elapsed time and measured <b>TTFT</b> print as a footer, since none of those numbers exist until the call returns. Measured on a local 7B: 435 deltas spread over 9.9s of a 10.0s call, where before there was nothing on screen for the whole ten seconds.</p>
-        <p>Piped output <b>never streams</b> and is byte-identical to before, so scripts are unaffected; <span class="fx">--no-stream</span> asks for the same buffered rendering on a terminal. When a head fails part-way through, its partial is <b>collapsed off the screen</b> and replaced by one line naming the head and the reason, because a partial left on screen reads as part of the answer. Nothing is erased once it has scrolled past the top of the window.</p>
-        <p>A fan-out has no single stream to show, so <span class="fx">--swarm</span> and <span class="fx">--confidence</span> draw a <b>live panel</b> instead: every head that was selected, with its state, elapsed time, tokens and the cost as it accrues. A confidence run adds the running log-odds against the threshold it has to cross, so an ensemble that stops after two heads says why it stopped. The panel is erased when the run ends, and the result printed after it is unchanged.</p>
+        <p>Piped output <b>never streams</b> and is byte-identical to before, so scripts are unaffected; <span class="fx">--no-stream</span> asks for the same buffered rendering on a terminal. When a model fails part-way through, its partial is <b>collapsed off the screen</b> and replaced by one line naming the model and the reason, because a partial left on screen reads as part of the answer. Nothing is erased once it has scrolled past the top of the window.</p>
+        <p>A fan-out has no single stream to show, so <span class="fx">--swarm</span> and <span class="fx">--confidence</span> draw a <b>live panel</b> instead: every model that was selected, with its state, elapsed time, tokens and the cost as it accrues. A confidence run adds the running log-odds against the threshold it has to cross, so an ensemble that stops after two models says why it stopped. The panel is erased when the run ends, and the result printed after it is unchanged.</p>
       </div>
       <div class="sub"><div class="lbl">Key flags</div>
         <div class="pill-row">
@@ -730,7 +730,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
 
     <section class="doc" id="edit">
       <h2><span class="cmd">hyctl edit</span> <span class="tagline">safe file edits</span></h2>
-      <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a head.</p>
+      <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a model.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl edit <span class="fl">--file</span> "$PWD/internal/foo.go" <span class="fl">--enum</span> MODERATE <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
     </section>
     <section class="doc" id="review">
@@ -740,19 +740,19 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
     </section>
     <section class="doc" id="parallel">
       <h2><span class="cmd">hyctl parallel</span> <span class="tagline">fan independent tasks</span></h2>
-      <p class="sum">Fan a set of independent tasks across heads. Optimal count follows <span class="fx">n*=√((1−s)/k)</span>.</p>
+      <p class="sum">Fan a set of independent tasks across models. Optimal count follows <span class="fx">n*=√((1−s)/k)</span>.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl parallel <span class="fl">--tasks</span> tasks.txt</pre></div>
       <a class="more" href="#graph-parallel">graph parallel →</a>
     </section>
 
     <!-- ══ TRUST / GRAPH / CONTEXT ══ -->
     <section class="doc" id="trust">
-      <h2><span class="cmd">hyctl trust</span> <span class="tagline">the confidence layer</span></h2>
+      <h2><span class="cmd">hyctl trust</span> <span class="tagline">calibration and verification</span></h2>
       <p class="sum">Builds and inspects the calibration behind <span class="fx">--confidence</span>. Each source earns a measured reliability from real outcomes.</p>
       <div class="sub"><div class="lbl">How it works</div><p>A Beta-Bernoulli posterior over sensitivity/specificity → a per-vote LLR and a <b>diagnostic power D</b> (KL divergence, nats). A coin-flip source has D≈0 and is ignored. The defect-cost model prices a wrong answer and sets the required confidence.</p></div>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre>hyctl trust calibration      <span class="c"># per-source se / sp / D</span>
-hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct  <span class="c"># a head ID from `hyctl probe`</span>
+hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct  <span class="c"># a model ID from `hyctl probe`</span>
 hyctl trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
 hyctl trust stats   <span class="c"># samples saved vs fixed-N</span>
 hyctl trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>
@@ -797,7 +797,7 @@ hyctl mcp report          <span class="c"># allowed / denied by agent &amp; tool
     </section>
 
     <section class="doc" id="mcp-registry">
-      <h2><span class="cmd">hyctl mcp registry</span> <span class="tagline">trust score for the MCP servers on your machine</span></h2>
+      <h2><span class="cmd">hyctl mcp registry</span> <span class="tagline">safety score for the MCP servers on your machine</span></h2>
       <p class="sum">Every existing MCP directory answers "does this server exist", none answer "is it safe to run with my credentials right now," and star/download counts are actively misleading (the most-starred servers score worst on quality in independent research). This scores what's actually installed instead of indexing everything that exists.</p>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre>hyctl mcp registry sync             <span class="c"># pull the official MCP registry into a local cache</span>
@@ -805,9 +805,9 @@ hyctl mcp registry scan             <span class="c"># list servers installed acr
 hyctl mcp registry audit            <span class="c"># resolve + score installed servers, update lifecycle state</span>
 hyctl mcp registry export <span class="fl">--out</span> DIR  <span class="c"># static index.html/index.json of audited servers</span>
 hyctl mcp registry backtest         <span class="c"># validate scoring against known real incidents (postmark-mcp, CVE-2025-6514)</span>
-hyctl mcp registry list             <span class="c"># audited servers by trust score</span>
+hyctl mcp registry list             <span class="c"># audited servers by safety score</span>
 hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server quarantined in error</span></pre></div>
-      <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance), automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out, <code>clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's trust state (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest, the direct fix for the <code>postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code>scan</code> never reads env-var or secret values from client configs, only server identity.</p>
+      <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance), automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out, <code>clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's status (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest, the direct fix for the <code>postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code>scan</code> never reads env-var or secret values from client configs, only server identity.</p>
       <p class="sum">Feeds back into the ledger: <code>hyctl mcp check</code> auto-classifies a tool call as <span class="fx">mcp-unverified</span>, <span class="fx">mcp-flagged</span>, or <span class="fx">mcp-quarantined</span> from a server's registry state, the same way PII is auto-detected from content, so a policy rule can gate on it automatically. Below that: <span class="fx">mcp-behavior-change</span>, a server whose ledger history has only ever shown one kind of access (read, say) suddenly performing another (network) is flagged from local history alone, no registry data or CVE required. A server's first-ever call is never flagged, there's nothing yet to compare it against.</p>
       <p class="sum">The exported page (<code>export</code>) carries a disclaimer, this is a probabilistic signal from automated checks, not a guarantee of safety or a claim about a publisher's intent, and every row links a pre-filled dispute issue against this repo, since a public negative signal about a real project needs a correction path before it ships, not as an afterthought.</p>
     </section>
@@ -826,7 +826,7 @@ hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server qua
     </section>
     <section class="doc" id="stats">
       <h2><span class="cmd">hyctl stats</span> <span class="tagline">rollup</span></h2>
-      <p class="sum">Cost rollup by <b>model, tier, and day</b>: your real savings.</p>
+      <p class="sum">Cost rollup by <b>model, routing level, and day</b>: your real spend.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl stats</pre></div>
     </section>
     <section class="doc" id="pricing">
@@ -846,10 +846,10 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
 
     <!-- ══ CONCEPTS ══ -->
     <section class="doc" id="tiers">
-      <h2>Tiers &amp; CapScore <span class="tagline">how routing decides</span></h2>
-      <p class="sum">Every head gets a <b>CapScore</b> (0-100); tasks route through named tiers by score. Lower tier number = stronger.</p>
+      <h2>Routing levels &amp; CapScore <span class="tagline">how routing decides</span></h2>
+      <p class="sum">Every model gets a <b>CapScore</b> (0-100); tasks route through named routing levels by score. Lower routing level number = stronger.</p>
       <table class="ladder">
-        <thead><tr><th>Tier</th><th>Score</th><th>Example heads</th></tr></thead>
+        <thead><tr><th>Routing level</th><th>Score</th><th>Example models</th></tr></thead>
         <tbody>
           <tr><td class="k">expert</td><td class="sc">90-100</td><td>Claude Opus, Claude Code</td></tr>
           <tr><td class="k">complex</td><td class="sc">80-89</td><td>Codex, GPT-class, Gemini Pro</td></tr>
@@ -862,14 +862,14 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
 
     <section class="doc" id="governor">
       <h2>Budget governor <span class="tagline">spend attention wisely</span></h2>
-      <p class="sum">Static <b>pressure bands</b> downgrade tiers as usage climbs; a <b>rate-aware first-passage</b> model escalates <i>before</i> a threshold is crossed. The terminal fallback is always the free local head.</p>
+      <p class="sum">Static <b>pressure bands</b> downgrade routing levels as usage climbs; a <b>rate-aware first-passage</b> model escalates <i>before</i> a threshold is crossed. The terminal fallback is always the free local model.</p>
       <table class="ladder">
         <thead><tr><th>claude_pct</th><th>Mode</th><th>Action</th></tr></thead>
         <tbody>
           <tr><td class="sc">0-49%</td><td class="k">normal</td><td>full orchestration</td></tr>
           <tr><td class="sc">50-64%</td><td class="k">compact</td><td>compact recommended</td></tr>
           <tr><td class="sc">65-69%</td><td class="k">caution</td><td>compact urgently</td></tr>
-          <tr><td class="sc">70-74%</td><td class="k">warning</td><td>downgrade one tier</td></tr>
+          <tr><td class="sc">70-74%</td><td class="k">warning</td><td>downgrade one routing level</td></tr>
           <tr><td class="sc">75-79%</td><td class="k">critical</td><td>routing only</td></tr>
           <tr><td class="sc">80%+</td><td class="k">emergency</td><td>route to local, warn</td></tr>
         </tbody>
@@ -879,7 +879,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     <section class="doc" id="policy">
       <h2>PII / local-only <span class="tagline">enforced, not conventional</span></h2>
       <p class="sum">With local-only policy on, any prompt containing sensitive data is <b>blocked from leaving your machine</b> at the dispatch layer, before any network call.</p>
-      <div class="sub"><div class="lbl">Detected</div><p>SSNs, credit cards, emails, API keys/tokens, IPs, private-key material → re-routed to a local head.</p></div>
+      <div class="sub"><div class="lbl">Detected</div><p>SSNs, credit cards, emails, API keys/tokens, IPs, private-key material → re-routed to a local model.</p></div>
     </section>
 
     <section class="doc" id="a2a">
@@ -897,7 +897,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
 </div>
 
 <footer>
-  <span>© Hydra, MIT. The Trust Control Plane for AI development.</span>
+  <span>© Hydra · MIT. Hydra picks the model best suited to each task and can check the answer.</span>
   <span><a href="/">Home</a> · <a href="/first-principles.html">First principles</a> · <a href="/pricing.html">Pricing</a> · <a href="https://github.com/ankit373/hydra">GitHub</a></span>
 </footer>
 
@@ -974,7 +974,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       function activate(){
         appNav.querySelectorAll('.item').forEach(function(x){ x.classList.toggle('on', x===it); });
         swap(appPanes, it.getAttribute('data-av'));
-        if(appTitle) appTitle.textContent='Hydra.app, '+it.getAttribute('data-title');
+        if(appTitle) appTitle.textContent='Hydra · '+it.getAttribute('data-title');
       }
       it.addEventListener('click', activate);
       it.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activate(); } });

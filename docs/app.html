@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra Desktop, watch every agent, every dollar, live</title>
-  <meta name="description" content="The Hydra desktop app: ask for work in a chat, and every reply says which model answered, at which tier, and what it cost. Plus Models, Activity, Usage and Audit views. macOS, Linux and Windows.">
-  <meta name="keywords" content="AI agent dashboard, LLM cost dashboard, desktop app, multi-model orchestration UI, agent monitoring, Hydra desktop">
+  <title>Hydra Desktop: ask anything, see which model answered and what it cost</title>
+  <meta name="description" content="The Hydra desktop app: ask anything in a chat, Hydra picks the model best suited to the task, and every reply says which model answered and what it cost. Plus Models, Activity, Usage, Audit and Settings views. macOS, Linux and Windows.">
+  <meta name="keywords" content="AI chat desktop app, multi-model AI app, LLM cost dashboard, AI gateway app, agent monitoring, Hydra desktop">
 
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/app.html">
-  <meta property="og:title" content="Hydra Desktop, watch every agent, every dollar, live">
-  <meta property="og:description" content="Chat-first, over your local control plane: every reply names the model, the tier and the cost. Free, open source, runs entirely on your machine.">
+  <meta property="og:title" content="Hydra Desktop: ask anything, see which model answered and what it cost">
+  <meta property="og:description" content="A chat-first desktop app for Hydra: every reply names the model that answered and what it cost. Free and open source, and your logs stay on your machine.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
-  <meta name="twitter:title" content="Hydra Desktop, watch every agent, every dollar, live">
-  <meta name="twitter:description" content="Five views over your local control plane. See what each agent is doing and what it costs, as it happens.">
+  <meta name="twitter:title" content="Hydra Desktop: ask anything, see which model answered and what it cost">
+  <meta name="twitter:description" content="Ask anything and see which model answered and what it cost. Models, Activity, Usage, Audit and Settings views over your local logs.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/app.html">
@@ -27,6 +27,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Hydra Desktop",
+    "description": "A chat-first desktop app for Hydra, the gateway that picks the model best suited to each task and can check the answer. Every reply names the model that answered and what it cost.",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux, Windows",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -303,12 +304,13 @@ footer a{color:var(--dim);}
 <section class="hero">
   <div class="wrap">
     <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
-    <h1>Your agents are already running.<br><span class="grad">Now you can watch them.</span></h1>
+    <h1>Ask anything.<br><span class="grad">See which model answered.</span></h1>
     <p class="lede">
-      The CLI routes the work. The desktop app shows you what it did, which head
-      answered, how long it took, what it cost, how confident it was, and which
-      files changed. It reads the same local logs <span class="mono">hyctl</span>
-      writes, so there is nothing to connect and nothing to sign in to.
+      The desktop app opens on a chat. Ask anything, and Hydra picks the model
+      best suited to the task. Each reply says which model answered, how long it
+      took and what it cost, and the other views show what ran and what changed.
+      It reads the same local logs <span class="mono">hyctl</span> writes, so there
+      is nothing to sign in to.
     </p>
     <div class="cta">
       <a class="btn primary" href="#download">Download for your platform</a>
@@ -324,7 +326,7 @@ footer a{color:var(--dim);}
     <div class="win">
       <div class="win-bar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="win-title">Hydra, localhost · no account, no telemetry</span>
+        <span class="win-title">Hydra · localhost · no account, no telemetry</span>
       </div>
       <div class="win-body">
         <div class="side">
@@ -341,34 +343,34 @@ footer a{color:var(--dim);}
           <!-- 1 · Chat · the default surface -->
           <div class="view">
             <div class="vhead">Chat</div>
-            <div class="vsub">ask for work, the reply says who answered, and what it cost</div>
+            <div class="vsub">ask anything; the reply says who answered and what it cost</div>
             <div class="chat-split">
               <div>
-                <div class="said">add pagination to /users</div>
+                <div class="said">summarise this contract in three bullets</div>
                 <div class="row" style="border:0;padding:2px 0 8px">
-                  <span style="flex:1;color:var(--dim)">Read <span class="mono">internal/api/users.go</span>,
-                    added page/size parsing and an <span class="mono">X-Total-Count</span> header.</span>
+                  <span style="flex:1;color:var(--dim)">24-month term, renews unless cancelled 60 days
+                    before the end. Fees rise 3% a year. Either side may end it for breach.</span>
                 </div>
                 <div class="prov">
-                  <span class="pill ok">T6</span> gemini-flash
+                  <span class="pill ok">done</span> claude-sonnet
                   <span style="color:var(--line)">·</span> 2.9s
                   <span style="color:var(--line)">·</span> $0.004
                   <span style="color:var(--line)">·</span> <span style="color:var(--aqua)">session →</span>
                 </div>
                 <div class="composer">
-                  <span style="flex:1;color:var(--faint)">Ask anything about this repo…</span>
+                  <span style="flex:1;color:var(--faint)">Ask anything…</span>
                   <span class="chip"><i></i>Auto-route</span>
                 </div>
               </div>
               <div class="ckpane">
                 <div class="cklbl">ACTIVE</div>
-                <div style="font-size:11.5px;margin-bottom:2px">gemini-flash <span style="color:var(--faint)">T6</span></div>
-                <div style="font-family:var(--mono);font-size:9.5px;color:var(--faint)">flash pool · 37 calls</div>
+                <div style="font-size:11.5px;margin-bottom:2px">claude-sonnet</div>
+                <div style="font-family:var(--mono);font-size:9.5px;color:var(--faint)">anthropic pool · 14 calls</div>
                 <div class="cklbl" style="margin-top:12px">MEASURED AT THIS</div>
-                <div class="ckrow"><span>gemini-flash</span><span style="color:var(--cheap)">1.18</span></div>
-                <div style="font-family:var(--mono);font-size:9px;color:var(--faint)">go · 41 obs</div>
+                <div class="ckrow"><span>claude-sonnet</span><span style="color:var(--cheap)">0.91</span></div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--faint)">summaries · 38 obs</div>
                 <div class="ckrow" style="margin-top:7px"><span>qwen2.5</span><span style="color:var(--mid)">0.31</span></div>
-                <div style="font-family:var(--mono);font-size:9px;color:var(--mid)">yaml · 5 obs · thin</div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--mid)">summaries · 5 obs · thin</div>
               </div>
             </div>
           </div>
@@ -376,13 +378,13 @@ footer a{color:var(--dim);}
           <!-- 2 · Models -->
           <div class="view">
             <div class="vhead">Models</div>
-            <div class="vsub">what this machine can route to, and whether anything can drive it now</div>
+            <div class="vsub">the models this machine can use, and whether each is ready now</div>
             <table class="mini">
-              <tr><th>Model</th><th>Tier</th><th>Reachable now</th><th style="text-align:right">Measured</th></tr>
-              <tr><td>claude-opus</td><td>1</td><td style="color:var(--cheap)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
-              <tr><td>claude-sonnet</td><td>3</td><td style="color:var(--cheap)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
-              <tr><td>gemini-flash</td><td>6</td><td style="color:var(--dim)">no API key for google</td><td class="n" style="color:var(--faint)">not measured</td></tr>
-              <tr><td>qwen2.5-coder:7b</td><td>10</td><td style="color:var(--dim)">start ollama serve</td><td class="n">0.34 · 77 outcomes</td></tr>
+              <tr><th>Model</th><th>Price</th><th>Reachable now</th><th style="text-align:right">Measured</th></tr>
+              <tr><td>claude-opus</td><td>$$$</td><td style="color:var(--cheap)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
+              <tr><td>claude-sonnet</td><td>$$</td><td style="color:var(--cheap)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
+              <tr><td>gemini-flash</td><td>$</td><td style="color:var(--dim)">no API key for google</td><td class="n" style="color:var(--faint)">not measured</td></tr>
+              <tr><td>qwen2.5-coder:7b</td><td>free</td><td style="color:var(--dim)">start ollama serve</td><td class="n">0.34 · 77 outcomes</td></tr>
             </table>
             <div style="margin-top:12px;font-size:11px;color:var(--dim)">
               The dot means reachable, not enabled in a config file. A score never
@@ -396,38 +398,38 @@ footer a{color:var(--dim);}
             <div class="vsub">grouped by who has to act, not by time alone</div>
             <div style="font-family:var(--mono);font-size:10px;color:#E0A93A;margin:2px 0 6px">
               WAITING ON YOU · 1</div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">rotate the signing key</span>
-              <span class="pill">answer</span><span style="color:var(--dim)">tier 1</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">approve the refund reply</span>
+              <span class="pill">answer</span><span style="color:var(--dim)">gpt-5</span></div>
             <div style="font-family:var(--mono);font-size:10px;color:var(--aqua);margin:10px 0 6px">
               RUNNING NOW · 1</div>
-            <div class="row"><span class="blink"></span><span style="flex:1">add pagination to /users</span>
-              <span class="pill live">live</span><span style="color:var(--dim)">tier 6</span></div>
+            <div class="row"><span class="blink"></span><span style="flex:1">summarise the Q3 report</span>
+              <span class="pill live">live</span><span style="color:var(--dim)">gemini-flash</span></div>
             <div style="font-family:var(--mono);font-size:10px;color:#FF5A6E;margin:10px 0 6px">
               SOMETHING FAILED · 1</div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">refactor the ledger globs</span>
-              <span class="pill fail">failed</span><span style="color:var(--dim)">tier 3</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">extract the invoice fields</span>
+              <span class="pill fail">failed</span><span style="color:var(--dim)">claude-sonnet</span></div>
             <div style="font-family:var(--mono);font-size:10px;color:var(--faint);margin:10px 0 6px">
               DONE · 2</div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">write DTO tests</span>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">draft a reply to Sam</span>
               <span class="pill ok">done</span><span style="color:var(--cheap)">local</span></div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">add a User DTO</span>
-              <span class="pill ok">done</span><span style="color:var(--dim)">tier 8</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">review the staged diff</span>
+              <span class="pill ok">done</span><span style="color:var(--dim)">deepseek</span></div>
           </div>
 
           <!-- 4 · Usage -->
           <div class="view">
             <div class="vhead">Usage</div>
-            <div class="vsub">spend, grouped by model · tier · day</div>
+            <div class="vsub">spend, grouped by model and day</div>
             <div class="cards">
               <div class="card"><div class="k">Calls today</div><div class="v">128</div></div>
               <div class="card"><div class="k">Spend today</div><div class="v" style="color:var(--aqua)">$0.42</div></div>
-              <div class="card"><div class="k">vs all-frontier</div><div class="v" style="color:var(--cheap)">−83%</div></div>
+              <div class="card"><div class="k">Checked</div><div class="v" style="color:var(--cheap)">121</div></div>
             </div>
             <table class="mini">
-              <tr><th>Model</th><th>Tier</th><th style="text-align:right">Calls</th><th style="text-align:right">Cost</th></tr>
-              <tr><td>claude-sonnet</td><td>2</td><td class="n">14</td><td class="n">$0.31</td></tr>
-              <tr><td>gemini-flash</td><td>6</td><td class="n">37</td><td class="n">$0.11</td></tr>
-              <tr><td>qwen2.5-coder:7b</td><td>10</td><td class="n">77</td><td class="n" style="color:var(--cheap)">free</td></tr>
+              <tr><th>Model</th><th>Price</th><th style="text-align:right">Calls</th><th style="text-align:right">Cost</th></tr>
+              <tr><td>claude-sonnet</td><td>$$</td><td class="n">14</td><td class="n">$0.31</td></tr>
+              <tr><td>gemini-flash</td><td>$</td><td class="n">37</td><td class="n">$0.11</td></tr>
+              <tr><td>qwen2.5-coder:7b</td><td>free</td><td class="n">77</td><td class="n" style="color:var(--cheap)">free</td></tr>
             </table>
           </div>
 
@@ -444,15 +446,15 @@ footer a{color:var(--dim);}
             <div class="row"><span style="flex:1">OWASP LLM Top-10 coverage</span><span style="color:var(--dim)">8 / 10 rules</span></div>
             <div class="row"><span style="flex:1">Prompt-injection markers seen</span><span style="color:var(--mid)">2 blocked</span></div>
             <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
-              EVERY DECISION IS APPEND-ONLY AND HASH-CHAINED · NOTHING LEAVES THE MACHINE</div>
+              EVERY DECISION IS APPEND-ONLY AND HASH-CHAINED · THE LOG STAYS ON THIS MACHINE</div>
           </div>
 
           <!-- 6 · Settings -->
           <div class="view">
             <div class="vhead">Settings</div>
             <div class="vsub">what this machine is set to do, and the only screen that writes</div>
-            <div class="row"><span style="flex:1">Route anything with PII to a local head</span><span class="pill ok">on</span></div>
-            <div class="row"><span style="flex:1">Refuse rather than send, when nothing local is routable</span><span class="pill ok">on</span></div>
+            <div class="row"><span style="flex:1">Send anything with PII only to a local model</span><span class="pill ok">on</span></div>
+            <div class="row"><span style="flex:1">Refuse rather than send when no local model is ready</span><span class="pill ok">on</span></div>
             <div class="row"><span style="flex:1">Keep prompt and response text</span><span style="color:var(--dim)">off</span></div>
             <div class="row"><span style="flex:1">Serve an answer from a matching earlier question</span><span style="color:var(--dim)">off</span></div>
             <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
@@ -463,7 +465,7 @@ footer a{color:var(--dim);}
     </div>
     <p class="caption">
       A live rendering of the app's views, built from its own design tokens.
-      Not a screenshot, the numbers are sample data.
+      Not a screenshot: the numbers are sample data.
     </p>
   </div>
 </section>
@@ -471,7 +473,7 @@ footer a{color:var(--dim);}
 <!-- ══ THE VIEWS ═══════════════════════════════════════════════════════ -->
 <section class="blk wrap" id="views">
   <div class="klabel"><span>What's in it</span><b>six views, one question each</b></div>
-  <h2>Each screen answers something you'd otherwise <span class="grad">grep the logs for</span>.</h2>
+  <h2>Each screen answers <span class="grad">one plain question</span>.</h2>
   <p>
     Five of them read and one writes. Everything shown comes from the JSONL files
     <span class="mono">hyctl</span> already writes to <span class="mono">~/.hydra</span>,
@@ -485,26 +487,26 @@ footer a{color:var(--dim);}
     <div class="feat">
       <div class="tag">Chat</div>
       <h3>Ask, and see what answered</h3>
-      <p>The window opens here. Ask for work and the reply names the model, the tier
-        and the cost, with the run narrating itself as it goes rather than after.
+      <p>The window opens here. Ask anything and the reply names the model and
+        the cost, with the run narrating itself as it goes rather than after.
         The model picker groups by shared quota, so it shows when choosing one model
         spends the budget another will need.</p>
     </div>
     <div class="feat">
       <div class="tag">Models</div>
       <h3>What you can actually route to</h3>
-      <p>Every head this machine found, grouped by the token pool it spends, each
-        marked with whether anything can drive it <i>right now</i> and, when it
-        cannot, why, no API key, or a local server that is not running. Beside
-        it, the accuracy each model has actually earned, never shown without the
-        number of outcomes behind it.</p>
+      <p>Every model this machine found, grouped by the token pool it spends. Each
+        is marked with whether it can be used <i>right now</i> and, when it cannot,
+        why: no API key, or a local server that is not running. Beside it is the
+        accuracy each model has actually earned, never shown without the number of
+        outcomes behind it.</p>
     </div>
     <div class="feat">
       <div class="tag">Usage</div>
       <h3>Where the money went</h3>
-      <p>Spend grouped by model, by tier and by day, with call counts beside each,
-        alongside the governor's context pressure and your trust record, so cost
-        and confidence sit on one screen.</p>
+      <p>Spend grouped by model and by day, with call counts beside each,
+        alongside context use and each model's checked record, so cost and
+        accuracy sit on one screen.</p>
     </div>
     <div class="feat">
       <div class="tag">Activity</div>
@@ -518,7 +520,7 @@ footer a{color:var(--dim);}
       <div class="tag">Session</div>
       <h3>Why it did that</h3>
       <p class="app-note">Opened from a request in Activity, not from the rail.</p>
-      <p>One run's timeline in order: which head was selected, which candidates
+      <p>One run's timeline in order: which model was selected, which candidates
         failed and why it fell through, how long each step took, where it handed
         off, and a layered graph when the run fanned out, so a swarm reads as a
         shape rather than a list. Its <b>Code</b> tab carries the diffs for the same
@@ -529,9 +531,9 @@ footer a{color:var(--dim);}
     <div class="feat">
       <div class="tag">Settings</div>
       <h3>What this machine is set to do</h3>
-      <p>The switches that decide where work may go and what gets kept: PII routed
-        to a local head, refusing rather than sending when nothing local is
-        routable, whether prompt text and vectors are stored at all, and whether
+      <p>The switches that decide where work may go and what gets kept: PII sent
+        only to a local model, refusing rather than sending when no local model is
+        ready, whether prompt text and vectors are stored at all, and whether
         an answer may come from a previous run. Each one says what it costs rather
         than only what it is named, because every one of them is off by default for
         a reason. A config it cannot parse is reported, never rendered as defaults
@@ -543,7 +545,7 @@ footer a{color:var(--dim);}
       <p>Every tool call an agent made, whether the guardrails allowed it, and
         what got blocked or flagged, over an append-only, hash-chained audit
         log, mapped against the OWASP LLM Top 10. Its <b>MCP servers</b> tab
-        carries a trust verdict for each server installed on this machine, and
+        carries a safety verdict for each server installed on this machine, and
         says plainly when nothing has been compared against the official
         registry yet.</p>
     </div>
@@ -551,8 +553,8 @@ footer a{color:var(--dim);}
 
   <div class="note">
     <b>Beside the chat, a pane you glance at.</b> The model working now and the
-    quota it draws from, this run's confidence, the files it changed, and how
-    accurate each model has actually measured at this kind of work, with the
+    quota it draws from, how likely this run's answer is to be correct, the files
+    it changed, and how accurate each model has measured at this kind of work, with the
     sample size beside every score, because a number from five observations is not
     a measurement.
   </div>
@@ -561,12 +563,12 @@ footer a{color:var(--dim);}
 <!-- ══ WHY IT'S DIFFERENT ══════════════════════════════════════════════ -->
 <section class="blk wrap">
   <div class="klabel"><span>The shape of it</span><b>local by construction</b></div>
-  <h2>No account. No server. <span class="grad">Nothing leaves the machine.</span></h2>
+  <h2>No account. No Hydra server. <span class="grad">Your logs stay on your machine.</span></h2>
   <p>
     There is no Hydra backend to sign in to, because there is no Hydra backend.
     The app opens the same files on your disk that the CLI writes, and that is the
-    whole data path. Close it and the CLI keeps working exactly as before, it is
-    a window onto the control plane, not a dependency of it.
+    whole data path. Close it and the CLI keeps working exactly as before: the
+    app is a window onto Hydra, not a dependency of it.
   </p>
   <div class="grid4">
     <div class="feat">
@@ -578,8 +580,8 @@ footer a{color:var(--dim);}
     <div class="feat">
       <div class="tag">Provider-neutral</div>
       <h3>Whatever you have installed</h3>
-      <p>Claude, Gemini, Codex, an API key, a local Ollama model, the app shows
-        whichever heads your machine actually has, and marks the ones it cannot drive.</p>
+      <p>An OpenAI or Gemini key, a CLI agent, a local Ollama model: the app shows
+        whichever models your machine actually has, and marks the ones it cannot use.</p>
     </div>
     <div class="feat">
       <div class="tag">Estimated vs measured</div>
@@ -618,7 +620,7 @@ footer a{color:var(--dim);}
     Pin a version with <span class="mono">HYDRA_VERSION=v1.7.0</span>, or change where it
     lands with <span class="mono">HYDRA_APP_DIR=~/Applications</span>.
     <a href="https://github.com/ankit373/hydra/blob/main/install-app.sh">Read the script</a>
-    before you pipe it to a shell, it is under 200 lines and you should.
+    before you pipe it to a shell. It is under 200 lines, and you should.
   </p>
 
   <h3 style="font-family:var(--display);font-size:19px;margin-top:40px;">Or take the binary directly</h3>
