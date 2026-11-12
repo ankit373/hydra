@@ -1177,6 +1177,10 @@ pricing.Load()
 ```
 The tier table is not just an offline fallback: it is what prices the CLI-agent heads (claude, agy,
 codex, cursor…) that never appear in OpenRouter's catalog.
+Nothing refreshes it, so `.github/workflows/registry-drift.yml` checks it weekly (#1361): `go run
+./ci/registrydrift` compares each tier with the OpenRouter model `ci/registry-drift.yaml` maps it to,
+and keeps one `registry-drift` issue open while a model is gone or retiring, a price moved more than
+25%, or the "as of" date is over 90 days old. It reports only, never edits the file.
 `HYDRA_PRICING_TTL_HOURS` overrides the 24h TTL.
 `hyctl pricing refresh` forces a synchronous fetch.
 `hyctl pricing list [filter] [--json]` shows all known models.
