@@ -4,7 +4,7 @@ name: Routing bench
 # Read-only and secret-free; bench-comment.yml posts the result with a write token.
 on:
   pull_request:
-    branches: [develop, "release/v*"]
+    branches: [main, "release/v*"]
     paths:
       # The harness imports ~40 internal packages (classify, config, cost, ...),
       # so any of them can move a decision; a hand list drifts.

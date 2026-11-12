@@ -309,7 +309,7 @@ from a script. So it measures **routing, not model quality**.
 
 ```bash
 go run ./ci/benchdiff run -out /tmp/head.json        # on your branch
-git worktree add /tmp/hydra-base origin/develop      # the base, with your harness on it
+git worktree add /tmp/hydra-base origin/main         # the base, with your harness on it
 rm -rf /tmp/hydra-base/ci/benchdiff && cp -R ci/benchdiff /tmp/hydra-base/ci/
 (cd /tmp/hydra-base && go run ./ci/benchdiff run -out /tmp/base.json)
 go run ./ci/benchdiff compare -base /tmp/base.json -head /tmp/head.json
