@@ -53,7 +53,7 @@ const toggle = (label: RegExp) =>
 describe('the settings form', () => {
   it('reads the machine rather than showing blanks', async () => {
     render(<Settings />)
-    await waitFor(() => expect(toggle(/PII to a local head/)).toBeChecked())
+    await waitFor(() => expect(toggle(/personal data to a local model/)).toBeChecked())
     expect(toggle(/Keep prompt and response text/)).not.toBeChecked()
     expect(screen.getByText('/home/a/.hydra/config.toml')).toBeInTheDocument()
   })
@@ -70,7 +70,7 @@ describe('the settings form', () => {
 
   it('sends every switch, not only the one that changed', async () => {
     render(<Settings />)
-    await waitFor(() => expect(toggle(/PII to a local head/)).toBeChecked())
+    await waitFor(() => expect(toggle(/personal data to a local model/)).toBeChecked())
 
     fireEvent.click(toggle(/Serve an answer from a matching earlier question/))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -87,13 +87,13 @@ describe('the settings form', () => {
 
   it('discards back to what is on disk', async () => {
     render(<Settings />)
-    await waitFor(() => expect(toggle(/PII to a local head/)).toBeChecked())
+    await waitFor(() => expect(toggle(/personal data to a local model/)).toBeChecked())
 
-    fireEvent.click(toggle(/PII to a local head/))
-    expect(toggle(/PII to a local head/)).not.toBeChecked()
+    fireEvent.click(toggle(/personal data to a local model/))
+    expect(toggle(/personal data to a local model/)).not.toBeChecked()
 
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
-    expect(toggle(/PII to a local head/)).toBeChecked()
+    expect(toggle(/personal data to a local model/)).toBeChecked()
     expect(mockSave).not.toHaveBeenCalled()
   })
 

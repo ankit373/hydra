@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { GetModels } from '../bindings'
 import type { Model, ModelRegistry } from '../types'
+import { usd } from '../format'
 
 /**
  * The composer's model control.
@@ -77,7 +78,8 @@ export function ModelPicker({
               <span>
                 <span className="picker__autoT">Auto-route</span>
                 <span className="picker__autoS">
-                  Hydra reads the task's complexity and picks the cheapest model that clears it
+                  Hydra picks the lowest-cost model with a good measured record for this
+                  kind of task, and tries the next one if it fails.
                 </span>
               </span>
               {head === '' && <span className="picker__tick">✓</span>}
@@ -90,7 +92,7 @@ export function ModelPicker({
                   {p.shared && <span className="picker__shared">shared</span>}
                   {p.observedCalls > 0 && (
                     <span className="picker__poolSpend" title="What Hydra logged against this pool, not a provider quota reading">
-                      {p.observedCalls} calls · ${p.observedCostUsd.toFixed(2)}
+                      {p.observedCalls} calls · {usd(p.observedCostUsd)}
                     </span>
                   )}
                 </div>
