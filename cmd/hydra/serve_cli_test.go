@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -23,6 +24,8 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/serve"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -462,17 +465,157 @@ func TestServeRouter_ResolvesTheClassAndItsBasis(t *testing.T) {
 	}
 }
 
-// G4. Decision 2 keeps the old pinned route reachable as hydra/standard; a
-// route default leaking into it would rerank what was a fixed tier.
+// G4. Decision 2 keeps the old pinned route reachable as hydra/standard: it
+// must build exactly what `hydra` built before #1206, --task-class included.
 func TestServeRouter_HydraStandardRoutesAsBefore(t *testing.T) {
-	r := serveRouter{defaultEnum: "MODERATE", defaultClass: "classification.banking77"}
-	opts, _, err := r.options(serve.Request{Route: serve.Route{Enum: "STANDARD"}})
+	const class = "classification.banking77"
+	before, beforeEv, err := serveRouter{defaultEnum: "STANDARD", defaultClass: class}.options(serve.Request{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	r := serveRouter{defaultClass: class, objective: rank.Quality}
 	tier := dispatch.EnumToTier("STANDARD")
-	if opts.TierHint != tier || opts.Enum != "STANDARD" || opts.Domain != "" {
-		t.Errorf("hydra/standard built %+v, want TierHint=%q Enum=STANDARD Domain=\"\"", opts, tier)
+	for _, name := range []string{"STANDARD", "standard"} {
+		opts, ev, err := r.options(serve.Request{Route: serve.Route{Enum: name}, Objective: rank.Cost})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(opts, before) || !reflect.DeepEqual(ev, beforeEv) ||
+			opts.TierHint != tier || opts.Enum != "STANDARD" || opts.Domain != class || !opts.NoCache || opts.Objective != "" {
+			t.Errorf("hydra/%s built %+v evidence %+v; pre-#1206 hydra built %+v evidence %+v (TierHint=%q Enum=STANDARD Domain=%q Objective=\"\")",
+				name, opts, ev, before, beforeEv, tier, class)
+		}
+	}
+}
+
+// G12. `hydra` keeps --enum until a client or the operator chooses an
+// objective: the objective is opt-in until v2.0.0 (#1206).
+func TestServeRouter_HydraKeepsTheEnumUntilAnObjectiveIsChosen(t *testing.T) {
+	standard, simple := dispatch.EnumToTier("STANDARD"), dispatch.EnumToTier("SIMPLE")
+	for _, tc := range []struct {
+		name               string
+		r                  serveRouter
+		req                serve.Request
+		wantTier, wantEnum string
+		want               rank.Objective
+		noCache            bool
+	}{
+		{"default server", serveRouter{defaultEnum: "STANDARD", implicit: true}, serve.Request{}, standard, "STANDARD", "", false},
+		{"--enum SIMPLE", serveRouter{defaultEnum: "SIMPLE"}, serve.Request{}, simple, "SIMPLE", "", false},
+		{"--objective quality", serveRouter{defaultEnum: "STANDARD", objective: rank.Quality}, serve.Request{}, "", "", rank.Quality, false},
+		{"--objective cost", serveRouter{defaultEnum: "STANDARD", objective: rank.Cost}, serve.Request{}, "", "", rank.Cost, false},
+		{"header on a default server", serveRouter{defaultEnum: "STANDARD", implicit: true}, serve.Request{Objective: rank.Quality}, "", "", rank.Quality, true},
+		{"header over --enum", serveRouter{defaultEnum: "SIMPLE"}, serve.Request{Objective: rank.Cost}, "", "", rank.Cost, true},
+		{"header over --objective", serveRouter{defaultEnum: "STANDARD", objective: rank.Quality}, serve.Request{Objective: rank.Cost}, "", "", rank.Cost, true},
+		{"hydra/standard", serveRouter{defaultEnum: "STANDARD", objective: rank.Quality}, serve.Request{Route: serve.Route{Enum: "STANDARD"}, Objective: rank.Cost}, standard, "STANDARD", "", false},
+		{"pinned tier", serveRouter{objective: rank.Quality}, serve.Request{Route: serve.Route{Tier: "4"}, Objective: rank.Cost}, "4", "", "", false},
+		{"pinned head", serveRouter{objective: rank.Quality}, serve.Request{Route: serve.Route{Head: "h1"}, Objective: rank.Cost}, "", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts, ev, err := tc.r.options(tc.req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if opts.TierHint != tc.wantTier || opts.Enum != tc.wantEnum || opts.Objective != tc.want ||
+				opts.NoCache != tc.noCache || opts.Domain != "" || ev != nil {
+				t.Errorf("TierHint=%q Enum=%q Objective=%q NoCache=%v Domain=%q evidence=%+v, want TierHint=%q Enum=%q Objective=%q NoCache=%v and no class",
+					opts.TierHint, opts.Enum, opts.Objective, opts.NoCache, opts.Domain, ev, tc.wantTier, tc.wantEnum, tc.want, tc.noCache)
+			}
+		})
+	}
+}
+
+// G13. The basis header must never call a prior a measurement, nor evidence
+// borrowed from other classes a catalogue score.
+func TestPPassBasis_MeasuredOnlyAtMinCommitments(t *testing.T) {
+	h := provider.Head{ID: "h", CapScore: 80}
+	for _, tc := range []struct {
+		in, elsewhere int
+		want          string
+	}{
+		{0, 0, "catalogue_prior"},
+		{rank.MinCommitments - 1, 30, "borrowed"},
+		{rank.MinCommitments, 30, "measured"},
+	} {
+		scores := rank.Scores([]provider.Head{h}, func(string) rank.Measurement {
+			n := tc.in + tc.elsewhere
+			return rank.Measurement{Correct: n, Total: n, InDomainCorrect: tc.in, InDomainTotal: tc.in}
+		})
+		res := &dispatch.Result{Head: h, Scores: scores, Objective: rank.Quality}
+		if got := withObjective(nil, res).PPassBasis; got != tc.want {
+			t.Errorf("%d in-domain observations (%d elsewhere) reported basis %q, want %q", tc.in, tc.elsewhere, got, tc.want)
+		}
+	}
+	// No objective ordered it (a pin, the governor or the cache), so none is claimed.
+	ev := &serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}
+	if got := withObjective(ev, &dispatch.Result{Head: h, Cache: &cache.Hit{}}); got != ev {
+		t.Errorf("an answer no objective ordered reported %+v", got)
+	}
+}
+
+// End to end through the adapter: a buffered unpinned request reports the
+// objective that ordered it and the answering head's basis. A stream cannot
+// (its headers leave first), and the governor taking over reports none.
+func TestServeRouter_AnUnpinnedRequestReportsItsObjectiveOnlyWhenItOrdered(t *testing.T) {
+	dispatchable(t, "the head's answer")
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	r := serveRouter{d: d, objective: rank.Quality}
+	ask := func(on func(serve.Event)) *serve.Evidence {
+		t.Helper()
+		ans, err := r.Chat(ctx, serve.Request{
+			RequestID: runid.New(), OnEvent: on,
+			Messages: []executor.Message{{Role: "user", Content: "hi"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ans.Evidence
+	}
+
+	if ev := ask(nil); ev == nil || *ev != (serve.Evidence{Objective: "quality", PPassBasis: "catalogue_prior"}) {
+		t.Errorf("buffered evidence %+v, want objective quality on a catalogue prior", ev)
+	}
+	if ev := ask(func(serve.Event) {}); ev != nil {
+		t.Errorf("streamed evidence %+v, want none: the headers left before the order was known", ev)
+	}
+
+	logs := filepath.Join(config.Dir(), "logs")
+	if err := os.MkdirAll(logs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(logs, "state.json"), []byte(`{"claude_pct": 72}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ev := ask(nil); ev != nil {
+		t.Errorf("under quota warning the governor routed it, yet it reported %+v", ev)
+	}
+}
+
+func TestCmdServe_BadObjectiveIsRefusedBeforeBinding(t *testing.T) {
+	testutil.NewSandbox(t)
+	for _, args := range [][]string{
+		{"--objective", "balanced"},
+		{"--objective", ""},
+		{"--objective", "quality", "--enum", "SIMPLE"},
+	} {
+		_, _, err := run(t, append([]string{"serve"}, args...)...)
+		if err == nil || !strings.Contains(err.Error(), "--objective") {
+			t.Errorf("%q was not refused at startup: %v", args, err)
+		}
+	}
+}
+
+func TestDefaultRouting_NamesTheEnumUnlessAnObjectiveIsChosen(t *testing.T) {
+	if got := defaultRouting("STANDARD", ""); got != "STANDARD" {
+		t.Errorf("default banner reads %q, want the enum", got)
+	}
+	if got := defaultRouting("STANDARD", rank.Quality); !strings.Contains(got, "objective quality") || !strings.Contains(got, "hydra/standard") {
+		t.Errorf("objective banner reads %q", got)
 	}
 }
 

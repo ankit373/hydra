@@ -856,6 +856,7 @@ hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is 
 # Serve the router to anything that speaks OpenAI
 hyctl serve                             # OpenAI-compatible endpoint, loopback only
 #   the `model` field is the routing instruction: `hydra`, `hydra/hard`, `hydra/t4`, or a head id.
+#   `hydra` takes --enum (STANDARD); --objective quality|cost or X-Hydra-Objective opts into routing by objective.
 #   streams as server-sent events, and passes tool calls through on every dialect it speaks.
 hyctl serve --task-class classification.banking77   # class for requests that send no X-Hydra-Task-Class
 #   X-Hydra-Task-Class routes on that class (and enables temperature); X-Hydra-Max-Cost-USD only lowers the ceiling.
@@ -1048,6 +1049,30 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]
 is enabled ("2 of 423"). A name the catalogue does not have is shown as not
 routable with the reason, rather than quietly dropped. Naming nothing changes
 nothing: the single key-derived head is exactly as before.
+
+### Routing objective for `hyctl serve`
+
+A `model: "hydra"` request routes as `--enum` (`STANDARD` by default). Routing
+by objective is opt-in:
+
+| Objective | Tries first | How to choose it |
+|---|---|---|
+| `quality` | the head measured strongest in the task class (often the priciest) | `hyctl serve --objective quality`, or `X-Hydra-Objective: quality` per request |
+| `cost` | the cheapest head measured competent | `hyctl serve --objective cost`, or `X-Hydra-Objective: cost` |
+
+A routed answer echoes `X-Hydra-Objective` and `X-Hydra-P-Pass-Basis`
+(`measured`, `borrowed` or `catalogue_prior`). Under quota pressure the
+governor routes it as `STANDARD`.
+
+**Deprecated: the implicit default.** In v2.0.0 `quality` becomes the default
+for `hydra`. Until then, a `hydra` request naming no objective, on a server
+started with neither `--enum` nor `--objective`, still routes as `STANDARD`
+but gets `Deprecation: @1794441600` (RFC 9745) and a `Link` to this section,
+and the server prints one stderr warning per start
+(`HYDRA_NO_DEPRECATION_WARNINGS=1` silences it). To keep today's route after
+v2.0.0, send `model: "hydra/standard"` or start the server with an explicit
+`--enum STANDARD`. To opt in now, use `--objective` or the header. Setting
+policy.yaml `max_cost_usd` caps what `quality` may spend.
 
 ---
 
