@@ -153,11 +153,17 @@ func expand(t *testing.T, name string, row map[string]any) string {
 	return name
 }
 
+// externalChecks are commit statuses an app posts, not a workflow: CLA Assistant's is license/cla.
+var externalChecks = []string{"license/cla"}
+
 // reportedChecks is every check name a pull_request run can report, from the workflows themselves.
 func reportedChecks(t *testing.T) map[string]bool {
 	t.Helper()
 	out := map[string]bool{}
-	for _, file := range []string{"ci.yml", "cla.yml"} {
+	for _, c := range externalChecks {
+		out[c] = true
+	}
+	for _, file := range []string{"ci.yml"} {
 		w := loadWorkflow(t, file)
 		if _, ok := w.On["pull_request"]; !ok {
 			if _, ok := w.On["pull_request_target"]; !ok {
