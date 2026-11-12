@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use Hydra in your work, please cite it as below."
+type: software
+title: "Hydra (hyctl): the trust control plane for AI development"
+abstract: >-
+  Hydra (hyctl) is a local-first, multi-vendor AI control plane. It routes
+  each task to a model by confidence of correctness, not just price: the
+  cheapest model on your machine or account that clears the confidence you
+  set. One command, every model.
+authors:
+  - family-names: Jha
+    given-names: Ankit
+    # TODO: add the ORCID iD, e.g. orcid: "https://orcid.org/0000-0000-0000-0000"
+license: MIT
+repository-code: "https://github.com/ankit373/hydra"
+url: "https://hydra.uvansa.com"
+keywords:
+  - ai
+  - llm
+  - model routing
+  - orchestration
+  - cli
+  - local-first
+  - verification

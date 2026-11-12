@@ -11,6 +11,9 @@ name: Publish (all channels)
 # registry never got it (#1315):
 #   HOMEBREW_TAP_GITHUB_TOKEN  → PAT with push access to ankit373/homebrew-hydra
 #   PYPI_API_TOKEN             → PyPI API token (publish)
+# Zenodo is optional and skipped while its token is unset:
+#   ZENODO_TOKEN               → Zenodo token, scopes deposit:write and deposit:actions
+#   vars.ZENODO_CONCEPT_ID     → the concept record id, set after the first upload
 # npm uses trusted publishing (OIDC), so it needs no secret; NPM_TOKEN is only a
 # fallback until the trusted publisher is set on npmjs.com.
 
@@ -166,3 +169,27 @@ jobs:
       version: ${{ inputs.tag }}
       tag: ${{ inputs.tag }}
       upload: true
+
+  # Stable releases only: Zenodo keeps every version for good, so an edge or RC
+  # build would be a permanent DOI for something that never shipped. Nothing
+  # waits on this job, so a Zenodo outage fails it without holding up a channel.
+  zenodo:
+    name: Zenodo archive
+    needs: binaries
+    if: ${{ !contains(inputs.tag, '-') }}
+    runs-on: ubuntu-latest
+    env:
+      ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+      ZENODO_CONCEPT_ID: ${{ vars.ZENODO_CONCEPT_ID }}
+    steps:
+      - name: Missing token
+        if: ${{ env.ZENODO_TOKEN == '' }}
+        run: echo "::notice::ZENODO_TOKEN is not set, so this release is not archived on Zenodo."
+      - uses: actions/checkout@v7
+        if: ${{ env.ZENODO_TOKEN != '' }}
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - name: Upload and publish
+        if: ${{ env.ZENODO_TOKEN != '' }}
+        run: ./scripts/zenodo-publish.sh "$RELEASE_TAG"
