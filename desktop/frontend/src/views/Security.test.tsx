@@ -190,7 +190,7 @@ describe('the enforcement boundary', () => {
         })}
       />,
     )
-    expect(screen.getByText(/2 of 3 heads are separate programs/)).toBeInTheDocument()
+    expect(screen.getByText(/2 of 3 models are separate programs/)).toBeInTheDocument()
     expect(screen.getByText(/claude, codex/)).toBeInTheDocument()
     expect(screen.getByText(/not what they read or send on their own account/)).toBeInTheDocument()
   })

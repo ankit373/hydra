@@ -94,6 +94,6 @@ describe('what it says out loud', () => {
 
   it('gives the shape an accessible reading, not just a picture', () => {
     render(<TierTrack entries={[e('head_selected', 6), e('head_selected', 2)]} />)
-    expect(screen.getByRole('img', { name: 'Tier movement: T6 then T2' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Routing level over the run: T6 then T2' })).toBeInTheDocument()
   })
 })

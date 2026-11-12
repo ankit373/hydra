@@ -32,12 +32,13 @@ const POLL_MS = 2000
 // a future view's persistence cannot collide with it.
 const TURNS_KEY = 'hydra.chat.turns'
 
-/** Openers for an empty thread. Deliberately about this repo and this router,
- *  since a generic prompt teaches nothing about what Hydra is for. */
+/** Openers for an empty thread. They span task types (a document, an
+ *  extraction, a reply, a code review) so the first screen shows Hydra is not
+ *  only for code. */
 const STARTERS = [
-  'What changed on this branch?',
-  'Which head is cheapest for Go work here?',
-  'Is this migration safe for production?',
+  'Summarise the arguments for and against a four-day work week',
+  'Extract the supplier, date and total: "Invoice 4471, Acme Ltd, 3 March, $1,240"',
+  'Draft a polite reply declining a meeting invitation',
   'Review the staged diff',
 ]
 
@@ -373,10 +374,11 @@ export function ChatView({
       <div className="chatv__log" ref={logRef}>
         {turns.length === 0 && (
           <div className="chatv__empty">
-            <p className="chatv__emptyT">Ask Hydra anything about this repo</p>
+            <p className="chatv__emptyT">Ask Hydra anything</p>
             <p className="chatv__emptyS">
-              Routed like any other task. Every reply says which model answered, at which
-              tier, and what it cost.
+              Hydra picks a model with a good measured record on this kind of task, and
+              tries another if it fails. Every reply says which model answered and what it
+              cost.
             </p>
             {/* Real prompts, not decoration: each one fills the composer so it
                 can be edited before it is sent, rather than dispatching blind. */}
@@ -406,8 +408,8 @@ export function ChatView({
               <div className="shift">
                 <span className="shift__ico" aria-hidden="true">&#8663;</span>
                 <span className="shift__txt">
-                  Moved to <b>{turns[i - 1].reply!.tier > t.reply!.tier ? 'a stronger' : 'a cheaper'}</b>{' '}
-                  model, T{turns[i - 1].reply!.tier} &rarr; T{t.reply!.tier}
+                  Moved to <b>{turns[i - 1].reply!.tier > t.reply!.tier ? 'a stronger' : 'a lower-cost'}</b>{' '}
+                  model.
                 </span>
               </div>
             )}
@@ -510,7 +512,7 @@ export function ChatView({
                 void send()
               }
             }}
-            placeholder={busy ? 'working…' : 'Ask anything about this repo…'}
+            placeholder={busy ? 'working…' : 'Ask anything…'}
             rows={2}
             disabled={busy}
           />
@@ -624,7 +626,7 @@ function FellBack({ reply }: { reply: ChatReply }) {
       {tried.map((a) => (
         <p key={a.head} className="turn__fellbackRow">
           <b>{a.model || a.head}</b>
-          {a.tier > 0 && ` (T${a.tier})`} could not answer: {a.reason}
+          {' '}could not answer: {a.reason}
         </p>
       ))}
       <p className="turn__fellbackRow">Answered by {reply.model || reply.head} instead.</p>
@@ -637,7 +639,6 @@ function SessionLink({ reply, onOpenRun }: { reply: ChatReply; onOpenRun: (runID
   return (
     <button className="turn__meta" onClick={() => onOpenRun(reply.runId)}>
       {who}
-      {reply.tier > 0 && ` · T${reply.tier}`}
       {reply.durationMs > 0 && ` · ${ms(reply.durationMs)}`}
       {reply.costUsd > 0 && ` · ${usdExact(reply.costUsd)}`}
       {who ? ' · session →' : 'session →'}

@@ -294,8 +294,8 @@ export default function App() {
       out.push({
         id: `head:${h.id}`,
         label: h.id,
-        group: "Heads",
-        hint: h.routable ? `tier ${h.tier}` : "unroutable",
+        group: "Models",
+        hint: h.routable ? "ready" : "not ready",
         run: () => setView("models"),
       });
     }
