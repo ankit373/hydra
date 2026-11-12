@@ -2,7 +2,7 @@ module github.com/ankit373/hydra
 
 go 1.25
 
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	github.com/BurntSushi/toml v1.6.0
