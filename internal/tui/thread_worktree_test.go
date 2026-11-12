@@ -489,7 +489,7 @@ func TestThreadEdit_IsolatesThenAppliesThroughTheUI(t *testing.T) {
 		t.Errorf("isolation is not disclosed: %q", logs)
 	}
 
-	m, acmd := keyRune(m, 'a')
+	m, acmd := command(m, "/apply")
 	m = runCmds(t, m, acmd)
 	if m.th().wt != nil {
 		t.Error("apply left the worktree attached")
@@ -504,9 +504,9 @@ func TestThreadEdit_IsolatesThenAppliesThroughTheUI(t *testing.T) {
 	}
 }
 
-// x x discards the worktree after a landed edit: tree untouched, worktree and
-// branch gone, and the first x only arms.
-func TestThreadEdit_DoubleXDiscards(t *testing.T) {
+// /undo then y discards the worktree after a landed edit: tree untouched,
+// worktree and branch gone, and /undo alone only asks.
+func TestThreadEdit_UndoAsksThenDiscards(t *testing.T) {
 	repo := threadRepo(t)
 	stubExec(t)
 	ckEditStage = func(_ context.Context, tk *ckTask, _ string) (*editor.Result, error) {
@@ -525,17 +525,17 @@ func TestThreadEdit_DoubleXDiscards(t *testing.T) {
 		t.Fatal("no worktree")
 	}
 
-	m, _ = keyRune(m, 'x')
+	m, _ = command(m, "/undo")
 	if m.th().wt == nil {
-		t.Fatal("a single x already discarded, it must only arm")
+		t.Fatal("/undo already discarded, it must only ask")
 	}
-	if !strings.Contains(m.flash, "x again discards") {
-		t.Errorf("the arm is silent: %q", m.flash)
+	if !strings.Contains(askOf(m), "discard worktree") {
+		t.Errorf("the question is silent: %q", askOf(m))
 	}
-	m, dcmd := keyRune(m, 'x')
+	m, dcmd := keyRune(m, 'y')
 	m = runCmds(t, m, dcmd)
 	if m.th().wt != nil {
-		t.Fatal("the second x did not discard")
+		t.Fatal("y did not discard")
 	}
 	if _, err := os.Stat(wt.dir); !os.IsNotExist(err) {
 		t.Error("discard left the worktree dir")
@@ -574,7 +574,7 @@ func TestThreadEdit_ApplyConflictThroughTheUI(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 
-	m, acmd := keyRune(m, 'a')
+	m, acmd := command(m, "/apply")
 	m = runCmds(t, m, acmd)
 	logs := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(logs, "applied with conflicts") || !strings.Contains(logs, branch) {

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/awsconf"
+	"github.com/ankit373/hydra/internal/keystore"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -576,7 +577,7 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 }
 
 func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
-	model := defaultModelFor("bedrock")
+	model := modelFor(req.Head)
 	body, err := bedrockBody(req)
 	if err != nil {
 		return nil, err
@@ -994,8 +995,10 @@ var apiKeyEnvs = func() map[string][]string {
 	return envs
 }()
 
+// apiKeyFor reads through keystore.Lookup, so a key saved in the desktop app
+// reaches an HTTP head while an exported one still wins.
 func apiKeyFor(providerID string) string {
-	return firstEnv(apiKeyEnvs[providerID]...)
+	return keystore.Lookup(apiKeyEnvs[providerID]...)
 }
 
 func azureEndpoint() string   { return firstEnv("AZURE_OPENAI_ENDPOINT") }

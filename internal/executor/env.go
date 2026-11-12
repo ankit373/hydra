@@ -38,7 +38,8 @@ const extraEnvVar = "HYDRA_HEAD_ENV"
 // AWS_SECRET_ACCESS_KEY, OPENAI_API_KEY and every other provider's credential
 // for the duration of the call, alongside SSH_AUTH_SOCK. Least privilege here
 // is per provider, using the same map that already decides which credential an
-// HTTP head sends.
+// HTTP head sends. A key saved in the app is never in
+// the environment (keystore.Lookup), so it never reaches a subprocess.
 func headEnv(h provider.Head) []string {
 	names := make([]string, 0, 8)
 	names = append(names, apiKeyEnvs[h.Provider]...)
