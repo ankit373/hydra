@@ -295,9 +295,10 @@ that cannot go red is not a gate.
 
 ### The routing bench
 
-A PR touching the router (`internal/dispatch`, `trust`, `signals`, `swarm`,
-`rank`, `policy`, `pricing`, `provider`, `budget`, `capabilities`, or
-`registry/`) gets one comment showing how its routing decisions moved. It is
+A PR touching `internal/`, `registry/`, `go.mod` or `go.sum` gets one comment
+showing how its routing decisions moved. The whole of `internal/` because the
+harness imports about 40 of its packages, and any of them can move a decision.
+It is
 `ci/benchdiff` routing `ci/benchdiff/suite.json` on the PR's base and head:
 the chosen head, tier, fallback depth and estimated cost per prompt, plus the
 SPRT outcome and whether its answer matches the expected one.

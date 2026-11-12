@@ -6,17 +6,12 @@ on:
   pull_request:
     branches: [develop, "release/v*"]
     paths:
-      - "internal/dispatch/**"
-      - "internal/trust/**"
-      - "internal/signals/**"
-      - "internal/swarm/**"
-      - "internal/rank/**"
-      - "internal/policy/**"
-      - "internal/pricing/**"
-      - "internal/provider/**"
-      - "internal/budget/**"
-      - "internal/capabilities/**"
+      # The harness imports ~40 internal packages (classify, config, cost, ...),
+      # so any of them can move a decision; a hand list drifts.
+      - "internal/**"
       - "registry/**"
+      - "go.mod"
+      - "go.sum"
       - "ci/benchdiff/**"
       - ".github/workflows/bench.yml"
 
