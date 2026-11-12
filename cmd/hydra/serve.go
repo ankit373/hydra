@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -29,11 +30,15 @@ import (
 // meet, the same seam internal/workflow and internal/vet use.
 type serveRouter struct {
 	d *dispatch.Dispatcher
-	// pinnedEnum is --enum when passed explicitly, which pins `hydra` to the
-	// pre-E1 route. Empty routes `hydra` by objective.
-	pinnedEnum string
-	// objective is --objective, what an unpinned request naming none optimises.
+	// defaultEnum is --enum, the route of a `hydra` request no objective orders.
+	defaultEnum string
+	// objective is --objective, opt-in until v2.0.0: what an unpinned request
+	// naming none optimises. Empty keeps `hydra` on defaultEnum.
 	objective rank.Objective
+	// implicit is set when the operator chose neither --enum nor --objective:
+	// the default v2.0.0 changes, so relying on it is deprecated (#1206).
+	implicit bool
+	notice   *deprecationNotice
 	// defaultClass is --task-class, the class an unpinned request naming none
 	// routes for. Empty leaves such a request routing exactly as before E1.
 	defaultClass string
@@ -44,6 +49,9 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	opts, ev, err := r.options(req)
 	if err != nil {
 		return serve.Answer{}, err
+	}
+	if r.Deprecated(req) {
+		r.notice.warn()
 	}
 	// Before dispatch, because a stream's headers leave with its first frame.
 	if ev != nil && req.OnEvent != nil {
@@ -108,10 +116,51 @@ func passBasis(sc rank.Score) string {
 	return "catalogue_prior"
 }
 
+// Deprecated is serve.Deprecator: an unpinned `hydra` request naming no
+// objective, on a server whose operator chose no default either.
+func (r serveRouter) Deprecated(req serve.Request) bool {
+	return r.implicit && req.Route == (serve.Route{}) && req.Objective == ""
+}
+
+// implicitDefaultWarning is the stderr line; the header says the same per request.
+const implicitDefaultWarning = "hyctl serve: deprecated: model \"hydra\" with no objective routes as " +
+	dispatch.ServedDefaultEnum + " today and will route by objective quality in v2.0.0. " +
+	"Opt in now with --objective quality or the X-Hydra-Objective header; keep today's route " +
+	"with model \"hydra/standard\" or an explicit --enum " + dispatch.ServedDefaultEnum + ". " +
+	"HYDRA_NO_DEPRECATION_WARNINGS=1 silences this."
+
+// deprecationNotice prints implicitDefaultWarning once per server start. Nil
+// prints nothing, which is what HYDRA_NO_DEPRECATION_WARNINGS=1 gives.
+type deprecationNotice struct {
+	once sync.Once
+	w    io.Writer
+}
+
+func (n *deprecationNotice) warn() {
+	if n != nil {
+		n.once.Do(func() { fmt.Fprintln(n.w, implicitDefaultWarning) })
+	}
+}
+
+// newDeprecationNotice is nil when the operator silenced deprecations.
+func newDeprecationNotice(w io.Writer) *deprecationNotice {
+	if os.Getenv("HYDRA_NO_DEPRECATION_WARNINGS") == "1" {
+		return nil
+	}
+	return &deprecationNotice{w: w}
+}
+
 // options is the one translation of a served request into what the router is
 // asked, plus the class it routes for, nil when it routes for none.
 func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Evidence, error) {
-	tier, enum, head, err := routeToDispatch(req.Route, r.pinnedEnum)
+	// An objective, the client's or the operator's, leaves `hydra` unpinned for
+	// it to order; with none, `hydra` keeps --enum exactly as before #1206.
+	obj := cmp.Or(req.Objective, r.objective)
+	unpinned := r.defaultEnum
+	if obj != "" {
+		unpinned = ""
+	}
+	tier, enum, head, err := routeToDispatch(req.Route, unpinned)
 	if err != nil {
 		return dispatch.Options{}, nil, err
 	}
@@ -148,7 +197,7 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 	// Only an unpinned route is ordered by an objective. The cache key does not
 	// cover one, so a client choosing it neither reads nor fills the cache.
 	if tier == "" && head == "" {
-		opts.Objective = cmp.Or(req.Objective, r.objective)
+		opts.Objective = obj
 		opts.NoCache = opts.NoCache || req.Objective != ""
 	}
 	return opts, ev, nil
@@ -254,8 +303,8 @@ func advertisable(heads []provider.Head) []serve.Model {
 }
 
 // routeToDispatch turns the client's routing key into what the router reads.
-// An empty pinnedEnum leaves `hydra` unpinned, for the objective to order.
-func routeToDispatch(rt serve.Route, pinnedEnum string) (tier, enum, head string, err error) {
+// An empty defaultEnum leaves `hydra` unpinned, for the objective to order.
+func routeToDispatch(rt serve.Route, defaultEnum string) (tier, enum, head string, err error) {
 	switch {
 	case rt.Head != "":
 		return "", "", rt.Head, nil
@@ -278,8 +327,8 @@ func routeToDispatch(rt serve.Route, pinnedEnum string) (tier, enum, head string
 		}
 		return strconv.Itoa(n), "", "", nil
 
-	case pinnedEnum != "":
-		return dispatch.EnumToTier(pinnedEnum), pinnedEnum, "", nil
+	case defaultEnum != "":
+		return dispatch.EnumToTier(defaultEnum), defaultEnum, "", nil
 	}
 	return "", "", "", nil
 }
@@ -327,11 +376,13 @@ func cmdServe() *cobra.Command {
 			"POST /v1/decisions and /v1/systemone take typed questions in either wire format and\n" +
 			"ask the decision sources in order: one when its answer clears --confidence, more\n" +
 			"through the SPRT when not. X-Hydra-Decision-Sources and -Confidence say which.\n\n" +
-			"The model field is the routing instruction. `hydra` is routed by objective:\n" +
-			"quality runs the head measured strongest in the task class first, cost the cheapest\n" +
-			"one measured competent. X-Hydra-Objective overrides --objective per request, and\n" +
-			"an explicit --enum pins `hydra` instead. `hydra/standard` is the pre-E1 route,\n" +
+			"The model field is the routing instruction. `hydra` takes the default enum,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
+			"Routing by objective is opt-in: --objective, or X-Hydra-Objective per request, has\n" +
+			"`hydra` try the head measured strongest in the task class first (quality) or the\n" +
+			"cheapest one measured competent (cost). In v2.0.0 quality becomes the default; until\n" +
+			"then a `hydra` request relying on neither gets a Deprecation header, and\n" +
+			"`hydra/standard` or an explicit --enum keeps today's route after the change.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
 			"invisible; one after it ends the stream, because SSE cannot take back a partial and\n" +
 			"appending the next head's answer to it would compose a reply no head ever gave.\n\n" +
@@ -355,13 +406,9 @@ func cmdServe() *cobra.Command {
 			if !dispatch.IsKnownEnum(enum) {
 				return fmt.Errorf("unknown enum %q", enum)
 			}
-			pinnedEnum := pinnedEnumFrom(c)
-			objective, err := rank.ParseObjective(obj)
-			if err == nil && objective == "" {
-				err = fmt.Errorf("give %s or %s", rank.Quality, rank.Cost)
-			}
+			objective, err := serveObjective(c, obj)
 			if err != nil {
-				return fmt.Errorf("--objective: %w", err)
+				return err
 			}
 			defaultClass := ""
 			if taskClass != "" {
@@ -387,8 +434,11 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r := serveRouter{d: d, pinnedEnum: pinnedEnum, objective: objective, defaultClass: defaultClass, localOnly: localOnly}
-			printServeBanner(os.Stdout, ln.Addr().String(), defaultRouting(pinnedEnum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
+			r := serveRouter{
+				d: d, defaultEnum: enum, objective: objective, implicit: implicitDefault(c, objective),
+				notice: newDeprecationNotice(os.Stderr), defaultClass: defaultClass, localOnly: localOnly,
+			}
+			printServeBanner(os.Stdout, ln.Addr().String(), defaultRouting(enum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
@@ -396,8 +446,8 @@ func cmdServe() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&addr, "addr", "127.0.0.1:8787", "address to bind")
 	f.StringVar(&token, "token", "", "bearer token required of every request (or HYDRA_SERVE_TOKEN)")
-	f.StringVar(&enum, "enum", dispatch.ServedDefaultEnum, "pin `hydra` to this routing enum; applies only when passed")
-	f.StringVar(&obj, "objective", string(rank.Quality), "what `hydra` optimises when no --enum pins it: quality or cost")
+	f.StringVar(&enum, "enum", dispatch.ServedDefaultEnum, "routing enum for a request that names no key")
+	f.StringVar(&obj, "objective", "", "route `hydra` by objective, quality or cost (opt-in; quality becomes the default in v2.0.0)")
 	f.StringVar(&taskClass, "task-class", "", "dotted task class for a request that names none, e.g. classification.banking77")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
@@ -420,22 +470,37 @@ func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string, flagSet, loc
 	return nil
 }
 
-// pinnedEnumFrom is --enum only when passed: its default names no choice, and
-// `hydra` now routes by objective unless the operator opts out (#1206).
-func pinnedEnumFrom(c *cobra.Command) string {
-	if !c.Flags().Changed("enum") {
-		return ""
+// serveObjective is --objective: empty when not passed, refused when passed
+// empty or unknown, or alongside --enum, since both say how `hydra` routes.
+func serveObjective(c *cobra.Command, obj string) (rank.Objective, error) {
+	if !c.Flags().Changed("objective") {
+		return "", nil
 	}
-	enum, _ := c.Flags().GetString("enum")
-	return enum
+	o, err := rank.ParseObjective(obj)
+	if err == nil && o == "" {
+		err = fmt.Errorf("give %s or %s", rank.Quality, rank.Cost)
+	}
+	if err != nil {
+		return "", fmt.Errorf("--objective: %w", err)
+	}
+	if c.Flags().Changed("enum") {
+		return "", errors.New("--objective and --enum both set how `hydra` routes; pass one")
+	}
+	return o, nil
+}
+
+// implicitDefault is a server whose operator chose neither --enum nor
+// --objective, so `hydra` takes the default v2.0.0 changes.
+func implicitDefault(c *cobra.Command, o rank.Objective) bool {
+	return !c.Flags().Changed("enum") && o == ""
 }
 
 // defaultRouting is the banner's account of how `hydra` routes.
-func defaultRouting(pinnedEnum string, o rank.Objective) string {
-	if pinnedEnum != "" {
-		return pinnedEnum
+func defaultRouting(enum string, o rank.Objective) string {
+	if o != "" {
+		return fmt.Sprintf("objective %s (hydra/standard pins %s)", o, dispatch.ServedDefaultEnum)
 	}
-	return fmt.Sprintf("objective %s (hydra/standard pins the old route)", o)
+	return enum
 }
 
 func printServeBanner(w io.Writer, addr, routing string, hasToken, localOnly bool, heads []provider.Head, unlistedDecisions int) {

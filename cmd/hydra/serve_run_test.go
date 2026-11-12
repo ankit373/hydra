@@ -15,7 +15,7 @@ import (
 // askServe routes one request through the adapter under the given request id.
 func askServe(t *testing.T, d *dispatch.Dispatcher, id, prompt string) {
 	t.Helper()
-	_, err := serveRouter{d: d, pinnedEnum: "MODERATE"}.Chat(context.Background(), serve.Request{
+	_, err := serveRouter{d: d, defaultEnum: "MODERATE"}.Chat(context.Background(), serve.Request{
 		RequestID: id,
 		Messages:  []executor.Message{{Role: "user", Content: prompt}},
 	})

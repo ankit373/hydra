@@ -27,7 +27,30 @@ const (
 	// BasisHeader says whether the answering head's P(pass) was measured in
 	// this class or is the catalogue's prior.
 	BasisHeader = "X-Hydra-P-Pass-Basis"
+
+	// DeprecationHeader (RFC 9745) marks a reply whose route relied on the
+	// implicit `hydra` default, which v2.0.0 changes (#1206).
+	DeprecationHeader = "Deprecation"
+	// deprecatedSince is 2026-11-12T00:00:00Z, as RFC 9745's @epoch.
+	deprecatedSince = "@1794441600"
+	// deprecationLink is RFC 9745's rel="deprecation" pointer to what changes.
+	deprecationLink = `<https://github.com/ankit373/hydra#routing-objective-for-hyctl-serve>; rel="deprecation"; type="text/html"`
 )
+
+// Deprecator is an optional Router extension. Deprecated reports that a
+// request relies on a default a later major changes.
+type Deprecator interface {
+	Deprecated(req Request) bool
+}
+
+// markDeprecated sets the RFC 9745 headers when r says req relies on a
+// deprecated default. Before any write, so errors and streams carry them too.
+func markDeprecated(h http.Header, r Router, req Request) {
+	if d, ok := r.(Deprecator); ok && d.Deprecated(req) {
+		h.Set(DeprecationHeader, deprecatedSince)
+		h.Add("Link", deprecationLink)
+	}
+}
 
 // Evidence is what the router concluded about a request; nil on an Answer
 // means it reported none.

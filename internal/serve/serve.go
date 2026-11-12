@@ -212,6 +212,7 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 	// that got a 502 is exactly the one that needs to find the trace.
 	base.RequestID = runid.New()
 	w.Header().Set(RequestIDHeader, base.RequestID)
+	markDeprecated(w.Header(), r, base)
 
 	if in.Stream {
 		streamChat(w, req, r, in, base)
