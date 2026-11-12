@@ -255,7 +255,7 @@ func route(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal *tr
 		localOnly = localOnly || d.PIILocalOnly()
 	}
 	if target > 0 {
-		r.SPRT = ensemble(ctx, d, sw, cal, p, opts, localOnly, target)
+		r.SPRT = ensemble(ctx, sw, cal, p, opts, localOnly, target)
 		if r.SPRT.Samples > 0 {
 			r.CostUSD = r.SPRT.SpentUSD
 		}
@@ -265,9 +265,9 @@ func route(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal *tr
 
 const noEvidence = "no_evidence"
 
-// ensemble mirrors swarm.RunSPRT's head-to-source mapping, with a scripted
-// executor and text equivalence in place of live heads and the LLM judge.
-func ensemble(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal *trust.Calibrator,
+// ensemble runs swarm.RunSPRT's plan and sources, with a scripted executor and
+// text equivalence in place of live heads and the LLM judge.
+func ensemble(ctx context.Context, sw *swarm.Swarm, cal *trust.Calibrator,
 	p Prompt, opts dispatch.Options, localOnly bool, target float64) *SPRT {
 	heads, _, err := sw.Plan(p.Prompt, swarm.Options{
 		Mode: swarm.ModeBest, TierHint: opts.TierHint, Enum: p.Enum,
@@ -276,13 +276,7 @@ func ensemble(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal 
 	if err != nil {
 		return &SPRT{Decision: "unplanned"}
 	}
-	estIn := len(p.Prompt) / 4
-	sources := make([]trust.Source, 0, len(heads))
-	for _, h := range heads {
-		cost := d.EstimateCost(rank.UITier(h), estIn, estIn/2)
-		sources = append(sources, trust.Source{ID: h.ID, Family: h.Provider, EstCostUSD: cost})
-	}
-	res, err := trust.Run(ctx, trust.Task{Domain: trust.Domain(p.Domain)}, sources,
+	res, err := trust.Run(ctx, trust.Task{Domain: trust.Domain(p.Domain)}, sw.Sources(p.Prompt, heads),
 		scripted{p}, cal, trust.Target{Confidence: target})
 	if errors.Is(err, trust.ErrNoEvidence) {
 		return &SPRT{Decision: noEvidence}
