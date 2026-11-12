@@ -43,7 +43,9 @@ tiers:
 
   4:  # Gemini 2.0 Flash Thinking via agy (disabled in models.yaml)
     id: flash-thinking
-    input_per_million: 0.825     # agy dropped it; tracks Flash (High) retail
+    # Still live: rank.UITier prices any head scored 80-84 here (cursor, kiro,
+    # gemini, windsurf and agy CLIs, bedrock and azure keys). Flash (High) rate.
+    input_per_million: 0.825
     output_per_million: 4.125
 
   5:  # Gemini 3.1 Pro (High)

@@ -39,7 +39,8 @@ Run `hyctl pricing list` for live rates fetched from OpenRouter.
 | Architecture decision | ~$0.020 | ~$0.020 | 0% |
 | **Typical 50-call session** | **~$0.22** | **~$0.04** | **~82%** |
 
-Pricing based on OpenRouter rates as of June 2026.
+Computed in June 2026 with Opus at $15/$75. At the current $5/$25 the all-Claude
+baseline is a third of this, so the real savings are lower.
 
 ## Enterprise / Commercial Support
 
