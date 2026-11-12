@@ -172,6 +172,25 @@ func TestRoutingDomain(t *testing.T) {
 	}
 }
 
+// G5. E1 adds task classes on the serve path only; a CLI dispatch that lands
+// in a different cell orphans every history recorded under the old one (#888).
+func TestRoutingDomain_CodingPathUnchanged(t *testing.T) {
+	for _, tc := range []struct {
+		opts Options
+		was  string
+	}{
+		{Options{Resource: "x.go"}, "go"},
+		{Options{Resource: "x.GO"}, "go"},
+		{Options{Resource: "Makefile"}, trust.DefaultDomain},
+		{Options{Domain: "go"}, "go"},
+		{Options{}, ""},
+	} {
+		if got := routingDomain(tc.opts); got != tc.was {
+			t.Errorf("routingDomain(%+v) = %q, was %q before E1: history under the old cell is orphaned", tc.opts, got, tc.was)
+		}
+	}
+}
+
 // --dry-run has to say what it ranked on, or a reordering is indistinguishable
 // from an arbitrary one.
 func TestExplain_ReportsTheEvidenceBehindTheOrder(t *testing.T) {
