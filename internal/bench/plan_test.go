@@ -43,6 +43,7 @@ func TestPlan_FreezesItemsArmsPricesAndABreadcrumb(t *testing.T) {
 		"suite_revision": b.SuiteRevision == "", "data_sha256": len(b.DataSHA256) == 0,
 		"split_sha256": b.SplitSHA256 == "", "arms": len(b.Arms) == 0, "prices": len(b.Prices) == 0,
 		"host": b.Host == (HostInfo{}), "model_cutoffs": len(b.ModelCutoffs) != 2, "seed": b.Seed == 0,
+		"prompt_sha256": b.PromptSHA256 == "",
 	} {
 		if empty {
 			t.Errorf("breadcrumb %s is empty", name)
@@ -80,7 +81,7 @@ func TestPlan_FreezesItemsArmsPricesAndABreadcrumb(t *testing.T) {
 }
 
 // cfg8 hashes what the run asks: neither the cap nor any price moves the id, since
-// prices are frozen in run.json; an item, arm or seed does.
+// prices are frozen in run.json; an item, arm, seed or prompt does.
 func TestCfg8_WhatChangesTheRun(t *testing.T) {
 	base := Run{Track: "core", Suite: "s", Tier: "smoke", Seed: 1, ItemIDs: []string{"a"}, Prices: testPrices("m")}
 	same := base
@@ -93,9 +94,10 @@ func TestCfg8_WhatChangesTheRun(t *testing.T) {
 		t.Fatal("the cap or a price changed the run id")
 	}
 	for name, edit := range map[string]func(*Run){
-		"items": func(r *Run) { r.ItemIDs = []string{"b"} },
-		"seed":  func(r *Run) { r.Seed = 2 },
-		"arms":  func(r *Run) { r.ArmOrder = []string{"x"} },
+		"items":  func(r *Run) { r.ItemIDs = []string{"b"} },
+		"seed":   func(r *Run) { r.Seed = 2 },
+		"arms":   func(r *Run) { r.ArmOrder = []string{"x"} },
+		"prompt": func(r *Run) { r.Crumb.PromptSHA256 = "changed" },
 	} {
 		diff := base
 		edit(&diff)

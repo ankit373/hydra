@@ -48,8 +48,11 @@ type Breadcrumb struct {
 	ProviderModels  map[string][]string  `json:"provider_models,omitempty"` // per arm, read off the rows by report
 	Temperature     float64              `json:"temperature"`               // the value sent
 	CalibSHA256     string               `json:"calib_sha256,omitempty"`
-	Host            HostInfo             `json:"host"`
-	ModelCutoffs    map[string]string    `json:"model_cutoffs"` // stated training cutoffs, for contamination
+	// PromptSHA256 hashes the rubric, temperature and token cap, so a resume after the
+	// prompt changed in code is a new run rather than two prompts pooled in one.
+	PromptSHA256 string            `json:"prompt_sha256"`
+	Host         HostInfo          `json:"host"`
+	ModelCutoffs map[string]string `json:"model_cutoffs"` // stated training cutoffs, for contamination
 }
 
 // HostInfo is the machine at the start of the run; latency on a loaded one is noise.
@@ -72,7 +75,9 @@ func (r *Run) cfg8() string {
 		Order, Items       []string
 		Split              string
 		Data               map[string]string
-	}{r.Track, r.Suite, r.Tier, r.Seed, r.Arms, r.ArmOrder, r.ItemIDs, r.Crumb.SplitSHA256, r.Crumb.DataSHA256})
+		Prompt             string
+	}{r.Track, r.Suite, r.Tier, r.Seed, r.Arms, r.ArmOrder, r.ItemIDs, r.Crumb.SplitSHA256, r.Crumb.DataSHA256,
+		r.Crumb.PromptSHA256})
 	s := sha256.Sum256(b)
 	return hex.EncodeToString(s[:4])
 }
