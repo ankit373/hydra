@@ -40,7 +40,10 @@ jobs:
             echo "PR #$pr has moved past $HEAD_SHA; a newer run will post"; exit 0
           fi
           marker='<!-- hydra-routing-bench -->'
-          body=$(head -c 60000 out/comment.md)
+          # The text is fork-controlled: a zero-width space after @ and before a
+          # digit after # stops it pinging users or teams, or linking issues.
+          zwsp=$'\xe2\x80\x8b'
+          body=$(sed "s/@/@$zwsp/g; s/#\([0-9]\)/#$zwsp\1/g" out/comment.md | head -c 60000)
           case "$body" in "$marker"*) ;; *) echo "::error::comment lacks the marker"; exit 1 ;; esac
           id=$(gh api --paginate "repos/$REPO/issues/$pr/comments" \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n1)
