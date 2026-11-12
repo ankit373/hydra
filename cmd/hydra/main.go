@@ -71,7 +71,7 @@ import (
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
-	_ "github.com/ankit373/hydra/internal/provider/env"
+	envprovider "github.com/ankit373/hydra/internal/provider/env"
 	_ "github.com/ankit373/hydra/internal/provider/port"
 )
 
@@ -142,6 +142,13 @@ func rootCmd() *cobra.Command {
 		// main prints the error instead, in Cobra's own format, so that a
 		// cancelled run can read as "interrupted" rather than as a failure.
 		SilenceErrors: true,
+		// Before any command discovers heads, so a key saved in the desktop
+		// app reaches every reader of the environment with no second lookup.
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if err := envprovider.LoadStoredKeys(); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "  ⚠ stored API keys could not be read: %v\n", err)
+			}
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !config.Exists() {
 				return runInit(cmd.Context())
@@ -154,7 +161,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdVet(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
-		cmdWorkflow(), cmdServe(),
+		cmdWorkflow(), cmdServe(), cmdBench(),
 		cmdSecurity(), cmdPolicy(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 		cmdRlimitExec(),
 	)
@@ -272,8 +279,9 @@ func cmdTui() *cobra.Command {
 			if err := requireTerminal("hyctl tui"); err != nil {
 				return err
 			}
-			// Mouse support is for wheel scrolling; the keyboard remains
-			// fully sufficient on terminals without it.
+			// Mouse support is for wheel scrolling; ctrl+s hands the mouse back
+			// to the terminal for selecting text.
+			defer tui.OwnTerminal()()
 			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 			_, err := p.Run()
 			return err
@@ -331,6 +339,7 @@ func runInit(ctx context.Context) error {
 
 	fmt.Println(dimStyle.Render("  Scanning your machine for AI models..."))
 	result := probe.Run(ctx)
+	defer tui.OwnTerminal()()
 
 	if len(result.Heads) == 0 {
 		// Nothing found, guide the user through installing something.
@@ -1027,8 +1036,9 @@ func cmdDispatch() *cobra.Command {
 
 			// Evaluated once for this dispatch, whichever of the plain, swarm
 			// and SPRT paths runs, and handed to Dispatch so no candidate
-			// re-derives it.
-			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius, nil)
+			// re-derives it. No head is pinned here, so the per-head signals
+			// read absent.
+			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius, nil, "")
 			if ruleDecision.Action.Type == signals.ActionBlock {
 				return &dispatch.ErrBlocked{Rule: ruleDecision.Rule, Reason: ruleDecision.Action.Reason}
 			}
@@ -4516,7 +4526,7 @@ func cmdReview() *cobra.Command {
 			return nil
 		},
 	}
-	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD/GPT-OSS)")
+	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD)")
 
 	cmd.AddCommand(sum, diff, approve, reject, qa)
 	return cmd

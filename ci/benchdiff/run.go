@@ -231,7 +231,7 @@ func seed(rows []Calibrated) error {
 // route makes the decisions `hyctl dispatch --dry-run [--confidence]` makes,
 // then runs the SPRT over the planned heads with answers from the suite.
 func route(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal *trust.Calibrator, p Prompt) Result {
-	dec := d.Decide(ctx, p.Prompt, p.Domain, nil, nil)
+	dec := d.Decide(ctx, p.Prompt, p.Domain, nil, nil, "")
 	opts := dispatch.Options{DryRun: true, Enum: p.Enum, Domain: p.Domain, Decision: &dec}
 	if p.Enum != "" {
 		opts.TierHint = dispatch.EnumToTier(p.Enum)

@@ -42,6 +42,9 @@ floor internal/a2a                  93
 # and the two default paths, which the tests override to stay off the
 # developer's real ~/.aws.
 floor internal/awsconf              85
+# New packages (#1199). Measured 94.4% and 92.2% on macOS; neither has platform-split code.
+floor internal/bench                85
+floor internal/bench/suites         90
 floor internal/budget               92
 floor internal/build                90
 floor internal/capabilities         90
@@ -73,6 +76,9 @@ floor internal/glob                 96
 floor internal/graph                88
 floor internal/ground               95
 floor internal/health               82
+# The Keychain binding (ring_os.go) is darwin/windows-only, so Linux measures
+# the logic it wraps through a fake and the file store, not the binding itself.
+floor internal/keystore             84
 floor internal/ledger               86
 # internal/mcpregistry talks to two external APIs (OSV.dev, GitHub) and reads
 # five clients' config files, so its remaining uncovered lines are the

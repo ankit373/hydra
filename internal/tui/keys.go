@@ -29,6 +29,7 @@ var ckKeymap = []ckBinding{
 	{"ctrl+u/ctrl+d", "scroll half a page", "EVERYWHERE", nil},
 	{"home/end", "top / bottom · chat: end returns to live", "EVERYWHERE", nil},
 	{"ctrl+c", "quit", "EVERYWHERE", nil},
+	{"ctrl+s", "select text: hand the mouse to the terminal to copy · again restores wheel scroll", "EVERYWHERE", nil},
 
 	{"ctrl+t", "new thread", "THREADS", nil},
 	{"ctrl+t", "thread", "", []int{ckViewChat}},
@@ -37,7 +38,7 @@ var ckKeymap = []ckBinding{
 	{"ctrl+\\", "split: pin a second thread beside this one (≥100 cols) · again closes", "THREADS", nil},
 	{"ctrl+b", "background the thread, it keeps running in agents, pings chat when done", "THREADS", nil},
 	{"ctrl+g", "jump to the next thread needing you (confirms, plan gates, failures)", "THREADS", nil},
-	{"a · x", "after an isolated edit: apply the worktree to your tree · x x discards it", "THREADS", nil},
+	{"/apply · /undo", "after an isolated edit: apply the worktree to your tree · discard it (asks y/n)", "THREADS", nil},
 
 	{"enter", "send · approve a plan · empty input: open the last trace", "CHAT", nil},
 	{"enter", "send", "", []int{ckViewChat}},
@@ -48,7 +49,7 @@ var ckKeymap = []ckBinding{
 	{"ctrl+o", "route", "", []int{ckViewChat}},
 	{"esc", "cancel the running task · discard a plan · clear the input", "CHAT", nil},
 	{"y/n", "approve / refuse a pending plan or file write", "CHAT", nil},
-	{"d · x · o", "after an edit: diff · undo · open in $EDITOR (empty input)", "CHAT", nil},
+	{"/diff /undo /open", "after an edit: diff · undo (asks y/n) · open in $EDITOR", "CHAT", nil},
 	{"e", "expand the collapsed output of a head that gave up (empty input)", "CHAT", nil},
 	{"/ask /edit /plan /auto…", "set the mode by name (/architect /careful /unattended too)", "CHAT", nil},
 	{":chat :agents :models :activity :usage :audit", "jump · :q quit", "CHAT", nil},
@@ -118,6 +119,14 @@ func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.addThread(), nil
 	case tea.KeyCtrlG:
 		return m.nextAttention(), nil
+	case tea.KeyCtrlS:
+		// Mouse capture is what gives wheel scrolling, and it is also what
+		// stops the terminal selecting text, so the user picks (TUI-105).
+		m.mouseOff = !m.mouseOff
+		if m.mouseOff {
+			return m, tea.DisableMouse
+		}
+		return m, tea.EnableMouseCellMotion
 	}
 	// alt+1-9 jumps to that thread from anywhere.
 	if msg.Alt && msg.Type == tea.KeyRunes && len(msg.Runes) == 1 &&
@@ -240,6 +249,10 @@ func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 		return m.stopWait(t, w, note)
 	case m.view == ckViewChat && t.planWait != nil:
 		return m.stopWait(t, *t.planWait, "plan discarded, nothing ran")
+	case m.view == ckViewChat && t.undoAsk != nil:
+		t.undoAsk = nil
+		m.flash = "kept, nothing changed"
+		return m, nil
 	case m.view == ckViewChat && t.input != "":
 		t.input = ""
 	case m.view == ckViewChat && t.queued != nil:

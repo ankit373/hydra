@@ -60,7 +60,7 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, 
 	if len(heads) > 0 {
 		unlisted = 0 // the banner reports an empty /v1/decisions, not a partial one
 	}
-	ceiling, _ := costCeiling(policy.ForFile(config.ScriptHome(), policy.Spec{}), false, 0)
+	ceiling, _ := servePolicyCeiling()
 	return decisionRouter{router: decide.Router{
 		Heads:  heads,
 		Price:  decisionPrice(pricing.Load()),
@@ -68,6 +68,12 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, 
 		Cal:    cal,
 		Target: trust.Target{Confidence: confidence, MaxCostUSD: ceiling},
 	}, unlisted: unlisted}, nil
+}
+
+// servePolicyCeiling is policy.yaml's max_cost_usd for a served request, which
+// names no file, and where it came from.
+func servePolicyCeiling() (float64, string) {
+	return costCeiling(policy.ForFile(config.ScriptHome(), policy.Spec{}), false, 0)
 }
 
 // decisionPrice estimates one call from the input's size; decision sources bill input only.
