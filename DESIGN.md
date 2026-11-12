@@ -29,7 +29,7 @@ design/scripts/emit.mjs       copies the CSS to its consumers and writes the lip
 
 | Output | Consumer |
 |---|---|
-| `docs/assets/tokens.css` | every website page links it |
+| `docs/assets/tokens.css` | every website page links it, then `docs/assets/site.css`, the one shared stylesheet; canvas and SVG drawing read the same roles through `Hydra.color()` in `docs/assets/site.js` |
 | `desktop/frontend/src/tokens.generated.css` | imported by `desktop/frontend/src/tokens.css` |
 | `internal/tui/tokens_gen.go` | `internal/tui/styles.go` and the wordmark gradient |
 | `desktop/window_gen.go` | the desktop app's native window background, painted before the first frame |
@@ -180,6 +180,6 @@ Terminal roles, worst case against the terminal backgrounds above:
 Each of these is scheduled in the design revamp and listed so nobody mistakes it for the pattern to copy:
 
 - **Light theme on the web and in the desktop app (Phase 4).** The values exist; both surfaces pin `data-theme="dark"`.
-- **Website stylesheets (Phase 3).** Pages keep their own variable names (`--ink`, `--aqua` and the like), mapped onto the roles once in `docs/assets/page-aliases.css`, and still carry literal colours, per-page font stacks and their own type sizes.
+- **Website radii, widths and display sizes (Phase 7).** Colour, type size, spacing and motion on the site come from tokens and a check fails on a colour literal; corner radii, container widths, 1–2px hairline nudges and the hero display sizes above the 48px top of the scale (fluid, inside `clamp()`) are still literal.
 - **Desktop alpha and shadow literals, and the logo SVG (Phases 6 and 7).** `app.css` keeps neutral scrims, shadows and white washes; `brand.tsx` keeps its gradient stops; the radii are 8/14/22px rather than the token scale.
 - **TUI wizards, splash and CLI colours (Phase 8).** `init.go`, `install.go`, `splash.go` and `cmd/hydra` still use their own ANSI-256 values.

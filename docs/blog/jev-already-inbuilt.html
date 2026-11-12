@@ -40,279 +40,51 @@
   </script>
 
 <link rel="stylesheet" href="../assets/tokens.css">
-<link rel="stylesheet" href="../assets/page-aliases.css">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js"></script>
 <style>
-:root{
-  color-scheme:dark;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-  --math:"Cambria Math","Latin Modern Math","STIX Two Math",Georgia,"Times New Roman",serif;
-  --maxw:1080px;
-  --prose:700px;
-}
-@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("/fonts/SpaceGrotesk.woff2") format("woff2");}
-@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("/fonts/JetBrainsMono.woff2") format("woff2");}
-*{box-sizing:border-box;}
-html{scroll-behavior:smooth;}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.65;
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;font-size:17px;}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-h1,h2,h3{margin:0;text-wrap:balance;font-family:"Space Grotesk",var(--sans);}
-a{color:inherit;text-decoration:none;}
-::selection{background:rgba(0,230,195,.28);color:#fff;}
-:focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
-.mono{font-family:var(--mono);}
-.tnum{font-variant-numeric:tabular-nums;}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.accent{color:var(--aqua);}.cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
-.cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
-b{color:var(--ink);}
-
-.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
-  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
-  border-bottom:1px solid var(--line);}
-.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
-.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
-.topbar .grow{flex:1;}
-.topbar nav{display:flex;gap:20px;}
-.topbar nav a{color:var(--dim);transition:color .15s;}
-.topbar nav a:hover{color:var(--aqua);}
-.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
-.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
-@media(max-width:860px){.topbar nav{display:none;}}
-
-.hero{position:relative;padding-top:64px;padding-bottom:36px;overflow:hidden;}
-.hero::before{content:"";position:absolute;inset:-40% 0 auto;height:480px;z-index:0;
-  background:radial-gradient(55% 55% at 78% 0%,rgba(139,92,246,.18),transparent 70%),
-             radial-gradient(46% 46% at 8% 12%,rgba(42,240,224,.10),transparent 70%);
-  filter:blur(6px);pointer-events:none;}
-.hero{max-width:none;padding-left:0;padding-right:0;}
-.hero>*{position:relative;z-index:1;max-width:var(--prose);margin-left:auto;margin-right:auto;
-  padding-left:24px;padding-right:24px;}
-.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--aqua);
-  margin-bottom:16px;}
-.hero h1{font-size:clamp(28px,5vw,46px);line-height:1.1;letter-spacing:-.5px;font-weight:750;}
-.hero .sub{font-size:clamp(15.5px,2vw,19px);color:var(--dim);margin:22px auto 0;}
-.byline{margin-top:26px;padding-top:0;border-top:none;display:flex;gap:10px;
-  font-family:var(--mono);font-size:11.5px;color:var(--dim);flex-wrap:wrap;}
-.byline span:not(.sep){border:1px solid var(--line);border-radius:10px;padding:7px 12px;background:rgba(10,12,24,.4);}
-.byline .sep{display:none;}
-
-/* scroll progress, a thin gradient bar pinned above everything including the topbar */
-#progressBar{position:fixed;top:0;left:0;height:3px;width:0%;z-index:100;
-  background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));
-  box-shadow:0 0 10px rgba(139,92,246,.5);}
-
-/* side section rail: fills the gap between 860px, where the topbar nav
-   already hides, and whatever width actually has room beside a 1080px
-   content column without overlapping it */
-.rail{position:fixed;right:22px;top:50%;transform:translateY(-50%);z-index:55;
-  display:none;flex-direction:column;gap:18px;}
-@media(min-width:1150px){.rail{display:flex;}}
-.rail a{position:relative;width:10px;height:10px;border-radius:50%;border:2px solid var(--line-2);
-  background:var(--bg2);transition:.2s;}
-.rail a:hover,.rail a.active{border-color:var(--aqua);background:var(--aqua);box-shadow:0 0 10px var(--aqua);}
-.rail a .lbl{position:absolute;right:22px;top:50%;transform:translateY(-50%);white-space:nowrap;
-  font-family:var(--mono);font-size:11px;color:var(--dim);background:rgba(10,12,24,.92);
-  border:1px solid var(--line);border-radius:6px;padding:4px 9px;opacity:0;pointer-events:none;transition:.15s;}
-.rail a:hover .lbl{opacity:1;}
-
-/* next-in-series: internal links between posts, before the site footer */
-.series{margin:0 0 20px;padding:44px 0;border-top:1px solid var(--line);}
-.series .lbl2{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--aqua);margin-bottom:18px;}
-.series-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:var(--prose);margin:0 auto;padding:0 24px;}
-@media(max-width:620px){.series-grid{grid-template-columns:1fr;}}
-.series-card{display:block;padding:18px 20px;border:1px solid var(--line);border-radius:14px;
-  background:rgba(14,15,28,.5);transition:.18s;}
-.series-card:hover{border-color:var(--aqua);transform:translateY(-2px);}
-.series-card .sk{font-family:var(--mono);font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
-.series-card .st{font-size:15px;font-weight:700;line-height:1.35;font-family:"Space Grotesk",var(--sans);}
-
-.legend{display:flex;flex-wrap:wrap;gap:10px;margin:26px auto 0;}
-.tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.3px;padding:6px 12px;border-radius:20px;
-  border:1px solid var(--line);background:rgba(20,22,44,.5);display:inline-flex;gap:7px;align-items:center;}
-.tag .g{font-weight:700;}
-.tag.t-primary .g{color:var(--cyan);}.tag.t-reported .g{color:var(--cheap);}
-.tag.t-arith .g{color:var(--violet);}.tag.t-flag .g{color:var(--mid);}
-
-main{padding-bottom:20px;}
-.pillar{padding:52px 0;border-top:1px solid var(--line);}
-.pillar.first{padding-top:20px;border-top:none;}
-article{max-width:var(--prose);margin:0 auto;padding:0 24px;}
-.pillar h2{font-size:clamp(24px,3.2vw,32px);letter-spacing:-.3px;font-weight:750;margin-bottom:18px;}
-.pillar h3{font-size:19px;font-weight:700;margin:34px 0 12px;}
-.pillar .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:2px;text-transform:uppercase;color:var(--aqua);
-  margin-bottom:16px;}
-p{color:var(--ink);margin:0 0 1.2em;}
-p.lede{color:var(--dim);font-size:17px;}
-
-blockquote.pull{margin:30px -2px;padding:4px 0 4px 20px;border-left:3px solid var(--aqua);
-  font-size:21px;line-height:1.42;color:var(--ink);font-weight:500;font-family:"Space Grotesk",var(--sans);}
-blockquote.pull cite{display:block;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--faint);font-style:normal;font-weight:400;}
-blockquote.inline{margin:20px 0;padding:2px 0 2px 16px;border-left:2px solid var(--line-2);
-  font-size:16px;color:var(--dim);}
-blockquote.inline cite{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--faint);font-style:normal;}
-
-.work{margin:22px 0;border:1px solid var(--line);border-radius:14px;background:rgba(10,12,24,.55);padding:20px 22px;}
-.work .lbl{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--aqua);margin-bottom:12px;}
-.work .step{font-family:var(--mono);font-size:14px;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;padding:5px 0;}
-.work .step .k{color:var(--dim);min-width:190px;}
-.work .step .v{color:var(--ink);font-weight:600;}
-.work .note{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);font-size:13.5px;color:var(--faint);font-family:var(--sans);line-height:1.65;}
-
-.statpair{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;margin:24px 0;}
-@media(max-width:560px){.statpair{grid-template-columns:1fr;}.statpair .arrow{transform:rotate(90deg);justify-self:center;}}
-.statpair .box{border:1px solid var(--line);border-radius:12px;padding:18px;text-align:center;background:rgba(10,12,24,.4);}
-.statpair .box.bad{border-color:rgba(255,90,110,.4);}
-.statpair .box.good{border-color:rgba(63,217,138,.4);}
-.statpair .box .n{font-family:var(--mono);font-weight:700;font-size:25px;}
-.statpair .box.bad .n{color:var(--exp);}
-.statpair .box.good .n{color:var(--cheap);}
-.statpair .box .t{font-size:12px;color:var(--dim);margin-top:6px;}
-.statpair .arrow{font-size:20px;color:var(--faint);}
-
-.matchgrid{margin:24px 0;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
-.matchrow{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);}
-.matchrow:first-child{border-top:none;}
-.matchrow .c{padding:16px 18px;font-size:14.5px;}
-.matchrow .c:first-child{border-right:1px solid var(--line);background:rgba(224,169,58,.05);}
-.matchrow .c:last-child{background:rgba(0,230,195,.05);}
-.matchrow .c b{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;}
-.matchrow .c:first-child b{color:var(--mid);}
-.matchrow .c:last-child b{color:var(--aqua);}
-@media(max-width:620px){.matchrow{grid-template-columns:1fr;}.matchrow .c:first-child{border-right:none;border-bottom:1px solid var(--line);}}
-
-.callout{margin:26px 0;padding:22px 24px;border-radius:16px;
-  background:linear-gradient(160deg,rgba(0,230,195,.09),rgba(16,18,31,1));
-  border:1px solid rgba(0,230,195,.35);}
-.callout p:last-child{margin-bottom:0;}
-
-.flagbox{margin:22px 0;padding:16px 18px;border-radius:12px;border:1px dashed rgba(224,169,58,.5);
-  background:rgba(224,169,58,.06);font-size:13.5px;color:var(--dim);}
-.flagbox b{color:var(--mid);}
-
-.redbox{margin:22px 0;padding:16px 18px;border-radius:12px;border:1px dashed rgba(255,90,110,.5);
-  background:rgba(255,90,110,.06);font-size:13.5px;color:var(--dim);}
-.redbox b{color:var(--exp);}
-
-.divider{display:flex;align-items:center;justify-content:center;gap:10px;margin:50px 0;color:var(--faint);font-size:13px;}
-.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line);}
-
-.endlist{margin:22px 0;}
-.enditem{display:grid;grid-template-columns:26px 1fr;gap:12px;padding:14px 0;border-top:1px solid var(--line);}
-.enditem:first-child{border-top:none;}
-.enditem .n{font-family:var(--mono);color:var(--aqua);font-size:12.5px;}
-.enditem p{margin:0;font-size:15px;}
-
-.refs ol{margin:0;padding:0;list-style:none;counter-reset:refc;}
-.refs li{counter-increment:refc;padding:12px 0 12px 30px;position:relative;border-top:1px solid var(--line);font-size:13.5px;color:var(--dim);line-height:1.55;}
-.refs li:first-child{border-top:none;}
-.refs li::before{content:counter(refc)".";position:absolute;left:0;font-family:var(--mono);color:var(--faint);}
-.refs li a{color:var(--dim);border-bottom:1px dashed var(--line-2);font-family:var(--mono);font-size:12.5px;word-break:break-all;}
-.refs li a:hover{color:var(--aqua);border-color:var(--aqua);}
-sup.cite{font-family:var(--mono);font-size:11px;color:var(--aqua);}
-sup.cite a{color:var(--aqua);}
-
-footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
-.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-.foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
-.foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
-.foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
-
-.paper-head{display:none;}
-button.pdf-btn{font:inherit;background:none;cursor:pointer;}
-
-/* print-as-research-paper: inlined last so it wins the cascade on plain
-   source order, never on an !important arms race against this file's own
-   screen rules. */
-@media print {
-  @page{size:A4;margin:20mm 18mm 22mm;}
-  :root{color-scheme:light;
-    --bg:#fff;--bg2:#fff;--panel:#f6f6f8;--line:#d8d8e2;--line-2:#b9b9ca;
-    --ink:#131320;--dim:#44445a;--faint:#6b6b80;
-    --cyan:#0a6b76;--aqua:#0a6b76;--violet:#5b3fae;--magenta:#9c2d7a;
-    --cheap:#1e7a46;--mid:#8a5a00;--exp:#9c1d2e;}
-  html,body{background:#fff !important;color:var(--ink) !important;font-size:11.5pt;}
-  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none !important;text-shadow:none !important;filter:none !important;}
-  .topbar,button.pdf-btn,.pdf-btn,#progressBar,.rail,.series{display:none !important;}
-  a{color:inherit;text-decoration:underline;text-decoration-color:var(--line-2);}
-  .wrap,article,main{max-width:none !important;}
-  article{padding:0 !important;}
-  .pillar{border-top:1px solid var(--line) !important;padding:16pt 0 !important;}
-  .pillar.first{border-top:none !important;}
-  h1,h2,h3{font-family:Georgia,"Times New Roman",serif !important;color:#000 !important;}
-  .grad{-webkit-text-fill-color:#000 !important;background:none !important;color:#000 !important;}
-  p,li,blockquote{font-family:Georgia,"Times New Roman",serif !important;orphans:3;widows:3;}
-  .mono,.kicker,.eyebrow,code{font-family:"Courier New",monospace !important;}
-  .hero{padding-top:0 !important;max-width:none !important;}
-  .hero::before{display:none !important;}
-  .hero>*{max-width:none !important;}
-  .paper-head{display:flex !important;justify-content:space-between;align-items:baseline;gap:12pt;
-    border-bottom:2pt solid #000;padding-bottom:8pt;margin-bottom:20pt;font-family:"Courier New",monospace;
-    font-size:8.5pt;letter-spacing:.04em;text-transform:uppercase;color:#000;}
-  .eyebrow{color:#000 !important;font-weight:700;}
-  .byline,.meta{color:#333 !important;}
-  .legend{display:none !important;}
-  .work,.callout,.flagbox,.redbox,.statpair .box,.matchrow .c{break-inside:avoid;border-color:#999 !important;background:#fafafa !important;}
-  .callout{background:#eef5f1 !important;border-color:#1e7a46 !important;}
-  .flagbox{background:#fdf6ea !important;border-color:#8a5a00 !important;}
-  .redbox{background:#fdf0f1 !important;border-color:#9c1d2e !important;}
-  .matchrow .c:first-child{background:#fdf6ea !important;}
-  .matchrow .c:last-child{background:#eef9f5 !important;}
-  sup.cite a,.refs a{color:#000 !important;text-decoration:none;}
-  footer{border-top:1px solid #999;margin-top:24pt;padding:16pt 0 0 !important;}
-  .foot{max-width:none !important;}
-  .foot .mark{-webkit-text-fill-color:#000 !important;background:none !important;color:#000 !important;}
-  @page{@bottom-center{content:"Hydra Research \2014  page " counter(page) " of " counter(pages);
-    font-family:"Courier New",monospace;font-size:8pt;color:#555;}}
-}
+.hero h1{font-size:clamp(var(--hy-font-size-2xl),5vw,var(--hy-font-size-4xl));line-height:1.1;}
+.work .step .k{min-width:190px;}
+.enditem{display:grid;grid-template-columns:26px 1fr;gap:var(--hy-space-3);padding:var(--hy-space-3) 0;
+  border-top:1px solid var(--hy-color-border-subtle);}
 </style>
+<link rel="stylesheet" href="../assets/print.css" media="print">
 </head>
-<body>
+<body class="article">
 
-<div id="progressBar"></div>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="progress-bar" aria-hidden="true"></div>
+<div class="progress-bar" aria-hidden="true"></div>
+<header class="site-header" id="topbar">
+  <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+  <span class="site-tag">blog</span>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <nav class="site-nav" id="site-nav" aria-label="Main">
+    <a href="/#start">Get started</a>
+    <a href="/docs.html">Docs</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/first-principles.html">First principles</a>
+    <a href="/blog/" aria-current="page">Blog</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
+  </nav>
+  <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
+</header>
 
-<nav class="rail" id="rail">
-  <a href="#what-jev-is" data-sec="what-jev-is"><span class="lbl">What Jev is</span></a>
-  <a href="#match" data-sec="match"><span class="lbl">The match</span></a>
-  <a href="#gate" data-sec="gate"><span class="lbl">The gate</span></a>
-  <a href="#ahead" data-sec="ahead"><span class="lbl">Where it's ahead</span></a>
-  <a href="#injection" data-sec="injection"><span class="lbl">The lesson</span></a>
-  <a href="#check" data-sec="check"><span class="lbl">The checklist</span></a>
+<nav class="rail" aria-label="Sections">
+  <a href="#what-jev-is"><span class="lbl">What Jev is</span></a>
+  <a href="#match"><span class="lbl">The match</span></a>
+  <a href="#gate"><span class="lbl">The gate</span></a>
+  <a href="#ahead"><span class="lbl">Where it's ahead</span></a>
+  <a href="#injection"><span class="lbl">The lesson</span></a>
+  <a href="#check"><span class="lbl">The checklist</span></a>
 </nav>
 
-<div class="paper-head" style="display:none">
+<main id="main">
+<div class="paper-head">
   <span>Hydra Research</span>
   <span>hydra.uvansa.com/blog/jev-already-inbuilt.html &middot; Oct 3, 2026</span>
 </div>
-
-<div class="topbar" id="topbar">
-  <a class="mark" href="/">HYDRA</a>
-  <span class="pill">blog</span>
-  <span class="grow"></span>
-  <nav>
-    <a href="#what-jev-is">What Jev is</a>
-    <a href="#match">The match</a>
-    <a href="#gate">The gate</a>
-    <a href="#ahead">Where it's ahead</a>
-    <a href="#injection">The lesson</a>
-    <a href="#check">The checklist</a>
-  </nav>
-  <button class="ghost pdf-btn" type="button" onclick="window.print()" title="Download this post as a formatted PDF">⬇ PDF</button>
-  <a class="ghost" href="/blog/">All posts</a>
-</div>
-
-<header class="hero wrap">
+<div class="hero wrap">
   <div class="eyebrow">field notes · competitive research</div>
   <h1>TypeSafe's Jev drew offers at a $10B valuation.<br><span class="grad">We shipped the same architecture in September.</span></h1>
   <p class="sub">A "decision model" that answers typed questions with calibrated confidence instead of generating text sounds new. It isn't, not as an idea. Hydra's own trust, entity and classify packages do the same job, provider-neutral, measured against a held-out probe set rather than a vendor benchmark. Here's the actual architecture match, the one place Jev is honestly ahead, and the published red-team result that validates a design choice we'd already made.</p>
@@ -320,6 +92,7 @@ button.pdf-btn{font:inherit;background:none;cursor:pointer;}
     <span>12 min read</span><span class="sep">·</span>
     <span>14 sources, all linked</span><span class="sep">·</span>
     <span>Oct 3, 2026</span>
+    <button class="btn pdf-btn" type="button" data-print title="Download this post as a formatted PDF"><span aria-hidden="true">⬇</span> PDF</button>
   </div>
   <div class="legend">
     <span class="tag t-primary"><span class="g">⊢</span> primary source / Hydra's own shipped code</span>
@@ -327,9 +100,16 @@ button.pdf-btn{font:inherit;background:none;cursor:pointer;}
     <span class="tag t-arith"><span class="g">◈</span> our own arithmetic</span>
     <span class="tag t-flag"><span class="g">○</span> vendor-reported, unverified</span>
   </div>
-</header>
+  <nav class="page-toc" aria-label="In this post">
+    <a href="#what-jev-is">What Jev is</a>
+    <a href="#match">The match</a>
+    <a href="#gate">The gate</a>
+    <a href="#ahead">Where it's ahead</a>
+    <a href="#injection">The lesson</a>
+    <a href="#check">The checklist</a>
+  </nav>
+</div>
 
-<main>
 <article>
 
   <section class="pillar first">
@@ -366,7 +146,7 @@ button.pdf-btn{font:inherit;background:none;cursor:pointer;}
       </div>
       <div class="matchrow">
         <div class="c"><b>Jev does this</b>A narrow yes/no judgment a regex can't make (e.g. "is this PII")</div>
-        <div class="c"><b>Hydra already ships this</b><code class="mono">internal/entity</code>: asks any routable head a fixed one-word question, then measures that head's own recall and false-positive rate before trusting it (shipped as #1040/#1044)</div>
+        <div class="c"><b>Hydra already ships this</b><code class="mono">internal/entity</code>: asks any routable head a fixed one-word question, then measures that head's own recall and false-positive rate before trusting it (shipped as <a href="https://github.com/ankit373/hydra/pull/1040">#1040</a>/<a href="https://github.com/ankit373/hydra/pull/1044">#1044</a>)</div>
       </div>
       <div class="matchrow">
         <div class="c"><b>Jev does this</b>High confidence → proceed, medium → escalate to a real LLM, low → escalate to a human</div>
@@ -462,7 +242,7 @@ button.pdf-btn{font:inherit;background:none;cursor:pointer;}
       <li id="r10"><b>Prompt-injection finding, Pydantic quote:</b> VentureBeat, "Companies are putting Jev in charge of AI agent decisions, and prompt injection can influence the verdict," Sep 21 2026 (Octomind block-probability example, Pydantic docs quote). <a href="https://venturebeat.com/security/companies-are-putting-jev-in-charge-of-ai-agent-decisions-and-prompt-injection-can-influence-the-verdict" target="_blank" rel="noopener">venturebeat.com/security/jev-prompt-injection</a></li>
       <li id="r11"><b>Second red-team result:</b> "Check Point Broke the 'Never Hallucinates' Decision Model for 50 Cents a Break." <a href="https://getaibook.com/news/check-point-breaks-jev-typed-decision-model-prompt-injection/" target="_blank" rel="noopener">getaibook.com/news/check-point-breaks-jev</a></li>
       <li id="r12"><b>Hydra's own calibration layer:</b> <code>internal/trust</code>: Beta-Bernoulli calibration, LLR/D, SPRT ensemble (<code>trust.Run</code>). Primary source: this repository.</li>
-      <li id="r13"><b>Hydra's own measured head-eligibility gate:</b> <code>internal/entity</code> (#1040, #1044): Wilson-interval recall/false-positive bar over a labelled probe set. Primary source: this repository.</li>
+      <li id="r13"><b>Hydra's own measured head-eligibility gate:</b> <code>internal/entity</code> (<a href="https://github.com/ankit373/hydra/pull/1040">#1040</a>, <a href="https://github.com/ankit373/hydra/pull/1044">#1044</a>): Wilson-interval recall/false-positive bar over a labelled probe set. Primary source: this repository.</li>
       <li id="r14"><b>Hydra's own corpus-based classifier:</b> <code>internal/classify</code>: k-NN pass-rate estimate under a Laplace-prior Beta posterior, validated against a permutation null. Primary source: this repository.</li>
     </ol>
     <div class="flagbox">
@@ -473,7 +253,7 @@ button.pdf-btn{font:inherit;background:none;cursor:pointer;}
 </article>
 </main>
 
-<div class="series">
+<nav class="series" aria-label="More in this series">
   <div class="series-grid">
     <a class="series-card" href="/blog/declared-not-enforced-isolation.html">
       <div class="sk">also in this series · security research</div>
@@ -484,56 +264,26 @@ button.pdf-btn{font:inherit;background:none;cursor:pointer;}
       <div class="st">The Diagnosis Is Unanimous. The Cure Isn't.</div>
     </a>
   </div>
-</div>
+</nav>
 
-<footer>
-  <div class="foot">
+<footer class="site-footer">
+  <div class="wrap">
     <div>
-      <a class="mark" href="/">HYDRA</a>
-      <p>The Trust Control Plane for AI development. Route to a confidence of correctness.</p>
+      <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Free and open source, MIT licensed.</p>
     </div>
-    <nav>
+    <nav aria-label="Footer">
       <a href="/">Home</a>
-      <a href="/blog/">Blog</a>
       <a href="/docs.html">Docs</a>
+      <a href="/app.html">Desktop app</a>
+      <a href="/pricing.html">Pricing</a>
       <a href="/first-principles.html">First principles</a>
+      <a href="/blog/">Blog</a>
       <a href="https://github.com/ankit373/hydra">GitHub</a>
+      <a href="/llms.txt">llms.txt</a>
     </nav>
   </div>
 </footer>
-
-<script>
-(function(){
-  var bar = document.getElementById('progressBar');
-  function onScroll(){
-    var h = document.documentElement;
-    var scrolled = h.scrollTop || document.body.scrollTop;
-    var height = h.scrollHeight - h.clientHeight;
-    bar.style.width = (height > 0 ? (scrolled / height) * 100 : 0) + '%';
-  }
-  window.addEventListener('scroll', onScroll, {passive:true});
-  onScroll();
-
-  var rail = document.getElementById('rail');
-  if (rail) {
-    var links = rail.querySelectorAll('a');
-    var sections = Array.prototype.map.call(links, function(a){
-      return document.getElementById(a.getAttribute('data-sec'));
-    });
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        var idx = sections.indexOf(entry.target);
-        if (idx === -1) return;
-        if (entry.isIntersecting) {
-          links.forEach(function(a){ a.classList.remove('active'); });
-          links[idx].classList.add('active');
-        }
-      });
-    }, {rootMargin:'-40% 0px -50% 0px'});
-    sections.forEach(function(s){ if (s) io.observe(s); });
-  }
-})();
-</script>
 
 </body>
 </html>

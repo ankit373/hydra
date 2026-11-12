@@ -355,6 +355,40 @@ jobs:
             exit 1
           fi
 
+  # The website in a real browser: axe finds zero violations on every page at
+  # phone and desktop width, nothing scrolls sideways from 320 to 1440px, no
+  # text sits under 12px, and no page logs an error (#1344).
+  site:
+    name: Website accessibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs-check/package-lock.json
+
+      - name: Install dependencies
+        working-directory: docs-check
+        run: npm ci
+
+      - name: Cache the browser
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-docs-${{ runner.os }}-${{ hashFiles('docs-check/package-lock.json') }}
+
+      - name: Install Chromium
+        working-directory: docs-check
+        run: npx playwright install --with-deps chromium
+
+      - name: Check every page
+        working-directory: docs-check
+        run: npx playwright test
+
   # Every target Hydra ships (and windows/arm64, which it should, see #262)
   # compiles and vets clean today. Nothing guarded that, so a Unix-only syscall
   # or a platform-specific import could land with CI fully green, because CI only
