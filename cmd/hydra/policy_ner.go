@@ -136,23 +136,23 @@ func printNER(id string, r entity.Report, took time.Duration) {
 	if r.Eligible() {
 		verdict = "eligible"
 	}
-	fmt.Printf("\n  %s\n\n", id)
-	fmt.Printf("    recall            %8s   %.2f   95%% low  %.2f   (bar %.2f)\n",
+	fmt.Fprintf(stdout, "\n  %s\n\n", id)
+	fmt.Fprintf(stdout, "    recall            %8s   %.2f   95%% low  %.2f   (bar %.2f)\n",
 		fmt.Sprintf("%d/%d", r.Recalled, r.Positives), r.Recall(), r.RecallLow(), entity.MinRecall)
-	fmt.Printf("    false positives   %8s   %.2f   95%% high %.2f   (bar %.2f)\n",
+	fmt.Fprintf(stdout, "    false positives   %8s   %.2f   95%% high %.2f   (bar %.2f)\n",
 		fmt.Sprintf("%d/%d", r.FalsePos, r.Negatives), r.FalsePositiveRate(), r.FalsePositiveHigh(), entity.MaxFalsePositive)
 	if r.Unreadable > 0 {
-		fmt.Printf("    unreadable        %8d   answered neither yes nor no\n", r.Unreadable)
+		fmt.Fprintf(stdout, "    unreadable        %8d   answered neither yes nor no\n", r.Unreadable)
 	}
 	if r.Failed > 0 {
-		fmt.Printf("    unreachable       %8d\n", r.Failed)
+		fmt.Fprintf(stdout, "    unreachable       %8d\n", r.Failed)
 	}
-	fmt.Printf("\n    %s", verdict)
+	fmt.Fprintf(stdout, "\n    %s", verdict)
 	if !r.Eligible() {
-		fmt.Printf(", so its answers are not evidence")
+		fmt.Fprintf(stdout, ", so its answers are not evidence")
 	}
-	fmt.Printf("   (%s)\n\n", took.Round(time.Millisecond))
-	fmt.Printf("  Nothing routes on this yet. It is the measurement that would earn it.\n\n")
+	fmt.Fprintf(stdout, "   (%s)\n\n", took.Round(time.Millisecond))
+	fmt.Fprintf(stdout, "  Nothing routes on this yet. It is the measurement that would earn it.\n\n")
 }
 
 func cmdPolicy() *cobra.Command {

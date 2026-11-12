@@ -14,7 +14,7 @@
 *Any model, any provider. Hydra can check the answer, and ask another model when the check fails.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
-[![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](https://hydra.uvansa.com#platform-support)
 [![GitHub Stars](https://img.shields.io/github/stars/ankit373/hydra?style=flat&color=8b5cf6)](https://github.com/ankit373/hydra/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/ankit373/hydra?color=06b6d4)](https://github.com/ankit373/hydra/issues)
@@ -811,7 +811,7 @@ targets total ([#263](https://github.com/ankit373/hydra/issues/263)), each built
 (including two hosted ARM runners) and uploaded on every RC and stable release. `install-app.sh`
 resolves the right archive for your OS/arch automatically, nothing to configure per-arch.
 
-**From source** (Go 1.22+):
+**From source** (Go 1.26+):
 ```bash
 git clone https://github.com/ankit373/hydra.git
 cd hydra

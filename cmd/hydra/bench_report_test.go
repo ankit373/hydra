@@ -16,7 +16,7 @@ import (
 func runFixture(t *testing.T) (results, id string) {
 	t.Helper()
 	args, _, results := benchFixture(t, "1.0")
-	if _, out, err := run(t, args...); err != nil {
+	if out, _, err := run(t, args...); err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
 	dirs, _ := os.ReadDir(results)
@@ -25,12 +25,12 @@ func runFixture(t *testing.T) (results, id string) {
 
 func TestBenchReport_WritesTheSummaryAndPrintsTheTable(t *testing.T) {
 	results, id := runFixture(t)
-	_, out, err := run(t, "bench", "report", id, "--results", results)
+	out, _, err := run(t, "bench", "report", id, "--results", results)
 	if err != nil || !strings.Contains(out, "| banking77 | frontier | 4 |") || !strings.Contains(out, "| banking77 | oracle |") {
 		t.Fatalf("report: %v\n%s", err, out)
 	}
 	first, _ := os.ReadFile(filepath.Join(results, id, "summary.json"))
-	_, js, err := run(t, "bench", "report", id, "--results", results, "--json")
+	js, _, err := run(t, "bench", "report", id, "--results", results, "--json")
 	if err != nil || js != string(first) {
 		t.Fatalf("report --json is not the byte-identical summary.json: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestBenchTable_WritesFromSummariesOnly(t *testing.T) {
 	// table reads summary.json and nothing else: remove everything else first.
 	os.Remove(filepath.Join(results, id, "items.jsonl"))
 	os.Remove(filepath.Join(results, id, "run.json"))
-	_, out, err := run(t, "bench", "table", id, "--results", results)
+	out, _, err := run(t, "bench", "table", id, "--results", results)
 	if err != nil || !strings.Contains(out, "table.md") {
 		t.Fatalf("table: %v\n%s", err, out)
 	}

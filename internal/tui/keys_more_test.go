@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -40,11 +38,11 @@ func TestViewKeys_PerViewRouting(t *testing.T) {
 	}
 	before := len(m.flatRows())
 	m.modelSel = 0 // a group header
-	m = press(m, tea.KeySpace)
+	m = press(m, "space")
 	if len(m.flatRows()) >= before {
 		t.Error("space did not collapse the selected group")
 	}
-	m = press(m, tea.KeySpace)
+	m = press(m, "space")
 
 	// p pins from the models view via the key path.
 	for i, f := range m.flatRows() {
@@ -91,11 +89,11 @@ func TestViewKeys_PerViewRouting(t *testing.T) {
 	// Arrow keys are the same motion.
 	m.view = ckViewAgents
 	m.agentSel = 0
-	m = press(m, tea.KeyDown)
+	m = press(m, "down")
 	if m.agentSel != 1 {
 		t.Errorf("down → %d", m.agentSel)
 	}
-	m = press(m, tea.KeyUp)
+	m = press(m, "up")
 	if m.agentSel != 0 {
 		t.Errorf("up → %d", m.agentSel)
 	}

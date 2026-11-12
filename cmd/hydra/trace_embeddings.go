@@ -65,37 +65,37 @@ key: changing it invalidates the store rather than mixing two vector spaces.`,
 					"stats":           st,
 					"lexical":         lexStat(cfg),
 				}, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 
 			if !embed.Enabled(cfg) {
-				fmt.Println("Embedding capture is off.")
-				fmt.Println("Turn it on with capture_embeddings = true in config.toml.")
+				fmt.Fprintln(stdout, "Embedding capture is off.")
+				fmt.Fprintln(stdout, "Turn it on with capture_embeddings = true in config.toml.")
 				return nil
 			}
 			lex := lexStat(cfg)
-			fmt.Printf("  lexical index: %d prompt%s, %d term%s in %s\n",
+			fmt.Fprintf(stdout, "  lexical index: %d prompt%s, %d term%s in %s\n",
 				lex.Docs, plural(lex.Docs), lex.Terms, plural(lex.Terms), humanBytes(lex.Bytes))
 
 			if !emb.Available() {
-				fmt.Println("  no embedding model found, so search is lexical only.")
-				fmt.Printf("  %s\n", dimStyle.Render(
+				fmt.Fprintln(stdout, "  no embedding model found, so search is lexical only.")
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(
 					"pull one, e.g. `ollama pull nomic-embed-text`, or name it with embed_model in config.toml"))
 				return nil
 			}
 
-			fmt.Printf("  model %s · %d dimensions\n", emb.Model(), st.Dim)
+			fmt.Fprintf(stdout, "  model %s · %d dimensions\n", emb.Model(), st.Dim)
 			if st.Count == 0 {
-				fmt.Printf("  %s\n", dimStyle.Render("no vectors stored yet"))
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("no vectors stored yet"))
 				return nil
 			}
-			fmt.Printf("  %d vector%s in %s\n", st.Count, plural(st.Count), humanBytes(st.Bytes))
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "  %d vector%s in %s\n", st.Count, plural(st.Count), humanBytes(st.Bytes))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"budget %s, oldest dropped past it · holds about %d more",
 				humanBytes(st.Budget), remaining(st))))
 			if st.Oldest != nil && st.Newest != nil {
-				fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 					"oldest %s ago · newest %s ago",
 					since(*st.Oldest), since(*st.Newest))))
 			}

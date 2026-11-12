@@ -5,6 +5,7 @@ package tui
 import (
 	"bytes"
 	"fmt"
+	"image/color"
 	"log"
 	"math"
 	"os"
@@ -15,8 +16,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/ankit373/hydra/internal/sysinfo"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -109,36 +111,58 @@ func TestPalette_TextRolesMeetAAOnLightAndDark(t *testing.T) {
 	if tokTextMuted.Light.ANSI256 == tokTextSubtle.Light.ANSI256 || tokTextMuted.Dark.ANSI256 == tokTextSubtle.Dark.ANSI256 {
 		t.Errorf("text.muted and text.subtle share an ANSI-256 index: %v %v", tokTextMuted, tokTextSubtle)
 	}
-	text := map[string]lipgloss.CompleteAdaptiveColor{
-		"aqua": ckAqua, "cyan": ckCyan, "violet": ckViolet, "magenta": ckMagenta, "dim": ckDimc, "faint": ckFaint,
-		"cheap": ckCheap, "mid": ckMid, "exp": ckExp,
-	}
-	for name, c := range text {
-		found := false
-		for _, r := range tokRoles {
-			found = found || (r.c == c && r.min >= 4.5)
-		}
-		if !found {
-			t.Errorf("ck%s is not a generated text role", name)
-		}
-	}
-	wizard := map[string]lipgloss.Style{
-		"title": sTitle, "selected": sSelected, "dim": sDim, "prompt": sPrompt, "error": sError,
-		"hint": sHint, "warn": warnStyle, "success": successStyle, "fits": fitsStyle, "code": codeStyle,
-	}
-	for name, s := range wizard {
-		c, ok := s.GetForeground().(lipgloss.AdaptiveColor)
-		if !ok {
-			t.Errorf("wizard %s is not adaptive: %T", name, s.GetForeground())
-			continue
-		}
-		if r := ckContrast(ckRGB(t, c.Dark), ckOnDark); r < 4.5 {
-			t.Errorf("wizard %s dark %s is %.2f:1", name, c.Dark, r)
-		}
-		if r := ckContrast(ckRGB(t, c.Light), ckOnWhite); r < 4.5 {
-			t.Errorf("wizard %s light %s is %.2f:1", name, c.Light, r)
+	// Every depth and theme: a role's 256 and 16 picks are separate tokens.
+	for _, p := range []colorprofile.Profile{colorprofile.TrueColor, colorprofile.ANSI256, colorprofile.ANSI} {
+		for _, dark := range []bool{true, false} {
+			withTheme(t, p, dark)
+			text := map[string]color.Color{
+				"aqua": ckAqua, "cyan": ckCyan, "violet": ckViolet, "magenta": ckMagenta, "dim": ckDimc, "faint": ckFaint,
+				"cheap": ckCheap, "mid": ckMid, "exp": ckExp,
+			}
+			for name, c := range text {
+				found := false
+				for _, r := range tokRoles {
+					found = found || (r.c.at(p, dark) == c && r.min >= 4.5)
+				}
+				if !found {
+					t.Errorf("ck%s is not a generated text role at %v dark=%v", name, p, dark)
+				}
+			}
 		}
 	}
+	wizard := map[string]struct {
+		s func() lipgloss.Style
+		c wizPair
+	}{
+		"title": {func() lipgloss.Style { return sTitle }, wizTitle}, "selected": {func() lipgloss.Style { return sSelected }, wizSelected},
+		"dim": {func() lipgloss.Style { return sDim }, wizDim}, "prompt": {func() lipgloss.Style { return sPrompt }, wizPrompt},
+		"error": {func() lipgloss.Style { return sError }, wizError}, "hint": {func() lipgloss.Style { return sHint }, wizDim},
+		"warn": {func() lipgloss.Style { return warnStyle }, wizWarn}, "success": {func() lipgloss.Style { return successStyle }, wizSuccess},
+		"fits": {func() lipgloss.Style { return fitsStyle }, wizSuccess}, "code": {func() lipgloss.Style { return codeStyle }, wizCode},
+	}
+	for name, w := range wizard {
+		for _, dark := range []bool{true, false} {
+			withTheme(t, colorprofile.TrueColor, dark)
+			want := lipgloss.LightDark(dark)(lipgloss.Color(w.c.light), lipgloss.Color(w.c.dark))
+			if got := w.s().GetForeground(); got != want {
+				t.Errorf("wizard %s dark=%v draws %v, not its adaptive pair %v", name, dark, got, w.c)
+			}
+		}
+		if r := ckContrast(ckRGB(t, w.c.dark), ckOnDark); r < 4.5 {
+			t.Errorf("wizard %s dark %s is %.2f:1", name, w.c.dark, r)
+		}
+		if r := ckContrast(ckRGB(t, w.c.light), ckOnWhite); r < 4.5 {
+			t.Errorf("wizard %s light %s is %.2f:1", name, w.c.light, r)
+		}
+	}
+}
+
+// withTheme draws the styles for one terminal for the rest of the test.
+func withTheme(t *testing.T, p colorprofile.Profile, dark bool) {
+	t.Helper()
+	wasP, wasDark := ckProfile, ckDark
+	ckSetTheme(p, dark)
+	t.Cleanup(func() { ckSetTheme(wasP, wasDark) })
 }
 
 // Body text carries no colour, so it is the terminal's own foreground on any
@@ -174,13 +198,13 @@ func TestWizards_OptionsStartAtTheGutter(t *testing.T) {
 	im.cortex, im.skills = &h, defaultSkills(&h)
 	for s := stepCortex; s <= stepDone; s++ {
 		im.step = s
-		ckCheckWizardFrame(t, fmt.Sprintf("init step %d", s), im.View())
+		ckCheckWizardFrame(t, fmt.Sprintf("init step %d", s), im.View().Content)
 	}
 	in := newInstallModelFor(&sysinfo.Specs{TotalRAMGB: 8, FreeRAMGB: 1})
 	in.selected = &in.options[0]
 	for s := installStepPick; s <= installStepDone; s++ {
 		in.step = s
-		ckCheckWizardFrame(t, fmt.Sprintf("install step %d", s), in.View())
+		ckCheckWizardFrame(t, fmt.Sprintf("install step %d", s), in.View().Content)
 	}
 }
 
@@ -201,7 +225,7 @@ func TestWizards_EscGoesBack(t *testing.T) {
 
 	in := newInstallModelFor(&sysinfo.Specs{TotalRAMGB: 8, FreeRAMGB: 1})
 	in.step = installStepOllama
-	if v := stripANSI(in.View()); strings.Contains(v, "Press q to go back") {
+	if v := stripANSI(in.View().Content); strings.Contains(v, "Press q to go back") {
 		t.Error("the copy still sends the user to q, which quits")
 	}
 	var im tea.Model = in
@@ -237,13 +261,12 @@ func TestOwnTerminal_SendsLogsToAFileUntilRestored(t *testing.T) {
 
 func TestOwnTerminal_HonoursHydraTheme(t *testing.T) {
 	testutil.NewSandbox(t)
-	was := lipgloss.HasDarkBackground()
-	t.Cleanup(func() { lipgloss.SetHasDarkBackground(was) })
+	withTheme(t, ckProfile, ckDark)
 	for theme, dark := range map[string]bool{"light": false, "dark": true} {
 		t.Setenv("HYDRA_THEME", theme)
 		OwnTerminal()()
-		if lipgloss.HasDarkBackground() != dark {
-			t.Errorf("HYDRA_THEME=%s left dark=%v", theme, lipgloss.HasDarkBackground())
+		if ckDark != dark {
+			t.Errorf("HYDRA_THEME=%s left dark=%v", theme, ckDark)
 		}
 	}
 }
@@ -262,7 +285,7 @@ func TestBackspace_RemovesOneGrapheme(t *testing.T) {
 	for in, want := range cases {
 		m := testCockpit()
 		m.th().input = in
-		m = press(m, tea.KeyBackspace)
+		m = press(m, "backspace")
 		if got := m.th().input; got != want || !utf8.ValidString(got) {
 			t.Errorf("backspace on %q = %q, want %q", in, got, want)
 		}
@@ -316,9 +339,9 @@ func TestFrame_NoUntrustedEscapeReachesTheTerminal(t *testing.T) {
 	m := testCockpit()
 	m.groups[0].down, m.groups[0].note = true, evil
 	m.view = ckViewModels
-	leaks("models view", m.View())
+	leaks("models view", m.View().Content)
 
-	m = press(testCockpit(), tea.KeyCtrlT)
+	m = press(testCockpit(), "ctrl+t")
 	ex := &ckExecState{}
 	m.threads[1].exec = ex
 	m = altDigit(m, '1')
@@ -347,33 +370,36 @@ func TestNoColor_SelectionHasAGlyph(t *testing.T) {
 
 func TestMouse_CtrlSHandsSelectionToTheTerminal(t *testing.T) {
 	m := testCockpit()
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	if v := m.View(); v.MouseMode != tea.MouseModeCellMotion || !v.AltScreen {
+		t.Fatalf("the cockpit does not start with wheel capture: mouse=%v alt=%v", v.MouseMode, v.AltScreen)
+	}
+	next, _ := m.Update(key("ctrl+s"))
 	m = next.(Cockpit)
-	if !m.mouseOff || cmd == nil || fmt.Sprintf("%T", cmd()) != "tea.disableMouseMsg" {
-		t.Fatalf("ctrl+s did not release the mouse: off=%v", m.mouseOff)
+	if !m.mouseOff || m.View().MouseMode != tea.MouseModeNone {
+		t.Fatalf("ctrl+s did not release the mouse: off=%v mode=%v", m.mouseOff, m.View().MouseMode)
 	}
 	if !strings.Contains(stripANSI(m.statusBar()), "select mode") {
 		t.Error("select mode is not shown")
 	}
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
-	if next.(Cockpit).mouseOff || cmd == nil || fmt.Sprintf("%T", cmd()) != "tea.enableMouseCellMotionMsg" {
+	next, _ = m.Update(key("ctrl+s"))
+	if next.(Cockpit).mouseOff || next.(Cockpit).View().MouseMode != tea.MouseModeCellMotion {
 		t.Error("a second ctrl+s did not restore wheel scrolling")
 	}
 }
 
-// Coming back from $EDITOR re-asks for the mouse bubbletea v1 dropped, and a
-// failed editor says so instead of returning silently.
+// Coming back from $EDITOR, the renderer re-applies the mouse mode the view
+// declares, and a failed editor says so instead of returning silently.
 func TestEditorReturn_RestoresMouseAndReportsErrors(t *testing.T) {
 	m := testCockpit()
-	next, cmd := m.Update(ckEditorDoneMsg{err: fmt.Errorf("exec: %q: not found", "nope")})
-	if cmd == nil || fmt.Sprintf("%T", cmd()) != "tea.enableMouseCellMotionMsg" {
-		t.Error("the mouse was not re-enabled after the editor")
+	next, _ := m.Update(ckEditorDoneMsg{err: fmt.Errorf("exec: %q: not found", "nope")})
+	if next.(Cockpit).View().MouseMode != tea.MouseModeCellMotion {
+		t.Error("the mouse is not declared after the editor")
 	}
 	if !strings.Contains(next.(Cockpit).flash, "not found") {
 		t.Errorf("the editor failure is silent: %q", next.(Cockpit).flash)
 	}
 	m.mouseOff = true
-	if _, cmd = m.Update(ckEditorDoneMsg{}); cmd != nil {
+	if next, _ = m.Update(ckEditorDoneMsg{}); next.(Cockpit).View().MouseMode != tea.MouseModeNone {
 		t.Error("select mode was overridden by the editor return")
 	}
 }
@@ -383,5 +409,64 @@ func TestResultLines_KeepLayoutOfASettledAnswer(t *testing.T) {
 	out := stripANSI(strings.Join(ckResultLines(ckTask{answer: "func f() {\r\n\treturn\x1b]0;t\x07\r\n}"}), "\n"))
 	if strings.Contains(out, "{�") || !strings.Contains(out, "    return") || strings.Contains(out, "\x1b]") {
 		t.Errorf("settled answer = %q", out)
+	}
+}
+
+// ── v2 parity: 16 colours and no colour ───────────────────────────────────────
+
+// Lip Gloss v1 picked a basic colour by termenv's HSLuv nearest match; these
+// are its answers for every colour Hydra draws without a 16-colour token.
+// x/ansi's table disagrees on ten of them, warning orange (214) among them.
+func TestANSI16_KeepsTheV1Picks(t *testing.T) {
+	want := map[string]int{
+		"196": 9, "214": 11, "82": 10, "240": 8, "205": 13, "77": 10, "46": 10, "42": 10, "34": 2,
+		"255": 15, "250": 7, "226": 11, "220": 11, "22": 2, "213": 13, "245": 8, "75": 12, "25": 12,
+		"236": 0, "254": 15, "94": 3, "162": 13, "203": 9, "160": 9, "117": 14, "24": 12,
+		"#00707A": 12, "8": 8,
+	}
+	for c, n := range want {
+		if got := ANSI16(lipgloss.Color(c)); int(got) != n {
+			t.Errorf("ANSI16(%s) = %d, v1 drew %d", c, got, n)
+		}
+	}
+	withTheme(t, colorprofile.ANSI, true)
+	if got := sDim.GetForeground(); got != ANSI16(lipgloss.Color("245")) {
+		t.Errorf("a 16-colour wizard draws dim as %v, not v1's pick", got)
+	}
+}
+
+// NO_COLOR draws no SGR at all, as v1's Ascii profile did; a depth that
+// shows colour is passed through untouched.
+func TestOutputProfile_NoColorDrawsNoSGR(t *testing.T) {
+	was := lipgloss.Writer.Profile
+	t.Cleanup(func() { lipgloss.Writer.Profile = was })
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	// termenv honoured any NO_COLOR value and CLICOLOR=0; colorprofile parses
+	// a bool, so "yes" would have turned colour back on.
+	lipgloss.Writer.Profile = colorprofile.TrueColor
+	for _, env := range [][2]string{{"NO_COLOR", "yes"}, {"NO_COLOR", "x"}, {"CLICOLOR", "0"}} {
+		t.Setenv(env[0], env[1])
+		if got := OutputProfile(); got != colorprofile.NoTTY {
+			t.Errorf("%s=%s draws at %v, v1 drew no colour", env[0], env[1], got)
+		}
+		t.Setenv(env[0], "")
+	}
+	t.Setenv("CLICOLOR", "0")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	if got := OutputProfile(); got != colorprofile.TrueColor {
+		t.Errorf("CLICOLOR_FORCE did not override CLICOLOR=0: %v", got)
+	}
+	t.Setenv("CLICOLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	for in, want := range map[colorprofile.Profile]colorprofile.Profile{
+		colorprofile.ASCII: colorprofile.NoTTY, colorprofile.NoTTY: colorprofile.NoTTY,
+		colorprofile.ANSI: colorprofile.ANSI, colorprofile.TrueColor: colorprofile.TrueColor,
+	} {
+		lipgloss.Writer.Profile = in
+		if got := OutputProfile(); got != want {
+			t.Errorf("stdout at %v draws at %v, want %v", in, got, want)
+		}
 	}
 }

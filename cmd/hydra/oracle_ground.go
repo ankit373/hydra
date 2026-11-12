@@ -80,8 +80,8 @@ the caller's decision.`,
 						"verdict": o.Last,
 					})
 				}
-				fmt.Printf("\n  %s  %s\n", warnStyle.Render("NOT CHECKED"), dimStyle.Render(src))
-				fmt.Printf("  %s\n\n", dimStyle.Render(verr.Error()))
+				fmt.Fprintf(stdout, "\n  %s  %s\n", warnStyle.Render("NOT CHECKED"), dimStyle.Render(src))
+				fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(verr.Error()))
 				return nil
 			}
 			if verr != nil {
@@ -100,9 +100,9 @@ the caller's decision.`,
 
 			if scoreSpan != "" {
 				if err := scoreGrounding(scoreRun, scoreSpan, src, v.Passed, v.Detail); err != nil {
-					fmt.Printf("  %s\n", dimStyle.Render("span score: "+err.Error()))
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("span score: "+err.Error()))
 				} else {
-					fmt.Printf("  %s\n", dimStyle.Render("scored span "+scoreSpan))
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("scored span "+scoreSpan))
 				}
 			}
 
@@ -122,18 +122,18 @@ the caller's decision.`,
 			if !v.Passed {
 				status = warnStyle.Render("UNSUPPORTED")
 			}
-			fmt.Printf("\n  %s  %s\n", status, dimStyle.Render(src))
-			fmt.Printf("  %s\n", dimStyle.Render(v.Detail))
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "\n  %s  %s\n", status, dimStyle.Render(src))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(v.Detail))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%d claims checked against %d bytes of context · %.0f%% of the answer's words appear in it",
 				o.Last.Claims, o.Last.Context, o.Last.Overlap*100)))
 			if measured {
-				fmt.Printf("  calibrated evidence  %+.3f nats\n\n", llr)
+				fmt.Fprintf(stdout, "  calibrated evidence  %+.3f nats\n\n", llr)
 			} else {
 				// A number here would be the prior wearing a measurement's
 				// clothes, which is the one thing an evidence source must not do.
-				fmt.Printf("  %s\n", warnStyle.Render("insufficient evidence to state a strength"))
-				fmt.Printf("  %s\n\n", dimStyle.Render(why+
+				fmt.Fprintf(stdout, "  %s\n", warnStyle.Render("insufficient evidence to state a strength"))
+				fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(why+
 					"; train it with --record once you know whether the answer was right"))
 			}
 			return nil
@@ -174,6 +174,6 @@ func printJSON(v any) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(raw))
+	fmt.Fprintln(stdout, string(raw))
 	return nil
 }

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -95,7 +95,7 @@ func runCmds(t *testing.T, m Cockpit, cmd tea.Cmd) Cockpit {
 }
 
 func keyRune(m Cockpit, r rune) (Cockpit, tea.Cmd) {
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	next, cmd := m.Update(key(string(r)))
 	return next.(Cockpit), cmd
 }
 
@@ -228,7 +228,7 @@ func TestExec_EscCancelsRunningTask(t *testing.T) {
 	if m.th().exec == nil {
 		t.Fatal("no task started")
 	}
-	m = press(m, tea.KeyEsc) // cancel, exec stays until the worker reports back
+	m = press(m, "esc") // cancel, exec stays until the worker reports back
 	if m.th().exec == nil {
 		t.Fatal("esc cleared exec before the worker returned")
 	}
@@ -265,7 +265,7 @@ func TestExec_SubmitWhileRunningRefusesAndKeepsInput(t *testing.T) {
 		t.Error("no explanation for the refusal")
 	}
 	// esc with text clears the text; the task keeps running.
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if m.th().input != "" {
 		t.Errorf("esc did not clear the input: %q", m.th().input)
 	}
@@ -411,7 +411,7 @@ func TestChat_LettersTypeEvenAfterAnEdit(t *testing.T) {
 	}
 	m.th().input = ""
 	m, _ = command(m, "/undo")
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if askOf(m) != "" || !strings.Contains(m.flash, "kept") {
 		t.Errorf("esc did not cancel: ask=%q flash=%q", askOf(m), m.flash)
 	}
@@ -423,7 +423,7 @@ func TestChat_LettersTypeEvenAfterAnEdit(t *testing.T) {
 	}
 	// A pasted y is text, not an answer.
 	m, _ = command(m, "/undo")
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}, Paste: true})
+	next, _ := m.Update(tea.PasteMsg{Content: "y"})
 	m = next.(Cockpit)
 	if m.th().lastDone.undone || m.th().input != "y" {
 		t.Errorf("a pasted y confirmed the undo: input=%q", m.th().input)
@@ -565,7 +565,7 @@ func TestExec_PlanDiscardRunsNothing(t *testing.T) {
 	if m.th().planWait == nil {
 		t.Fatal("no plan gate")
 	}
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if m.th().planWait != nil {
 		t.Fatal("esc did not discard the plan")
 	}
@@ -754,7 +754,7 @@ func TestExec_CarefulConfirmsEveryWrite(t *testing.T) {
 	if m.th().confirm == nil {
 		t.Fatal("no fix gate")
 	}
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "fix declined") || !strings.Contains(joined, "tests ✗") {
 		t.Errorf("the declined fix is not honest:\n%s", joined)
@@ -809,7 +809,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 
 	// local only
 	m := chatFixture("ask")
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "jj")
 	m, _ = enter(m)
 	m, cmd := enter(typed(m, "explain the endpoint"))
@@ -826,7 +826,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 
 	// force tier 3
 	m = chatFixture("ask")
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "j")
 	m, _ = enter(m)
 	m = typed(m, "3")
@@ -841,7 +841,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 
 	// best of 3 reaches the answer stage as its strategy
 	m = chatFixture("ask")
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "jjj")
 	m, _ = enter(m)
 	m, cmd = enter(typed(m, "is this migration safe?"))
@@ -852,7 +852,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 
 	// consensus carries its target and renders the achieved confidence
 	m = chatFixture("ask")
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "jjjj")
 	m, _ = enter(m)
 	m = typed(m, "2") // ≥95%
@@ -885,7 +885,7 @@ func TestExec_OverrideFanoutFallsBackToSingleForEdits(t *testing.T) {
 	}
 
 	m := chatFixture("auto")
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "jjj") // best of 3
 	m, _ = enter(m)
 	m, cmd := enter(typed(m, "improve "+rel))
@@ -1176,7 +1176,7 @@ func TestChatStates_LayoutInvariantsAtEverySize(t *testing.T) {
 			t.Run(fmt.Sprintf("%s_%dx%d", name, sz.w, sz.h), func(t *testing.T) {
 				m := build(testCockpit())
 				m.w, m.h, m.ready = sz.w, sz.h, true
-				out := m.View()
+				out := m.View().Content
 				lines := strings.Split(out, "\n")
 				if len(lines) > sz.h {
 					t.Errorf("%s at %dx%d renders %d lines, want <= %d", name, sz.w, sz.h, len(lines), sz.h)
@@ -1204,7 +1204,7 @@ func TestChatScrollback_SurvivesLongAnswers(t *testing.T) {
 	for i := 0; i < 60; i++ {
 		m.th().log = append(m.th().log, fmt.Sprintf("history %d", i))
 	}
-	m = press(m, tea.KeyPgUp)
+	m = press(m, "pgup")
 	anchor := m.th().scroll
 	if anchor == 0 {
 		t.Fatal("pgup did not anchor")
@@ -1214,11 +1214,11 @@ func TestChatScrollback_SurvivesLongAnswers(t *testing.T) {
 	if m.th().scroll != anchor {
 		t.Error("a long answer yanked the anchored reader")
 	}
-	if out := stripANSI(m.View()); strings.Contains(out, "new answer line") {
+	if out := stripANSI(m.View().Content); strings.Contains(out, "new answer line") {
 		t.Error("anchored view was dragged to the new output")
 	}
-	m = press(m, tea.KeyEnd)
-	if out := stripANSI(m.View()); !strings.Contains(out, "✓ done") {
+	m = press(m, "end")
+	if out := stripANSI(m.View().Content); !strings.Contains(out, "✓ done") {
 		t.Error("end did not return to the live tail")
 	}
 }

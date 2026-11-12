@@ -88,6 +88,23 @@ func TestRunUpgrade_ScriptFailurePropagates(t *testing.T) {
 	}
 }
 
+// install.sh writes to the stream itself, not through the colour writer, so
+// on a terminal it still sees a terminal and its bytes arrive untouched.
+func TestRunUpgrade_ScriptGetsTheRealStream(t *testing.T) {
+	origExe := executablePath
+	executablePath = func() (string, error) { return "/usr/local/bin/hyctl", nil }
+	t.Cleanup(func() { executablePath = origExe })
+	origCmd := installScriptCommand
+	installScriptCommand = `printf '\033[31mred'`
+	t.Cleanup(func() { installScriptCommand = origCmd })
+
+	var err error
+	out := captureStdout(t, func() { err = runUpgrade(stdout) })
+	if err != nil || !strings.Contains(out, "\x1b[31mred") {
+		t.Errorf("the script's output was rewritten on its way out: %q, %v", out, err)
+	}
+}
+
 // `hyctl upgrade` must be reachable through the real command tree, with help
 // text that does not panic, the same contract every other subcommand meets
 // (see naming_test.go / cli_contract_test.go).

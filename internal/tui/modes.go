@@ -9,8 +9,8 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // ckUnattendedCapUSD is unattended mode's hard per-task cost cap. Refusal to
@@ -97,30 +97,31 @@ func ckIsMode(name string) bool {
 // modePickerKey is forgiving, not modal: the picker opened on a bare 'm', so
 // typing a word that starts with m ("make a helper…") closes it and keeps
 // typing, the m included. Only j/k/arrows/enter/esc/m are picker keys.
-func (m Cockpit) modePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEsc:
+func (m Cockpit) modePickerKey(msg ckKey) (tea.Model, tea.Cmd) {
+	switch msg.name() {
+	case "esc":
 		m.modePick = false
 		return m, nil
-	case tea.KeyBackspace:
+	case "backspace":
 		m.modePick = false // un-types the m that opened it
 		return m, nil
-	case tea.KeySpace:
+	case "space":
 		m.modePick = false
 		m.th().input = "m "
 		return m, nil
-	case tea.KeyUp:
+	case "up":
 		return m.moveModeSel(-1), nil
-	case tea.KeyDown:
+	case "down":
 		return m.moveModeSel(1), nil
-	case tea.KeyEnter:
+	case "enter":
 		m.mode = ckModes[m.modeSel].name
 		m.modePick = false
 		m.flash = "mode → " + m.mode
 		return m, nil
-	case tea.KeyRunes:
-		if len(msg.Runes) == 1 {
-			switch msg.Runes[0] {
+	}
+	if rs := msg.runes(); rs != nil {
+		if len(rs) == 1 {
+			switch rs[0] {
 			case 'j':
 				return m.moveModeSel(1), nil
 			case 'k':
@@ -132,7 +133,7 @@ func (m Cockpit) modePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Anything else, a typed letter or a paste, falls through to input.
 		m.modePick = false
-		m.th().input = "m" + string(msg.Runes)
+		m.th().input = "m" + string(rs)
 	}
 	return m, nil
 }

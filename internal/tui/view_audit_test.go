@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/mcpregistry"
 	"github.com/ankit373/hydra/internal/security"
@@ -232,7 +230,7 @@ func TestAuditQueue_ResolveJumpIgnore(t *testing.T) {
 
 	// Enter on the failed-runs item jumps to the trace.
 	m.auditSel = 0
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ := m.Update(key("enter"))
 	jumped := next.(Cockpit)
 	if jumped.view != ckViewActivity || !jumped.actDrill {
 		t.Fatalf("enter did not jump to the trace: view=%d", jumped.view)
