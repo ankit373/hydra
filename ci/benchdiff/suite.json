@@ -1,0 +1,39 @@
+{
+  "binaries": ["agy", "claude", "codex", "gemini", "ollama"],
+  "local_models": ["qwen2.5-coder:7b"],
+  "config": "cortex = \"claude\"\n\n[policies.pii]\naction = \"local-only\"\n",
+  "calibration": [
+    {"head": "claude", "domain": "go", "tp": 95, "fp": 5, "tn": 40, "fn": 5},
+    {"head": "codex", "domain": "go", "tp": 88, "fp": 12, "tn": 35, "fn": 8},
+    {"head": "gemini", "domain": "go", "tp": 80, "fp": 20, "tn": 30, "fn": 10},
+    {"head": "ollama/qwen2.5-coder:7b", "domain": "go", "tp": 60, "fp": 40, "tn": 20, "fn": 20},
+    {"head": "claude", "domain": "py", "tp": 96, "fp": 4, "tn": 0, "fn": 0},
+    {"head": "ollama/qwen2.5-coder:7b", "domain": "py", "tp": 97, "fp": 3, "tn": 0, "fn": 0},
+    {"head": "flash-high", "domain": "ts", "tp": 45, "fp": 5, "tn": 0, "fn": 0}
+  ],
+  "prompts": [
+    {"id": "unpinned", "prompt": "add pagination to the users list"},
+    {"id": "grunt", "prompt": "rename foo to bar across the package", "enum": "GRUNT"},
+    {"id": "trivial", "prompt": "add a MaxRetries constant", "enum": "TRIVIAL"},
+    {"id": "simple", "prompt": "write a User DTO with name and email fields", "enum": "SIMPLE"},
+    {"id": "standard", "prompt": "add a CRUD handler for invoices", "enum": "STANDARD"},
+    {"id": "moderate", "prompt": "write a repository for orders with optimistic locking", "enum": "MODERATE"},
+    {"id": "complex", "prompt": "add auth middleware with token refresh", "enum": "COMPLEX"},
+    {"id": "hard", "prompt": "review the tradeoffs of this sharding scheme", "enum": "HARD"},
+    {"id": "expert", "prompt": "design the migration from a single writer to consensus", "enum": "EXPERT"},
+    {"id": "pii-email", "prompt": "email jane.doe@example.com her overdue invoice", "enum": "STANDARD"},
+    {"id": "pii-unpinned", "prompt": "summarise the ticket from +1 415 555 0134 about billing"},
+    {"id": "pii-go", "prompt": "does this Go handler log jane.doe@example.com in clear", "domain": "go",
+     "answer": "yes", "expected": "yes"},
+    {"id": "domain-py", "prompt": "write a pytest fixture for a temp dir", "domain": "py"},
+    {"id": "domain-ts", "prompt": "type this fetch wrapper", "domain": "ts"},
+    {"id": "sprt-agree", "prompt": "does this Go loop capture the variable per iteration", "domain": "go",
+     "confidence": 0.9, "answer": "yes", "expected": "yes"},
+    {"id": "sprt-split", "prompt": "is this mutex held across the channel send", "domain": "go",
+     "confidence": 0.95, "answer": "no", "answers": {"claude": "yes", "codex": "yes"}, "expected": "yes"},
+    {"id": "sprt-pinned", "prompt": "is this slice aliasing safe", "enum": "STANDARD", "domain": "go",
+     "confidence": 0.9, "answer": "no", "expected": "no"},
+    {"id": "sprt-uncalibrated", "prompt": "is this query injection safe", "domain": "sql",
+     "confidence": 0.9, "answer": "no", "expected": "no"}
+  ]
+}
