@@ -5,7 +5,7 @@ on:
     # release/v* is included because it is the UAT gate: it is what a release is
     # validated on, and where fixes land during validation. Leaving it out meant
     # a PR into a release branch reported "no checks reported" and was mergeable
-    # with zero verification (#224).
+    # with zero verification (#224). develop stays until no open PR targets it.
     branches: [main, develop, "release/v*"]
 
 # Cancel any in-progress run for the same branch when a new commit is pushed.
@@ -469,7 +469,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pipx run zizmor==1.32.0 --min-severity high .github/workflows
 
-  # Mergify validates its config only on PRs into main, so develop checks it here.
+  # Mergify reads its config from main only, so a broken file is caught here, before it merges.
   # The invariants (check names, author pins) are cmd/hydra/mergify_config_test.go.
   mergify-config:
     name: Mergify config

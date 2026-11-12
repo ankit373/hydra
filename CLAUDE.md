@@ -398,7 +398,7 @@ hyctl workflow list ; hyctl workflow show <id> ; hyctl workflow resume <id>
 # Needs `npm install -g @alibaba-group/open-code-review`; exits 3 on a blocking
 # finding and 4 when no file was reviewed at all, since reviewing nothing is not a pass.
 hyctl vet                                  # staged + unstaged + untracked
-hyctl vet --from develop --to HEAD ; hyctl vet --commit <sha>
+hyctl vet --from main --to HEAD ; hyctl vet --commit <sha>
 hyctl vet --confidence 0.8                 # as many Heads per file as its blast radius warrants
 hyctl vet --dry-run                        # what would be reviewed, nothing dispatched
 hyctl vet --local --json                   # local Heads only, machine-readable
@@ -477,31 +477,35 @@ hyctl status ; hyctl probe ; hyctl cost ; hyctl stats
 
 ## Branching Strategy
 
-Modelled after GitHub CLI + Helm, simple enough for a small team, rigorous enough that nothing untested hits main.
+Trunk-based: everything merges into `main` through the Mergify queue, in small PRs.
 
 ```
-main                ← production only. NEVER pushed directly. Tags live here.
-  ↑ squash PR
-release/v1.x        ← UAT gate. Cut from develop 1-2 days before release.
-  ↑ squash PR         Bug fixes land here only. Merged → main AND back → develop.
-develop             ← integration. All features land here. Edge builds fire here.
-  ↑ squash PR
-feature/#{n}-slug   ← short-lived. Always branch from develop.
+main                ← the trunk. NEVER pushed directly. Every PR lands here. Edge builds fire here.
+  ↑ squash PR (Mergify queue)
+feature/#{n}-slug   ← short-lived. Always branch from main.
 fix/#{n}-slug
 chore/#{n}-slug
+hotfix/#{n}-slug
 
-hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked → develop.
+release/vX.Y        ← only to patch an old release when main cannot ship yet (RELEASING.md).
 ```
+
+`develop` is retired. It stays, locked, until no open PR targets it, then it is deleted;
+`archive/develop-final` keeps its history.
 
 ### Branch rules (hard rules, no exceptions)
 
 | Branch | Who pushes | Version bump? | CI publishes |
 |---|---|---|---|
-| `main` | release-please PR only | **YES**, semver tag | stable release + Homebrew |
-| `release/v*` | cut from develop | no | RC pre-release (`v1.2.0-rc.1`) |
-| `develop` | feature PR merges | no | edge pre-release (overwritten) |
-| `feature/*` `fix/*` `chore/*` | you | no | nothing |
-| `hotfix/*` | you | no | nothing (merges to main trigger release) |
+| `main` | the merge queue only | **YES**, when the release PR merges | edge pre-release on every merge; stable release + Homebrew/npm/PyPI from the release PR |
+| `release-please--*` | release-please | no | nothing (its PR is the release) |
+| `feature/*` `fix/*` `chore/*` `hotfix/*` | you | no | nothing |
+| `release/vX.Y` | the maintainer, rarely | no | nothing by itself (RELEASING.md) |
+
+**Installers are live on merge.** `install.sh`, `install.ps1` and `install-app.sh` are served
+from `main` to every `curl | sh` user the moment a PR merges, and released binaries point at
+those URLs too. A change to them must work with the latest *published* release, not just with
+what is on main.
 
 ---
 
@@ -512,7 +516,7 @@ Every issue must be:
 2. **Linked to its branch**, GitHub auto-links when branch name contains the issue number (`feature/54-hydra-stats` links to #54)
 3. **Linked to its PR**, PR body must contain `Closes #<issue>` so the PR shows on the issue
 4. **Moving through board states** at every transition (Todo → In Progress → In Review → Done)
-5. **Closed once the release carrying it reaches `main`**, automated by `close-shipped-issues.yml`, see below
+5. **Closed when its PR merges into `main`**, by GitHub, from `Closes #n` in the PR body
 
 ### Link a branch to an issue (GitHub auto-detection)
 GitHub automatically links a branch to an issue when the branch name contains the issue number.
@@ -526,28 +530,19 @@ gh issue view 54 --json linkedBranches
 ### Link a PR to an issue
 Always include `Closes #<n>` in the PR body.
 
-GitHub only honours the closing keyword when the PR merges into the **default branch**, which here
-is `main`. Every feature/fix PR targets `develop` by design, so the keyword links but never fires,
-and it fails silently: the PR merges green and the issue stays open. 17 issues accumulated this way
-before anyone noticed (#217), and 96 more before the sweep below existed.
+PRs target `main`, the default branch, so GitHub closes the issue when the PR merges. A PR body
+without the keyword is an issue that stays open; the merge queue will not take it (the
+"Closes keyword" merge protection).
 
-**Write the keyword anyway, it is now the thing that closes the issue.** At release time
-`close-shipped-issues.yml` reads `Closes #n` back out of the body of every PR in the release and
-closes each one with `Shipped in vX.Y.Z.` GitHub's own link API (`closingIssuesReferences`) is
-**empty** for develop-targeted PRs, so the PR body is the only record of the link that survives:
-a PR body without the keyword is an issue that never closes.
-
-If an issue is still open after a release, sweep it by hand:
+Issues from the develop era that are still open after their release can be swept by hand:
 
 ```bash
-gh workflow run close-shipped-issues.yml -f tag=v1.3.1 -f dry_run=true   # what would close
-gh workflow run close-shipped-issues.yml -f tag=v1.3.1                   # close it
+gh workflow run close-shipped-issues.yml -f tag=v1.7.0 -f dry_run=true   # what would close
+gh workflow run close-shipped-issues.yml -f tag=v1.7.0                   # close it
 ```
 
 Re-running is safe: it only ever closes issues that are open, and never reopens anything.
-
-(Board columns are untouched, they need a `read:project` scope `GITHUB_TOKEN` does not have, so
-`Deploy` → `Done` stays a manual move.)
+No release runs it any more: on main its lineage walk would cover every PR ever merged.
 
 ---
 
@@ -582,7 +577,7 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 ---
 
-## Step 2, Create a Branch (from develop)
+## Step 2, Create a Branch (from main)
 
 Branch naming is strict, always include the issue number:
 
@@ -590,17 +585,13 @@ Branch naming is strict, always include the issue number:
 |---|---|---|
 | Feature | `feature/#{issue}-short-desc` | `feature/43-hydra-stats` |
 | Bug fix | `fix/#{issue}-short-desc` | `fix/44-version-crash` |
-| Hotfix (prod) | `hotfix/#{issue}-short-desc` | `hotfix/45-nil-panic` |
+| Hotfix (urgent) | `hotfix/#{issue}-short-desc` | `hotfix/45-nil-panic` |
 | Chore / deps | `chore/#{issue}-short-desc` | `chore/46-bump-bubbletea` |
 
 ```bash
-# Features/fixes, always branch from develop
-git checkout develop && git pull origin develop
-git checkout -b feature/43-hydra-stats
-
-# Hotfixes, branch from the last production tag
+# Every branch starts from main
 git checkout main && git pull origin main
-git checkout -b hotfix/45-nil-panic
+git checkout -b feature/43-hydra-stats
 
 # Move issue to In Progress
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
@@ -650,7 +641,7 @@ gh pr create \
 Closes #43
 EOF
 )" \
-  --base develop \
+  --base main \
   --draft=false
 
 # Move issue to In Review
@@ -660,10 +651,9 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 **PR rules:**
 - Title must be a valid conventional commit (e.g. `feat(scope): description`)
-- Body must contain `Closes #<issue>`. The keyword does not fire on a develop-targeted PR, but
-  `close-shipped-issues.yml` reads it at release time and closes the issue then. No keyword, no close.
-- All features/fixes target `develop`. Hotfixes target `main`, and there the keyword *does* fire.
-- Never open a PR directly to `main` from a feature branch.
+- Body must contain `Closes #<issue>`. GitHub closes the issue when the PR merges into `main`.
+- Every PR targets `main`. The body becomes the squash commit body, which release-please reads:
+  a `BREAKING CHANGE:` or `Release-As:` line in it changes the next version (RELEASING.md).
 - Every author signs the [CLA](CLA.md) once, through CLA Assistant on their first PR. The
   `license/cla` status gates the queue (mirrored as `Contributor has signed` by `cla.yml` until
   #1380 step 2); there is no checkbox. `CONTRIBUTORS.md` is a thank-you list, not a gate. CI on a
@@ -695,7 +685,7 @@ gh pr merge <n> --squash
 ```
 
 **Never `--admin`**, and never `--auto` as a way of not looking. A red run that is not your
-change's fault, a stale base is the usual cause, is fixed by rebasing on `develop` and re-running,
+change's fault, a stale base is the usual cause, is fixed by rebasing on `main` and re-running,
 never by merging around it: #790's red coverage gate was an old base, and a rebase cleared it.
 A stuck or flaky check is something to report and ask about, not to decide does not count.
 
@@ -703,10 +693,10 @@ Do not poll with `gh pr checks --watch`; a short background poll loop costs far 
 
 ### The rest
 
-- PRs to `develop` require 0 approvals (self-merge allowed) but must pass CI
-- PRs to `main` (release branch merges, hotfixes) require 1 approval
+- PRs land through the Mergify queue: label `ready`, or the maintainer comments `@mergifyio queue`
+- PRs to `main` need CI green; release-please's PR also needs the maintainer's approval
 - Merge strategy: **Squash and merge** everywhere, clean linear history
-- Never force-push to `develop`, `release/*`, or `main`
+- Never force-push to `release/*` or `main`
 
 ```bash
 # After merge, move issue to Done
@@ -718,154 +708,43 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 ## Step 6, Release Cycle
 
-### Normal release flow (feature release)
+**[RELEASING.md](RELEASING.md) is the procedure.** In short:
 
-```
-Features merge to develop (conventional commits)
-        ↓  (accumulate until ready)
-Cut release branch: git checkout -b release/v1.2.0 develop
-        ↓  (push → rc.yml fires → publishes v1.2.0-rc.1 pre-release)
-UAT testing on release/v1.2.0
-Bug fixes land via PR into release/v1.2.0 (direct pushes are rejected, the
-release-branch-protection ruleset requires a PR and linear history, so a merge
-commit cannot land there either; squash or rebase only)
-        ↓  (each merge → rc.yml publishes v1.2.0-rc.2, rc.3 …)
-Sign-off ✓
-        ↓
-PR: release/v1.2.0 → main  (squash merge, MUST carry a Release-As footer, see below)
-        ↓
-release-please opens Release PR on main (bumps version, updates CHANGELOG)
-        ↓
-Merge Release PR → tag v1.2.0 created → release-please.yml fans the release out
-        ↓
-GoReleaser builds all platforms, publishes stable release, updates Homebrew tap
-        ↓
-close-shipped-issues.yml closes every issue in the release ("Shipped in v1.2.0.")
-        ↓
-Cherry-pick any release-branch fixes back to develop
-```
+- release-please keeps one open release PR (`autorelease: pending`) on `main`, updated on every
+  merge. It holds the CHANGELOG, the manifest bump and the docs version pins
+  (`extra-files` in `release-please-config.json`).
+- Nothing releases until the maintainer **approves that PR**. Mergify then queues it; no bot
+  approves it. `release:hold` or `release:blocked` on it keeps it out of the queue.
+- Merging it tags `vX.Y.Z`, and release-please.yml fans the release out through publish.yml.
+- An RC, when a release needs one: `gh workflow run rc.yml -f sha=<commit on main>`.
+- Never set `release-as` in `release-please-config.json`, it is sticky. To force a version, land
+  an empty `chore:` commit with a `Release-As: X.Y.Z` footer in its PR body.
 
-### ⚠️ The squash-merge trap, `Release-As:` is mandatory
+Until release-please runs with an App token, its PR gets no CI by itself (events made with
+`GITHUB_TOKEN` start no workflow). Close and reopen the PR to start CI on it.
 
-**A squash merge of `release/v*` → `main` destroys the commit history release-please
-needs, and the release silently does not happen.**
-
-This is not hypothetical: it is exactly what happened to v1.1.0. PR #219 merged green,
-`Release Please` ran green, and **no release was produced**. Its log:
-
-```
-✔ Considering: 3 commits
-✔ No user facing commits found since e5e766e, skipping
-```
-
-The reason: squashing collapses every `feat:`/`fix:` commit on the release branch into a
-**single** commit whose type is taken from the PR title, here `chore(release): v1.1.0`.
-`chore` does not bump. release-please saw no user-facing commit and correctly did nothing.
-Nothing failed, nothing was red, and no `v1.1.0` tag was ever created.
-
-**Therefore: the release→main PR body MUST contain a `Release-As:` footer**, which forces
-the version regardless of commit types:
-
-```
-Release-As: 1.2.0
-```
-
-Put it on its own line at the end of the PR **body**, a squash composes the commit message
-from title + body, so a footer in a local commit message is discarded. Give the PR a
-`fix(release):` or `feat(release):` title as well, so a user-facing commit exists and
-release-please cannot take the "nothing to do" path at all. Belt and braces, this step is
-invisible when it works and completely silent when it is missed.
-
-**Verify after merging**, every time, a green `Release Please` run does not mean a release:
+**Verify after a release**, a green `Release Please` run does not mean a release:
 
 ```bash
 gh run list --branch main --workflow "Release Please" --limit 1   # must be success
-gh pr list --state open --search "release"                        # a Release PR MUST appear
-git ls-remote --tags origin | grep "v1.2.0$"                      # after merging that PR
+git ls-remote --tags origin | grep "v1.8.0$"                      # the tag exists
+gh release view v1.8.0 --json assets --jq '.assets|length'        # CLI + desktop assets
 ```
 
-If no Release PR appears, the footer was missing. Fix it by pushing another PR to `main`
-carrying the footer; do **not** create the tag by hand, a manual tag leaves
-`.release-please-manifest.json` behind at the old version, and the next release is then
-computed off the wrong base (#215).
-
-### Closing the issues the release shipped
-
-`close-shipped-issues.yml` does this, hung off release-please.yml's job graph rather than a
-`release` or tag-push trigger: release-please tags with `GITHUB_TOKEN`, and events raised by
-that token start no workflow, so a trigger-based sweep would never fire at all.
-
-`main` carries only one squash commit per release, so its own log names just the release PRs.
-`.github/workflows/shipped_lineage.sh` follows each one's `refs/pull/<n>/head` into the develop
-lineage that actually shipped, and reads the trailing `(#n)` off every commit subject there.
-
-**A carry release has no such lineage.** `main` and `develop` both squash-merge, so a real merge
-collides add/add on ~500 files; v1.4.0 and v1.5.0 instead landed a commit whose *tree* is the
-release branch's and whose *parent* is main's tip. That ships the code and discards the history,
-so the walk above found only earlier releases' PRs and each release closed **zero** issues while
-reading green. 89 stranded before anyone noticed (#1140). The script now also walks
-`release/vX.Y.Z`, **bounded by the previous release branch**, because unbounded that branch
-reaches back through every earlier release and would close their still-open issues as shipped by
-this one: on v1.5.0, 455 numbers unbounded against 159 since v1.4.2. No release branch, or none
-earlier to bound it, and only the `refs/pull` walk is used, so an ordinary release is unchanged.
-A release sweep that closes nothing now **fails**, since that is what read green twice; a manual
-backfill closing nothing stays green, because re-running is meant to be a no-op. So does a
-**hotfix** release: its PRs target `main`, where `Closes #n` fires on merge and leaves the sweep
-nothing. A promotion is told apart by its mandatory `Release-As: X.Y.Z` footer (#1351).
-
-**That `(#n)` is not always a PR.** GitHub's squash default appends the PR number, but the
-Quick Start below prescribes `(#${ISSUE})` in the commit subject, and both conventions are in
-the history. So each number is resolved to whichever it is: a PR means read `Closes #m` out of
-its body, an issue means the commit names the issue it shipped. Only issues still open are
-touched. Handling just one convention silently loses most of the release, that is what the
-first cut of this workflow did. Verify:
-
-```bash
-gh run list --workflow "Close shipped issues" --limit 1
-```
-
-If it did not fire, re-run it by hand, see **Link a PR to an issue** above.
-
-### Cutting a release branch
-
-```bash
-git checkout develop && git pull origin develop
-git checkout -b release/v1.2.0
-git push -u origin release/v1.2.0
-# → rc.yml fires automatically, publishes v1.2.0-rc.1
-```
-
-### Hotfix flow (production bug)
-
-```bash
-# Branch from the last production tag
-git checkout main && git pull origin main
-git checkout -b hotfix/45-nil-panic
-
-# Fix, commit, push
-git commit -m "fix(dispatch): nil panic when prompt is empty"
-git push -u origin hotfix/45-nil-panic
-
-# PR → main (requires 1 approval)
-gh pr create --base main --title "fix(dispatch): nil panic when prompt is empty"
-
-# After merge → release-please picks it up → patch release (v1.2.1)
-# Cherry-pick back to develop
-git checkout develop && git cherry-pick <commit-sha>
-git push origin develop
-```
+Never create a release tag by hand: a manual tag leaves `.release-please-manifest.json` behind
+at the old version, and the next release is computed off the wrong base (#215).
 
 ### Release channels
 
-| Channel | Branch | Tag pattern | Install |
+| Channel | Built from | Tag pattern | Install |
 |---|---|---|---|
 | **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew install hyctl` |
-| **RC / UAT** | `release/v*` | `v1.2.0-rc.1` | GitHub pre-release |
-| **edge** | `develop` | `edge` (overwritten) | GitHub pre-release |
+| **RC** | a commit on `main`, by hand | `v1.2.0-rc.1` | GitHub pre-release |
+| **edge** | every merge to `main` | `edge` (overwritten) | GitHub pre-release |
 
 ### Version bump rules (CRITICAL)
 - **Only `main` ever gets a semver tag**, release-please enforces this
-- `release/*` and `develop` get pre-release tags only (RC / edge), no semver bump
+- RC and edge are pre-release tags only, no semver bump
 - Never manually bump version numbers, release-please reads conventional commits
 - `BREAKING CHANGE:` in commit body → major bump; `feat:` → minor; `fix:`/`perf:` → patch
 
@@ -881,8 +760,8 @@ Field: **Status**, `PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE`
 | Todo | `f75ad846` | Issue created (new work planned) |
 | In Progress | `47fc9ee4` | Branch created / coding started |
 | In Review | `1490e846` | PR opened |
-| Deploy | `bcafa7ca` | PR merged, waiting for release tag |
-| Done | `98236657` | Released / closed |
+| Deploy | `bcafa7ca` | Not used: an issue closes when its PR merges, and the board moves it to Done |
+| Done | `98236657` | Merged and closed |
 
 **This is not optional.** Every issue must be moved at every transition. Do not skip steps.
 
@@ -956,7 +835,7 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id f75ad846
 
 # 2. Create branch + move to In Progress
-git checkout develop && git pull origin develop
+git checkout main && git pull origin main
 git checkout -b feature/${ISSUE}-hydra-stats
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 47fc9ee4
@@ -968,18 +847,13 @@ git commit -m "feat(stats): add hyctl stats subcommand (#${ISSUE})"
 # 4. Push and open PR + move to In Review
 git push -u origin HEAD
 gh pr create --title "feat(stats): add hyctl stats subcommand" \
-  --body "Closes #${ISSUE}" --base develop
+  --body "Closes #${ISSUE}" --base main
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
 
-# 5. After merge to develop, move to Deploy (merged, not yet released)
-gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
-  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id bcafa7ca
-
-# 6. The release carrying it lands on main → close-shipped-issues.yml closes the issue from
-#    the "Closes #n" in the PR body. Only the board move is left to do by hand.
-gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
-  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
+# 5. After merge, GitHub closes the issue from "Closes #n" and the board moves it to Done.
+#    Check it did:
+gh issue view ${ISSUE} --json state,projectItems
 ```
 
 ---
@@ -1011,9 +885,10 @@ CHANGELOG.md                  ← release-please prepends each release; the pre-
                                 hand-written historical record. Do not edit the generated part.
 internal/build/build.go       ← version vars set by ldflags at build time
 internal/update/update.go     ← startup update checker (24h cache)
-.github/workflows/release.yml ← fires on tag push → goreleaser
-.github/workflows/edge.yml    ← fires on develop push → edge build
-.github/workflows/rc.yml      ← fires on a release/vX.Y.Z push (not a carry branch) → RC pre-release. Both build from a
+.github/workflows/release.yml ← fires on a hand-pushed vX.Y.Z tag → publish.yml
+.github/workflows/edge.yml    ← fires on main push → edge build
+.github/workflows/rc.yml      ← run by hand from a commit on main (`-f sha=`), or on a release/vX.Y.Z
+                                push (not a carry branch) → RC pre-release. Both build from a
                                 branch, so they must tag HEAD themselves, see below.
 .github/workflows/publish.yml ← fans a release out to brew/npm/pip
                                 All three pin GoReleaser to an exact version, guarded by
@@ -1024,17 +899,15 @@ internal/update/update.go     ← startup update checker (24h cache)
                                 protection either. Bumping the pin is deliberate; Dependabot
                                 does not track an action input (#881).
 .github/workflows/release-please.yml ← fires on main push → release PR, then fans out to
-                                       publish.yml and close-shipped-issues.yml
-.github/workflows/close-shipped-issues.yml ← closes the issues a release shipped, read back
-                                       from "Closes #n" in each PR body (#217). Its resolver
-                                       is close_shipped_issues.py beside it, and the lineage it
-                                       reads comes from shipped_lineage.sh, a script rather than
-                                       inline YAML so cmd/hydra/shipped_lineage_test.go can test
-                                       it against a real carry-shaped history (#1140).
-.github/workflows/sync-develop.yml   ← fires on main push → back-merge PR (main → develop).
-                                       FAILS loudly on conflict, and also when the PR it opened
-                                       cannot merge (#670). Either way a red run means develop
-                                       is behind main and a release cut will not merge cleanly.
+                                       publish.yml once that PR merges. It reads
+                                       release-please-config.json; it must not set
+                                       `release-type`, which makes the action ignore the file.
+.github/workflows/close-shipped-issues.yml ← backfill only, run by hand. Closes the issues a
+                                       develop-era release shipped, read back from "Closes #n"
+                                       in each PR body (#217). Its resolver is
+                                       close_shipped_issues.py beside it, and the lineage it
+                                       reads comes from shipped_lineage.sh, tested by
+                                       cmd/hydra/shipped_lineage_test.go (#1140).
 ```
 
 **A prerelease channel has to create the tag it names.** edge.yml and rc.yml build from a branch,
@@ -1045,25 +918,6 @@ local to the runner and never pushed, annotated with an explicit tagger because 
 identity of its own. Every edge build failed this way from #761 until #822 and nobody saw it, since
 edge and RC gate no PR and nothing else reports them; `cmd/hydra/prerelease_naming_test.go` is what
 fails at PR time now instead (#793, #821).
-
-**The back-merge PR cannot merge itself, and needs one of your commits.** Two independent
-reasons, both invisible on the PR: it is opened by `github-actions[bot]`, whose events start no
-workflow runs, so its required checks are *expected* and never arrive; and it carries
-release-please's **unsigned** commit, which `develop` rejects, `required_signatures` with
-`enforce_admins: true`, so `--admin` does not help and the refusal reads "the base branch policy
-prohibits the merge" while every check is green.
-
-Until a `BACK_MERGE_TOKEN` secret exists (a PAT whose account also signs), land it by hand:
-
-```bash
-git fetch origin chore/back-merge-main
-git checkout -B backmerge origin/chore/back-merge-main
-git commit -S --allow-empty -m "chore: sign and trigger the back-merge"
-git push origin HEAD:chore/back-merge-main
-```
-
-Skipping it leaves develop without the version bump, and the next release computes off a stale
-manifest, the #215 failure mode.
 
 ---
 
@@ -1096,21 +950,17 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 - `pricing.md` costs must match `hyctl pricing list` live output, never hardcode stale rates without noting the date
 - `sitemap.xml` `lastmod` must be updated whenever `index.html` changes
 - `app.html`'s direct download links are **version-pinned by necessity**, desktop asset names embed
-  their version, so GitHub's `/releases/latest/download/` shortcut cannot address them. They go stale
-  every release and must be bumped by hand; the `install-app.sh` command beside them resolves the
+  their version, so GitHub's `/releases/latest/download/` shortcut cannot address them. release-please
+  bumps them in its release PR, through `extra-files` and the `x-release-please-start-version` /
+  `x-release-please-end` comments around them; the `install-app.sh` command beside them resolves the
   newest tag at runtime and never goes stale, which is why it is the primary path on the page.
   **`cmd/hydra/docs_version_test.go` now fails the build when they drift**, so a missed bump is red
   rather than a 404 someone finds later. It checks three things: every version reference in
   `app.html`, `index.html` and `README.md` names one version; that version matches
   `.release-please-manifest.json`; and each asset URL's tag matches the version inside its filename.
-  Bump them all together:
-
-  ```bash
-  OLD=1.4.0 NEW=1.4.1
-  sed -i '' "s/v${OLD}/v${NEW}/g; s/\"softwareVersion\": \"${OLD}\"/\"softwareVersion\": \"${NEW}\"/" \
-    docs/app.html docs/index.html README.md
-  go test ./cmd/hydra -run TestDocs_Version   # must pass before the release PR
-  ```
+  release-please's updater replaces only the **first** version on a line, so an asset URL is split
+  after its tag, and every pinned version must sit between the markers.
+  `TestReleasePlease_BumpsEveryDocsVersionPin` replays that bump and fails if one would be missed.
 - Do not add features to `llms.txt` that haven't shipped to `main` yet
 
 ---

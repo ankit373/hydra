@@ -27,6 +27,8 @@ Not by seniority, and this part is enforced by the repo rather than by custom:
   This applies to the maintainer, and in practice he is the one it catches most.
 - **CI green is not negotiable.** Every check passing, verified immediately before merging. Never
   `--admin`, never auto-merge.
+- **A release is a decision, not a side effect.** Nothing publishes until the maintainer approves
+  release-please's release PR. [RELEASING.md](RELEASING.md) says when and how.
 
 If you can show a decision was made on a false premise, that reopens it. That is the whole appeal
 process and it is deliberately the only one.

@@ -4,3 +4,9 @@
 *.golden.md text eol=lf
 **/testdata/** text eol=lf
 bench/** text eol=lf
+
+# release-please rewrites the version pins in these in place, and the docs tests
+# read the split asset links byte for byte, so a Windows checkout must keep LF.
+README.md text eol=lf
+docs/app.html text eol=lf
+docs/index.html text eol=lf
