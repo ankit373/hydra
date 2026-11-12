@@ -15,6 +15,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/decide"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
@@ -43,6 +45,13 @@ type serveRouter struct {
 	// routes for. Empty leaves such a request routing exactly as before E1.
 	defaultClass string
 	localOnly    bool
+
+	// verifiers are each class's checks; a class with none is answered once.
+	// confidence and maxEscalations bound the cascade, over the shared cal.
+	verifiers      map[string][]decide.Verifier
+	confidence     float64
+	maxEscalations int
+	cal            *trust.Calibrator
 }
 
 func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer, error) {
@@ -53,6 +62,7 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	if r.Deprecated(req) {
 		r.notice.warn()
 	}
+	esc := r.escalationFor(ev, req, &opts)
 	// Before dispatch, because a stream's headers leave with its first frame.
 	if ev != nil && req.OnEvent != nil {
 		req.OnEvent(serve.Event{Kind: serve.EventEvidence, Evidence: ev})
@@ -77,6 +87,11 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		return serve.Answer{}, callerError(err)
 	}
 
+	// Usage covers every answer paid for, not only the one served.
+	paid := []*dispatch.Result{res}
+	if esc != nil {
+		res, paid = esc.served(), esc.results
+	}
 	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: ev}
 	if req.OnEvent == nil {
 		ans.Evidence = withObjective(ev, res)
@@ -84,7 +99,12 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	if res.Response != nil {
 		ans.ToolCalls = res.Response.ToolCalls
 		ans.FinishReason = res.Response.FinishReason
-		ans.InputTokens, ans.OutputTokens = res.Response.InputTokens, res.Response.OutputTokens
+	}
+	for _, p := range paid {
+		if p.Response != nil {
+			ans.InputTokens += p.Response.InputTokens
+			ans.OutputTokens += p.Response.OutputTokens
+		}
 	}
 	return ans, nil
 }
@@ -365,6 +385,7 @@ func cmdServe() *cobra.Command {
 		localOnly         bool
 		confidence        float64
 		heads             []string
+		maxEscalations    int
 	)
 
 	cmd := &cobra.Command{
@@ -383,6 +404,10 @@ func cmdServe() *cobra.Command {
 			"cheapest one measured competent (cost). In v2.0.0 quality becomes the default; until\n" +
 			"then a `hydra` request relying on neither gets a Deprecation header, and\n" +
 			"`hydra/standard` or an explicit --enum keeps today's route after the change.\n\n" +
+			"A task class with [[serve.verifiers]] in config.toml has each buffered answer on an\n" +
+			"objective route checked: until a verifier makes one --confidence sure, a head measured\n" +
+			"in that class to beat the last is asked, at most --max-escalations more, within the\n" +
+			"request's or policy.yaml's cost ceiling. With none measured better, the answer stands.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
 			"invisible; one after it ends the stream, because SSE cannot take back a partial and\n" +
 			"appending the next head's answer to it would compose a reply no head ever gave.\n\n" +
@@ -417,6 +442,10 @@ func cmdServe() *cobra.Command {
 				}
 			}
 
+			if maxEscalations < 0 {
+				return fmt.Errorf("--max-escalations must be 0 or more, got %d", maxEscalations)
+			}
+
 			d, err := dispatch.New(ctx)
 			if err != nil {
 				return fmt.Errorf("dispatcher init: %w", err)
@@ -425,18 +454,31 @@ func cmdServe() *cobra.Command {
 			if err := restrictServeHeads(d, heads, c.Flags().Changed("heads"), localOnly); err != nil {
 				return err
 			}
-
-			ln, err := serve.Listen(addr, token)
+			cfg, err := config.Load()
 			if err != nil {
 				return err
 			}
-			decider, err := newDecisionRouter(ctx, confidence, localOnly, d.Allows)
+			verifiers, err := serveVerifiers(cfg.Serve.Verifiers)
+			if err != nil {
+				return err
+			}
+			cal, err := trust.New(trust.DefaultPath())
+			if err != nil {
+				return fmt.Errorf("calibration load: %w", err)
+			}
+			decider, err := newDecisionRouter(ctx, confidence, localOnly, cal, d.Allows)
+			if err != nil {
+				return err
+			}
+
+			ln, err := serve.Listen(addr, token)
 			if err != nil {
 				return err
 			}
 			r := serveRouter{
 				d: d, defaultEnum: enum, objective: objective, implicit: implicitDefault(c, objective),
 				notice: newDeprecationNotice(os.Stderr), defaultClass: defaultClass, localOnly: localOnly,
+				verifiers: verifiers, confidence: confidence, maxEscalations: maxEscalations, cal: cal,
 			}
 			printServeBanner(os.Stdout, ln.Addr().String(), defaultRouting(enum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
@@ -450,10 +492,11 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&obj, "objective", "", "route `hydra` by objective, quality or cost (opt-in; quality becomes the default in v2.0.0)")
 	f.StringVar(&taskClass, "task-class", "", "dotted task class for a request that names none, e.g. classification.banking77")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
-	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
+	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources, or escalating a verified class, once an answer is this sure")
 	f.StringSliceVar(&heads, "heads", nil, "route among only these head ids (default [serve] heads in config.toml; "+
 		"--heads \"\" clears it). Embedding models stay available to the cache and recall, listed or not; "+
 		"decision sources are not heads it can name, so with a list set /v1/decisions has none")
+	f.IntVar(&maxEscalations, "max-escalations", 2, "most further heads a verified class's request may be escalated to")
 	return cmd
 }
 
