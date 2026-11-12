@@ -655,9 +655,8 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 - Every PR targets `main`. The body becomes the squash commit body, which release-please reads:
   a `BREAKING CHANGE:` or `Release-As:` line in it changes the next version (RELEASING.md).
 - Every author signs the [CLA](CLA.md) once, through CLA Assistant on their first PR. The
-  `license/cla` status gates the queue (mirrored as `Contributor has signed` by `cla.yml` until
-  #1380 step 2); there is no checkbox. `CONTRIBUTORS.md` is a thank-you list, not a gate. CI on a
-  fork PR waits for the signature (`cla-approve-runs.yml`).
+  `license/cla` status gates the queue; there is no checkbox. `CONTRIBUTORS.md` is a thank-you
+  list, not a gate. CI on a fork PR waits for the signature (`cla-approve-runs.yml`).
 
 ---
 

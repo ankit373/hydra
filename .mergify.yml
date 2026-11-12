@@ -37,10 +37,9 @@ shared:
     - check-success=Workflow security
     - check-success=Mergify config
 
-  # cla.yml mirrors CLA Assistant's license/cla under this name, which main's config still
-  # requires. Step 2 (#1380) points this at license/cla once main has this file.
-  # Not in any branch protection, so the queues require it (bots pass it).
-  cla: &cla check-success=Contributor has signed
+  # CLA Assistant's commit status: pending until the author signs, then success.
+  # Not in main's branch protection, so the queues require it (allowlisted bots pass it).
+  cla: &cla check-success=license/cla
 
   # release-please derives the bump and changelog from this, so it gates the queue.
   conventional: &conventional 'title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
@@ -235,7 +234,7 @@ merge_protections:
     success_conditions:
       - *closes
 
-  # release-please opens its PR with GITHUB_TOKEN, which starts no workflow, so no CLA run.
+  # release-please's PR is the repo's own, so a CLA Assistant outage must not hold a release.
   - name: CLA signed
     description: Every author has signed the CLA with CLA Assistant (license/cla).
     if:
