@@ -86,9 +86,6 @@ func totals(r Report) Totals {
 }
 
 func (t Totals) escalationRate() float64 {
-	if t.Ensembles == 0 {
-		return 0
-	}
 	return float64(t.Escalated) / float64(t.Ensembles)
 }
 
@@ -137,15 +134,28 @@ func compare(base, head Report) (Diff, error) {
 			d.Changes = append(d.Changes, Change{ID: r.ID, Base: byID[r.ID]})
 		}
 	}
-	if d.Base.CostUSD > 0 && (d.Head.CostUSD-d.Base.CostUSD)/d.Base.CostUSD > maxCostRise {
+	// No base results means nothing to measure against, not a rise from zero.
+	switch base, head := d.Base.CostUSD, d.Head.CostUSD; {
+	case d.Base.Prompts == 0 || head <= base:
+	case base == 0:
+		d.Gate = append(d.Gate, fmt.Sprintf("estimated cost rose from $0 to $%.6f", head))
+	case (head-base)/base > maxCostRise:
 		d.Gate = append(d.Gate, fmt.Sprintf("estimated cost rose %s, over the %+.0f%% bar",
-			pct(d.Base.CostUSD, d.Head.CostUSD), maxCostRise*100))
+			pct(base, head), maxCostRise*100))
 	}
-	if d.Head.escalationRate()-d.Base.escalationRate() > maxEscalationRise {
+	if rise, ok := d.escalationRise(); ok && rise > maxEscalationRise {
 		d.Gate = append(d.Gate, fmt.Sprintf("escalation rate rose %+.1f pp, over the %+.0f pp bar",
-			(d.Head.escalationRate()-d.Base.escalationRate())*100, maxEscalationRise*100))
+			rise*100, maxEscalationRise*100))
 	}
 	return d, nil
+}
+
+// escalationRise is head's rate minus base's, undefined when either ran no ensemble.
+func (d Diff) escalationRise() (float64, bool) {
+	if d.Base.Ensembles == 0 || d.Head.Ensembles == 0 {
+		return 0, false
+	}
+	return d.Head.escalationRate() - d.Base.escalationRate(), true
 }
 
 // cell is one side of a decision as the table shows it, and what equality means.
@@ -182,8 +192,12 @@ func render(d Diff, suite, note string) string {
 		len(d.Changes), d.Head.Prompts, suite)
 	b.WriteString("| | base | head | change |\n|---|---|---|---|\n")
 	fmt.Fprintf(&b, "| Estimated cost (USD) | %.6f | %.6f | %s |\n", d.Base.CostUSD, d.Head.CostUSD, pct(d.Base.CostUSD, d.Head.CostUSD))
-	fmt.Fprintf(&b, "| Escalation rate (SPRT > 1 head) | %s | %s | %+.1f pp |\n", ratio(d.Base.Escalated, d.Base.Ensembles),
-		ratio(d.Head.Escalated, d.Head.Ensembles), (d.Head.escalationRate()-d.Base.escalationRate())*100)
+	rise := "n/a"
+	if r, ok := d.escalationRise(); ok {
+		rise = fmt.Sprintf("%+.1f pp", r*100)
+	}
+	fmt.Fprintf(&b, "| Escalation rate (SPRT > 1 head) | %s | %s | %s |\n", ratio(d.Base.Escalated, d.Base.Ensembles),
+		ratio(d.Head.Escalated, d.Head.Ensembles), rise)
 	fmt.Fprintf(&b, "| SPRT accepted | %s | %s | %+d |\n", ratio(d.Base.Accepted, d.Base.Ensembles),
 		ratio(d.Head.Accepted, d.Head.Ensembles), d.Head.Accepted-d.Base.Accepted)
 	fmt.Fprintf(&b, "| Verifier correct | %s | %s | %+d |\n", ratio(d.Base.Correct, d.Base.Ensembles),

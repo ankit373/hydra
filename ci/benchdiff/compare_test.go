@@ -120,17 +120,32 @@ func TestCompare_RefusesMismatchedSchemas(t *testing.T) {
 	}
 }
 
+// A missing base has nothing to rise from, so it must not gate, or
+// -fail-on-gate fails every PR whose base cannot build the harness.
 func TestRender_NamesTheMissingBase(t *testing.T) {
-	d, err := compare(report(), report(routed("a", "x", 0)))
+	d, err := compare(report(), report(routed("a", "x", 0.01), ensembled("b", 3, true, 0.02)))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(d.Gate) != 0 {
+		t.Fatalf("a missing base gated: %v", d.Gate)
+	}
 	md := render(d, "s", "Base did not produce a report.")
-	if !strings.Contains(md, "Base did not produce a report.") || !strings.Contains(md, "1 of 1 prompts changed") {
+	if !strings.Contains(md, "Base did not produce a report.") || !strings.Contains(md, "2 of 2 prompts changed") {
 		t.Fatalf("missing base not reported:\n%s", md)
 	}
-	if !strings.Contains(md, "n/a | n/a") {
-		t.Errorf("an empty ensemble set should read n/a, not 0/0:\n%s", md)
+	if !strings.Contains(md, "| n/a | 1/1 (100%) | n/a |") {
+		t.Errorf("an empty ensemble set should read n/a, not 0/0 or a rise:\n%s", md)
+	}
+}
+
+func TestCompare_SpendFromAFreeBaseGates(t *testing.T) {
+	d, err := compare(report(routed("a", "ollama/qwen", 0)), report(routed("a", "claude", 0.01)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gate := strings.Join(d.Gate, "\n"); !strings.Contains(gate, "estimated cost rose from $0 to $0.010000") {
+		t.Fatalf("a free base moving to paid heads did not gate: %v", d.Gate)
 	}
 }
 
