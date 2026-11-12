@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // ckOverride is the routing override applied to the next task.
@@ -75,22 +75,22 @@ var ckOvRows = []ckOvRow{
 var ckOvConfChoices = []float64{0.90, 0.95, 0.99, 0.999}
 
 // overrideKey handles keys while the ctrl+o modal is open.
-func (m Cockpit) overrideKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Cockpit) overrideKey(msg ckKey) (tea.Model, tea.Cmd) {
 	switch m.ovStage {
 	case 'T':
 		return m.overrideTierKey(msg)
 	case 'C':
 		return m.overrideConfKey(msg)
 	}
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch msg.name() {
+	case "esc":
 		m.ovOpen = false
 		return m, nil
-	case tea.KeyUp:
+	case "up":
 		return m.moveOvSel(-1), nil
-	case tea.KeyDown:
+	case "down":
 		return m.moveOvSel(1), nil
-	case tea.KeyEnter:
+	case "enter":
 		row := ckOvRows[m.ovSel]
 		if row.sub != 0 {
 			m.ovStage = row.sub
@@ -100,11 +100,9 @@ func (m Cockpit) overrideKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ovOpen = false
 		m.flash = m.override.label() + ", next task"
 		return m, nil
-	case tea.KeyRunes:
-		if len(msg.Runes) != 1 {
-			return m, nil
-		}
-		switch msg.Runes[0] {
+	}
+	if rs := msg.runes(); len(rs) == 1 {
+		switch rs[0] {
 		case 'j':
 			return m.moveOvSel(1), nil
 		case 'k':
@@ -117,55 +115,48 @@ func (m Cockpit) overrideKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // overrideTierKey reads one digit: 1-9 → T1-T9, 0 → T10.
-func (m Cockpit) overrideTierKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEsc:
+func (m Cockpit) overrideTierKey(msg ckKey) (tea.Model, tea.Cmd) {
+	if msg.name() == "esc" {
 		m.ovStage = 0
 		return m, nil
-	case tea.KeyRunes:
-		if len(msg.Runes) != 1 {
-			return m, nil
-		}
-		r := msg.Runes[0]
-		if r < '0' || r > '9' {
-			return m, nil
-		}
-		tier := int(r - '0')
-		if tier == 0 {
-			tier = 10
-		}
-		m.override = ckOverride{kind: 'T', tier: tier}
-		m.ovOpen, m.ovStage = false, 0
-		m.flash = m.override.label() + ", next task"
 	}
+	rs := msg.runes()
+	if len(rs) != 1 || rs[0] < '0' || rs[0] > '9' {
+		return m, nil
+	}
+	tier := int(rs[0] - '0')
+	if tier == 0 {
+		tier = 10
+	}
+	m.override = ckOverride{kind: 'T', tier: tier}
+	m.ovOpen, m.ovStage = false, 0
+	m.flash = m.override.label() + ", next task"
 	return m, nil
 }
 
 // overrideConfKey picks a consensus target: j/k + enter, or digits 1-4.
-func (m Cockpit) overrideConfKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Cockpit) overrideConfKey(msg ckKey) (tea.Model, tea.Cmd) {
 	apply := func(i int) (tea.Model, tea.Cmd) {
 		m.override = ckOverride{kind: 'C', conf: ckOvConfChoices[i]}
 		m.ovOpen, m.ovStage, m.ovConfSel = false, 0, 0
 		m.flash = m.override.label() + ", next task"
 		return m, nil
 	}
-	switch msg.Type {
-	case tea.KeyEsc:
+	switch msg.name() {
+	case "esc":
 		m.ovStage, m.ovConfSel = 0, 0
 		return m, nil
-	case tea.KeyUp:
+	case "up":
 		m.ovConfSel = ckClampOff(m.ovConfSel-1, len(ckOvConfChoices)-1)
 		return m, nil
-	case tea.KeyDown:
+	case "down":
 		m.ovConfSel = ckClampOff(m.ovConfSel+1, len(ckOvConfChoices)-1)
 		return m, nil
-	case tea.KeyEnter:
+	case "enter":
 		return apply(m.ovConfSel)
-	case tea.KeyRunes:
-		if len(msg.Runes) != 1 {
-			return m, nil
-		}
-		switch r := msg.Runes[0]; {
+	}
+	if rs := msg.runes(); len(rs) == 1 {
+		switch r := rs[0]; {
 		case r == 'j':
 			m.ovConfSel = ckClampOff(m.ovConfSel+1, len(ckOvConfChoices)-1)
 		case r == 'k':

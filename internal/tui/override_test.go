@@ -5,14 +5,12 @@ package tui
 import (
 	"strings"
 	"testing"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func openOverride(t *testing.T) Cockpit {
 	t.Helper()
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	if !m.ovOpen {
 		t.Fatal("ctrl+o did not open the override modal")
 	}
@@ -31,7 +29,7 @@ func TestOverride_PicksDirectOptions(t *testing.T) {
 		t.Errorf("label = %q", got)
 	}
 
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "jjj") // → best of 3
 	m, _ = enter(m)
 	if m.override.kind != 'B' || m.override.strategy() != "best of 3" {
@@ -39,7 +37,7 @@ func TestOverride_PicksDirectOptions(t *testing.T) {
 	}
 
 	// auto (row 0) resets to no override.
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m, _ = enter(m)
 	if m.override.kind != 0 || m.override.label() != "route auto" {
 		t.Errorf("auto did not reset the override: %+v", m.override)
@@ -64,7 +62,7 @@ func TestOverride_ForceTierDigits(t *testing.T) {
 		t.Fatalf("tier 3 not applied: %+v", m.override)
 	}
 
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "j")
 	m, _ = enter(m)
 	m = typed(m, "0")
@@ -91,7 +89,7 @@ func TestOverride_ConsensusTargets(t *testing.T) {
 	}
 
 	// j/k + enter picks too, 99.9% renders without a fabricated ".0".
-	m = press(m, tea.KeyCtrlO)
+	m = press(m, "ctrl+o")
 	m = typed(m, "jjjj")
 	m, _ = enter(m)
 	m = typed(m, "jjjjjj") // clamps at the last target
@@ -121,11 +119,11 @@ func TestOverride_EscBacksOut(t *testing.T) {
 	}
 	m = typed(m, "j")
 	m, _ = enter(m) // tier sub-stage
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if !m.ovOpen || m.ovStage != 0 {
 		t.Fatal("esc did not return to the option list")
 	}
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if m.ovOpen {
 		t.Fatal("esc did not close the modal")
 	}
@@ -142,7 +140,7 @@ func TestOverride_ModalRendersWithinFrame(t *testing.T) {
 		m.ovStage = stage
 		for _, sz := range sizes {
 			m.w, m.h, m.ready = sz.w, sz.h, true
-			out := m.View()
+			out := m.View().Content
 			lines := strings.Split(out, "\n")
 			if len(lines) > sz.h {
 				t.Errorf("stage %q at %dx%d renders %d lines", stage, sz.w, sz.h, len(lines))
@@ -156,7 +154,7 @@ func TestOverride_ModalRendersWithinFrame(t *testing.T) {
 	// The modal says what it is: mode = what, this = where.
 	m := openOverride(t)
 	m.w, m.h, m.ready = 100, 30, true
-	if got := stripANSI(m.View()); !strings.Contains(got, "where it runs") {
+	if got := stripANSI(m.View().Content); !strings.Contains(got, "where it runs") {
 		t.Error("the modal does not explain the mode/override split")
 	}
 }

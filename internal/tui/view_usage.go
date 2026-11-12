@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/cost"

@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // The header: brand, the six tab labels with the active one chipped, and the
@@ -86,6 +87,7 @@ func TestContextGauge(t *testing.T) {
 		}
 	}
 	// The band colour comes from internal/budget, not an inline table.
+	withTheme(t, colorprofile.TrueColor, true)
 	if ckBandStyle(10).GetForeground() == ckBandStyle(77).GetForeground() {
 		t.Error("normal and critical bands are coloured identically")
 	}

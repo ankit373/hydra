@@ -120,7 +120,7 @@ func swap[T any](t *testing.T, v *T, to T) {
 
 func TestBenchRun_DryRunCallsNothing(t *testing.T) {
 	args, exec, results := benchFixture(t, "1.0")
-	_, out, err := run(t, append(args, "--dry-run")...)
+	out, _, err := run(t, append(args, "--dry-run")...)
 	if err != nil || !strings.Contains(out, "banking77: 4 items × 2 arms (frontier,cheapest) = 8 calls, worst case $") {
 		t.Fatalf("dry run: %v\n%s", err, out)
 	}
@@ -134,7 +134,7 @@ func TestBenchRun_DryRunCallsNothing(t *testing.T) {
 
 func TestBenchRun_RunsResumesAndCommitsTheRunDirectory(t *testing.T) {
 	args, exec, results := benchFixture(t, "1.0")
-	_, out, err := run(t, args...)
+	out, _, err := run(t, args...)
 	if err != nil || !strings.Contains(out, "8 rows written") || exec.calls.Load() != 8 {
 		t.Fatalf("run: %v after %d calls\n%s", err, exec.calls.Load(), out)
 	}
@@ -147,7 +147,7 @@ func TestBenchRun_RunsResumesAndCommitsTheRunDirectory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, out, err = run(t, args...); err != nil || !strings.Contains(out, "0 rows written") || exec.calls.Load() != 8 {
+	if out, _, err = run(t, args...); err != nil || !strings.Contains(out, "0 rows written") || exec.calls.Load() != 8 {
 		t.Fatalf("resume of a finished run: %v\n%s", err, out)
 	}
 	if _, _, err := run(t, append(args, "--suite", "clinc150")...); err == nil {
@@ -160,7 +160,7 @@ func TestBenchRun_RunsResumesAndCommitsTheRunDirectory(t *testing.T) {
 
 func TestBenchRun_ExitCodes(t *testing.T) {
 	args, _, _ := benchFixture(t, "0.0001") // under one frontier call
-	_, out, err := run(t, args...)
+	out, _, err := run(t, args...)
 	var status exitStatus
 	if !errors.As(err, &status) || status != 2 || !strings.Contains(out, "higher --max-usd") {
 		t.Fatalf("over the cap: %v\n%s", err, out)
@@ -169,7 +169,7 @@ func TestBenchRun_ExitCodes(t *testing.T) {
 	args, exec, _ := benchFixture(t, "1.0")
 	exec.answer = strings.Repeat("x", 10)
 	swap(t, &benchExec, func(provider.Head) executor.Executor { return estimating{exec} })
-	_, out, err = run(t, args...)
+	out, _, err = run(t, args...)
 	if !errors.As(err, &status) || status != 4 || !strings.Contains(out, "aborted") {
 		t.Fatalf("a contract violation: %v\n%s", err, out)
 	}

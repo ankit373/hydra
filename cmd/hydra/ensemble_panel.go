@@ -78,7 +78,7 @@ func newEnsemblePanelIf(want bool, title string) *ensemblePanel {
 		return nil
 	}
 	w, _ := terminalSize()
-	p := newEnsemblePanel(os.Stdout, w, title)
+	p := newEnsemblePanel(stdout, w, title)
 	p.animate()
 	return p
 }

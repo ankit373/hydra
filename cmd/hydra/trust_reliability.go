@@ -140,11 +140,11 @@ func reportHydra(own reliability.Tally, sources []reliability.SourceReport, bins
 				"scored": scored, "unscored": unscored, "error": err.Error(), "sources": sources,
 			})
 		}
-		fmt.Printf("\n  %d scored run(s), %d awaiting a verdict.\n", scored, unscored)
-		fmt.Printf("  %v.\n\n", err)
-		fmt.Println("  Attach verdicts with `hyctl trace score <run-id> --span <id> --name tests --value 1`,")
-		fmt.Println("  then this reports whether the confidence Hydra stated held up.")
-		fmt.Println()
+		fmt.Fprintf(stdout, "\n  %d scored run(s), %d awaiting a verdict.\n", scored, unscored)
+		fmt.Fprintf(stdout, "  %v.\n\n", err)
+		fmt.Fprintln(stdout, "  Attach verdicts with `hyctl trace score <run-id> --span <id> --name tests --value 1`,")
+		fmt.Fprintln(stdout, "  then this reports whether the confidence Hydra stated held up.")
+		fmt.Fprintln(stdout)
 		renderSources(sources)
 		return nil
 	}
@@ -166,7 +166,7 @@ func reportSource(source string, sources []reliability.SourceReport, jsonOut boo
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{"sources": sources})
 	}
 	if len(sources) == 0 {
-		fmt.Printf("\n  No decision answers recorded from %s.\n\n", source)
+		fmt.Fprintf(stdout, "\n  No decision answers recorded from %s.\n\n", source)
 		return nil
 	}
 	renderSources(sources)
@@ -179,18 +179,18 @@ func renderSources(sources []reliability.SourceReport) {
 	if len(sources) == 0 {
 		return
 	}
-	fmt.Printf("  %-28s %-10s %8s %8s %8s %8s %7s\n",
+	fmt.Fprintf(stdout, "  %-28s %-10s %8s %8s %8s %8s %7s\n",
 		"DECISION SOURCE", "DOMAIN", "VERDICTS", "AWAITING", "ECE", "BRIER", "GAP")
-	fmt.Println("  " + strings.Repeat("─", 84))
+	fmt.Fprintln(stdout, "  "+strings.Repeat("─", 84))
 	for _, s := range sources {
 		lead := fmt.Sprintf("  %-28s %-10s %8d %8d", s.Source, s.Domain, s.Scored, s.Unscored)
 		if s.Err != "" {
-			fmt.Printf("%s  %s\n", lead, warnStyle.Render(s.Err))
+			fmt.Fprintf(stdout, "%s  %s\n", lead, warnStyle.Render(s.Err))
 			continue
 		}
 		if s.Report == nil {
 			note := fmt.Sprintf("not enough verdicts yet, %d more needed", s.Need)
-			fmt.Printf("%s  %s\n", lead, dimStyle.Render(note))
+			fmt.Fprintf(stdout, "%s  %s\n", lead, dimStyle.Render(note))
 			continue
 		}
 		gap := s.Report.SignedGap()
@@ -198,22 +198,22 @@ func renderSources(sources []reliability.SourceReport) {
 		if math.Abs(gap) > calibrationSlack {
 			style = warnStyle
 		}
-		fmt.Printf("%s %8.4f %8.4f %s\n", lead, s.Report.ECE, s.Report.Brier,
+		fmt.Fprintf(stdout, "%s %8.4f %8.4f %s\n", lead, s.Report.ECE, s.Report.Brier,
 			style.Render(fmt.Sprintf("%+7.1f", gap*100)))
 	}
 	legend := "GAP is stated minus observed, in points: positive is overconfident"
-	fmt.Printf("\n  %s\n\n", dimStyle.Render(legend))
+	fmt.Fprintf(stdout, "\n  %s\n\n", dimStyle.Render(legend))
 }
 
 func renderReliability(rep reliability.Report, unscored int) {
-	fmt.Printf("\n  %d scored run(s)", rep.N)
+	fmt.Fprintf(stdout, "\n  %d scored run(s)", rep.N)
 	if unscored > 0 {
-		fmt.Printf("  ·  %s", dimStyle.Render(fmt.Sprintf("%d awaiting a verdict", unscored)))
+		fmt.Fprintf(stdout, "  ·  %s", dimStyle.Render(fmt.Sprintf("%d awaiting a verdict", unscored)))
 	}
-	fmt.Printf("  ·  %.1f%% correct overall\n\n", rep.BaseRate*100)
+	fmt.Fprintf(stdout, "  ·  %.1f%% correct overall\n\n", rep.BaseRate*100)
 
-	fmt.Printf("  %-14s %8s  %s\n", "STATED", "RUNS", "ACTUALLY CORRECT")
-	fmt.Println("  " + strings.Repeat("─", 62))
+	fmt.Fprintf(stdout, "  %-14s %8s  %s\n", "STATED", "RUNS", "ACTUALLY CORRECT")
+	fmt.Fprintln(stdout, "  "+strings.Repeat("─", 62))
 	for _, b := range rep.Bins {
 		filled := int(math.Round(b.Observed * barWidth))
 		cells := make([]rune, barWidth)
@@ -236,15 +236,15 @@ func renderReliability(rep reliability.Report, unscored int) {
 		if math.Abs(b.Gap()) > 0.1 {
 			style = warnStyle
 		}
-		fmt.Printf("  %5.0f-%-3.0f%% %8d  %s %s\n",
+		fmt.Fprintf(stdout, "  %5.0f-%-3.0f%% %8d  %s %s\n",
 			b.Lo*100, b.Hi*100, b.N, style.Render(bar),
 			style.Render(fmt.Sprintf("%5.1f%%  (%+.1f)", b.Observed*100, b.Gap()*100)))
 	}
-	fmt.Printf("\n  %s\n", dimStyle.Render("┃ marks the stated confidence; the bar is what actually happened"))
+	fmt.Fprintf(stdout, "\n  %s\n", dimStyle.Render("┃ marks the stated confidence; the bar is what actually happened"))
 
-	fmt.Printf("\n  brier %.4f  =  reliability %.4f  -  resolution %.4f  +  uncertainty %.4f\n",
+	fmt.Fprintf(stdout, "\n  brier %.4f  =  reliability %.4f  -  resolution %.4f  +  uncertainty %.4f\n",
 		rep.Brier, rep.Reliability, rep.Resolution, rep.Uncertainty)
-	fmt.Printf("  ECE %.4f   worst bin %.4f\n", rep.ECE, rep.MCE)
+	fmt.Fprintf(stdout, "  ECE %.4f   worst bin %.4f\n", rep.ECE, rep.MCE)
 
 	verdict := okStyle.Render("confidences track outcomes")
 	if gap := rep.SignedGap(); gap > calibrationSlack {
@@ -254,10 +254,10 @@ func renderReliability(rep reliability.Report, unscored int) {
 		verdict = warnStyle.Render(fmt.Sprintf(
 			"underconfident by %.1f points on average: runs are sampling more than they need to", -gap*100))
 	}
-	fmt.Printf("  %s\n", verdict)
+	fmt.Fprintf(stdout, "  %s\n", verdict)
 	if rep.Resolution < 0.01 {
-		fmt.Printf("  %s\n", warnStyle.Render(
+		fmt.Fprintf(stdout, "  %s\n", warnStyle.Render(
 			"resolution near zero: the confidences barely discriminate, so being well calibrated means little here"))
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 }

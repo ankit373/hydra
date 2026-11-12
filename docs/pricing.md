@@ -11,7 +11,7 @@
 
 ## What You Need
 
-- Go 1.22+ (only if building from source; Homebrew binary includes everything)
+- Go 1.26+ (only if building from source; Homebrew binary includes everything)
 - Ollama or llama.cpp (optional, for free local models)
 - Your own API keys for any hosted provider you want to use (for example OpenAI, Anthropic, Google, Mistral, AWS Bedrock or OpenRouter)
 

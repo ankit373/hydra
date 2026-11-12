@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
@@ -22,11 +22,11 @@ import (
 // frame in any context showing that cue.
 var scrollKeys = []struct {
 	name string
-	msg  tea.KeyMsg
+	msg  tea.KeyPressMsg
 }{
-	{"j", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}},
-	{"down", tea.KeyMsg{Type: tea.KeyDown}},
-	{"pgdn", tea.KeyMsg{Type: tea.KeyPgDown}},
+	{"j", key("j")},
+	{"down", key("down")},
+	{"pgdn", key("pgdown")},
 }
 
 // overflowing builds a cockpit whose every view has more content than a small
@@ -71,7 +71,7 @@ func hasCue(frame, arrow string) bool {
 
 func frameOf(m Cockpit, w, h int) string {
 	m.w, m.h, m.ready = w, h, true
-	return stripANSI(m.View())
+	return stripANSI(m.View().Content)
 }
 
 // A cue that no key answers is content the user cannot reach, the audit view
