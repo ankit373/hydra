@@ -1,0 +1,51 @@
+name: Routing bench comment
+
+# Posts bench.yml's diff on the PR. Split out so no PR code ever runs with a
+# write token: this job checks out nothing and only reads the uploaded artifact.
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] runs no PR code, only posts its text
+    workflows: ["Routing bench"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  comment:
+    name: Post routing diff
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Download the diff
+        run: gh run download "$RUN_ID" --repo "$REPO" --name routing-bench --dir out
+
+      # The artifact is PR-controlled, so the number is checked against the run
+      # it came from before anything is written to that PR.
+      - name: Upsert the comment
+        run: |
+          pr=$(cat out/pr-number)
+          if ! [[ "$pr" =~ ^[0-9]+$ ]]; then
+            echo "::error::artifact PR number is not a number"; exit 1
+          fi
+          sha=$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)
+          if [ "$sha" != "$HEAD_SHA" ]; then
+            echo "PR #$pr has moved past $HEAD_SHA; a newer run will post"; exit 0
+          fi
+          marker='<!-- hydra-routing-bench -->'
+          body=$(head -c 60000 out/comment.md)
+          case "$body" in "$marker"*) ;; *) echo "::error::comment lacks the marker"; exit 1 ;; esac
+          id=$(gh api --paginate "repos/$REPO/issues/$pr/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+          else
+            gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$body" > /dev/null
+          fi
