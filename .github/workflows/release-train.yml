@@ -1,0 +1,130 @@
+name: Release train
+
+# Once a week, says where the open release PR stands: how big it is and
+# whether it is overdue. It only labels and comments. Approving and merging
+# the release PR stays with the maintainer (GOVERNANCE.md).
+#
+#   release:small|medium|large|major  from scripts/release-size.sh
+#   release:overdue                   14 days since the last release with
+#                                     something unreleased, or 20 unreleased
+#                                     user-facing changes
+#   release:blocked                   copied onto the PR while any open issue
+#                                     has it; only a person takes it off
+#
+# The size labels say release:, not size/: Mergify's size/XS..XL labels
+# already count changed lines.
+
+on:
+  schedule:
+    # Wednesday 04:30 UTC, 10:00 IST.
+    - cron: "30 4 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-train
+  cancel-in-progress: false
+
+jobs:
+  label:
+    name: Label the release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      OVERDUE_DAYS: "14"
+      OVERDUE_CHANGES: "20"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Measure what is unreleased
+        id: size
+        run: ./scripts/release-size.sh HEAD | tee -a "$GITHUB_OUTPUT"
+
+      - name: Label and comment
+        env:
+          LAST_TAG: ${{ steps.size.outputs.last_tag }}
+          DAYS: ${{ steps.size.outputs.days }}
+          CHANGES: ${{ steps.size.outputs.changes }}
+          SIZE: ${{ steps.size.outputs.size }}
+          BREAKING: ${{ steps.size.outputs.breaking }}
+          CONTRACT: ${{ steps.size.outputs.contract }}
+        run: |
+          pr=$(gh pr list --state open --label "autorelease: pending" --json number -q '.[0].number')
+          if [ -z "$pr" ]; then
+            echo "No open release PR; nothing to label." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          make_label() { gh label create "$1" --color "$2" --description "$3" 2>/dev/null || true; }
+          make_label release:overdue D93F0B "The release PR is past the release train's limits"
+          for s in small medium large major; do make_label "release:$s" C5DEF5 "Release size, set by the release train"; done
+
+          # One size label at a time.
+          for s in small medium large major; do
+            if [ "$s" = "$SIZE" ]; then
+              gh pr edit "$pr" --add-label "release:$s"
+            else
+              gh pr edit "$pr" --remove-label "release:$s" 2>/dev/null || true
+            fi
+          done
+
+          overdue=false
+          if [ "$CHANGES" -gt 0 ] && { [ "$DAYS" -ge "$OVERDUE_DAYS" ] || [ "$CHANGES" -ge "$OVERDUE_CHANGES" ]; }; then
+            overdue=true
+            gh pr edit "$pr" --add-label release:overdue
+          else
+            gh pr edit "$pr" --remove-label release:overdue 2>/dev/null || true
+          fi
+
+          holds=$(gh issue list --state open --label release:blocked --json number,title \
+                    -q '.[] | "- #\(.number) \(.title)"')
+          if [ -n "$holds" ]; then
+            gh pr edit "$pr" --add-label release:blocked
+          fi
+
+          case "$SIZE" in
+            small) gates="CI, then the smoke test after publish." ;;
+            medium) gates="CI, and read the CHANGELOG in this PR before approving." ;;
+            large) gates="An RC at least 48 hours old (gh workflow run rc.yml -f sha=...); the Release gates check enforces it." ;;
+            major) gates="An RC at least 7 days old with only fixes since, plus migration notes in this PR." ;;
+            *) gates="Nothing to release." ;;
+          esac
+
+          marker="<!-- release-train -->"
+          body="$(cat <<EOF
+          $marker
+          | | |
+          |---|---|
+          | Last release | $LAST_TAG, $DAYS days ago |
+          | Unreleased user-facing changes | $CHANGES |
+          | Breaking | $BREAKING |
+          | Public contract touched | $CONTRACT |
+          | Size | $SIZE |
+          | Overdue | $overdue (at $OVERDUE_DAYS days or $OVERDUE_CHANGES changes) |
+
+          Before approving: $gates
+          ${holds:+
+          Held by:
+          $holds}
+          EOF
+          )"
+
+          id=$(gh api "repos/$GH_REPO/issues/$pr/comments" --paginate \
+                 -q ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh pr comment "$pr" --body "$body"
+          fi
+          echo "Release PR #$pr: size $SIZE, overdue $overdue" >> "$GITHUB_STEP_SUMMARY"
