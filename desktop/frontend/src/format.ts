@@ -1,17 +1,38 @@
 // Display formatting. Kept separate from the views so it can be unit-tested,
 // and so no component invents its own rounding.
 
+const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const USD_WHOLE = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+})
+const USD_SMALL = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+})
+
 /** Money, never rounded to a misleading $0.00 when the figure is merely small. */
 export function usd(v: number): string {
   if (v === 0) return '$0'
   if (v < 0.01) return '<$0.01'
-  return `$${v.toFixed(2)}`
+  return USD.format(v)
 }
 
-/** Money at ledger precision, for tables where the exact figure matters. */
+/** Money at ledger precision, for tables where the exact figure matters:
+ *  cents from a dollar up, and up to four decimals below one, so a $0.0182
+ *  call is not flattened to $0.02 and an $18.22 total is not "$18.2200". */
 export function usdExact(v: number): string {
   if (v === 0) return '—'
-  return `$${v.toFixed(4)}`
+  return Math.abs(v) >= 1 ? USD.format(v) : USD_SMALL.format(v)
+}
+
+/** Whole dollars with grouping, for modelled amounts like a defect cost. */
+export function usdWhole(v: number): string {
+  return USD_WHOLE.format(v)
 }
 
 export function tokens(v: number): string {
@@ -180,9 +201,9 @@ export function contextModeText(mode: string): string {
     case 'caution':
       return 'compact now'
     case 'warning':
-      return 'work is being downgraded a tier'
+      return 'requests move to lower-cost models'
     case 'critical':
-      return 'only the cheapest models from here'
+      return 'only the lowest-cost models from here'
     case 'emergency':
       return 'local models only'
     default:

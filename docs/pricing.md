@@ -12,35 +12,24 @@
 ## What You Need
 
 - Go 1.22+ (only if building from source; Homebrew binary includes everything)
-- Ollama (optional, for local model support at tiers 9-10)
-- Your own API keys for cloud models (Anthropic, Google, or OpenRouter)
+- Ollama or llama.cpp (optional, for free local models)
+- Your own API keys for any hosted provider you want to use (for example OpenAI, Anthropic, Google, Mistral, AWS Bedrock or OpenRouter)
 
 ## Model Costs (You Pay the Providers Directly)
 
 Hydra itself is free. The underlying models charge per token:
 
-| Model | Tier | Input cost | Output cost | Notes |
-|-------|------|-----------|-------------|-------|
-| Claude Opus 4.6 | 1-2 | ~$5/M tokens | ~$25/M tokens | Anthropic |
-| Claude Sonnet 4.6 | 3 | ~$3/M tokens | ~$15/M tokens | Anthropic |
-| Gemini 3.1 Pro | 5-6 | $1.25-2.00/M tokens | $5-12/M tokens | Google, via Antigravity |
-| Gemini 3.8 Flash | 7-9 | $0.075-0.825/M tokens | $0.63-4.13/M tokens | Google, via Antigravity |
-| Qwen3 (local) | 9-10 | $0 | $0 | Ollama, runs locally |
+| Model (examples) | Input cost | Output cost | Notes |
+|-------|-----------|-------------|-------|
+| Claude Opus 4.6 | ~$5/M tokens | ~$25/M tokens | Anthropic |
+| Claude Sonnet 4.6 | ~$3/M tokens | ~$15/M tokens | Anthropic |
+| Gemini 3.1 Pro | $1.25-2.00/M tokens | $5-12/M tokens | Google, via Antigravity |
+| Gemini 3.8 Flash | $0.075-0.825/M tokens | $0.63-4.13/M tokens | Google, via Antigravity |
+| Qwen3 (local) | $0 | $0 | Ollama, runs locally |
 
-Run `hyctl pricing list` for live rates fetched from OpenRouter.
+Example rates only, OpenRouter list prices as of 2026-11-12. Run `hyctl pricing list` for live rates for every model, fetched from OpenRouter.
 
-## Typical Savings vs All-Claude Sessions
-
-| Session type | Without Hydra | With Hydra | Saved |
-|-------------|--------------|-----------|-------|
-| Write DTO / interface | ~$0.003 | $0.000 (local) | 100% |
-| CRUD controller + tests | ~$0.008 | ~$0.0001 | ~99% |
-| Code review + refactor | ~$0.012 | ~$0.004 | ~67% |
-| Architecture decision | ~$0.020 | ~$0.020 | 0% |
-| **Typical 50-call session** | **~$0.22** | **~$0.04** | **~82%** |
-
-Computed in June 2026 with Opus at $15/$75. At the current $5/$25 the all-Claude
-baseline is a third of this, so the real savings are lower.
+Hydra publishes no savings percentage. What you spend depends on which models you have and what you ask them; `hyctl cost` and `hyctl stats` report your own spend.
 
 ## Enterprise / Commercial Support
 

@@ -83,7 +83,7 @@ export function AppHeader({
         <button
           className="apphead__stat"
           onClick={onHeads}
-          title={headsError || 'What this machine can route to'}
+          title={headsError || 'Models this machine can use'}
         >
           <span
             className={
@@ -100,7 +100,7 @@ export function AppHeader({
           {/* Three states, not two: an unread probe is not zero heads, and a
               probe that failed is not one still running. */}
           {routable !== null
-            ? `${routable} routable`
+            ? `${routable} ready`
             : headsError
               ? 'probe failed'
               : 'probing…'}

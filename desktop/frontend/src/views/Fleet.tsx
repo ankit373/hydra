@@ -21,13 +21,13 @@ export function Fleet({
 
       {!data.hasRuns ? (
         <div className="empty">
-          <p className="empty__title">Nothing has run yet</p>
-          <p>Ask for something in Chat, or run it from a terminal instead:</p>
+          <p className="empty__title">No requests yet</p>
+          <p>Ask something in Chat and it will appear here.</p>
           <button className="empty__cta" onClick={onStartTask}>
             Start a task
           </button>
           <p className="empty__alt">
-            <code>hyctl dispatch --enum SIMPLE "…"</code>
+            From a terminal: <code>hyctl dispatch "…"</code>
           </p>
         </div>
       ) : (
@@ -93,7 +93,7 @@ function RunCard({
         </button>
         <span className="run__meta">
           {ms(run.elapsedMs)} · {usdExact(run.costUsd)}
-          {run.confidence > 0 && ` · ${pct(run.confidence * 100, 1)} confidence`}
+          {run.confidence > 0 && ` · ${pct(run.confidence * 100, 1)} likely correct`}
         </span>
       </header>
 
@@ -181,7 +181,7 @@ function AgentRow({ agent }: { agent: Agent }) {
       <span className="agent__meta">
         {agent.durationMs > 0 && ms(agent.durationMs)}
         {agent.costUsd > 0 && ` · ${usdExact(agent.costUsd)}`}
-        {agent.confidence > 0 && ` · ${pct(agent.confidence * 100, 1)}`}
+        {agent.confidence > 0 && ` · ${pct(agent.confidence * 100, 1)} likely correct`}
       </span>
       {agent.detail && <span className="agent__detail">{agent.detail}</span>}
     </li>
