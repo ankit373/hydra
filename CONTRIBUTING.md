@@ -27,14 +27,19 @@ By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). We main
 
 ## Signing the CLA
 
-Hydra accepts contributions under a [Contributor License Agreement](CLA.md). Two steps, once, and
-then never again:
+Hydra accepts contributions under a [Contributor License Agreement](CLA.md). You sign it once,
+on your first pull request, and never again:
 
-1. Add yourself to [`CONTRIBUTORS.md`](CONTRIBUTORS.md) in the same pull request as your first
-   contribution
-2. Tick the CLA box in the pull request description
+1. Open your pull request. [CLA Assistant](https://cla-assistant.io/ankit373/hydra) comments with
+   a link to sign.
+2. Follow the link and sign with your GitHub account. The `license/cla` check turns green, and it
+   covers all your future pull requests too.
 
-A workflow checks both. Bot pull requests (Dependabot, release-please) are exempt.
+CI on a pull request from a fork starts once you have signed, so sign first if you are waiting on
+checks. Bot pull requests (Dependabot, release-please, Mergify) are exempt.
+
+[`CONTRIBUTORS.md`](CONTRIBUTORS.md) is a thank-you list, not a gate. Add yourself if you like; the
+CLA does not depend on it.
 
 **Most projects like this use a DCO instead**, including vLLM and Linux. A DCO certifies you have
 the right to submit; a CLA also grants a copyright and patent licence, which is what keeps a future

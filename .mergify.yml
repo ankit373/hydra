@@ -36,8 +36,9 @@ shared:
     - check-success=Workflow security
     - check-success=Mergify config
 
-  # Not in develop's branch protection, so the queues require it (bots pass it).
-  cla: &cla check-success=Contributor has signed
+  # CLA Assistant's commit status: pending until the author signs, then success.
+  # Not in develop's branch protection, so the queues require it (allowlisted bots pass it).
+  cla: &cla check-success=license/cla
 
   # release-please derives the bump and changelog from this, so it gates the queue.
   conventional: &conventional 'title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
@@ -134,8 +135,8 @@ queue_rules:
       - and: *release_build
       - and: *security
 
-  # CLA sits in queue_conditions: merge_conditions run on Mergify's draft PR, whose
-  # author (mergify[bot]) the CLA check would fail. Queue conditions hold while queued.
+  # CLA sits in queue_conditions: merge_conditions run on Mergify's draft PR, where license/cla
+  # judges the batch and mergify[bot], not this PR's author. Queue conditions hold while queued.
   - name: release
     queue_conditions:
       - base~=^release/v
@@ -210,9 +211,9 @@ merge_protections:
     success_conditions:
       - *closes
 
-  # release-please opens its PR with GITHUB_TOKEN, which starts no workflow, so no CLA run.
+  # release-please's PR is the repo's own, so a CLA Assistant outage must not hold a release.
   - name: CLA signed
-    description: The author has ticked the CLA box and is in CONTRIBUTORS.md.
+    description: Every author has signed the CLA with CLA Assistant (license/cla).
     if:
       - *not_mergify
       - not:
@@ -373,17 +374,6 @@ pull_request_rules:
         message: |
           @{{author}}, `main` only takes `release/vX.Y.Z-to-main`, `hotfix/*` and release-please PRs.
           Retarget this PR to `develop`; it reaches main with the next release.
-
-  - name: CLA not signed
-    conditions:
-      - check-failure=Contributor has signed
-      - -closed
-    actions:
-      comment:
-        message: |
-          @{{author}}, the CLA check failed: tick the CLA box in the description and add yourself to
-          CONTRIBUTORS.md in this PR. [CLA.md](https://github.com/ankit373/hydra/blob/main/CLA.md) explains
-          why it is a CLA and not a DCO.
 
   - name: Release PR missing Release-As footer
     conditions:
