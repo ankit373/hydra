@@ -1,5 +1,6 @@
 # Merge queue for hydra: every PR lands through here, never via the merge button.
 # develop/release PRs merge on green; main only on a maintainer's @mergifyio queue.
+# Mergify reads this file from main only: a change here is live once a release carries it.
 
 shared:
   # main and release/v* require no checks in GitHub, so the queue requires them.
@@ -18,33 +19,104 @@ shared:
     - check-success=YAML validation
     - check-success=Secret scan
 
+  # PRs into main also build what a release ships (ci.yml), since merging one publishes.
+  release_build: &release_build
+    - check-success=Release build (GoReleaser)
+    - check-success=Release desktop build / darwin/universal
+    - check-success=Release desktop build / windows/amd64
+    - check-success=Release desktop build / windows/arm64
+    - check-success=Release desktop build / linux/amd64
+    - check-success=Release desktop build / linux/arm64
+
+  # Security and config gates (ci.yml). Not in any branch protection yet, so
+  # every queue requires them itself.
+  security: &security
+    - check-success=Go vulnerability scan
+    - check-success=Dependency review
+    - check-success=Workflow security
+    - check-success=Mergify config
+
   # Not in develop's branch protection, so the queues require it (bots pass it).
   cla: &cla check-success=Contributor has signed
 
   # release-please derives the bump and changelog from this, so it gates the queue.
   conventional: &conventional 'title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
 
+  # close-shipped-issues.yml reads this back at release time; without it the issue never closes (#217).
+  closes: &closes 'body~=(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #\d+'
+
+  # A squash leaves release-please nothing to bump without this footer (v1.1.0, #219).
+  release_as: &release_as 'body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$'
+
+  # Branches a maintainer promotes to main: a release carry or a hotfix.
+  promotion_head: &promotion_head 'head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+)$'
+
+  # A carry must be a feat/fix(release) with a Release-As footer; a hotfix needs neither.
+  promotion_shape: &promotion_shape
+    or:
+      - head~=^hotfix/
+      - and:
+          - title~=^(feat|fix)\(release\)
+          - *release_as
+
+  # The only branches that may land on main: the promotions plus release-please.
+  main_head: &main_head 'head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+|release-please--.+)$'
+
+  release_please: &release_please head~=^release-please--
+  # A fork can name a branch anything, so the bot and the repo are what identify release-please.
+  release_please_bot: &release_please_bot author=github-actions[bot]
+  same_repo: &same_repo -from-fork
+  # release-please's PR is CHANGELOG + manifest only; anything else is not its PR.
+  release_please_files: &release_please_files -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+
+  # sync-develop.yml's PR, pinned to the bot and the repo since anyone can name a branch.
+  back_merge: &back_merge
+    and:
+      - head=chore/back-merge-main
+      - author=github-actions[bot]
+      - *same_repo
+  human: &human -author~=\[bot\]$
+  dependabot: &dependabot author=dependabot[bot]
+  # Mergify's own draft and config PRs are not contributions; protections skip them.
+  not_mergify: &not_mergify -author=mergify[bot]
+
+  # Labels a person puts on to say "do not land this yet".
+  not_held: &not_held
+    - label!=hold
+    - label!=do-not-merge
+    - label!=wip
+
 merge_queue:
   queue_controls_comment: false
-  # One PR at a time: the CI matrix is the expensive part, and volume is low.
+  # One check at a time: the CI matrix is the expensive part, and volume is low.
   max_parallel_checks: 1
+  # One comment with the result (merged, or dequeued and why); progress is in the check.
+  status_comments: outcomes
 
 defaults:
   queue_rule:
     merge_method: squash
     batch_size: 1
+    # About 1.5x the slowest CI run measured (29 min); auto sets no timeout until a queue has ~20 runs.
+    checks_timeout: 45 minutes
     # "title (#n)" feeds close-shipped-issues; the body carries the Release-As footer.
     commit_message_format:
       title: pr-title
       body: pr-body
 
 queue_rules:
-  # release-please's own PR: CHANGELOG + manifest only, so it merges without the CI matrix.
+  # release-please's own PR. Merging it tags and publishes everywhere, so the full CI set
+  # must pass first; in queue_conditions, as merge_conditions would check a draft (#1353).
   - name: release-please
     queue_conditions:
       - base=main
-      - head~=^release-please--
-      - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+      - *release_please
+      - *release_please_bot
+      - *same_repo
+      - *release_please_files
+      - and: *ci
+      - and: *release_build
+      - and: *security
     merge_conditions: []
 
   # Promotion to main from a hand-built carry (commit-tree: release tree, main
@@ -52,27 +124,31 @@ queue_rules:
   - name: promote
     queue_conditions:
       - base=main
-      - head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+)$
+      - *promotion_head
       - "#approved-reviews-by>=1"
       - author=ankit373
       - -draft
-      - or:
-          - head~=^hotfix/
-          - and:
-              - title~=^(feat|fix)\(release\)
-              - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
-    merge_conditions: *ci
+      - *promotion_shape
+    merge_conditions:
+      - and: *ci
+      - and: *release_build
+      - and: *security
 
+  # CLA sits in queue_conditions: merge_conditions run on Mergify's draft PR, whose
+  # author (mergify[bot]) the CLA check would fail. Queue conditions hold while queued.
   - name: release
     queue_conditions:
       - base~=^release/v
       - -draft
       - *conventional
+      - *cla
     merge_conditions:
       - and: *ci
-      - *cla
+      - and: *security
     # merge, not rebase: a Mergify rebase is an unsigned git push (#1079).
     update_method: merge
+    # One fresh run for a flaky leg; a second red dequeues, so nothing merges around it.
+    max_checks_retries: 1
 
   # develop's 13 required checks are injected from branch protection.
   - name: develop
@@ -80,9 +156,121 @@ queue_rules:
       - base=develop
       - -draft
       - *conventional
-    merge_conditions:
       - *cla
+    # Branch protection supplies develop's 13 checks; these are on top of them.
+    merge_conditions: *security
     update_method: merge
+    max_checks_retries: 1
+    # Up to 3 PRs share one CI run when a backlog forms; a red batch is split to find the culprit.
+    # Safe with signed commits: Mergify signs its queue branch, and each PR still lands as its own squash.
+    batch_size:
+      min: 1
+      max: 3
+
+# First match wins; unmatched PRs are medium.
+priority_rules:
+  - name: hotfix and security first
+    conditions:
+      - or:
+          - head~=^hotfix/
+          # A label, not the title: only a maintainer can apply one, and this rule interrupts running checks.
+          - label=security
+    priority: high
+    allow_checks_interruption: true
+
+  - name: Dependabot last
+    conditions:
+      - *dependabot
+    priority: low
+
+# Reported as one "Mergify Merge Protections" check. Mergify will not merge while it
+# fails; make it a required check in branch protection to stop the merge button too.
+#
+# Freezes are off. For a one-off window: `mergify freeze create --reason ... --timezone
+# Asia/Kolkata --start ... --end ... -e "label=hotfix"`, or Merge Protections >
+# Scheduled Freezes in the dashboard. For a recurring window, add a rule here with
+# `success_conditions: [schedule=Mon-Fri 09:00-18:00[Asia/Kolkata]]`.
+merge_protections:
+  - name: Conventional title
+    description: The squash commit takes the title verbatim and release-please reads it.
+    if:
+      - *not_mergify
+    success_conditions:
+      - *conventional
+
+  - name: Closes keyword
+    description: close-shipped-issues.yml closes the issue from this at release time.
+    if:
+      - *not_mergify
+      - *human
+      - or:
+          - base=develop
+          - base~=^release/v
+          - head~=^hotfix/
+    success_conditions:
+      - *closes
+
+  # release-please opens its PR with GITHUB_TOKEN, which starts no workflow, so no CLA run.
+  - name: CLA signed
+    description: The author has ticked the CLA box and is in CONTRIBUTORS.md.
+    if:
+      - *not_mergify
+      - not:
+          and:
+            - *release_please
+            - author=github-actions[bot]
+    success_conditions:
+      - *cla
+
+  - name: Ready to land
+    description: Not a draft, and no hold, do-not-merge or wip label.
+    if:
+      - *not_mergify
+    success_conditions:
+      - -draft
+      - and: *not_held
+
+  - name: Review threads resolved
+    description: Every review thread is resolved, on main and release branches too.
+    if:
+      - *not_mergify
+    success_conditions:
+      - "#review-threads-unresolved=0"
+
+  # A merged workflow runs with the repo's token and secrets, and develop needs no review.
+  - name: Workflow changes need the maintainer
+    description: A change under .github/workflows/ needs ankit373's approval unless they wrote it.
+    if:
+      - files~=^\.github/workflows/
+      - -author=ankit373
+      - *not_mergify
+      # The back-merge only replays what already passed this gate on its way to main.
+      - not: *back_merge
+    success_conditions:
+      - approved-reviews-by=ankit373
+
+  - name: Feature work targets develop
+    description: feature, feat, chore and docs branches never go straight to main or a release.
+    if:
+      - head~=^(feature|feat|chore|docs)/
+    success_conditions:
+      - base=develop
+
+  # A release-branch fix during UAT is a fix/ branch into release/vX.Y.Z (CLAUDE.md, Step 6).
+  - name: Fixes target develop or a release branch
+    description: fix branches go to develop, or to a release branch under UAT.
+    if:
+      - head~=^fix/
+    success_conditions:
+      - base~=^(develop|release/v\d+\.\d+\.\d+)$
+
+  - name: Only promotions reach main
+    description: main takes release/vX.Y.Z-to-main, hotfix/* and release-please, nothing else.
+    if:
+      - base=main
+      - *not_mergify
+    success_conditions:
+      - *main_head
 
 pull_request_rules:
   # Opt-in, like vLLM's `ready`: matching on author alone would queue every stale open PR.
@@ -91,15 +279,17 @@ pull_request_rules:
       - base~=^(develop|release/v.+)$
       - -draft
       - label=ready
-      - label!=hold
+      - and: *not_held
     actions:
       queue:
 
   - name: Approve and queue release-please's PR
     conditions:
       - base=main
-      - head~=^release-please--
-      - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+      - *release_please
+      - *release_please_bot
+      - *same_repo
+      - *release_please_files
     actions:
       review:
         type: APPROVE
@@ -113,42 +303,76 @@ pull_request_rules:
       - base=main
       - author=ankit373
       - -draft
-      - head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+)$
-      - or:
-          - head~=^hotfix/
-          - and:
-              - title~=^(feat|fix)\(release\)
-              - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
+      - *promotion_head
+      - *promotion_shape
     actions:
       review:
         type: APPROVE
         message: Maintainer's promotion; it ships only when they comment @mergifyio queue.
 
-  # Hygiene bots, modelled on vLLM's: they comment and label, they never block.
+  # Patch and minor bumps are routine; the develop queue still waits for every check.
+  - name: Queue Dependabot patch and minor bumps
+    conditions:
+      - *dependabot
+      - base=develop
+      - -draft
+      - "#dependabot-update-type>=1"
+      - -dependabot-update-type=version-update:semver-major
+      - and: *not_held
+    actions:
+      queue:
+
+  # Security updates ignore dependabot.yml's target-branch and open against main.
+  - name: Dependabot PR to main
+    conditions:
+      - *dependabot
+      - base=main
+      - -closed
+    actions:
+      comment:
+        message: |
+          This Dependabot PR targets `main`, which only takes release carries, hotfixes and release-please.
+          Land the same bump on `develop` instead (e.g. `@dependabot recreate` after retargeting, or a
+          `chore/<n>-security-bumps-on-develop` PR) and close this one. It ships with the next release.
+
+  # Hygiene bots, modelled on vLLM's: they comment and label; the protections above block.
   - name: Conventional title missing
     conditions:
       - -closed
       - -draft
-      - '-title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
+      - not: *conventional
     actions:
       comment:
         message: |
           @{{author}}, the title must be a conventional commit, e.g. `fix(dispatch): nil panic on empty prompt`.
-          The squash commit takes it verbatim and release-please reads it, so the queue will not take this PR until it is.
+          The squash commit takes it verbatim and release-please reads it, so the queue will not take this PR
+          until it is.
 
   - name: Closes keyword missing
     conditions:
       - base=develop
       - -closed
       - -draft
-      - -author~=\[bot\]$
-      - -head=chore/back-merge-main
-      - -body~=(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #\d+
+      - *human
+      - not: *closes
     actions:
       comment:
         message: |
           @{{author}}, add `Closes #<issue>` to the description. On develop it does not close anything at merge;
           close-shipped-issues.yml reads it back at release time, so without it the issue stays open for ever (#217).
+
+  - name: Disallowed branch to main
+    conditions:
+      - base=main
+      - -closed
+      - *not_mergify
+      - -author=dependabot[bot]
+      - not: *main_head
+    actions:
+      comment:
+        message: |
+          @{{author}}, `main` only takes `release/vX.Y.Z-to-main`, `hotfix/*` and release-please PRs.
+          Retarget this PR to `develop`; it reaches main with the next release.
 
   - name: CLA not signed
     conditions:
@@ -158,48 +382,142 @@ pull_request_rules:
       comment:
         message: |
           @{{author}}, the CLA check failed: tick the CLA box in the description and add yourself to
-          CONTRIBUTORS.md in this PR. [CLA.md](https://github.com/ankit373/hydra/blob/main/CLA.md) explains why it is a CLA and not a DCO.
+          CONTRIBUTORS.md in this PR. [CLA.md](https://github.com/ankit373/hydra/blob/main/CLA.md) explains
+          why it is a CLA and not a DCO.
 
   - name: Release PR missing Release-As footer
     conditions:
       - base=main
       - head~=^release/v.+-to-main$
       - -closed
-      - -body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
+      - not: *release_as
     actions:
       comment:
         message: |
           This release PR has no `Release-As: X.Y.Z` footer. Without it the squash leaves release-please nothing
           to bump and no release is made, silently (v1.1.0, #219). The queue will not take it until it has one.
 
-  - name: Conflict, needs rebase
+  # needs-rebase is the old name of this label; it goes when the conflict does.
+  - name: Conflict
     conditions:
       - conflict
       - -closed
     actions:
       label:
-        add: [needs-rebase]
+        add: [conflict]
+        remove: [needs-rebase]
       comment:
         message: |
-          @{{author}}, this conflicts with `{{base}}`. Rebase on it and force-push your branch; the queue skips it until then.
+          @{{author}}, this conflicts with `{{base}}`. Rebase on it and force-push your branch; the queue
+          skips it until then.
 
   - name: Conflict resolved
     conditions:
       - -conflict
-      - -closed
     actions:
       label:
-        remove: [needs-rebase]
+        remove: [conflict, needs-rebase]
 
-  - name: label-desktop
+  # A workflow edit runs with repo secrets on the next push; the maintainer reviews it.
+  - name: Workflow change
+    conditions:
+      - -closed
+      - files~=^\.github/workflows/
+    actions:
+      label:
+        add: [workflow-change]
+      request_reviews:
+        users: [ankit373]
+
+  - name: Assign the author
+    conditions:
+      - -closed
+      - *human
+      - "#assignee=0"
+    actions:
+      assign:
+        add_users: ["{{author}}"]
+
+  # Add only: the label itself bumps updated-at, so an auto-remove rule would flap.
+  - name: Stale
+    conditions:
+      - -closed
+      - updated-at<21 days ago
+      - label!=hold
+      - -head~=^release
+    actions:
+      label:
+        add: [stale]
+      comment:
+        message: |
+          @{{author}}, nothing has happened here for 21 days. Push, comment or close it, and remove the `stale` label
+          when you pick it back up.
+
+  # Size from the larger of added and deleted lines; toggle moves the label as the PR grows.
+  - name: size/XS
+    conditions:
+      - "#added-lines<10"
+      - "#deleted-lines<10"
+    actions: {label: {toggle: [size/XS]}}
+
+  - name: size/S
+    conditions:
+      - "#added-lines<100"
+      - "#deleted-lines<100"
+      - or: ["#added-lines>=10", "#deleted-lines>=10"]
+    actions: {label: {toggle: [size/S]}}
+
+  - name: size/M
+    conditions:
+      - "#added-lines<500"
+      - "#deleted-lines<500"
+      - or: ["#added-lines>=100", "#deleted-lines>=100"]
+    actions: {label: {toggle: [size/M]}}
+
+  - name: size/L
+    conditions:
+      - "#added-lines<1000"
+      - "#deleted-lines<1000"
+      - or: ["#added-lines>=500", "#deleted-lines>=500"]
+    actions: {label: {toggle: [size/L]}}
+
+  - name: size/XL
+    conditions:
+      - or: ["#added-lines>=1000", "#deleted-lines>=1000"]
+    actions: {label: {toggle: [size/XL]}}
+
+  # Area labels: one per real directory, so a reviewer can filter by what a PR touches.
+  - name: area/desktop
     conditions: [-closed, files~=^desktop/]
-    actions: {label: {add: [desktop]}}
+    actions: {label: {add: [area/desktop]}}
 
-  - name: label-registry
+  - name: area/trust
+    conditions:
+      - -closed
+      - or: [files~=^internal/trust/, files~=^cmd/hydra/trust_]
+    actions: {label: {add: [area/trust]}}
+
+  - name: area/mcp
+    conditions:
+      - -closed
+      - or: [files~=^internal/mcpregistry/, files~=^desktop/api/mcp, files~=^desktop/frontend/src/views/MCP]
+    actions: {label: {add: [area/mcp]}}
+
+  - name: area/serve
+    conditions:
+      - -closed
+      - or: [files~=^internal/serve/, files~=^cmd/hydra/serve]
+    actions: {label: {add: [area/serve]}}
+
+  - name: area/executor
+    conditions: [-closed, files~=^internal/executor/]
+    actions: {label: {add: [area/executor]}}
+
+  - name: area/registry
     conditions: [-closed, files~=^registry/]
-    actions: {label: {add: [registry]}}
+    actions: {label: {add: [area/registry]}}
 
-  - name: label-ci-build
+  - name: area/ci
     conditions:
       - -closed
       - or:
@@ -210,15 +528,15 @@ pull_request_rules:
           - files~=^install(-app)?\.(sh|ps1)$
           - files=.goreleaser.yaml
           - files=.mergify.yml
-    actions: {label: {add: [ci/build]}}
+    actions: {label: {add: [area/ci]}}
 
-  - name: label-docs
+  - name: area/docs
     conditions:
       - -closed
       - or:
           - files~=^docs/
           - files~=^[A-Z]+\.md$
-    actions: {label: {add: [documentation]}}
+    actions: {label: {add: [area/docs]}}
 
   - name: label-dependencies
     conditions:
@@ -233,7 +551,7 @@ pull_request_rules:
       - -closed
       - or:
           - head~=^release/v
-          - head~=^release-please--
+          - *release_please
           - head~=^hotfix/
     actions: {label: {add: [release]}}
 
