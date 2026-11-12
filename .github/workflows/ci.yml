@@ -317,6 +317,44 @@ jobs:
         working-directory: desktop/frontend
         run: npm run build
 
+  # The website, the desktop app and the TUI all style from files generated out
+  # of design/tokens. Rebuilding must change nothing: a hand edit to a generated
+  # file, or a token change committed without its outputs, fails here (#1339).
+  design-tokens:
+    name: Design tokens up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: design/package-lock.json
+
+      - name: Install dependencies
+        working-directory: design
+        run: npm ci
+
+      # The build also fails on any declared WCAG 2 or APCA floor it misses.
+      - name: Rebuild tokens
+        working-directory: design
+        run: npm run build
+
+      # status, not diff: a generated file the rebuild created but nobody
+      # committed is untracked, and `git diff` would pass it.
+      - name: Generated files match the token source
+        run: |
+          paths="design DESIGN.md docs/assets/tokens.css desktop/frontend/src/tokens.generated.css desktop/window_gen.go internal/tui/tokens_gen.go"
+          drift=$(git status --porcelain -- $paths)
+          if [ -n "$drift" ]; then
+            echo "Generated files are out of date; run: cd design && npm ci && npm run build"
+            echo "$drift"
+            git diff -- $paths
+            exit 1
+          fi
+
   # Every target Hydra ships (and windows/arm64, which it should, see #262)
   # compiles and vets clean today. Nothing guarded that, so a Unix-only syscall
   # or a platform-specific import could land with CI fully green, because CI only

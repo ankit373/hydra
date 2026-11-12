@@ -1,0 +1,298 @@
+{
+  "palette": {
+    "$type": "color",
+    "$description": "Primitive tier. Leonardo key colours per hue scale, plus the logo stops. Surfaces never use these directly; semantic roles are generated from them.",
+    "neutral": {
+      "950": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0235,
+            0.0275,
+            0.0588
+          ],
+          "hex": "#06070f"
+        }
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0549,
+            0.0667,
+            0.1333
+          ],
+          "hex": "#0e1122"
+        }
+      },
+      "50": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9569,
+            0.9608,
+            0.9843
+          ],
+          "hex": "#f4f5fb"
+        }
+      },
+      "300": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6039,
+            0.6275,
+            0.7686
+          ],
+          "hex": "#9aa0c4"
+        }
+      },
+      "600": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3529,
+            0.3725,
+            0.5216
+          ],
+          "hex": "#5a5f85"
+        }
+      }
+    },
+    "aqua": {
+      "400": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.902,
+            0.7647
+          ],
+          "hex": "#00e6c3"
+        }
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.302,
+            0.2588
+          ],
+          "hex": "#004d42"
+        }
+      }
+    },
+    "cyan": {
+      "300": {
+        "$value": "{palette.brand.cyan}"
+      },
+      "700": {
+        "$value": "{palette.brand.cyan-deep}"
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0,
+            0.2314,
+            0.251
+          ],
+          "hex": "#003b40"
+        }
+      }
+    },
+    "violet": {
+      "200": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7686,
+            0.7098,
+            0.9922
+          ],
+          "hex": "#c4b5fd"
+        }
+      },
+      "500": {
+        "$value": "{palette.brand.violet}"
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2314,
+            0.1137,
+            0.5608
+          ],
+          "hex": "#3b1d8f"
+        }
+      }
+    },
+    "green": {
+      "400": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2471,
+            0.851,
+            0.5412
+          ],
+          "hex": "#3fd98a"
+        }
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0431,
+            0.3647,
+            0.2
+          ],
+          "hex": "#0b5d33"
+        }
+      }
+    },
+    "amber": {
+      "400": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8784,
+            0.6627,
+            0.2275
+          ],
+          "hex": "#e0a93a"
+        }
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4196,
+            0.2706,
+            0
+          ],
+          "hex": "#6b4500"
+        }
+      }
+    },
+    "red": {
+      "400": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.3529,
+            0.4314
+          ],
+          "hex": "#ff5a6e"
+        }
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5569,
+            0.0784,
+            0.149
+          ],
+          "hex": "#8e1426"
+        }
+      }
+    },
+    "blue": {
+      "400": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3529,
+            0.6627,
+            1
+          ],
+          "hex": "#5aa9ff"
+        }
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0431,
+            0.2392,
+            0.502
+          ],
+          "hex": "#0b3d80"
+        }
+      }
+    },
+    "brand": {
+      "$description": "Logo gradient stops. The gradient appears in the logo mark and wordmark only.",
+      "cyan": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1647,
+            0.9412,
+            0.8784
+          ],
+          "hex": "#2af0e0"
+        }
+      },
+      "violet": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5451,
+            0.3608,
+            0.9647
+          ],
+          "hex": "#8b5cf6"
+        }
+      },
+      "magenta": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9098,
+            0.3216,
+            0.7843
+          ],
+          "hex": "#e852c8"
+        }
+      },
+      "cyan-deep": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.4392,
+            0.4784
+          ],
+          "hex": "#00707a"
+        }
+      },
+      "violet-deep": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4275,
+            0.1569,
+            0.851
+          ],
+          "hex": "#6d28d9"
+        }
+      },
+      "magenta-deep": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6353,
+            0.1098,
+            0.6863
+          ],
+          "hex": "#a21caf"
+        }
+      }
+    }
+  }
+}
