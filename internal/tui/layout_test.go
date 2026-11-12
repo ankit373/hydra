@@ -441,10 +441,10 @@ func TestCkWordmark_PreservesText(t *testing.T) {
 	if got := stripANSI(ckWordmark("HYDRA")); got != "HYDRA" {
 		t.Errorf("wordmark text = %q", got)
 	}
-	if c := ckLerpHex(0.0); c != lipgloss.Color("#2AF0E0") {
+	if c := ckLerpHex(0.0); c.Dark != "#2AF0E0" || c.Light != "#00707A" {
 		t.Errorf("lerp(0) = %v", c)
 	}
-	if c := ckLerpHex(1.0); c != lipgloss.Color("#E852C8") {
+	if c := ckLerpHex(1.0); c.Dark != "#E852C8" || c.Light != "#A21CAF" {
 		t.Errorf("lerp(1) = %v", c)
 	}
 }
@@ -458,10 +458,10 @@ func TestPlural(t *testing.T) {
 // The tier colour ramp must be defined for every tier, including ones outside
 // the documented 1-10 range.
 func TestCkTierColor_CoversEveryTier(t *testing.T) {
-	seen := map[lipgloss.Color]bool{}
+	seen := map[lipgloss.CompleteAdaptiveColor]bool{}
 	for tier := -1; tier <= 12; tier++ {
 		c := ckTierColor(tier)
-		if c == "" {
+		if c == (lipgloss.CompleteAdaptiveColor{}) {
 			t.Errorf("tier %d has no colour", tier)
 		}
 		seen[c] = true
