@@ -16,7 +16,7 @@ on:
       - ".github/workflows/bench.yml"
 
 concurrency:
-  group: bench-${{ github.head_ref }}
+  group: bench-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
