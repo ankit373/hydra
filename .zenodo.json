@@ -1,0 +1,22 @@
+{
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "mit",
+  "title": "Hydra (hyctl): the trust control plane for AI development",
+  "description": "<p>Hydra (hyctl) is a local-first, multi-vendor AI control plane. It routes each task to a model by confidence of correctness, not just price: the cheapest model on your machine or account that clears the confidence you set. One command, every model.</p>",
+  "creators": [
+    {
+      "name": "Jha, Ankit",
+      "orcid": "TODO-add-orcid-iD"
+    }
+  ],
+  "keywords": [
+    "ai",
+    "llm",
+    "model routing",
+    "orchestration",
+    "cli",
+    "local-first",
+    "verification"
+  ]
+}
