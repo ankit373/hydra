@@ -17,7 +17,7 @@
   "bugs": "https://github.com/ankit373/hydra/issues",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ankit373/hydra.git",
+    "url": "git+https://github.com/ankit373/hydra.git",
     "directory": "npm"
   },
   "license": "MIT",

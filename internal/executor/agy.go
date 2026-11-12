@@ -119,6 +119,10 @@ func agyCommand(ctx context.Context, req Request) (*exec.Cmd, context.CancelFunc
 		return nil, nil, "", err
 	}
 	cmd.Env = env
+	if err := sandbox.WithLimits(cmd, req.MaxMemoryMB, req.MaxCPUSeconds); err != nil {
+		cancel()
+		return nil, nil, "", err
+	}
 	return cmd, func() { cancel(); closeGate() }, modelFlag, nil
 }
 

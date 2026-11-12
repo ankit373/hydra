@@ -257,10 +257,8 @@ func TestCLI_DryRunExecutesNothing(t *testing.T) {
 // Commands that write to files must refuse a relative path before doing
 // anything, and say which it was.
 //
-// Only the ones that return an error are driven in-process: `hyctl edit` calls
-// os.Exit(2) on a failed edit, deliberately, so callers can gate on it, which
-// would take the test binary down with it. Exit codes are asserted against a
-// real subprocess below.
+// Only the ones that return an error are driven here: `hyctl edit` reports a
+// relative path in its JSON result and exits 2, which exit_code_test.go asserts.
 func TestCLI_FileCommandsRefuseUnsafePaths(t *testing.T) {
 	cliSandbox(t)
 
@@ -390,6 +388,39 @@ func TestToFloat(t *testing.T) {
 		if got := toFloat(v); got != 0 {
 			t.Errorf("toFloat(%#v) = %v, want 0", v, got)
 		}
+	}
+}
+
+// statusOutput runs printBudgetStatus over one state.json body, ANSI stripped.
+func statusOutput(t *testing.T, state string) string {
+	t.Helper()
+	testutil.NewSandbox(t)
+	dir := filepath.Join(config.Dir(), "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return stripANSICodes(captureStdout(t, func() { printBudgetStatus(nil) }))
+}
+
+// The session line is develop's verbatim (main.go at b76d105), and a level of
+// 0 prints none, as claude_pct at 0 never did.
+func TestPrintBudgetStatus_KeepsDevelopsSessionLine(t *testing.T) {
+	if out := statusOutput(t, `{"claude_pct":52}`); !strings.Contains(out, "  Claude  :  █████░░░░░  52%  compact\n") {
+		t.Errorf("status at 52%% does not print develop's line:\n%q", out)
+	}
+	if out := statusOutput(t, `{"claude_pct":0}`); strings.Contains(out, "Claude") {
+		t.Errorf("status at 0%% printed a session line:\n%s", out)
+	}
+}
+
+// develop rendered a null per-model entry as a row of zeros; it still does.
+func TestPrintBudgetStatus_NullModelEntryIsAZeroRow(t *testing.T) {
+	out := statusOutput(t, `{"budget":{"m":null}}`)
+	if !strings.Contains(out, "  m                     ░░░░░░░░░░   0%  0/0") {
+		t.Errorf("a null budget entry did not render as a zero row:\n%q", out)
 	}
 }
 

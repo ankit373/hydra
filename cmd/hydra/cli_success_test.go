@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -17,9 +18,9 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// The commands that call os.Exit do so only on their *failure* paths, `hyctl
-// edit` exits 2 when the edit fails, the MCP gate exits 3 on a deny, the oracle
-// exits 1 on a failing verdict, `parallel` exits 1 when a task fails. Their
+// The commands with a contracted exit code set it only on their *failure* paths,
+// `hyctl edit` exits 2 when the edit fails, the MCP gate exits 3 on a deny, the
+// oracle exits 1 on a failing verdict, `parallel` exits 1 when a task fails. Their
 // success paths are the larger bodies and run cleanly in process, so this drives
 // those: a real dispatch through a fake head planted on $PATH, with no network
 // and no API key.
@@ -453,7 +454,7 @@ func TestCLI_Dispatch_SwarmBillsEveryHead(t *testing.T) {
 // ── edit, executed for real ───────────────────────────────────────────────────
 
 func TestCLI_Edit_SucceedsAndRecordsTheEdit(t *testing.T) {
-	_, repo := dispatchable(t, marked("package main\n\nfunc main() {}"))
+	_, repo := dispatchable(t, "```go\npackage main\n\nfunc main() {}\n```")
 
 	file := filepath.Join(repo, "main.go")
 	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
@@ -1706,5 +1707,80 @@ func TestCLI_Tui_FailsFastWithNoTerminal(t *testing.T) {
 	}
 	if strings.TrimSpace(out) == "" {
 		t.Error("--snapshot rendered nothing")
+	}
+}
+
+// A score built from the neutral baseline must say which categories were never
+// checked, and the typosquat line must only fire on a real near-miss (#1170).
+func TestCLI_MCPRegistryAudit_ShowsUncheckedCategoriesAndOnlyNearMisses(t *testing.T) {
+	s := populated(t)
+	seed(t, "mcp_registry_cache.json", `{"fetched_at":"2026-01-01T00:00:00Z","servers":[
+		{"name":"io.github.acme/widget","packages":[{"registryType":"oci","identifier":"@acme/widget-mcp"}]},
+		{"name":"io.github.other/thing","packages":[{"registryType":"oci","identifier":"other-thing"}]}]}`)
+	claude := `{"mcpServers":{
+		"widget":  {"command":"npx","args":["@acme/widget-mcp"]},
+		"near":    {"command":"npx","args":["@acme/widgit-mcp"]},
+		"grafana": {"command":"npx","args":["mcp-grafana-server"]}}}`
+	if err := os.WriteFile(filepath.Join(s.Home, ".claude.json"), []byte(claude), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, cobraOut, err := run(t, "mcp", "registry", "audit")
+	if err != nil {
+		t.Fatalf("audit failed: %v\n%s", err, out+cobraOut)
+	}
+	for _, cat := range []string{"repo health", "operational", "community"} {
+		if !regexp.MustCompile(cat + `\s+not checked`).MatchString(out) {
+			t.Errorf("unchecked category %q is not shown:\n%s", cat, out)
+		}
+	}
+	if !strings.Contains(out, "context, not evidence of safety") {
+		t.Errorf("the registry-presence context signal is not shown:\n%s", out)
+	}
+	if !strings.Contains(out, `"@acme/widget-mcp" (1 edits away)`) {
+		t.Errorf("a 1-edit near-miss lost its typosquat line:\n%s", out)
+	}
+	if strings.Count(out, "verify this isn't a typosquat") != 1 {
+		t.Errorf("the typosquat line fired for a far identifier:\n%s", out)
+	}
+}
+
+// `list` empty before any sync must name the sync, not the audit the user just ran (#1170).
+func TestCLI_MCPRegistryList_NamesSyncWhenNeverSynced(t *testing.T) {
+	populated(t)
+	out, cobraOut, err := run(t, "mcp", "registry", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out+cobraOut, "`hyctl mcp registry sync`") {
+		t.Errorf("list did not name the missing sync:\n%s", out+cobraOut)
+	}
+}
+
+// `list` showed a bare score; it now says how many categories stand on evidence (#1170).
+func TestCLI_MCPRegistryList_ShowsCheckedCategoryCount(t *testing.T) {
+	populated(t)
+	seed(t, "mcp_registry_state.json", `{
+		"io.github.x/thin": {
+			"state": "provisional",
+			"manifest_hash": "a",
+			"first_seen_at": "2026-01-01T00:00:00Z",
+			"state_changed_at": "2026-01-01T00:00:00Z",
+			"last_score": {
+				"security_implementation": {"value": 70, "confidence": "low"},
+				"repository_health": {"confidence": "insufficient_evidence"},
+				"operational_security": {"confidence": "insufficient_evidence"},
+				"community_governance": {"confidence": "insufficient_evidence"},
+				"overall": 70,
+				"confidence": "low"
+			}
+		}
+	}`)
+	out, cobraOut, err := run(t, "mcp", "registry", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "1 of 4") {
+		t.Errorf("list did not show that 3 of 4 categories were never checked:\n%s", out+cobraOut)
 	}
 }

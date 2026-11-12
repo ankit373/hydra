@@ -569,3 +569,24 @@ func TestFormatScore_Rounds(t *testing.T) {
 		t.Errorf("FormatScore = %q, want 73/100", got)
 	}
 }
+
+// The audit's typosquat line and the scoring signal share this threshold; a
+// 15-edit "nearest" identifier was printed as a near-miss (#1170).
+func TestIsNearMiss(t *testing.T) {
+	for _, tt := range []struct {
+		ident string
+		dist  int
+		want  bool
+	}{
+		{"@acme/widget-mcp", 1, true},
+		{"@acme/widget-mcp", 2, true},
+		{"@acme/widget-mcp", 3, false},
+		{"@acme/widget-mcp", 15, false},
+		{"@acme/widget-mcp", 0, false},
+		{"ab", 1, false},
+	} {
+		if got := IsNearMiss(tt.ident, tt.dist); got != tt.want {
+			t.Errorf("IsNearMiss(%q, %d) = %v, want %v", tt.ident, tt.dist, got, tt.want)
+		}
+	}
+}

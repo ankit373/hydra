@@ -19,7 +19,7 @@ const FlushTimeout = 3 * time.Second
 // d.heads is already discovered by the time any dispatch runs.
 func (d *Dispatcher) recorder() *retrieve.Recorder {
 	d.recallOnce.Do(func() {
-		s, err := retrieve.Open(d.cfg, d.heads)
+		s, err := retrieve.Open(d.cfg, d.embedHeads())
 		if err != nil {
 			// A store that will not open means record nothing, which is not
 			// worth failing a dispatch over.

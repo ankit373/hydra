@@ -1,0 +1,28 @@
+{
+  "model": "jev-latest",
+  "state": "I was charged twice for my subscription this month. Please refund the extra charge.",
+  "questions": {
+    "billing": {
+      "type": "noul",
+      "instructions": "Is this message about billing?"
+    },
+    "tone": {
+      "type": "choice",
+      "instructions": "What is the tone of this message?",
+      "criteria": {
+        "angry": "An upset or hostile message",
+        "calm": "A neutral or polite message",
+        "excited": "An enthusiastic or eager message"
+      }
+    },
+    "urgency": {
+      "type": "score",
+      "instructions": "How urgent is this message?",
+      "criteria": [
+        "Can wait",
+        "Needs attention this week",
+        "Needs attention today"
+      ]
+    }
+  }
+}

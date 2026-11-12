@@ -17,8 +17,8 @@ describe('the verdict and the measurement', () => {
   // which is part of why the state had never been exercised.
   it('says so when the audit log is empty rather than rendering zeroes as fact', () => {
     render(<Security data={securityReport({ hasData: false })} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Evidence' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Detailed' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Evidence' }))
     expect(screen.getByText(/audit log is empty/i)).toBeInTheDocument()
   })
 })
@@ -97,16 +97,16 @@ describe('the banners, which are conditional and so were never exercised', () =>
   // instruction could not be followed.
   it('names the file to edit when the policy is fail-open', () => {
     render(<Security data={securityReport({ policyAudit: policyAudit({ failOpen: true }) })} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Guardrails' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Detailed' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Guardrails' }))
     const banner = screen.getByText(/FAIL-OPEN/)
     expect(banner.textContent).toMatch(/~\/\.hydra\/mcp_policy\.json/)
   })
 
   it('shows no fail-open banner when the default is deny', () => {
     render(<Security data={securityReport()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Guardrails' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Detailed' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Guardrails' }))
     expect(screen.queryByText(/FAIL-OPEN/)).not.toBeInTheDocument()
   })
 })
@@ -114,18 +114,20 @@ describe('the banners, which are conditional and so were never exercised', () =>
 describe('the tabs', () => {
   it('starts on Overview and switches to Detailed', () => {
     render(<Security data={securityReport()} />)
-    const overview = screen.getByRole('button', { name: 'Overview' })
-    expect(overview).toHaveAttribute('aria-current', 'page')
+    // aria-selected, not aria-current: a tab reports selection, and the role
+    // now matches what the markup does (aria-controls + a real tabpanel).
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
-    expect(screen.getByRole('button', { name: 'Detailed' })).toHaveAttribute('aria-current', 'page')
+    fireEvent.click(screen.getByRole('tab', { name: 'Detailed' }))
+    expect(screen.getByRole('tab', { name: 'Detailed' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'false')
   })
 
   // The point is that none of these throw on a report with empty collections,
   // which is the state a fresh machine is actually in.
   it('renders every detail tab without throwing', () => {
     render(<Security data={securityReport()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Detailed' }))
 
     for (const tab of [
       'Register', 'Coverage', 'Controls', 'Guardrails', 'Exposure',
@@ -139,8 +141,8 @@ describe('the tabs', () => {
 
   it('uses the UI vocabulary for the guardrails tab, not the internal name', () => {
     render(<Security data={securityReport()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
-    expect(screen.getByRole('button', { name: 'Guardrails' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Detailed' }))
+    expect(screen.getByRole('tab', { name: 'Guardrails' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Policy' })).not.toBeInTheDocument()
   })
 })
@@ -155,8 +157,8 @@ describe('the evidence tail', () => {
         })}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Evidence' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Detailed' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Evidence' }))
     expect(screen.getByText(/full audit log is longer/i)).toBeInTheDocument()
   })
 })
