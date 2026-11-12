@@ -1,0 +1,80 @@
+name: Routing bench
+
+# Routes a pinned prompt suite on the PR's base and head and diffs the decisions.
+# Read-only and secret-free; bench-comment.yml posts the result with a write token.
+on:
+  pull_request:
+    branches: [main, "release/v*"]
+    paths:
+      # The harness imports ~40 internal packages (classify, config, cost, ...),
+      # so any of them can move a decision; a hand list drifts.
+      - "internal/**"
+      - "registry/**"
+      - "go.mod"
+      - "go.sum"
+      - "ci/benchdiff/**"
+      - ".github/workflows/bench.yml"
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: Routing bench
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: head
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: head/go.mod
+          cache: true
+          cache-dependency-path: head/go.sum
+
+      - name: Route the suite on head
+        working-directory: head
+        run: go run ./ci/benchdiff run -out "$RUNNER_TEMP/head.json"
+
+      # The head's harness and suite, against the base's router, so both sides
+      # answer the same questions. A base it cannot build is reported, not fatal.
+      - name: Route the suite on base
+        run: |
+          rm -rf base/ci/benchdiff
+          mkdir -p base/ci
+          cp -R head/ci/benchdiff base/ci/benchdiff
+          cd base
+          if ! go run ./ci/benchdiff run -out "$RUNNER_TEMP/base.json"; then
+            echo "::warning::the base could not run the head's bench harness"
+          fi
+
+      - name: Diff
+        working-directory: head
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          go run ./ci/benchdiff compare -base "$RUNNER_TEMP/base.json" -head "$RUNNER_TEMP/head.json" \
+            -out "$RUNNER_TEMP/out/comment.md"
+          echo "$PR_NUMBER" > "$RUNNER_TEMP/out/pr-number"
+          cat "$RUNNER_TEMP/out/comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: routing-bench
+          path: ${{ runner.temp }}/out
+          retention-days: 7
