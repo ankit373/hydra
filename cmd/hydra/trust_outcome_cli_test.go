@@ -161,9 +161,20 @@ func TestCLI_TrustCalibrationFlagsCellsWithNoNegativeVerdicts(t *testing.T) {
 		t.Fatalf("trust calibration: %v", err)
 	}
 	if !strings.Contains(out, "neg") {
-		t.Errorf("no neg column, so a pinned cell is indistinguishable:\n%s", out)
+		t.Errorf("no neg column, so a one-sided cell is indistinguishable:\n%s", out)
 	}
-	if !strings.Contains(out, "no negative verdicts") {
+	if !strings.Contains(out, "one direction only") {
 		t.Errorf("positives-only cell not flagged:\n%s", out)
+	}
+	// The flag has to say the cell is inert, not merely thin: before #1142 it
+	// told the reader sp was capped at 0.5 while the arithmetic was driving it
+	// below, so the warning described a bound the code did not hold.
+	if !strings.Contains(out, "contribute 0 nats") {
+		t.Errorf("the flag does not say the cell carries no evidence:\n%s", out)
+	}
+	// And the D column must agree with it, or the table advertises diagnostic
+	// power the router will not spend.
+	if !strings.Contains(out, "0.000 ·") {
+		t.Errorf("a one-sided cell still reports diagnostic power:\n%s", out)
 	}
 }

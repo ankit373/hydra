@@ -1,0 +1,23 @@
+{
+  "budget": {
+    "anthropic/claude-sonnet-4.5": {
+      "mode": "normal",
+      "pct": 12,
+      "source": "real",
+      "updated_at": "2026-10-30T14:02:11Z",
+      "used": 24512,
+      "window": 200000
+    }
+  },
+  "claude_pct": 66,
+  "claude_pct_history": [
+    30,
+    42,
+    51,
+    58,
+    66
+  ],
+  "last_model": "Claude Sonnet 4.5",
+  "last_status": "ok",
+  "last_tier": 3
+}

@@ -164,6 +164,17 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 	// what say it replied rather than said nothing.
 	answer.ToolCalls = cr.Choices[0].Message.ToolCalls
 	answer.FinishReason = cr.Choices[0].FinishReason
+	// Some servers report a model's tool call as ordinary message text, and the
+	// client then sees a JSON blob where a call should be and the agent loop
+	// stops. Only when the server reported none, so a server that structures
+	// its calls is never second-guessed (#1147).
+	if len(answer.ToolCalls) == 0 {
+		if calls, ok := RecoverToolCalls(answer.Output, req.Tools); ok {
+			answer.ToolCalls, answer.ToolCallsRecovered = calls, true
+			answer.Output = ""
+			answer.FinishReason = "tool_calls"
+		}
+	}
 	return answer, nil
 }
 
@@ -959,6 +970,8 @@ var apiKeyEnvs = func() map[string][]string {
 		},
 		"cohere":    {"COHERE_API_KEY"},
 		"replicate": {"REPLICATE_API_TOKEN"},
+		// The variable TypeSafe's own SDK reads; only the decision head uses it.
+		"typesafe": {"TYPESAFE_API_KEY"},
 		// The variable LiteLLM's own client reads, so a machine already set up
 		// to talk to a proxy needs nothing new.
 		"litellm": {"LITELLM_PROXY_API_KEY"},

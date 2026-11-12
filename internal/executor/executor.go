@@ -67,6 +67,12 @@ type Response struct {
 	ToolCalls    []ToolCall
 	FinishReason string
 
+	// ToolCallsRecovered: the calls were read out of the model's own text
+	// because its server reported none, so they are Hydra's reading rather
+	// than the provider's. Carried so a log can tell the two apart; nothing
+	// routes on it (#1147).
+	ToolCallsRecovered bool
+
 	// TokensEstimated is true when InputTokens/OutputTokens were derived by
 	// Hydra (e.g. agy's char/4 heuristic) rather than reported by the provider.
 	// The HTTP executor parses real usage and leaves this false; the agy
