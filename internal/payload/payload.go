@@ -493,8 +493,8 @@ func (w *builderWriter) Write(p []byte) (int, error) { return w.b.Write(p) }
 // ErrDegenerateCorpus reports a corpus the dictionary builder cannot model.
 var ErrDegenerateCorpus = errors.New("payload: corpus is too uniform to train a dictionary from")
 
-// buildDict wraps zstd.BuildDict, which panics with an integer divide by zero
-// on a corpus that compresses to no literals at all.
+// buildDict wraps zstd.BuildDict, which before v1.20 panicked with an integer divide
+// by zero on a corpus that compresses to no literals at all.
 //
 // That is not a hypothetical input here, it is the expected one. Hydra's
 // payloads are dominated by one system prompt repeated across thousands of
@@ -507,5 +507,10 @@ func buildDict(samples [][]byte, history []byte) (dict []byte, err error) {
 			dict, err = nil, fmt.Errorf("%w (%v)", ErrDegenerateCorpus, r)
 		}
 	}()
-	return zstd.BuildDict(zstd.BuildDictOptions{ID: 1, Contents: samples, History: history})
+	dict, err = zstd.BuildDict(zstd.BuildDictOptions{ID: 1, Contents: samples, History: history})
+	// v1.20 returns this unexported error instead of panicking; the test pins the text.
+	if err != nil && err.Error() == "0 literals found" {
+		return nil, fmt.Errorf("%w (%v)", ErrDegenerateCorpus, err)
+	}
+	return dict, err
 }

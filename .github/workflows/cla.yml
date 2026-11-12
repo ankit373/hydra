@@ -3,7 +3,8 @@ name: CLA
 # A published CLA that nothing checks is a document, not an agreement. This is
 # the check. It is deliberately self-contained: no third-party app, no bot
 # account, no storing anyone's signature anywhere but the repo itself.
-on:
+# zizmor flags this trigger; safe here as only the base is checked out and run.
+on:  # zizmor: ignore[dangerous-triggers]
   pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
@@ -22,6 +23,7 @@ jobs:
           # fork must not be able to edit the workflow that checks it, nor add
           # itself to CONTRIBUTORS.md in a commit this job then trusts.
           ref: ${{ github.base_ref }}
+          persist-credentials: false
 
       - name: Check the acknowledgement and the roster
         env:
