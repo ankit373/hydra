@@ -260,7 +260,7 @@ func (m Cockpit) modelTree(h int) string {
 			}
 			glyph, meta := ckCheapS.Render("●"), fmt.Sprintf("%d model%s", len(g.rows), plural(len(g.rows)))
 			if g.down {
-				glyph, meta = ckExpS.Render("○"), "server down · "+truncate(g.note, 34)
+				glyph, meta = ckExpS.Render("○"), "server down · "+truncate(ckSafe(g.note), 34)
 			} else if g.upCount() == 0 {
 				glyph = ckExpS.Render("○")
 			}
@@ -322,7 +322,7 @@ func (m Cockpit) modelDetail(w int) string {
 			kv("models", fmt.Sprintf("%d (%d routable)", len(g.rows), g.upCount())),
 		}
 		if g.down {
-			lines = append(lines, kv("state", "down"), " "+ckFaintS.Render(truncate(g.note, 38)))
+			lines = append(lines, kv("state", "down"), " "+ckFaintS.Render(truncate(ckSafe(g.note), 38)))
 		} else {
 			lines = append(lines, kv("state", "up"))
 		}

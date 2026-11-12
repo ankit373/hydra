@@ -422,7 +422,7 @@ func (m *Cockpit) pingIfElsewhere(th *ckThread, what string) {
 // cannot flood the pane (scrollback still holds what is shown).
 func ckPlanLines(t ckTask) []string {
 	out := []string{ckLabelS.Render("  PLAN") + ckDimS.Render(
-		fmt.Sprintf(", %d step%s · drafted by %s", t.planSteps, plural(t.planSteps), t.headName))}
+		fmt.Sprintf(", %d step%s · drafted by %s", t.planSteps, plural(t.planSteps), ckSafe(t.headName)))}
 	lines := strings.Split(strings.TrimRight(ckSafeText(t.plan), "\n"), "\n")
 	const keep = 12
 	over := 0
@@ -507,7 +507,7 @@ func (m Cockpit) settleTask(th *ckThread, t ckTask) (Cockpit, tea.Cmd) {
 	case t.canceled:
 		what = "cancelled"
 	case t.errText != "":
-		what = "failed, " + truncate(ckFirstLine(t.errText), 40)
+		what = "failed, " + truncate(ckSafe(ckFirstLine(t.errText)), 40)
 	case t.stopped:
 		what = "stopped"
 	}
@@ -622,7 +622,7 @@ func ckResultLines(t ckTask) []string {
 		}
 	}
 	if t.note != "" {
-		out = append(out, ckDimS.Render("  "+t.note))
+		out = append(out, ckDimS.Render("  "+ckSafe(t.note)))
 	}
 	if t.edited {
 		out = append(out, ckProofStrip(t))
@@ -652,7 +652,7 @@ func ckProofStrip(t ckTask) string {
 		name = filepath.Base(t.file)
 	}
 	parts = append(parts, ckCheapS.Render("edit ✓ ")+
-		ckDimS.Render(fmt.Sprintf("%s +%d/−%d", truncate(name, 30), t.added, t.removed)))
+		ckDimS.Render(fmt.Sprintf("%s +%d/−%d", truncate(ckSafe(name), 30), t.added, t.removed)))
 	parts = append(parts, ckTestsCell(t))
 	return "  " + strings.Join(parts, ckFaintS.Render(" · "))
 }
@@ -835,7 +835,7 @@ func (m Cockpit) undoAskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			case ask.wt != nil && th.wt == ask.wt:
 				m.flash = ""
 				return m.discardWorktree(th)
-			case ask.task != nil && th.wt == nil:
+			case ask.task != nil && th.wt == nil && th.lastDone == ask.task:
 				m.flash = ""
 				return m.undoEdit(th, ask.task), nil
 			}

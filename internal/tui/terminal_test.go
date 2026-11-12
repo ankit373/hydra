@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -267,6 +268,37 @@ func TestStream_StripsTerminalControlSequences(t *testing.T) {
 	if got := ckSafeText("a\r\nb\tc"); got != "a\nb    c" {
 		t.Errorf("ckSafeText dropped layout: %q", got)
 	}
+}
+
+// Every other path untrusted text takes to the frame: a provider's fallback
+// reason, a head name, an edited path, a failure pinged from another thread
+// and a parked server's reason. Only lipgloss's own SGR may carry an ESC.
+func TestFrame_NoUntrustedEscapeReachesTheTerminal(t *testing.T) {
+	testutil.NewSandbox(t)
+	evil := "E\x1b]52;c;ZXZpbA==\x07T\x1b[2JX\u009b31mY\rZ"
+	sgr := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	leaks := func(where, s string) {
+		t.Helper()
+		if rest := sgr.ReplaceAllString(s, ""); strings.ContainsAny(rest, "\x1b\x07\u009b\r") {
+			t.Errorf("%s carries a control sequence: %q", where, stripANSI(s))
+		}
+	}
+	task := ckTask{answer: "a", plan: "p", planSteps: 1, headName: "h" + evil, note: evil,
+		edited: true, rel: "f" + evil + ".go"}
+	leaks("plan header", strings.Join(ckPlanLines(task), "\n"))
+	leaks("result lines", strings.Join(ckResultLines(task), "\n"))
+
+	m := testCockpit()
+	m.groups[0].down, m.groups[0].note = true, evil
+	m.view = ckViewModels
+	leaks("models view", m.View())
+
+	m = press(testCockpit(), tea.KeyCtrlT)
+	ex := &ckExecState{}
+	m.threads[1].exec = ex
+	m = altDigit(m, '1')
+	next, _ := m.Update(ckExecDoneMsg{exec: ex, task: ckTask{threadID: 2, errText: evil}})
+	leaks("ping from thread 2", strings.Join(next.(Cockpit).th().log, "\n"))
 }
 
 // ── NO_COLOR cues (TUI-06) and mouse capture (TUI-105) ───────────────────────

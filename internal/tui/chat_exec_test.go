@@ -447,6 +447,15 @@ func TestChat_LettersTypeEvenAfterAnEdit(t *testing.T) {
 		t.Errorf("a stale y acted: wt=%v flash=%q", m.th().wt, m.flash)
 	}
 	m.th().wt = nil
+	// A queued task that ran and finished while the question waited is a new
+	// edit; y must not restore the old file over it.
+	m, _ = command(m, "/undo")
+	asked := m.th().lastDone
+	m.th().lastDone = &ckTask{edited: true, file: "newer.go", editRef: "000003"}
+	m, _ = keyRune(m, 'y')
+	if asked.undone || !strings.Contains(m.flash, "changed since") {
+		t.Errorf("a stale y restored the earlier edit: flash=%q", m.flash)
+	}
 	// While a task runs, /undo waits rather than asking under it.
 	m.th().exec = &ckExecState{}
 	m, _ = command(m, "/undo")
