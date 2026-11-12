@@ -973,6 +973,17 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 | New public page or anchor | `sitemap.xml` |
 | AI crawler policy change | `robots.txt` |
 
+### Styling and the accessibility check
+- Every page links `docs/assets/tokens.css` (generated) then `docs/assets/site.css`, the one shared
+  stylesheet: header with its phone menu, footer, buttons, code blocks, focus ring, skip link.
+  `docs/assets/site.js` runs the menu and copy buttons, and `Hydra.loop()` runs a canvas only while it
+  is on screen. A page's own `<style>` holds only what is that page's alone.
+- No colour or font-size literals: `cmd/hydra/docs_tokens_test.go` fails on a hex or `rgb()` colour
+  and on a px font size inside the scale. Use `var(--hy-…)`, or `Hydra.color('role')` in script.
+- `cd docs-check && npm ci && npx playwright install chromium && npx playwright test` runs axe on
+  every page at phone and desktop width, plus overflow, 12px-floor and console-error checks (CI job
+  `Website accessibility`). Both it and the Go guards find pages by globbing `docs/`.
+
 ### Rules
 - `llms.txt` must always reflect what `hyctl --help` and `hyctl stats` actually do, no aspirational features
 - `pricing.md` costs must match `hyctl pricing list` live output, never hardcode stale rates without noting the date
