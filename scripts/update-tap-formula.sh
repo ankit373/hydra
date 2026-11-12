@@ -77,6 +77,11 @@ RUBY
 
 echo "→ Committing & pushing formula…"
 git -C "$work/tap" add Formula/hyctl.rb
+# A re-run for a tag the tap already has is done, not a failure.
+if git -C "$work/tap" diff --cached --quiet; then
+  echo "✓ Tap already has ${TAG}, nothing to commit."
+  exit 0
+fi
 git -C "$work/tap" -c user.name="hydra-release" -c user.email="release@uvansa.com" \
   commit -m "chore: hyctl ${TAG}" >/dev/null
 # git on a runner has no credential helper, so a plain push prompts for a username
