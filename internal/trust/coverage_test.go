@@ -113,12 +113,17 @@ func TestNew_SkipsMalformedRecords(t *testing.T) {
 	// outcome is an int on the wire, not a label, writing "correct" there makes
 	// the whole line fail to unmarshal and be skipped as malformed, which is how
 	// the first version of this fixture silently tested nothing.
+	// One verdict in each direction: a source that has only ever answered one
+	// way is not discriminating and its LLR is 0 by design, so a same-direction
+	// pair would leave this asserting the skip behaviour against a zero it
+	// would get either way (#1142).
 	good := `{"ts":"2026-08-01T00:00:00Z","source":"model:a","domain":"go","said_correct":true,"outcome":1}`
+	goodNeg := `{"ts":"2026-08-01T00:00:01Z","source":"model:a","domain":"go","said_correct":false,"outcome":2}`
 	body := strings.Join([]string{
 		good,
 		`{not json`,
 		``,
-		good,
+		goodNeg,
 		`{"ts":"trunc`,
 	}, "\n") + "\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {

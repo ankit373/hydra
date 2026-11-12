@@ -3,7 +3,8 @@ name: CLA
 # A published CLA that nothing checks is a document, not an agreement. This is
 # the check. It is deliberately self-contained: no third-party app, no bot
 # account, no storing anyone's signature anywhere but the repo itself.
-on:
+# zizmor flags this trigger; safe here as only the base is checked out and run.
+on:  # zizmor: ignore[dangerous-triggers]
   pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
@@ -22,11 +23,15 @@ jobs:
           # fork must not be able to edit the workflow that checks it, nor add
           # itself to CONTRIBUTORS.md in a commit this job then trusts.
           ref: ${{ github.base_ref }}
+          persist-credentials: false
 
       - name: Check the acknowledgement and the roster
         env:
           BODY: ${{ github.event.pull_request.body }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -46,8 +51,13 @@ jobs:
             ticked=1
           fi
 
+          # The roster is read from the PR head, as data only: first-timers add
+          # their own row in this PR, and the base copy can never contain it.
+          # Nothing from the head is checked out or run.
+          roster="$(gh api -H 'Accept: application/vnd.github.raw' \
+            "repos/$HEAD_REPO/contents/CONTRIBUTORS.md?ref=$HEAD_SHA" || true)"
           listed=0
-          if grep -qiF "/$AUTHOR)" CONTRIBUTORS.md || grep -qiE "\b$AUTHOR\b" CONTRIBUTORS.md; then
+          if printf '%s' "$roster" | grep -qiF "(https://github.com/$AUTHOR)"; then
             listed=1
           fi
 

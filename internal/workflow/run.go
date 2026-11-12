@@ -45,8 +45,13 @@ type Saver func(Workflow) error
 func Run(ctx context.Context, w Workflow, r Router, save Saver) (Workflow, error) {
 	// The heartbeat is what tells a later reader this run is alive: without
 	// it a killed run reads as running forever and nothing says it needs
-	// resuming (#898).
-	stopBeat := heartbeat(w.ID)
+	// resuming (#898). Claiming it is also what refuses a second runner,
+	// which dispatched every remaining step a second time (#1162).
+	stopBeat, err := heartbeat(w.ID)
+	if err != nil {
+		return w, fmt.Errorf("%w: %s is being run by another process; continue it once that one stops, or at most %s after its last heartbeat",
+			err, w.ID, beatTimeout)
+	}
 	defer stopBeat()
 
 	if len(w.Steps) == 0 {
@@ -115,25 +120,31 @@ func Run(ctx context.Context, w Workflow, r Router, save Saver) (Workflow, error
 	return w, nil
 }
 
-// stepPrompt is step i's prompt with the previous step's output as context.
-// Without this a workflow is a list of unrelated prompts rather than a chain.
+// stepPrompt is step i's prompt with every prior step's output as context.
+// Without this a workflow is a list of unrelated prompts rather than a chain,
+// and with only the immediate predecessor the command's own three-step example
+// could not work: step 3 explains what step 1 listed (#1168).
 //
-// The previous output is fenced, because a workflow exists to route a cheap
-// head's step into a stronger one's, and unfenced it is a model writing the
-// next model's instructions. a2a already fences exactly this (#740).
+// Each output is fenced, because a workflow exists to route a cheap head's step
+// into a stronger one's, and unfenced it is a model writing the next model's
+// instructions. a2a already fences exactly this (#740).
 func (w Workflow) stepPrompt(i int) string {
-	if i == 0 {
-		return w.Steps[i].Prompt
+	var prior []Step
+	for _, s := range w.Steps[:i] {
+		if strings.TrimSpace(s.Output) != "" {
+			prior = append(prior, s)
+		}
 	}
-	prev := w.Steps[i-1]
-	if strings.TrimSpace(prev.Output) == "" {
+	if len(prior) == 0 {
 		return w.Steps[i].Prompt
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "This is step %d of %d in the task: %s\n\n", i+1, len(w.Steps), w.Task)
-	label := fmt.Sprintf("STEP %d OUTPUT (%s)", prev.N, util.SafeTerminal(prev.Title))
-	b.WriteString(util.WrapUntrusted(label, prev.Output))
-	b.WriteString("\n\n")
+	for _, p := range prior {
+		label := fmt.Sprintf("STEP %d OUTPUT (%s)", p.N, util.SafeTerminal(p.Title))
+		b.WriteString(util.WrapUntrusted(label, p.Output))
+		b.WriteString("\n\n")
+	}
 	b.WriteString(w.Steps[i].Prompt)
 	return b.String()
 }

@@ -13,6 +13,10 @@ concurrency:
   group: ci-${{ github.head_ref }}
   cancel-in-progress: true
 
+# Read-only by default; a job that needs more names it.
+permissions:
+  contents: read
+
 jobs:
   # Hydra ships for darwin, linux and windows on both amd64 and arm64, but every
   # job in this file used to run on ubuntu-latest, so `go test` only ever ran on
@@ -280,6 +284,23 @@ jobs:
         working-directory: desktop/frontend
         run: npm test
 
+      # jsdom has no layout, so `npm test` cannot see any of the below. Three
+      # defects shipped in one day that only a browser could catch, one of them
+      # a regression against a width an earlier PR had verified by hand (#1127).
+      - name: Cache the browser
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('desktop/frontend/package-lock.json') }}
+
+      - name: Install Chromium
+        working-directory: desktop/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Layout check
+        working-directory: desktop/frontend
+        run: npm run layout
+
       # The production bundle must build, not merely typecheck, `wails build`
       # runs this exact command before it compiles any Go.
       - name: Build
@@ -351,16 +372,102 @@ jobs:
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    # Gitleaks reads the PR's commit list through the API.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+
+  # Known vulnerabilities in what the code calls, stdlib included. The toolchain
+  # pin had drifted 19 stdlib advisories behind with nothing to say so.
+  govulncheck:
+    name: Go vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
+      - name: Scan the CLI
+        run: govulncheck ./...
+
+      # ./api/... only, as in the desktop job: main.go needs the webview headers.
+      - name: Scan the desktop backend
+        working-directory: desktop
+        run: govulncheck ./api/...
+
+  # Blocks a PR that adds a dependency with a known high-severity advisory.
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  # Workflows run with the repo's token and secrets, so they are linted as code.
+  workflow-security:
+    name: Workflow security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Warning and up, matching the shellcheck job's bar for scripts.
+      - name: actionlint
+        env:
+          SHELLCHECK_OPTS: --severity=warning
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+      # Policy in .github/zizmor.yml; the token lets it check pinned commits upstream.
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pipx run zizmor==1.32.0 --min-severity high .github/workflows
+
+  # Mergify validates its config only on PRs into main, so develop checks it here.
+  # The invariants (check names, author pins) are cmd/hydra/mergify_config_test.go.
+  mergify-config:
+    name: Mergify config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate against Mergify's schema
+        run: |
+          pipx run check-jsonschema==0.39.0 \
+            --schemafile https://docs.mergify.com/mergify-configuration-schema.json .mergify.yml
 
   # The only place desktop/main.go is compiled. The `desktop` job above is
   # scoped to ./api/... because main.go imports Wails, so without this the Wails
@@ -375,3 +482,49 @@ jobs:
     with:
       version: ci
       targets: '[{"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}]'
+
+  # A PR into main is what ships: merging it tags and publishes. So it builds what
+  # publish.yml builds, all 5 desktop targets and GoReleaser, before it can merge (#1353).
+  release-desktop:
+    name: Release desktop build
+    if: github.base_ref == 'main'
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ci
+
+  release-binaries:
+    name: Release build (GoReleaser)
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # Uncached, like the release it rehearses.
+          cache: false
+
+      # Not --snapshot, which swallowed the missing-tag error (#821). A local tag
+      # like edge.yml's, never pushed; the -ci suffix cannot collide with a release.
+      - name: Create the tag GoReleaser reads
+        id: ver
+        run: |
+          released=$(python3 -c 'import json; print(json.load(open(".release-please-manifest.json"))["."])')
+          tag="v${released}-ci.g$(git rev-parse --short HEAD)"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              tag -a "${tag}" -m "release build check"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Build every release archive
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          # Exact, like the release workflows (#821).
+          version: "2.18.2"
+          args: release --clean --skip=publish,sign,sbom,validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.tag }}

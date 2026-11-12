@@ -1,0 +1,5 @@
+{
+  "model_path": "Cloudflare/clef",
+  "tokenizer_path": "Cloudflare/clef",
+  "is_generation": true
+}

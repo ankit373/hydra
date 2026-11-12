@@ -19,6 +19,10 @@ type RuleStat struct {
 	Index    int    `json:"index"`
 	Summary  string `json:"summary"`
 	Decision string `json:"decision"`
+	// Classification is the data-sensitivity tag the rule is scoped to, empty
+	// when it matches any. Its own field as well as part of Summary, so a
+	// dashboard need not parse a display string back apart (#1169).
+	Classification string `json:"classification,omitempty"`
 	// Hits counts events whose Reason named this rule index.
 	Hits int `json:"hits"`
 	// Dead is a rule that has never matched anything recorded.
@@ -96,11 +100,12 @@ func AuditPolicy(pol ledger.Policy, events []ledger.Event) PolicyAudit {
 
 	for i, r := range pol.Rules {
 		st := RuleStat{
-			Index:    i,
-			Summary:  ruleSummary(r),
-			Decision: string(r.Decision),
-			Hits:     hits[i],
-			Dead:     hits[i] == 0,
+			Index:          i,
+			Summary:        ruleSummary(r),
+			Decision:       string(r.Decision),
+			Classification: r.Classification,
+			Hits:           hits[i],
+			Dead:           hits[i] == 0,
 		}
 		if by, ok := shadowedBy(pol.Rules, i); ok {
 			st.ShadowedBy = &by
@@ -136,7 +141,10 @@ func ruleSummary(r ledger.Rule) string {
 		}
 		return s
 	}
-	return fmt.Sprintf("%s %s/%s %s", f(string(r.Action)), f(r.Tool), f(r.Resource), f(r.Agent))
+	// Without the classification scope the three DefaultPolicy rules render
+	// identically, and a pii-scoped network deny reads as a universal one.
+	return fmt.Sprintf("%s %s/%s %s%s", f(string(r.Action)), f(r.Tool), f(r.Resource), f(r.Agent),
+		ledger.ClassificationSuffix(r.Classification))
 }
 
 // shadowedBy reports an earlier rule that makes rule i unreachable. Sufficient,

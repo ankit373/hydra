@@ -115,6 +115,10 @@ const (
 	// the cache as though it were a model.
 	KindCacheHit Kind = "cache_hit"
 
+	// KindDecision is one decision source's answer. Head is the source and
+	// Confidence the probability it stated that its answer is right.
+	KindDecision Kind = "decision"
+
 	KindError Kind = "error"
 )
 
@@ -170,6 +174,10 @@ type Event struct {
 	CostUSD    float64 `json:"cost_usd,omitempty"`
 	DurationMS int64   `json:"duration_ms,omitempty"`
 	Confidence float64 `json:"confidence,omitempty"`
+
+	// Domain is the calibration domain the work was done in, so a verdict on
+	// the span can be read against the domain and not only the head.
+	Domain string `json:"domain,omitempty"`
 
 	// Tokens on the span itself. cost.jsonl has them too, but a task-id join
 	// cannot say which of several attempts spent them.

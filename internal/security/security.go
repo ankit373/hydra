@@ -25,6 +25,9 @@ type LedgerPanel struct {
 	Total   int `json:"total"`
 	Allowed int `json:"allowed"`
 	Denied  int `json:"denied"`
+	// Asked is permission withheld pending a human. Denied alone answered
+	// "what did Hydra stop" with half the number (#1169).
+	Asked   int `json:"asked"`
 	Flagged int `json:"flagged"`
 }
 
@@ -178,7 +181,7 @@ func BuildWith(heads []provider.Head, servers []LocalServer) (*Report, error) {
 	s := ledger.Summarize(events)
 	r := &Report{
 		HasData: len(events) > 0,
-		Ledger:  LedgerPanel{Total: s.Total, Allowed: s.Allowed, Denied: s.Denied, Flagged: s.Flagged},
+		Ledger:  LedgerPanel{Total: s.Total, Allowed: s.Allowed, Denied: s.Denied, Asked: s.Asked, Flagged: s.Flagged},
 		ByHead:  ledger.ByHeadRisk(events),
 	}
 
