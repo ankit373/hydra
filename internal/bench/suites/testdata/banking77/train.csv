@@ -1,0 +1,5 @@
+text,category
+When will my card arrive?,card_arrival
+"My card has not arrived
+and it has been a week",card_arrival
+How do I top up?,top_up_failed

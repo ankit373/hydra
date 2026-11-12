@@ -38,6 +38,21 @@ type SPRTResult struct {
 	SpanID string
 }
 
+// Sources maps heads to SPRT sources, with the per-call cost estimate that
+// orders and budgets them. The bench harness reuses it so it cannot drift.
+func (s *Swarm) Sources(prompt string, heads []provider.Head) []trust.Source {
+	estIn := len(prompt) / 4
+	sources := make([]trust.Source, 0, len(heads))
+	for _, h := range heads {
+		var cost float64
+		if s.pricing != nil {
+			cost = s.pricing.EstimateCost(rank.UITier(h), estIn, estIn/2)
+		}
+		sources = append(sources, trust.Source{ID: h.ID, Family: h.Provider, EstCostUSD: cost})
+	}
+	return sources
+}
+
 // RunSPRT routes a prompt through the SPRT optimal-stopping ensemble: it samples
 // the selected heads adaptively, in most-diagnostic-per-dollar order, stopping as
 // soon as the calibrated confidence reaches opts.Confidence. It is the production
@@ -65,7 +80,10 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		return nil, err
 	}
 	if len(selected) == 0 {
-		return nil, fmt.Errorf("swarm sprt: no heads available")
+		// Wrapped so a caller can tell "this machine has no head" from a
+		// failure about one task: it is the same condition dispatch reports,
+		// and it repeats identically for every task (#1152).
+		return nil, fmt.Errorf("%w: swarm sprt: no heads available", dispatch.ErrNoHeads)
 	}
 	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
 
@@ -83,16 +101,9 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		return nil, fmt.Errorf("swarm sprt: calibration load: %w", err)
 	}
 
-	// Map heads → trust.Source, estimating per-call cost for ordering + budget.
-	estIn := len(prompt) / 4
-	sources := make([]trust.Source, 0, len(selected))
+	sources := s.Sources(prompt, selected)
 	byID := make(map[string]provider.Head, len(selected))
 	for _, h := range selected {
-		var cost float64
-		if s.pricing != nil {
-			cost = s.pricing.EstimateCost(rank.UITier(h), estIn, estIn/2)
-		}
-		sources = append(sources, trust.Source{ID: h.ID, Family: h.Provider, EstCostUSD: cost})
 		byID[h.ID] = h
 	}
 

@@ -104,8 +104,8 @@ will be asked for explicitly rather than inferred from this agreement.
 
 ## How to sign
 
-Add your name to [`CONTRIBUTORS.md`](CONTRIBUTORS.md) in the same pull request as your first
-contribution, and tick the CLA box in the pull request template. That tick is checked
-automatically.
+Open your first pull request. [CLA Assistant](https://cla-assistant.io/ankit373/hydra) comments on
+it with a link; follow it and sign with your GitHub account. The `license/cla` check on the pull
+request turns green once you have signed.
 
 Signing once covers all your future contributions. You do not need to repeat it.

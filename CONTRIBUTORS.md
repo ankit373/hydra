@@ -1,7 +1,10 @@
 # Contributors
 
-Everyone who has signed the [Contributor License Agreement](CLA.md), in the order they first
-contributed. Add yourself in the same pull request as your first contribution.
+Thank you to everyone who has contributed to Hydra, in the order they first contributed.
+
+This list is a thank-you, not a gate. Signing the [Contributor License Agreement](CLA.md) happens
+with CLA Assistant on your first pull request, and it keeps the record of who signed. Adding
+yourself here is welcome but optional.
 
 | Name | GitHub | Signed |
 |---|---|---|

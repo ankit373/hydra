@@ -13,6 +13,7 @@ import (
 const prior = `cortex = "old-head"
 skills = ["code-gen"]
 explore_rate = 0.15
+explore_seed = 42
 embed_model = "nomic-embed-text"
 cache_threshold = 0.93
 cache_budget_mb = 512
@@ -84,6 +85,9 @@ func TestSaveKeepsEverySettingItWasNotAskedToChange(t *testing.T) {
 	if got.ExploreRate != 0.15 {
 		t.Errorf("explore_rate = %v, want 0.15; a lost explore rate makes every later counterfactual unidentifiable", got.ExploreRate)
 	}
+	if got.ExploreSeed != 42 {
+		t.Errorf("explore_seed = %v, want 42; a lost seed makes an exploring run unrepeatable", got.ExploreSeed)
+	}
 	if got.EmbedModel != "nomic-embed-text" {
 		t.Errorf("embed_model = %q, want it kept", got.EmbedModel)
 	}
@@ -128,7 +132,7 @@ func TestSaveWritesNoKeyItWasNotGiven(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
-	for _, unwanted := range []string{"explore_rate", "payload_keep_rate", "payload_budget_mb", "embed_budget_mb", "cache_threshold", "cache_budget_mb"} {
+	for _, unwanted := range []string{"explore_rate", "explore_seed", "payload_keep_rate", "payload_budget_mb", "embed_budget_mb", "cache_threshold", "cache_budget_mb"} {
 		if strings.Contains(string(out), unwanted) {
 			t.Errorf("wrote %q unasked\n--- file ---\n%s", unwanted, out)
 		}

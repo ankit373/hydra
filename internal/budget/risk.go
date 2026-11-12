@@ -2,7 +2,11 @@
 
 package budget
 
-import "math"
+import (
+	"math"
+
+	"github.com/ankit373/hydra/internal/stats"
+)
 
 // The orchestrator's claude_pct is the one genuinely session-cumulative budget
 // quantity: it only climbs as the context window fills. Modelling it as a
@@ -116,7 +120,7 @@ func FirstPassageProb(dist, mu, sigma, horizon float64) float64 {
 	// z2 far in the left tail). Evaluate it in log-space so it underflows to 0
 	// cleanly instead of producing NaN.
 	term2 := math.Exp(expo + logNormCDF(z2))
-	p := normCDF(z1) + term2
+	p := stats.NormalCDF(z1) + term2
 	if math.IsNaN(p) || p < 0 {
 		return 0
 	}
@@ -126,16 +130,13 @@ func FirstPassageProb(dist, mu, sigma, horizon float64) float64 {
 	return p
 }
 
-// normCDF is the standard-normal CDF Φ(z) via the complementary error function.
-func normCDF(z float64) float64 { return 0.5 * math.Erfc(-z/math.Sqrt2) }
-
 // logNormCDF is log Φ(z), stable in the far-left tail where Φ(z) underflows to
 // 0. For z ≥ −1 it takes the direct log; below that it uses the asymptotic
 // log φ(z) − log(−z) (Mills-ratio leading term), which keeps the reflection
 // term finite when combined with a large positive exponent.
 func logNormCDF(z float64) float64 {
 	if z >= -1 {
-		return math.Log(normCDF(z))
+		return math.Log(stats.NormalCDF(z))
 	}
 	const logSqrt2Pi = 0.9189385332046727 // 0.5·ln(2π)
 	return -0.5*z*z - logSqrt2Pi - math.Log(-z)

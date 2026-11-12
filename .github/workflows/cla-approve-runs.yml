@@ -1,0 +1,58 @@
+name: CLA approve runs
+
+# Fork PR runs wait for approval (Settings > Actions > "Require approval for all
+# external contributors"). Once CLA Assistant marks license/cla green, approve them.
+# status workflows run from the default branch only, so this is live once it is on main.
+on:
+  status:
+
+permissions: {}
+
+jobs:
+  approve:
+    name: Approve fork runs once the CLA is signed
+    if: github.event.context == 'license/cla' && github.event.state == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Approve waiting runs for the signed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.sha }}
+        run: |
+          set -euo pipefail
+
+          prs="$(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" \
+            --jq '.[] | select(.head.sha == env.SHA) | .number')"
+          if [ -z "$prs" ]; then
+            echo "No open pull request has head $SHA; nothing to approve."
+            exit 0
+          fi
+          echo "Open pull requests at $SHA: $(echo "$prs" | tr '\n' ' ')"
+
+          # CLA Assistant can post before Actions has queued the runs; retry briefly.
+          runs=""
+          for attempt in 1 2 3; do
+            runs="$(gh api "repos/$REPO/actions/runs?head_sha=$SHA&status=action_required&per_page=100" \
+              --jq '.workflow_runs[] | select(.event == "pull_request") | .id')"
+            [ -n "$runs" ] && break
+            [ "$attempt" = 3 ] || sleep 20
+          done
+          if [ -z "$runs" ]; then
+            echo "No runs at $SHA are waiting for approval."
+            exit 0
+          fi
+
+          failed=0
+          for id in $runs; do
+            if gh api -X POST "repos/$REPO/actions/runs/$id/approve" --silent; then
+              echo "Approved run $id."
+            else
+              echo "::error::Could not approve run $id."
+              failed=1
+            fi
+          done
+          exit "$failed"

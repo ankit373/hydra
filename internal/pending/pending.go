@@ -53,6 +53,15 @@ type Question struct {
 
 	LocalOnly bool `json:"localOnly,omitempty"`
 	MaxTokens int  `json:"maxTokens,omitempty"`
+
+	// What a served request routed with, so an answered task resumes on the
+	// same class, temperature, ceiling and cache rule it was parked under.
+	Domain        string   `json:"domain,omitempty"`
+	Temperature   *float64 `json:"temperature,omitempty"`
+	MaxCostUSD    float64  `json:"maxCostUsd,omitempty"`
+	MaxCostSource string   `json:"maxCostSource,omitempty"`
+	NoCache       bool     `json:"noCache,omitempty"`
+	Objective     string   `json:"objective,omitempty"`
 }
 
 // Dir is where parked tasks live, alongside the run logs.

@@ -27,14 +27,20 @@ By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). We main
 
 ## Signing the CLA
 
-Hydra accepts contributions under a [Contributor License Agreement](CLA.md). Two steps, once, and
-then never again:
+Hydra accepts contributions under a [Contributor License Agreement](CLA.md). You sign it once,
+on your first pull request, and never again:
 
-1. Add yourself to [`CONTRIBUTORS.md`](CONTRIBUTORS.md) in the same pull request as your first
-   contribution
-2. Tick the CLA box in the pull request description
+1. Open your pull request. [CLA Assistant](https://cla-assistant.io/ankit373/hydra) comments with
+   a link to sign.
+2. Follow the link and sign with your GitHub account. The `license/cla` check turns green, and it
+   covers all your future pull requests too. If the `Contributor has signed` check already failed,
+   re-run it or push again.
 
-A workflow checks both. Bot pull requests (Dependabot, release-please) are exempt.
+CI on a pull request from a fork starts once you have signed, so sign first if you are waiting on
+checks. Bot pull requests (Dependabot, release-please, Mergify) are exempt.
+
+[`CONTRIBUTORS.md`](CONTRIBUTORS.md) is a thank-you list, not a gate. Add yourself if you like; the
+CLA does not depend on it.
 
 **Most projects like this use a DCO instead**, including vLLM and Linux. A DCO certifies you have
 the right to submit; a CLA also grants a copyright and patent licence, which is what keeps a future
@@ -337,6 +343,9 @@ Keep the first line under 72 characters. Add a body paragraph if the *why* is no
 - `registry/models.yaml`, add new models here. Include `pool`, `token_limit`, and `pricing_key`.
 - `registry/domains.yaml`, maps task domains to enum keys. Keep entries alphabetically sorted.
 - Always validate YAML syntax: `yq '.' registry/models.yaml > /dev/null`.
+- `registry/pricing.yaml`, a tier priced at a model's list rate gets a line in `ci/registry-drift.yaml`
+  naming that OpenRouter model, so the weekly drift check can compare them. Run it locally with
+  `go run ./ci/registrydrift`; it prints a report and changes nothing.
 
 ---
 

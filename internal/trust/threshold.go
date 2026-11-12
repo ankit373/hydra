@@ -5,9 +5,9 @@ package trust
 import (
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/ankit373/hydra/internal/reliability"
+	"github.com/ankit373/hydra/internal/stats"
 )
 
 // thresholdGrid is how finely the accept threshold is searched. The grid is fixed
@@ -98,8 +98,8 @@ func chooseThreshold(heldOut []heldOutRun, target, confidence float64) (threshol
 				wrong++
 			}
 		}
-		if binomialCDF(wrong, accepted, target) > level {
-			continue
+		if p, err := stats.BinomialCDF(wrong, accepted, target); err != nil || p > level {
+			continue // a cutoff the test cannot vouch for is never chosen
 		}
 		chosen = threshold{
 			accept:     accept,
@@ -114,19 +114,4 @@ func chooseThreshold(heldOut []heldOutRun, target, confidence float64) (threshol
 		return threshold{}, errNoThreshold
 	}
 	return chosen, nil
-}
-
-// binomialCDF is P(X <= k) for X ~ Binomial(n, p), summed in log space so a
-// large n does not underflow each term before it is added.
-func binomialCDF(k, n int, p float64) float64 {
-	lnP, lnQ := math.Log(p), math.Log1p(-p)
-	lnNFact, _ := math.Lgamma(float64(n + 1))
-	var sum float64
-	for i := 0; i <= k; i++ {
-		lnIFact, _ := math.Lgamma(float64(i + 1))
-		lnRestFact, _ := math.Lgamma(float64(n - i + 1))
-		lnChoose := lnNFact - lnIFact - lnRestFact
-		sum += math.Exp(lnChoose + float64(i)*lnP + float64(n-i)*lnQ)
-	}
-	return math.Min(sum, 1)
 }

@@ -9,7 +9,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -284,7 +283,7 @@ func (m Cockpit) traceBox(r ckRun, h int) string {
 	}
 	box := ckBoxS
 	if m.actDrill {
-		box = box.BorderForeground(ckAqua)
+		box = ckFocusBox(box)
 	}
 	return box.Render(b.String())
 }
@@ -309,5 +308,5 @@ func (m Cockpit) openEditedFile() (tea.Model, tea.Cmd) {
 		m.flash = "set $EDITOR to open " + truncate(r.edited[0], 30)
 		return m, nil
 	}
-	return m, tea.ExecProcess(exec.Command(ed, r.edited[0]), func(error) tea.Msg { return nil })
+	return m, ckOpenEditor(ed, r.edited[0])
 }
