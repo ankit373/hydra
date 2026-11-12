@@ -3,7 +3,7 @@
 package tui
 
 // thread_worktree.go, edit-thread isolation (#598): each edit-capable thread
-// gets its own git worktree of the user's repo, and the a / x x keys merge it
+// gets its own git worktree of the user's repo, and /apply or /undo merge it
 // back with conflicts surfaced (git apply --3way) or discard it.
 
 import (
@@ -281,26 +281,20 @@ func ckSplitLines(s string) []string {
 	return out
 }
 
-// ── apply / discard (the a and x x keys) ─────────────────────────────────────
+// ── apply / discard (/apply and a confirmed /undo) ──────────────────────────
 
-// discardKey is the two-press discard: destructive, so the first x only arms.
-func (m Cockpit) discardKey(th *ckThread) (Cockpit, tea.Cmd, bool) {
-	if !th.discardArm {
-		th.discardArm = true
-		m.flash = fmt.Sprintf("x again discards worktree %s, its edits are lost", th.wt.tag)
-		return m, nil, true
-	}
-	th.discardArm = false
+// discardWorktree removes the thread's worktree and everything in it. Only
+// reached through /undo's y/n question, never from a single key.
+func (m Cockpit) discardWorktree(th *ckThread) (Cockpit, tea.Cmd) {
 	tag := th.wt.tag
 	if err := ckDiscardWorktree(th.wt); err != nil {
-		th.log = append(th.log, ckExpS.Render("  ✗ discard failed ")+ckDimS.Render(err.Error()))
-		return m, nil, true
+		th.log = append(th.log, ckExpS.Render("  ✗ discard failed ")+ckDimS.Render(ckSafe(err.Error())))
+		return m, nil
 	}
 	th.wt = nil
 	th.files = nil
 	th.log = append(th.log, ckDimS.Render(fmt.Sprintf("  ⎇ worktree %s discarded, your tree was never touched", tag)))
-	nm, cmd := m.releaseThreads(th)
-	return nm, cmd, true
+	return m.releaseThreads(th)
 }
 
 // applyThread merges the thread's worktree back into the user's tree with
@@ -320,7 +314,7 @@ func (m Cockpit) applyThread(th *ckThread) (Cockpit, tea.Cmd, bool) {
 		th.log = append(th.log,
 			ckExpS.Render("  ✗ apply blocked ")+ckDimS.Render("· nothing in your tree was changed"),
 			ckDimS.Render("    "+truncate(ckSafe(out.detail), 80)),
-			ckFaintS.Render("    save or stash the overlapping change, then press a again · x x discards"))
+			ckFaintS.Render("    save or stash the overlapping change, then /apply again · /undo discards"))
 		return m, nil, true
 	case out.empty:
 		th.log = append(th.log, ckDimS.Render("  ⎇ nothing to apply, worktree removed"))

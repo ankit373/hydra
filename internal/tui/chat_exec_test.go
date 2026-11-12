@@ -99,6 +99,23 @@ func keyRune(m Cockpit, r rune) (Cockpit, tea.Cmd) {
 	return next.(Cockpit), cmd
 }
 
+// command types a slash command into the chat input and sends it.
+func command(m Cockpit, c string) (Cockpit, tea.Cmd) { return enter(typed(m, c)) }
+
+// askOf is the thread's pending /undo question, "" when none.
+func askOf(m Cockpit) string {
+	if a := m.th().undoAsk; a != nil {
+		return a.question
+	}
+	return ""
+}
+
+// undoConfirmed is /undo answered with y.
+func undoConfirmed(m Cockpit) (Cockpit, tea.Cmd) {
+	m, _ = command(m, "/undo")
+	return keyRune(m, 'y')
+}
+
 // chatFixture is a chat-focused cockpit in the given mode.
 func chatFixture(mode string) Cockpit {
 	m := testCockpit()
@@ -309,7 +326,7 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 		t.Fatalf("edit mode ran %d edits, want 1 (no plan step)", edits)
 	}
 	joined := stripANSI(strings.Join(m.th().log, "\n"))
-	for _, want := range []string{"edit ✓ main.go +1/−1", "tests, skipped (edit mode)", "d diff · x undo · o open"} {
+	for _, want := range []string{"edit ✓ main.go +1/−1", "tests, skipped (edit mode)", "/diff · /undo · /open"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("proof strip missing %q:\n%s", want, joined)
 		}
@@ -322,8 +339,8 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 		t.Errorf("the code panel does not hold the edited content: %v", m.th().codeLines)
 	}
 
-	// d: diff on, from the snapshots; d again: back to the file.
-	m, _ = keyRune(m, 'd')
+	// /diff: diff on, from the snapshots; /diff again: back to the file.
+	m, _ = command(m, "/diff")
 	if !m.th().codeDiff {
 		t.Fatal("d did not open the diff")
 	}
@@ -331,50 +348,126 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 	if !strings.Contains(diffText, "-var old = 1") || !strings.Contains(diffText, "+var new = 2") {
 		t.Errorf("the diff does not show the change:\n%s", diffText)
 	}
-	m, _ = keyRune(m, 'd')
+	m, _ = command(m, "/diff")
 	if m.th().codeDiff {
 		t.Fatal("d did not toggle the diff off")
 	}
 
 	// o with no $EDITOR: an explanation, not a dead key.
 	t.Setenv("EDITOR", "")
-	m, cmd = keyRune(m, 'o')
+	m, cmd = command(m, "/open")
 	if cmd != nil || !strings.Contains(m.flash, "EDITOR") {
 		t.Errorf("o without $EDITOR: cmd=%v flash=%q", cmd, m.flash)
 	}
 	t.Setenv("EDITOR", "true")
-	if _, cmd = keyRune(m, 'o'); cmd == nil {
+	if _, cmd = command(m, "/open"); cmd == nil {
 		t.Error("o with $EDITOR did not open the file")
 	}
 
-	// x: restore the exact pre-task bytes; a second x refuses.
-	m, _ = keyRune(m, 'x')
+	// /undo asks first, and n keeps the edit.
+	m, _ = command(m, "/undo")
+	if !strings.Contains(askOf(m), "restore main.go") {
+		t.Fatalf("/undo did not ask: %q", askOf(m))
+	}
+	m, _ = keyRune(m, 'n')
+	if raw, _ := os.ReadFile(abs); string(raw) == before {
+		t.Fatal("n still restored the file")
+	}
+	// y restores the exact pre-task bytes; a second /undo refuses.
+	m, _ = undoConfirmed(m)
 	if raw, _ := os.ReadFile(abs); string(raw) != before {
 		t.Fatalf("undo did not restore exactly:\n got %q\nwant %q", raw, before)
 	}
 	if !strings.Contains(m.flash, "restored") {
 		t.Errorf("undo flash = %q", m.flash)
 	}
-	m, _ = keyRune(m, 'x')
-	if !strings.Contains(m.flash, "already restored") {
+	m, _ = command(m, "/undo") // nothing left to restore: says so, no question
+	if askOf(m) != "" || !strings.Contains(m.flash, "already restored") {
 		t.Errorf("second undo flash = %q", m.flash)
 	}
 }
 
-// With no completed edit, d/x/o type like any other letter, the hijack exists
-// only while there is something to act on.
-func TestExec_DXOTypeWhenNothingToActOn(t *testing.T) {
+// Letters always type, even with a finished edit on the thread: "xml output
+// please" once reverted the file and lost the x (TUI-102).
+func TestChat_LettersTypeEvenAfterAnEdit(t *testing.T) {
 	m := testCockpit()
-	m = typed(m, "d")
-	if m.th().input != "d" || m.th().codeDiff {
-		t.Errorf("d with no last edit did not type: input=%q", m.th().input)
+	m.th().lastDone = &ckTask{edited: true, file: "x.go", editRef: "000001", editRefLast: "000001"}
+	for _, s := range []string{"xml output please", "apply it", "diff", "open"} {
+		m.th().input = ""
+		m = typed(m, s)
+		if m.th().input != s || askOf(m) != "" || m.th().codeDiff {
+			t.Errorf("typing %q: input=%q ask=%q diff=%v", s, m.th().input, askOf(m), m.th().codeDiff)
+		}
 	}
 	m.th().input = ""
+	m, _ = command(m, "/undo")
+	if askOf(m) == "" {
+		t.Fatal("/undo did not ask before restoring")
+	}
+	// A key other than y/n cancels and still types, nothing is eaten.
+	m = typed(m, "z")
+	if askOf(m) != "" || m.th().input != "z" {
+		t.Errorf("after z: ask=%q input=%q", askOf(m), m.th().input)
+	}
+	m.th().input = ""
+	m, _ = command(m, "/undo")
+	m = press(m, tea.KeyEsc)
+	if askOf(m) != "" || !strings.Contains(m.flash, "kept") {
+		t.Errorf("esc did not cancel: ask=%q flash=%q", askOf(m), m.flash)
+	}
+	// Enter closes the question without confirming it or opening the trace.
+	m, _ = command(m, "/undo")
+	m, _ = enter(m)
+	if askOf(m) != "" || m.view != ckViewChat || !strings.Contains(m.flash, "kept") {
+		t.Errorf("enter on the question: ask=%q view=%d flash=%q", askOf(m), m.view, m.flash)
+	}
+	// A pasted y is text, not an answer.
+	m, _ = command(m, "/undo")
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}, Paste: true})
+	m = next.(Cockpit)
+	if m.th().lastDone.undone || m.th().input != "y" {
+		t.Errorf("a pasted y confirmed the undo: input=%q", m.th().input)
+	}
+	m.th().input = ""
+	// A task that starts while the question waits makes y inert.
+	m, _ = command(m, "/undo")
+	m.th().exec = &ckExecState{}
+	m, _ = keyRune(m, 'y')
+	if !strings.Contains(m.flash, "task started") {
+		t.Errorf("y under a running task: flash=%q", m.flash)
+	}
+	m.th().exec = nil
+	// The question is pinned to its target: if the thread moved on, y is inert.
+	m.th().input = ""
+	m, _ = command(m, "/undo")
+	m.th().lastDone = &ckTask{edited: true, file: "other.go", editRef: "000002"}
+	m.th().wt = &ckWorktree{tag: "t9"}
+	m, _ = keyRune(m, 'y')
+	if m.th().wt == nil || !strings.Contains(m.flash, "changed since") {
+		t.Errorf("a stale y acted: wt=%v flash=%q", m.th().wt, m.flash)
+	}
+	m.th().wt = nil
+	// A queued task that ran and finished while the question waited is a new
+	// edit; y must not restore the old file over it.
+	m, _ = command(m, "/undo")
+	asked := m.th().lastDone
+	m.th().lastDone = &ckTask{edited: true, file: "newer.go", editRef: "000003"}
+	m, _ = keyRune(m, 'y')
+	if asked.undone || !strings.Contains(m.flash, "changed since") {
+		t.Errorf("a stale y restored the earlier edit: flash=%q", m.flash)
+	}
+	// While a task runs, /undo waits rather than asking under it.
+	m.th().exec = &ckExecState{}
+	m, _ = command(m, "/undo")
+	if askOf(m) != "" || !strings.Contains(m.flash, "waits until") {
+		t.Errorf("/undo during a run: ask=%q flash=%q", askOf(m), m.flash)
+	}
+	m.th().exec = nil
 	ans := chatFixture("ask")
-	ans.th().lastDone = &ckTask{answer: "text only"} // finished, but nothing edited
-	ans = typed(ans, "x")
-	if ans.th().input != "x" {
-		t.Errorf("x with an answer-only result did not type: %q", ans.th().input)
+	ans.th().lastDone = &ckTask{answer: "text only"}
+	ans, _ = command(ans, "/undo")
+	if askOf(ans) != "" || !strings.Contains(stripANSI(strings.Join(ans.th().log, "\n")), "no finished edit") {
+		t.Errorf("/undo with nothing edited: ask=%q", askOf(ans))
 	}
 }
 
@@ -527,7 +620,7 @@ func TestExec_AutoVerifyLoopFixesThenPasses(t *testing.T) {
 		t.Errorf("the strip does not credit the fix loop:\n%s", joined)
 	}
 	// The task's diff spans first-before → last-after, collapsing the fix hops.
-	m, _ = keyRune(m, 'd')
+	m, _ = command(m, "/diff")
 	diffText := strings.Join(m.th().codeLines, "\n")
 	if !strings.Contains(diffText, "+package main // v2") {
 		t.Errorf("the diff does not end at the final content:\n%s", diffText)
@@ -1253,7 +1346,7 @@ func TestResultActions_DegradeWithoutSnapshots(t *testing.T) {
 	if !strings.Contains(m.flash, "no snapshot") {
 		t.Errorf("flash = %q", m.flash)
 	}
-	m, _, _ = m.resultKey('x')
+	m, _ = command(m, "/undo")
 	if !strings.Contains(m.flash, "no snapshot") {
 		t.Errorf("undo flash = %q", m.flash)
 	}
@@ -1263,7 +1356,7 @@ func TestResultActions_DegradeWithoutSnapshots(t *testing.T) {
 	if !strings.Contains(m.flash, "diff unavailable") {
 		t.Errorf("pruned-snapshot diff flash = %q", m.flash)
 	}
-	m, _, _ = m.resultKey('x')
+	m, _ = undoConfirmed(m)
 	if !strings.Contains(m.flash, "undo unavailable") {
 		t.Errorf("pruned-snapshot undo flash = %q", m.flash)
 	}

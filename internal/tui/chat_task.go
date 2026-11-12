@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -423,8 +422,8 @@ func (m *Cockpit) pingIfElsewhere(th *ckThread, what string) {
 // cannot flood the pane (scrollback still holds what is shown).
 func ckPlanLines(t ckTask) []string {
 	out := []string{ckLabelS.Render("  PLAN") + ckDimS.Render(
-		fmt.Sprintf(", %d step%s · drafted by %s", t.planSteps, plural(t.planSteps), t.headName))}
-	lines := strings.Split(strings.TrimRight(t.plan, "\n"), "\n")
+		fmt.Sprintf(", %d step%s · drafted by %s", t.planSteps, plural(t.planSteps), ckSafe(t.headName)))}
+	lines := strings.Split(strings.TrimRight(ckSafeText(t.plan), "\n"), "\n")
 	const keep = 12
 	over := 0
 	if len(lines) > keep {
@@ -432,7 +431,7 @@ func ckPlanLines(t ckTask) []string {
 		lines = lines[:keep]
 	}
 	for _, l := range lines {
-		out = append(out, ckDimS.Render("   "+ckSafe(l)))
+		out = append(out, ckDimS.Render("   "+l))
 	}
 	if over > 0 {
 		out = append(out, ckFaintS.Render(fmt.Sprintf("   … %d more line%s", over, plural(over))))
@@ -485,7 +484,7 @@ func (m Cockpit) settleTask(th *ckThread, t ckTask) (Cockpit, tea.Cmd) {
 	th.inEdit = false
 	th.log = append(th.log, ckResultLines(t)...)
 	if t.edited && th.wt != nil {
-		th.log = append(th.log, ckFaintS.Render("  a applies it to your tree · x x discards the worktree"))
+		th.log = append(th.log, ckFaintS.Render("  /apply applies it to your tree · /undo discards the worktree"))
 	}
 
 	// An untouched worktree from a task that never edited (failed plan, declined
@@ -496,7 +495,7 @@ func (m Cockpit) settleTask(th *ckThread, t ckTask) (Cockpit, tea.Cmd) {
 			th.wt = nil
 			th.files = nil
 		} else {
-			th.log = append(th.log, ckMidS.Render("  ⚠ empty worktree cleanup failed: "+err.Error()))
+			th.log = append(th.log, ckMidS.Render("  ⚠ empty worktree cleanup failed: "+ckSafe(err.Error())))
 		}
 	}
 	if th.wt == nil {
@@ -508,7 +507,7 @@ func (m Cockpit) settleTask(th *ckThread, t ckTask) (Cockpit, tea.Cmd) {
 	case t.canceled:
 		what = "cancelled"
 	case t.errText != "":
-		what = "failed, " + truncate(ckFirstLine(t.errText), 40)
+		what = "failed, " + truncate(ckSafe(ckFirstLine(t.errText)), 40)
 	case t.stopped:
 		what = "stopped"
 	}
@@ -609,25 +608,25 @@ func ckResultLines(t ckTask) []string {
 		return append(out, ckFaintS.Render("  trace "+ckShortID(t.runID)+", enter opens the trace"))
 	}
 	if t.answer != "" {
-		lines := strings.Split(strings.TrimRight(t.answer, "\n"), "\n")
+		lines := strings.Split(strings.TrimRight(ckSafeText(t.answer), "\n"), "\n")
 		over := 0
 		if len(lines) > ckAnswerCapLines {
 			over = len(lines) - ckAnswerCapLines
 			lines = lines[:ckAnswerCapLines]
 		}
 		for _, l := range lines {
-			out = append(out, ckAquaS.Render("  ▎ ")+ckInkS.Render(ckSafe(l)))
+			out = append(out, ckAquaS.Render("  ▎ ")+ckInkS.Render(l))
 		}
 		if over > 0 {
 			out = append(out, ckFaintS.Render(fmt.Sprintf("  ▎ … %d more line%s truncated", over, plural(over))))
 		}
 	}
 	if t.note != "" {
-		out = append(out, ckDimS.Render("  "+t.note))
+		out = append(out, ckDimS.Render("  "+ckSafe(t.note)))
 	}
 	if t.edited {
 		out = append(out, ckProofStrip(t))
-		out = append(out, ckFaintS.Render("  d diff · x undo · o open, on an empty input"))
+		out = append(out, ckFaintS.Render("  /diff · /undo · /open"))
 	}
 	glyph, tone := "✓ done ", ckCheapS
 	if t.stopped {
@@ -653,7 +652,7 @@ func ckProofStrip(t ckTask) string {
 		name = filepath.Base(t.file)
 	}
 	parts = append(parts, ckCheapS.Render("edit ✓ ")+
-		ckDimS.Render(fmt.Sprintf("%s +%d/−%d", truncate(name, 30), t.added, t.removed)))
+		ckDimS.Render(fmt.Sprintf("%s +%d/−%d", truncate(ckSafe(name), 30), t.added, t.removed)))
 	parts = append(parts, ckTestsCell(t))
 	return "  " + strings.Join(parts, ckFaintS.Render(" · "))
 }
@@ -704,12 +703,16 @@ func ckFirstLine(s string) string {
 	return s
 }
 
-// ── result actions (a/d/x/o) ──────────────────────────────────────────────────
+// ── result actions (/apply /diff /undo /open) ────────────────────────────────
 
-// resultKey acts on the active thread's last finished edit from an empty
-// input: a applies an isolated thread's worktree, d toggles the diff, x undoes
-// (or, on a worktree thread, discards, pressed twice), o opens $EDITOR.
-// Returns handled=false when there is nothing to act on, so the rune types.
+// ckResultCmds are the typed commands that act on a finished edit. Commands,
+// not bare letters: a letter typed into an empty input once reverted a file
+// with no question asked (TUI-102).
+var ckResultCmds = map[string]rune{"/apply": 'a', "/diff": 'd', "/undo": 'x', "/open": 'o'}
+
+// resultKey acts on the thread's last finished edit: a applies its worktree,
+// d toggles the diff, x asks before undoing or discarding, o opens $EDITOR.
+// handled=false when there is nothing to act on.
 func (m Cockpit) resultKey(r rune) (Cockpit, tea.Cmd, bool) {
 	th := m.th()
 	t := th.lastDone
@@ -721,7 +724,7 @@ func (m Cockpit) resultKey(r rune) (Cockpit, tea.Cmd, bool) {
 				if r == 'a' {
 					return m.applyThread(th)
 				}
-				return m.discardKey(th)
+				return m.askUndo(th, nil), nil, true
 			}
 		}
 		return m, nil, false
@@ -735,17 +738,14 @@ func (m Cockpit) resultKey(r rune) (Cockpit, tea.Cmd, bool) {
 	case 'd':
 		return m.toggleDiff(th, t), nil, true
 	case 'x':
-		if th.wt != nil {
-			return m.discardKey(th)
-		}
-		return m.undoEdit(th, t), nil, true
+		return m.askUndo(th, t), nil, true
 	case 'o':
 		ed := os.Getenv("EDITOR")
 		if ed == "" {
 			m.flash = "set $EDITOR to open " + truncate(t.file, 30)
 			return m, nil, true
 		}
-		return m, tea.ExecProcess(exec.Command(ed, t.file), func(error) tea.Msg { return nil }), true
+		return m, ckOpenEditor(ed, t.file), true
 	}
 	return m, nil, false
 }
@@ -788,6 +788,66 @@ func (m Cockpit) toggleDiff(th *ckThread, t *ckTask) Cockpit {
 	return m
 }
 
+// ckUndoAsk is a pending /undo: the question and the exact target it named,
+// so a y always acts on what was asked about, never on what replaced it.
+type ckUndoAsk struct {
+	question string
+	wt       *ckWorktree // the worktree to discard; nil = restore task's file
+	task     *ckTask
+}
+
+// askUndo poses /undo's question; undoAskKey answers it. Restoring a file or
+// dropping a worktree loses work, so it never happens on one keystroke.
+func (m Cockpit) askUndo(th *ckThread, t *ckTask) Cockpit {
+	if th.wt != nil {
+		th.undoAsk = &ckUndoAsk{wt: th.wt,
+			question: fmt.Sprintf("discard worktree %s and its edits? y discards · n keeps", th.wt.tag)}
+		m.flash = ""
+		return m
+	}
+	if t.undone || t.editRef == "" {
+		return m.undoEdit(th, t) // nothing to restore: say why instead of asking
+	}
+	th.undoAsk = &ckUndoAsk{task: t,
+		question: fmt.Sprintf("restore %s to its pre-task state? y restores · n keeps", filepath.Base(t.file))}
+	m.flash = ""
+	return m
+}
+
+// undoAskKey answers a pending /undo: a typed y does it, anything else keeps
+// the work. Keys other than y/n/enter still do their usual job, so typing is
+// never eaten; enter only closes the question, it never confirms it.
+func (m Cockpit) undoAskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	th := m.th()
+	ask := th.undoAsk
+	th.undoAsk = nil
+	m.flash = "kept, nothing changed"
+	if msg.Type == tea.KeyEnter {
+		return m, nil
+	}
+	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && !msg.Paste {
+		switch msg.Runes[0] {
+		case 'y', 'Y':
+			switch {
+			case th.exec != nil:
+				m.flash = "a task started on this thread, nothing was touched"
+				return m, nil
+			case ask.wt != nil && th.wt == ask.wt:
+				m.flash = ""
+				return m.discardWorktree(th)
+			case ask.task != nil && th.wt == nil && th.lastDone == ask.task:
+				m.flash = ""
+				return m.undoEdit(th, ask.task), nil
+			}
+			m.flash = "the thread changed since /undo asked, nothing was touched"
+			return m, nil
+		case 'n', 'N':
+			return m, nil
+		}
+	}
+	return m.chatKey(msg)
+}
+
 // undoEdit restores the file to its exact pre-task bytes from the first edit
 // snapshot, preserving the file's permissions. One-shot per task.
 func (m Cockpit) undoEdit(th *ckThread, t *ckTask) Cockpit {
@@ -812,7 +872,7 @@ func (m Cockpit) undoEdit(th *ckThread, t *ckTask) Cockpit {
 		m.flash = "undo failed, " + werr.Error()
 		return m
 	}
-	t.undone = true // through the pointer: the second x says "already restored"
+	t.undone = true // through the pointer: a second /undo says "already restored"
 	m.flash = "restored " + filepath.Base(t.file) + " to its pre-task state"
 	m = m.showCode(th, t.file, string(before))
 	th.codeShown = len(th.codeLines)
