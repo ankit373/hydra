@@ -36,7 +36,7 @@ routing_map:
   COMPLEX:    5    # → Gemini 3.1 Pro (High)
 
   # Hard cross-cutting, tradeoff review, non-trivial algorithms (also rubber duck for Claude)
-  HARD:       4    # → GPT-OSS 120B (Medium)
+  HARD:       4    # → Gemini 2.0 Flash Thinking (disabled in models.yaml)
 
   # Very hard, multi-step reasoning, complex refactors
   VERY_HARD:  3    # → Claude Sonnet 4.6 (Thinking)
