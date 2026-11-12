@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Regression for a live 80x24 frame: entries a bit wider than the narrow chat
@@ -41,7 +41,7 @@ func TestChatCode_LiveFrame80x24NeverOverflows(t *testing.T) {
 	if got := lipgloss.Height(m.chatCode(bodyH)); got != bodyH {
 		t.Errorf("chatCode height = %d, want exactly %d", got, bodyH)
 	}
-	out := stripANSI(m.View())
+	out := stripANSI(m.View().Content)
 	if strings.Contains(out, "enlarge the terminal") {
 		t.Errorf("the live frame trips ckFrame's crop disclosure:\n%s", out)
 	}

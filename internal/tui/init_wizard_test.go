@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/probe"
@@ -29,24 +29,27 @@ func wizardHeads() *probe.Result {
 	}}
 }
 
-func key(s string) tea.KeyMsg {
-	if s == " " {
-		return tea.KeyMsg{Type: tea.KeySpace}
+// key is the keypress a terminal sends for a key name, as Bubble Tea v2's
+// decoder builds it: a printable key carries its text, ctrl+x does not.
+func key(s string) tea.KeyPressMsg {
+	if s == " " || s == "space" {
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	}
-	if len(s) == 1 {
-		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+	if r := []rune(s); len(r) == 1 {
+		return tea.KeyPressMsg{Code: r[0], Text: s}
 	}
-	switch s {
-	case "enter":
-		return tea.KeyMsg{Type: tea.KeyEnter}
-	case "up":
-		return tea.KeyMsg{Type: tea.KeyUp}
-	case "down":
-		return tea.KeyMsg{Type: tea.KeyDown}
-	case "ctrl+c":
-		return tea.KeyMsg{Type: tea.KeyCtrlC}
-	case "esc":
-		return tea.KeyMsg{Type: tea.KeyEsc}
+	named := map[string]tea.Key{
+		"enter": {Code: tea.KeyEnter}, "esc": {Code: tea.KeyEscape}, "tab": {Code: tea.KeyTab},
+		"shift+tab": {Code: tea.KeyTab, Mod: tea.ModShift}, "backspace": {Code: tea.KeyBackspace},
+		"up": {Code: tea.KeyUp}, "down": {Code: tea.KeyDown}, "pgup": {Code: tea.KeyPgUp},
+		"pgdown": {Code: tea.KeyPgDown}, "home": {Code: tea.KeyHome}, "end": {Code: tea.KeyEnd},
+		"ctrl+left": {Code: tea.KeyLeft, Mod: tea.ModCtrl}, "ctrl+right": {Code: tea.KeyRight, Mod: tea.ModCtrl},
+	}
+	if k, ok := named[s]; ok {
+		return tea.KeyPressMsg(k)
+	}
+	if c, ok := strings.CutPrefix(s, "ctrl+"); ok && len(c) == 1 {
+		return tea.KeyPressMsg{Code: rune(c[0]), Mod: tea.ModCtrl}
 	}
 	panic("unhandled key " + s)
 }
@@ -89,7 +92,7 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	if cmd != nil || im.step != stepDone {
 		t.Errorf("save did not land on the summary: step=%v cmd=%v", im.step, cmd)
 	}
-	if v := stripANSI(im.View()); !strings.Contains(v, "Hydra is ready") || !strings.Contains(v, "hyctl tui") {
+	if v := stripANSI(im.View().Content); !strings.Contains(v, "Hydra is ready") || !strings.Contains(v, "hyctl tui") {
 		t.Errorf("the summary is missing its outcome or next step:\n%s", v)
 	}
 	if _, cmd = send(m, "enter"); cmd == nil {
@@ -131,10 +134,10 @@ func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
 	if im.err != nil {
 		t.Fatalf("the wizard reported an error: %v", im.err)
 	}
-	for _, line := range strings.Split(im.View(), "\n") {
+	for _, line := range strings.Split(im.View().Content, "\n") {
 		if strings.TrimSpace(line) == "" && strings.Trim(line, " ") != line {
 			t.Errorf("done screen has a whitespace-only (not empty) line: %q\nfull view:\n%s",
-				line, im.View())
+				line, im.View().Content)
 		}
 	}
 }
@@ -236,7 +239,7 @@ func TestInitWizard_EveryStepRenders(t *testing.T) {
 	seen := map[step]string{}
 	for i := 0; i < 6; i++ {
 		im := m.(InitModel)
-		view := im.View()
+		view := im.View().Content
 		if strings.TrimSpace(view) == "" {
 			t.Fatalf("step %d rendered nothing", im.step)
 		}
@@ -276,7 +279,7 @@ func TestInitWizard_TierScreenShowsEveryHeadAgainstItsRoutingTier(t *testing.T) 
 
 	m := tea.Model(NewInitModel(wizardHeads()))
 	m, _ = send(m, "enter") // pick the first cortex, land on the tier screen
-	view := m.View()
+	view := m.View().Content
 
 	for _, h := range wizardHeads().Heads {
 		if !strings.Contains(view, h.Name) {
@@ -349,8 +352,8 @@ func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
 	if im.err == nil {
 		t.Fatal("the wizard reported success with an unwritable config directory")
 	}
-	if !strings.Contains(im.View(), "Setup failed") {
-		t.Errorf("the done screen does not show the failure:\n%s", im.View())
+	if !strings.Contains(im.View().Content, "Setup failed") {
+		t.Errorf("the done screen does not show the failure:\n%s", im.View().Content)
 	}
 }
 
@@ -402,7 +405,7 @@ func TestInitWizard_CaptureStepExplainsWhatIsStored(t *testing.T) {
 	m := tea.Model(NewInitModel(wizardHeads()))
 	m, _ = send(m, "enter", "enter", "enter") // land on the capture step
 
-	view := m.(InitModel).View()
+	view := m.(InitModel).View().Content
 	for _, want := range []string{"prompts and responses", "budget", "redacted", "secret detector"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the capture step never mentions %q:\n%s", want, view)
@@ -462,7 +465,7 @@ func TestInitWizard_EmbedStepSaysNothingLeavesTheMachine(t *testing.T) {
 
 	m := tea.Model(NewInitModel(wizardHeads()))
 	m, _ = send(m, "enter", "enter", "enter", "enter")
-	view := m.(InitModel).View()
+	view := m.(InitModel).View().Content
 
 	for _, want := range []string{"vector", "Nothing leaves the machine", "redacted", "Ollama"} {
 		if !strings.Contains(view, want) {
@@ -478,7 +481,7 @@ func TestInitWizard_CacheStepSaysItChangesTheAnswer(t *testing.T) {
 
 	m := tea.Model(NewInitModel(wizardHeads()))
 	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
-	view := m.(InitModel).View()
+	view := m.(InitModel).View().Content
 
 	for _, want := range []string{"changes what you get back", "word for word", "personal"} {
 		if !strings.Contains(view, want) {

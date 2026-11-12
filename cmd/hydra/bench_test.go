@@ -40,14 +40,14 @@ func benchLock(t *testing.T) (lockPath string, hits *atomic.Int64) {
 func TestBenchFetch_DownloadsIntoHydraHomeThenVerifies(t *testing.T) {
 	sb := testutil.NewSandbox(t)
 	lock, hits := benchLock(t)
-	_, out, err := run(t, "bench", "fetch", "--lock", lock)
+	out, _, err := run(t, "bench", "fetch", "--lock", lock)
 	if err != nil || !strings.Contains(out, "s/f.txt  downloaded") {
 		t.Fatalf("first fetch: %v\n%s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(sb.HydraHome, "bench", "data", "s", "f.txt")); err != nil {
 		t.Fatalf("data not under $HYDRA_HOME/bench/data: %v", err)
 	}
-	_, out, err = run(t, "bench", "fetch", "s", "--lock", lock)
+	out, _, err = run(t, "bench", "fetch", "s", "--lock", lock)
 	if err != nil || !strings.Contains(out, "s/f.txt  verified") || hits.Load() != 1 {
 		t.Fatalf("second fetch: %v after %d requests\n%s", err, hits.Load(), out)
 	}

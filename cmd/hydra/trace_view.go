@@ -63,7 +63,7 @@ Run ids come from ` + "`hyctl trace view`" + ` with no argument, which uses the 
 				if err != nil {
 					return err
 				}
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			renderWaterfall(tr, showText)
@@ -93,19 +93,19 @@ func resolveRunID(args []string) (string, error) {
 }
 
 func renderWaterfall(tr *waterfall.Trace, showText bool) {
-	fmt.Printf("\n  %s %s\n", dimStyle.Render("Run"), cortexStyle.Render(tr.RunID))
+	fmt.Fprintf(stdout, "\n  %s %s\n", dimStyle.Render("Run"), cortexStyle.Render(tr.RunID))
 	if tr.Detail != "" {
-		fmt.Printf("  %s\n", dimStyle.Render(oneLine(tr.Detail)))
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(oneLine(tr.Detail)))
 	}
 
 	total := tr.End.Sub(tr.Start)
 	cost, inTok, outTok := tr.Totals()
-	fmt.Printf("  %s\n\n", dimStyle.Render(fmt.Sprintf(
+	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(fmt.Sprintf(
 		"%s · %d tokens in, %d out · $%.6f", humanDuration(total), inTok, outTok, cost)))
 
 	spans := tr.Flatten()
 	if len(spans) == 0 {
-		fmt.Printf("  %s\n\n", dimStyle.Render("no spans in this run"))
+		fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render("no spans in this run"))
 		return
 	}
 	for _, s := range spans {
@@ -115,14 +115,14 @@ func renderWaterfall(tr *waterfall.Trace, showText bool) {
 		}
 	}
 	if tr.Unspanned > 0 {
-		fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+		fmt.Fprintf(stdout, "\n  %s\n", warnStyle.Render(fmt.Sprintf(
 			"%d event(s) named no span and are not shown", tr.Unspanned)))
 	}
 	if tr.OrphanScores > 0 {
-		fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+		fmt.Fprintf(stdout, "\n  %s\n", warnStyle.Render(fmt.Sprintf(
 			"%d score(s) judge a span this run does not contain", tr.OrphanScores)))
 	}
-	fmt.Printf("\n  %s\n\n", dimStyle.Render("hyctl trace view "+tr.RunID+" --span <id>  for one span's prompt and response"))
+	fmt.Fprintf(stdout, "\n  %s\n\n", dimStyle.Render("hyctl trace view "+tr.RunID+" --span <id>  for one span's prompt and response"))
 }
 
 func renderSpanRow(s *waterfall.Span, tr *waterfall.Trace) {
@@ -143,7 +143,7 @@ func renderSpanRow(s *waterfall.Span, tr *waterfall.Trace) {
 		label = label[:29] + "…"
 	}
 
-	fmt.Printf("  %-30s %s %s%s %s\n",
+	fmt.Fprintf(stdout, "  %-30s %s %s%s %s\n",
 		label,
 		bar(s, tr),
 		statusMark(s),
@@ -273,14 +273,14 @@ func renderSpanDetail(tr *waterfall.Trace, id string, jsonOut bool) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(string(raw))
+		fmt.Fprintln(stdout, string(raw))
 		return nil
 	}
 
-	fmt.Printf("\n  %s %s\n", dimStyle.Render("Span"), cortexStyle.Render(s.ID))
-	fmt.Printf("  %s\n", dimStyle.Render(spanHeader(s)))
+	fmt.Fprintf(stdout, "\n  %s %s\n", dimStyle.Render("Span"), cortexStyle.Render(s.ID))
+	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(spanHeader(s)))
 	if s.Detail != "" {
-		fmt.Printf("  %s\n", dimStyle.Render(oneLine(s.Detail)))
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(oneLine(s.Detail)))
 	}
 	if len(s.Meta) > 0 {
 		keys := make([]string, 0, len(s.Meta))
@@ -292,11 +292,11 @@ func renderSpanDetail(tr *waterfall.Trace, id string, jsonOut bool) error {
 		for _, k := range keys {
 			kv = append(kv, fmt.Sprintf("%s=%v", k, s.Meta[k]))
 		}
-		fmt.Printf("  %s\n", dimStyle.Render(strings.Join(kv, " · ")))
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(strings.Join(kv, " · ")))
 	}
 	if len(s.Scores) > 0 {
-		fmt.Println()
-		fmt.Printf("  %s\n", dimStyle.Render("── judged ──"))
+		fmt.Fprintln(stdout)
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("── judged ──"))
 		for _, sc := range s.Scores {
 			mark := okStyle.Render("✔")
 			if sc.Value <= 0 {
@@ -306,15 +306,15 @@ func renderSpanDetail(tr *waterfall.Trace, id string, jsonOut bool) error {
 			if sc.Source != "" {
 				line += dimStyle.Render(" · " + sc.Source)
 			}
-			fmt.Printf("    %s\n", line)
+			fmt.Fprintf(stdout, "    %s\n", line)
 			if sc.Comment != "" {
-				fmt.Printf("      %s\n", dimStyle.Render(oneLine(sc.Comment)))
+				fmt.Fprintf(stdout, "      %s\n", dimStyle.Render(oneLine(sc.Comment)))
 			}
 		}
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	renderSpanText(s, "  ")
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	return nil
 }
 
@@ -352,17 +352,17 @@ func renderSpanText(s *waterfall.Span, indent string) {
 		ref   string
 	}{{"asked", s.InputRef}, {"answered", s.OutputRef}} {
 		segs, why := loadSegments(side.ref)
-		fmt.Printf("%s%s\n", indent, dimStyle.Render("── "+side.title+" ──"))
+		fmt.Fprintf(stdout, "%s%s\n", indent, dimStyle.Render("── "+side.title+" ──"))
 		if why != "" {
-			fmt.Printf("%s  %s\n", indent, dimStyle.Render(why))
+			fmt.Fprintf(stdout, "%s  %s\n", indent, dimStyle.Render(why))
 			continue
 		}
 		for _, seg := range segs {
 			if seg.Label != "" && len(segs) > 1 {
-				fmt.Printf("%s  %s\n", indent, dimStyle.Render("["+seg.Label+"]"))
+				fmt.Fprintf(stdout, "%s  %s\n", indent, dimStyle.Render("["+seg.Label+"]"))
 			}
 			for _, line := range strings.Split(strings.TrimRight(seg.Content, "\n"), "\n") {
-				fmt.Printf("%s  %s\n", indent, line)
+				fmt.Fprintf(stdout, "%s  %s\n", indent, line)
 			}
 		}
 	}
@@ -474,7 +474,7 @@ span keeps whatever the head itself reported.`,
 			if value <= 0 {
 				mark = warnStyle.Render("✘")
 			}
-			fmt.Printf("\n  %s %s = %g %s\n\n", mark, name, value,
+			fmt.Fprintf(stdout, "\n  %s %s = %g %s\n\n", mark, name, value,
 				dimStyle.Render("on span "+spanID+" of "+runID))
 			return nil
 		},

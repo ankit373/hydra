@@ -113,7 +113,7 @@ It resolves the newest release tag (desktop asset names embed their version, so 
 
 Platform support: `hyctl` is built for macOS, Linux and Windows on both x86-64 and ARM64, six targets, every release. Homebrew covers macOS and Linux; npm/npx and pip cover all three OSes; `install.sh` covers macOS and Linux and `install.ps1` covers Windows (per-user, no admin rights; both verify the release checksum). The desktop app ships five targets every release: macOS (universal), Windows x86-64, Windows ARM64, Linux x86-64 and Linux ARM64. `install-app.sh` picks the right one automatically.
 
-Or build from source (requires Go 1.22+):
+Or build from source (requires Go 1.26+):
 
 ```bash
 git clone https://github.com/ankit373/hydra && cd hydra && go build ./cmd/hydra

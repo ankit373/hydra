@@ -70,10 +70,10 @@ func cmdBenchReport() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				_, err = cmd.OutOrStdout().Write(b)
+				_, err = stdout.Write(b)
 				return err
 			}
-			fmt.Fprint(cmd.OutOrStdout(), bench.Table([]bench.Summary{s}))
+			fmt.Fprint(stdout, bench.Table([]bench.Summary{s}))
 			return nil
 		},
 	}
@@ -109,7 +109,7 @@ func cmdBenchTable() *cobra.Command {
 			if err := os.WriteFile(outPath, []byte(bench.Table(sums)), 0o644); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "  wrote %s\n", outPath)
+			fmt.Fprintf(stdout, "  wrote %s\n", outPath)
 			return nil
 		},
 	}
@@ -153,7 +153,7 @@ func cmdBenchFetch() *cobra.Command {
 					if got {
 						state = "downloaded"
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "  %s/%s  %s  sha256 %s\n", name, e.Name, state, e.SHA256)
+					fmt.Fprintf(stdout, "  %s/%s  %s  sha256 %s\n", name, e.Name, state, e.SHA256)
 				}
 			}
 			return nil
@@ -221,7 +221,7 @@ func cmdBenchRun() *cobra.Command {
 				return err
 			}
 			host := benchHost()
-			out := cmd.OutOrStdout()
+			out := stdout
 			for _, name := range names {
 				mk, ok := suites.Registry()[name]
 				if !ok {

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/mcpregistry"

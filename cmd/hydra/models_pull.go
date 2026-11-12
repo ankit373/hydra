@@ -112,11 +112,11 @@ func reportPulled(ref string, added []string, jsonOut bool) error {
 	case 0:
 		// Already present: a re-pull is not a failure, and claiming a new head
 		// appeared would be a lie about what changed.
-		fmt.Printf("  %s %s was already installed; nothing new to route to.\n", okStyle.Render("✓"), ref)
+		fmt.Fprintf(stdout, "  %s %s was already installed; nothing new to route to.\n", okStyle.Render("✓"), ref)
 	default:
-		fmt.Printf("  %s pulled %s\n", okStyle.Render("✓"), ref)
+		fmt.Fprintf(stdout, "  %s pulled %s\n", okStyle.Render("✓"), ref)
 		for _, h := range heads {
-			fmt.Printf("    routable as %s\n", cortexStyle.Render(h))
+			fmt.Fprintf(stdout, "    routable as %s\n", cortexStyle.Render(h))
 		}
 	}
 	return nil
@@ -143,20 +143,20 @@ func (p *pullProgress) handle(pr modelpull.Progress) {
 	}
 	line := pullLine(pr)
 	if p.tty {
-		fmt.Printf("\r\033[K  %s", line)
+		fmt.Fprintf(stdout, "\r\033[K  %s", line)
 		p.wrote = true
 		return
 	}
 	// Piped: only a change is worth a line, or a download emits thousands.
 	if pr.Status != p.lastStat {
-		fmt.Printf("  %s\n", line)
+		fmt.Fprintf(stdout, "  %s\n", line)
 		p.lastStat = pr.Status
 	}
 }
 
 func (p *pullProgress) done() {
 	if p.wrote {
-		fmt.Println()
+		fmt.Fprintln(stdout)
 	}
 }
 

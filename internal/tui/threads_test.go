@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
 func altDigit(m Cockpit, d rune) Cockpit {
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{d}, Alt: true})
+	next, _ := m.Update(tea.KeyPressMsg{Code: d, Mod: tea.ModAlt})
 	return next.(Cockpit)
 }
 
@@ -23,7 +23,7 @@ func altDigit(m Cockpit, d rune) Cockpit {
 
 func TestThreads_CtrlTCreatesAndAltDigitJumps(t *testing.T) {
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	if got := m.th().id; got != 2 {
 		t.Fatalf("ctrl+t landed on thread %d, want 2", got)
 	}
@@ -50,7 +50,7 @@ func TestThreads_CtrlTCreatesAndAltDigitJumps(t *testing.T) {
 func TestThreads_CapRefusesTheTenth(t *testing.T) {
 	m := testCockpit()
 	for i := 0; i < ckMaxThreads+2; i++ {
-		m = press(m, tea.KeyCtrlT)
+		m = press(m, "ctrl+t")
 	}
 	if len(m.threads) != ckMaxThreads {
 		t.Fatalf("%d threads exist, cap is %d", len(m.threads), ckMaxThreads)
@@ -62,13 +62,13 @@ func TestThreads_CapRefusesTheTenth(t *testing.T) {
 
 func TestThreads_CtrlArrowsCycleVisible(t *testing.T) {
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
-	m = press(m, tea.KeyCtrlT) // threads 1,2,3, current 3
-	m = press(m, tea.KeyCtrlRight)
+	m = press(m, "ctrl+t")
+	m = press(m, "ctrl+t") // threads 1,2,3, current 3
+	m = press(m, "ctrl+right")
 	if m.th().id != 1 {
 		t.Fatalf("ctrl+→ from 3 landed on %d, want 1 (wraps)", m.th().id)
 	}
-	m = press(m, tea.KeyCtrlLeft)
+	m = press(m, "ctrl+left")
 	if m.th().id != 3 {
 		t.Fatalf("ctrl+← wrapped to %d, want 3", m.th().id)
 	}
@@ -76,7 +76,7 @@ func TestThreads_CtrlArrowsCycleVisible(t *testing.T) {
 
 func TestThreads_TypingIsNeverBrokenByPlainDigitsOrLetters(t *testing.T) {
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m = typed(m, "add 19 tests to x.go")
 	if got := m.th().input; got != "add 19 tests to x.go" {
 		t.Errorf("typing into a thread mangled the input: %q", got)
@@ -87,9 +87,9 @@ func TestThreads_TypingIsNeverBrokenByPlainDigitsOrLetters(t *testing.T) {
 
 func TestThreadStatus_GlyphsAndCounts(t *testing.T) {
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
-	m = press(m, tea.KeyCtrlT)
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
+	m = press(m, "ctrl+t")
+	m = press(m, "ctrl+t")
 	ts := m.threads
 	ts[0].exec = &ckExecState{stage: "running", started: time.Now()}
 	ts[1].planWait = &ckWait{task: ckTask{}}
@@ -132,7 +132,7 @@ func TestThreadStatus_GlyphsAndCounts(t *testing.T) {
 func TestThreadStrip_ShowsChipsAndWorktreeTag(t *testing.T) {
 	m := testCockpit()
 	m.th().name = "first-task"
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m.th().name = "second"
 	m.th().wt = &ckWorktree{tag: "t2-abc123"}
 
@@ -155,7 +155,7 @@ func TestThreadStrip_ShowsChipsAndWorktreeTag(t *testing.T) {
 func TestThreadStrip_OverflowWindowsAroundActive(t *testing.T) {
 	m := testCockpit()
 	for i := 0; i < 8; i++ {
-		m = press(m, tea.KeyCtrlT)
+		m = press(m, "ctrl+t")
 		m.th().name = fmt.Sprintf("a-very-long-thread-name-%d", i+2)
 	}
 	m = altDigit(m, '5')
@@ -173,17 +173,17 @@ func TestThreadStrip_OverflowWindowsAroundActive(t *testing.T) {
 
 func TestCtrlG_JumpsToTheNextThreadNeedingInput(t *testing.T) {
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
+	m = press(m, "ctrl+t")
 	m = altDigit(m, '1')
 	m.threads[1].confirm = &ckWait{question: "write a.go? y/n"}
 	m.threads[2].attn = true
 
-	m = press(m, tea.KeyCtrlG)
+	m = press(m, "ctrl+g")
 	if m.th().id != 2 {
 		t.Fatalf("ctrl+g landed on %d, want 2", m.th().id)
 	}
-	m = press(m, tea.KeyCtrlG)
+	m = press(m, "ctrl+g")
 	if m.th().id != 3 {
 		t.Fatalf("second ctrl+g landed on %d, want 3", m.th().id)
 	}
@@ -191,7 +191,7 @@ func TestCtrlG_JumpsToTheNextThreadNeedingInput(t *testing.T) {
 		t.Error("visiting the thread did not clear its attention mark")
 	}
 	m.threads[1].confirm = nil
-	m = press(m, tea.KeyCtrlG)
+	m = press(m, "ctrl+g")
 	if !strings.Contains(m.flash, "nothing needs you") {
 		t.Errorf("ctrl+g with nothing pending: flash=%q", m.flash)
 	}
@@ -202,35 +202,35 @@ func TestCtrlG_JumpsToTheNextThreadNeedingInput(t *testing.T) {
 func TestSplit_ToggleFocusAndNarrowRefusal(t *testing.T) {
 	m := testCockpit()
 	m.w = 120
-	m = press(m, tea.KeyCtrlBackslash)
+	m = press(m, "ctrl+\\")
 	if m.split {
 		t.Fatal("split opened with only one thread")
 	}
-	m = press(m, tea.KeyCtrlT) // thread 2, current
-	m = press(m, tea.KeyCtrlBackslash)
+	m = press(m, "ctrl+t") // thread 2, current
+	m = press(m, "ctrl+\\")
 	if !m.split || m.splitID != 1 {
 		t.Fatalf("split=%v pin=%d, want pin 1 (previously active)", m.split, m.splitID)
 	}
 	// ctrl+→ moves focus: the pinned side becomes active, the old active pins.
-	m = press(m, tea.KeyCtrlRight)
+	m = press(m, "ctrl+right")
 	if m.th().id != 1 || !m.split || m.splitID != 2 {
 		t.Fatalf("focus swap: cur=%d split=%v pin=%d", m.th().id, m.split, m.splitID)
 	}
-	m = press(m, tea.KeyCtrlBackslash)
+	m = press(m, "ctrl+\\")
 	if m.split {
 		t.Fatal("ctrl+\\ did not close the split")
 	}
 
 	// Too narrow: refuse with a note, render nothing broken.
 	m.w = 80
-	m = press(m, tea.KeyCtrlBackslash)
+	m = press(m, "ctrl+\\")
 	if m.split || !strings.Contains(m.flash, "split needs") {
 		t.Errorf("narrow split: split=%v flash=%q", m.split, m.flash)
 	}
 
 	// A live split degrades honestly when the terminal shrinks under it.
 	m.w = 120
-	m = press(m, tea.KeyCtrlBackslash)
+	m = press(m, "ctrl+\\")
 	if !m.split {
 		t.Fatal("split did not open at 120 cols")
 	}
@@ -248,13 +248,13 @@ func TestSplit_RendersBothThreadsAndScrollsIndependently(t *testing.T) {
 	for i := 0; i < 60; i++ {
 		m.th().log = append(m.th().log, fmt.Sprintf("one-line-%d", i))
 	}
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	for i := 0; i < 60; i++ {
 		m.th().log = append(m.th().log, fmt.Sprintf("two-line-%d", i))
 	}
-	m = press(m, tea.KeyCtrlBackslash) // pin thread 1 beside thread 2
+	m = press(m, "ctrl+\\") // pin thread 1 beside thread 2
 
-	out := stripANSI(m.View())
+	out := stripANSI(m.View().Content)
 	if !strings.Contains(out, "two-line-59") || !strings.Contains(out, "one-line-59") {
 		t.Fatalf("split does not show both live tails:\n%s", out)
 	}
@@ -266,7 +266,7 @@ func TestSplit_RendersBothThreadsAndScrollsIndependently(t *testing.T) {
 	}
 
 	// Scroll the active side only; the pinned side stays live.
-	m = press(m, tea.KeyPgUp)
+	m = press(m, "pgup")
 	if m.threads[1].scroll == 0 {
 		t.Fatal("pgup did not anchor the active side")
 	}
@@ -274,13 +274,13 @@ func TestSplit_RendersBothThreadsAndScrollsIndependently(t *testing.T) {
 		t.Fatal("pgup moved the pinned side too")
 	}
 	// Focus over, scroll there, come back: each side keeps its own position.
-	m = press(m, tea.KeyCtrlLeft)
-	m = press(m, tea.KeyPgUp)
+	m = press(m, "ctrl+left")
+	m = press(m, "pgup")
 	anchored := m.threads[0].scroll
 	if anchored == 0 {
 		t.Fatal("pgup did not anchor the other side")
 	}
-	m = press(m, tea.KeyCtrlRight)
+	m = press(m, "ctrl+right")
 	if m.threads[0].scroll != anchored {
 		t.Error("switching focus lost the pinned side's scroll position")
 	}
@@ -295,12 +295,12 @@ func TestThreads_ScrollbackPreservedAcrossSwitches(t *testing.T) {
 	for i := 0; i < 60; i++ {
 		m.th().log = append(m.th().log, fmt.Sprintf("history %d", i))
 	}
-	m = press(m, tea.KeyPgUp)
+	m = press(m, "pgup")
 	anchor := m.th().scroll
 	if anchor == 0 {
 		t.Fatal("pgup did not anchor")
 	}
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m = altDigit(m, '1')
 	if m.th().scroll != anchor {
 		t.Fatalf("switching threads lost the scroll anchor: %d != %d", m.th().scroll, anchor)
@@ -315,7 +315,7 @@ func TestThreads_ScrollbackPreservedAcrossSwitches(t *testing.T) {
 	if m.th().id != 1 || m.th().scroll != anchor {
 		t.Errorf("thread 2's result yanked thread 1: id=%d scroll=%d", m.th().id, m.th().scroll)
 	}
-	if out := stripANSI(m.View()); strings.Contains(out, "thread2 answer") {
+	if out := stripANSI(m.View().Content); strings.Contains(out, "thread2 answer") {
 		t.Error("thread 2's output leaked into thread 1's pane")
 	}
 }
@@ -327,7 +327,7 @@ func TestThreads_ScrollbackPreservedAcrossSwitches(t *testing.T) {
 func TestExecDone_RoutesByThreadIDNotCurrent(t *testing.T) {
 	testutil.NewSandbox(t)
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	ex1, ex2 := &ckExecState{}, &ckExecState{}
 	m.threads[0].exec = ex1
 	m.threads[1].exec = ex2
@@ -356,7 +356,7 @@ func TestExecDone_RoutesByThreadIDNotCurrent(t *testing.T) {
 func TestGate_OnAnotherThreadPingsChatAndArmsAttention(t *testing.T) {
 	testutil.NewSandbox(t)
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlT)
+	m = press(m, "ctrl+t")
 	m = altDigit(m, '1') // current: 1; the gate lands on 2
 	ex := &ckExecState{}
 	m.threads[1].exec = ex
@@ -385,7 +385,7 @@ func TestBackground_ReparentsToAgentsAndPingsOnCompletion(t *testing.T) {
 	m.th().exec = ex
 	m.th().lastRunID = "20260904T100200Z-cccc" // the fixture's live run
 
-	m = press(m, tea.KeyCtrlB)
+	m = press(m, "ctrl+b")
 	bg := m.threadByID(1)
 	if !bg.bg {
 		t.Fatal("ctrl+b did not background the thread")
@@ -443,7 +443,7 @@ func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 	states := map[string]func(Cockpit) Cockpit{
 		"four_threads_long_names": func(m Cockpit) Cockpit {
 			for i := 0; i < 3; i++ {
-				m = press(m, tea.KeyCtrlT)
+				m = press(m, "ctrl+t")
 			}
 			for i, t := range m.threads {
 				t.name = fmt.Sprintf("an-extremely-long-thread-name-that-must-truncate-%d", i+1)
@@ -451,7 +451,7 @@ func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 			return m
 		},
 		"split_both_streaming": func(m Cockpit) Cockpit {
-			m = press(m, tea.KeyCtrlT)
+			m = press(m, "ctrl+t")
 			m.split, m.splitID = true, 1
 			m.threads[0].exec = &ckExecState{stage: "verifying, go test ./...", started: time.Now()}
 			m.threads[0].log = append(m.threads[0].log, strings.Split(long, ". ")...)
@@ -460,20 +460,20 @@ func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 			return m
 		},
 		"queued_chip_long_path": func(m Cockpit) Cockpit {
-			m = press(m, tea.KeyCtrlT)
+			m = press(m, "ctrl+t")
 			m.th().queued = &ckQueued{reason: "queued behind 1 · both touch internal/very/deeply/nested/path/that/never/ends/handlers/users_endpoint_pagination.go"}
 			m.th().name = "queued-one"
 			return m
 		},
 		"huge_task_while_other_streams": func(m Cockpit) Cockpit {
-			m = press(m, tea.KeyCtrlT)
+			m = press(m, "ctrl+t")
 			m.threads[0].exec = &ckExecState{stage: "streaming", started: time.Now()}
 			m.threads[0].log = append(m.threads[0].log, "streamed line")
 			m.th().input = long
 			return m
 		},
 		"worktree_header_and_strip": func(m Cockpit) Cockpit {
-			m = press(m, tea.KeyCtrlT)
+			m = press(m, "ctrl+t")
 			m.th().wt = &ckWorktree{tag: "t2-abc123", branch: "hydra/task-t2-abc123"}
 			m.th().log = append(m.th().log, "an edit landed")
 			return m
@@ -486,7 +486,7 @@ func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 			t.Run(fmt.Sprintf("%s_%dx%d", name, sz.w, sz.h), func(t *testing.T) {
 				m := build(testCockpit())
 				m.w, m.h, m.ready = sz.w, sz.h, true
-				out := m.View()
+				out := m.View().Content
 				lines := strings.Split(out, "\n")
 				if len(lines) > sz.h {
 					t.Errorf("%s at %dx%d renders %d lines, want <= %d", name, sz.w, sz.h, len(lines), sz.h)
@@ -532,7 +532,7 @@ func TestCodePanel_RealFileLinesDoNotWrap(t *testing.T) {
 					sz.w, sz.h, pw, got, bodyH)
 			}
 		}
-		if out := m.View(); strings.Contains(stripANSI(out), "more lines, enlarge") {
+		if out := m.View().Content; strings.Contains(stripANSI(out), "more lines, enlarge") {
 			t.Errorf("%dx%d: the frame had to clamp a streamed file", sz.w, sz.h)
 		}
 	}

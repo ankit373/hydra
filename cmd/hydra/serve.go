@@ -477,10 +477,10 @@ func cmdServe() *cobra.Command {
 			}
 			r := serveRouter{
 				d: d, defaultEnum: enum, objective: objective, implicit: implicitDefault(c, objective),
-				notice: newDeprecationNotice(os.Stderr), defaultClass: defaultClass, localOnly: localOnly,
+				notice: newDeprecationNotice(stderr), defaultClass: defaultClass, localOnly: localOnly,
 				verifiers: verifiers, confidence: confidence, maxEscalations: maxEscalations, cal: cal,
 			}
-			printServeBanner(os.Stdout, ln.Addr().String(), defaultRouting(enum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
+			printServeBanner(stdout, ln.Addr().String(), defaultRouting(enum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
