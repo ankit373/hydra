@@ -3,6 +3,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -11,10 +13,9 @@ import (
 )
 
 // The CLA is signed once through CLA Assistant, which posts the license/cla status.
-// cla.yml mirrors it as "Contributor has signed" until main's Mergify reads license/cla
-// (step 2 of #1380). These pin the bridge and that the checkbox gate is gone.
+// These pin that the queue waits on it and that the checkbox gate is gone.
 
-const claCondition = "check-success=Contributor has signed"
+const claCondition = "check-success=license/cla"
 
 type ghWorkflow struct {
 	On          map[string]any `yaml:"on"`
@@ -94,25 +95,19 @@ func TestCLA_ContributorQueuesRequireTheCLACheck(t *testing.T) {
 	}
 }
 
-// cla.yml passes on CLA Assistant's license/cla status alone: no checkbox, no roster.
-func TestCLA_WorkflowMirrorsLicenseCLA(t *testing.T) {
-	w := parseWorkflow(t, "cla.yml")
-	checkNarrow(t, "cla.yml", w, map[string]string{"statuses": "read"})
-	job, ok := w.Jobs["signed"]
-	if !ok || job.Name != "Contributor has signed" {
-		t.Fatalf("cla.yml no longer reports \"Contributor has signed\", which main's Mergify config requires")
+// The home-grown check is gone: no workflow reports it and no Mergify rule waits on it.
+func TestCLA_NoHomeGrownCheckRemains(t *testing.T) {
+	entries, err := os.ReadDir(filepath.Join("..", "..", ".github", "workflows"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	var script string
-	for _, s := range job.Steps {
-		script += s.Run
-	}
-	if !strings.Contains(script, `"license/cla"`) || !strings.Contains(script, "/status") {
-		t.Error("cla.yml does not read the license/cla commit status")
-	}
-	for _, old := range []string{"CONTRIBUTORS.md", "BODY", "[xX]"} {
-		if strings.Contains(script, old) {
-			t.Errorf("cla.yml still reads %q; the checkbox and roster gate is gone", old)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".yml") && strings.Contains(workflowFile(t, e.Name()), "Contributor has signed") {
+			t.Errorf("%s still reports \"Contributor has signed\"; CLA Assistant's license/cla replaced it", e.Name())
 		}
+	}
+	if strings.Contains(repoFile(t, ".mergify.yml"), "Contributor has signed") {
+		t.Error(".mergify.yml still waits on \"Contributor has signed\", which nothing reports")
 	}
 }
 
