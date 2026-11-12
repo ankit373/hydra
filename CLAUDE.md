@@ -799,7 +799,9 @@ reaches back through every earlier release and would close their still-open issu
 this one: on v1.5.0, 455 numbers unbounded against 159 since v1.4.2. No release branch, or none
 earlier to bound it, and only the `refs/pull` walk is used, so an ordinary release is unchanged.
 A release sweep that closes nothing now **fails**, since that is what read green twice; a manual
-backfill closing nothing stays green, because re-running is meant to be a no-op.
+backfill closing nothing stays green, because re-running is meant to be a no-op. So does a
+**hotfix** release: its PRs target `main`, where `Closes #n` fires on merge and leaves the sweep
+nothing. A promotion is told apart by its mandatory `Release-As: X.Y.Z` footer (#1351).
 
 **That `(#n)` is not always a PR.** GitHub's squash default appends the PR number, but the
 Quick Start below prescribes `(#${ISSUE})` in the commit subject, and both conventions are in
@@ -1001,7 +1003,7 @@ internal/build/build.go       ← version vars set by ldflags at build time
 internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/release.yml ← fires on tag push → goreleaser
 .github/workflows/edge.yml    ← fires on develop push → edge build
-.github/workflows/rc.yml      ← fires on release/v* push → RC pre-release. Both build from a
+.github/workflows/rc.yml      ← fires on a release/vX.Y.Z push (not a carry branch) → RC pre-release. Both build from a
                                 branch, so they must tag HEAD themselves, see below.
 .github/workflows/publish.yml ← fans a release out to brew/npm/pip
                                 All three pin GoReleaser to an exact version, guarded by
