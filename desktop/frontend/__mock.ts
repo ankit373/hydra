@@ -33,7 +33,31 @@ const run = (id: string, live: boolean, goal: string, cost: number) => ({
   running: live ? 1 : 0, ok: 3, failed: 0, pending: 0, allCount: 4, skipped: 0, goal,
 })
 
+// Provider keys, shared by every state so the first-run flow can be walked:
+// saving one makes GetHeads report a model that can answer.
+const PROVIDERS: [string, string][] = [
+  ['anthropic', 'Anthropic (Claude)'], ['openai', 'OpenAI (ChatGPT)'],
+  ['openrouter', 'OpenRouter (many models, one key)'], ['google', 'Google Gemini'],
+  ['xai', 'xAI (Grok)'], ['groq', 'Groq'], ['mistral', 'Mistral'], ['deepseek', 'DeepSeek'],
+]
+const saved: Record<string, string> = state0() === 'healthy' ? { anthropic: 'k3Qz' } : {}
+function state0() { return new URLSearchParams(location.search).get('state') ?? 'healthy' }
+const providerKeys = () => ({
+  store: 'the macOS Keychain',
+  keys: PROVIDERS.map(([provider, label]) => ({
+    provider, label, keyUrl: `https://example.com/${provider}`, envVar: `${provider.toUpperCase()}_API_KEY`,
+    source: saved[provider] ? 'stored' : '', hint: saved[provider], saved: !!saved[provider],
+  })),
+})
+const keyAPI = {
+  GetProviderKeys: () => delay(providerKeys()),
+  SaveProviderKey: (p: string, k: string) => { saved[p] = k.trim().slice(-4); return delay(providerKeys()) },
+  RemoveProviderKey: (p: string) => { delete saved[p]; return delay(providerKeys()) },
+  TestProviderKey: () => new Promise((r) => setTimeout(() => r({ ok: true, accepted: true, model: 'claude-sonnet-4-20250514', reply: 'ready' }), 700)),
+}
+
 const API = {
+  ...keyAPI,
   GetDashboard: () => delay({
     hasData: true,
     spend: { todayUsd: 1.8342, allTimeUsd: 64.2119, todayCalls: 87, totalCalls: 3128, tokensActualPct: 71 },
@@ -113,7 +137,10 @@ const nothing = {
   GetFleet: () => delay({ hasRuns: false, liveCount: 0, waitingCount: 0, groupThreshold: 8, runs: [] }),
   GetSession: () => delay({ runId: '', live: false, found: false, goal: '', nonLinear: false, skipped: 0, agents: [], edges: [], timeline: [] }),
   GetEdits: () => delay([]),
-  GetHeads: () => delay({ routable: 0, heads: [] }),
+  GetHeads: () => delay(Object.keys(saved).length
+    ? { routable: 1, heads: [{ id: 'env/anthropic', name: 'Claude Sonnet 4', provider: 'anthropic', source: 'env', tier: 4, capScore: 92, routable: true, localOnly: false }] }
+    : { routable: 0, heads: [] }),
+  Chat: () => new Promise((r) => setTimeout(() => r({ output: 'I can summarise documents, draft and polish emails, pull totals out of invoices, and answer questions in plain English. Paste in what you are working on and say what you need.', head: 'env/anthropic', model: 'Claude Sonnet 4', tier: 4, costUsd: 0, durationMs: 2100, runId: 'run-1' }), 900)),
   GetMCPServers: () => delay({ scanned: false, synced: '', servers: [] }),
   GetPendingQuestions: () => delay({ questions: [] }),
   CheckHyctl: () => delay({ found: false, path: '', version: '', supported: false }),

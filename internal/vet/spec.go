@@ -99,8 +99,8 @@ func Resolve(ctx context.Context, opts Options) (*Spec, error) {
 	if err := delegate(ctx, opts, []string{"preview"}, &spec); err != nil {
 		return nil, err
 	}
-	if v := strings.TrimSpace(spec.SchemaVersion); v != "" && v != supportedSchema {
-		return nil, fmt.Errorf("%s delegate speaks schema %s, this build reads %s", ruleBinary, v, supportedSchema)
+	if err := checkSchema("preview", spec.SchemaVersion); err != nil {
+		return nil, err
 	}
 	if len(spec.Reviewable) == 0 {
 		return &spec, nil
@@ -117,8 +117,24 @@ func Resolve(ctx context.Context, opts Options) (*Spec, error) {
 	if err := delegate(ctx, opts, append([]string{"rule"}, paths...), &rules); err != nil {
 		return nil, err
 	}
+	// The rule document's schema was decoded and never compared, so a renamed
+	// field degraded into "no rule matched, nothing reviewed, exit 0", which is
+	// what the check exists to prevent (#1166).
+	if err := checkSchema("rule", rules.SchemaVersion); err != nil {
+		return nil, err
+	}
 	spec.Groups = rules.Groups
 	return &spec, nil
+}
+
+// checkSchema refuses a delegate document this parser was not written against.
+// Both calls read the same, or one of them silently mis-parses.
+func checkSchema(call, got string) error {
+	if v := strings.TrimSpace(got); v != "" && v != supportedSchema {
+		return fmt.Errorf("%s delegate %s speaks schema %s, this build reads %s",
+			ruleBinary, call, v, supportedSchema)
+	}
+	return nil
 }
 
 // args renders the diff selector. Commit wins over a range because the two are

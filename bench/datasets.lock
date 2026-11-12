@@ -1,0 +1,33 @@
+# Pinned benchmark data. `hyctl bench fetch` downloads each file into
+# $HYDRA_HOME/bench/data/<suite>/ and refuses any whose sha256 differs.
+# Commits resolved with `git ls-remote` on 2026-11-05; see bench/DATASETS.md.
+
+[banking77]
+revision = "PolyAI-LDN/task-specific-datasets@57ec275d8078af65b7731c2a98be812d844a6d6b"
+licence = "CC-BY-4.0"
+licence_verified = "https://github.com/PolyAI-LDN/task-specific-datasets/blob/57ec275d8078af65b7731c2a98be812d844a6d6b/LICENSE, 2026-11-05"
+
+[[banking77.file]]
+name = "train.csv"
+url = "https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/57ec275d8078af65b7731c2a98be812d844a6d6b/banking_data/train.csv"
+sha256 = "b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b"
+
+[[banking77.file]]
+name = "test.csv"
+url = "https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/57ec275d8078af65b7731c2a98be812d844a6d6b/banking_data/test.csv"
+sha256 = "d12d6e3bc4c3103966ae786dc435913c0c563dfa328f5a3646d0e62cfeeb474d"
+
+[[banking77.file]]
+name = "categories.json"
+url = "https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/57ec275d8078af65b7731c2a98be812d844a6d6b/banking_data/categories.json"
+sha256 = "53261da888122daf2d120d925458631d9619e15d82e56052e7a42e535ce32b63"
+
+[clinc150]
+revision = "clinc/oos-eval@828f8093932c8fe6ca7936c3d2e52903b1c523de"
+licence = "CC-BY-3.0"
+licence_verified = "https://github.com/clinc/oos-eval/blob/828f8093932c8fe6ca7936c3d2e52903b1c523de/LICENSE, 2026-11-05"
+
+[[clinc150.file]]
+name = "data_full.json"
+url = "https://raw.githubusercontent.com/clinc/oos-eval/828f8093932c8fe6ca7936c3d2e52903b1c523de/data/data_full.json"
+sha256 = "36923c3705a59e08fe9c3883d8bc2dd966ef93e22cb78ac41171782a698d56e0"

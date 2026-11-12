@@ -391,6 +391,39 @@ func TestToFloat(t *testing.T) {
 	}
 }
 
+// statusOutput runs printBudgetStatus over one state.json body, ANSI stripped.
+func statusOutput(t *testing.T, state string) string {
+	t.Helper()
+	testutil.NewSandbox(t)
+	dir := filepath.Join(config.Dir(), "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return stripANSICodes(captureStdout(t, func() { printBudgetStatus(nil) }))
+}
+
+// The session line is develop's verbatim (main.go at b76d105), and a level of
+// 0 prints none, as claude_pct at 0 never did.
+func TestPrintBudgetStatus_KeepsDevelopsSessionLine(t *testing.T) {
+	if out := statusOutput(t, `{"claude_pct":52}`); !strings.Contains(out, "  Claude  :  █████░░░░░  52%  compact\n") {
+		t.Errorf("status at 52%% does not print develop's line:\n%q", out)
+	}
+	if out := statusOutput(t, `{"claude_pct":0}`); strings.Contains(out, "Claude") {
+		t.Errorf("status at 0%% printed a session line:\n%s", out)
+	}
+}
+
+// develop rendered a null per-model entry as a row of zeros; it still does.
+func TestPrintBudgetStatus_NullModelEntryIsAZeroRow(t *testing.T) {
+	out := statusOutput(t, `{"budget":{"m":null}}`)
+	if !strings.Contains(out, "  m                     ░░░░░░░░░░   0%  0/0") {
+		t.Errorf("a null budget entry did not render as a zero row:\n%q", out)
+	}
+}
+
 // printBudgetStatus reads state.json written by another process. It must
 // survive every shape that file can be in.
 func TestPrintBudgetStatus_SurvivesEveryStateShape(t *testing.T) {

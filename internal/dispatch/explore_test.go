@@ -3,8 +3,11 @@
 package dispatch
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -17,6 +20,39 @@ func exploreHeads(n int) []provider.Head {
 		heads[i] = provider.Head{ID: string(rune('a' + i)), CapScore: 100 - i}
 	}
 	return heads
+}
+
+// An objective route spans every tier, so a draw could escalate cost: it is
+// never explored, whatever the rate.
+func TestPick_AnObjectiveRouteNeverExplores(t *testing.T) {
+	d := exploreDispatcher(1)
+	in := exploreHeads(5)
+	for i := range 200 {
+		got, p := d.pick(in, Options{Objective: "quality"})
+		if p != 1 || got[0].ID != in[0].ID {
+			t.Fatalf("pick %d on an objective route ran %s with act_prob %v; want %s at 1", i, got[0].ID, p, in[0].ID)
+		}
+	}
+}
+
+// Plain `hyctl dispatch` names no tier and no objective, and must explore
+// exactly as it did before E1 when explore_rate is set.
+func TestDispatch_AnUnpinnedCLIDispatchStillExplores(t *testing.T) {
+	d := objectiveDispatcher(t)
+	d.cfg.ExploreRate, d.rng = 1, newExploreRand(42)
+	ran := map[string]int{}
+	for i := range 40 {
+		res, err := d.Dispatch(context.Background(), "hi", Options{
+			Domain: objectiveClass, RunID: "run-e", TaskID: fmt.Sprintf("task-e%d", i),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ran[res.Head.ID]++
+	}
+	if len(ran) != 2 {
+		t.Errorf("40 unpinned CLI dispatches at explore_rate 1 ran only %v; develop explores across both heads", ran)
+	}
 }
 
 func exploreDispatcher(rate float64) *Dispatcher {
@@ -228,4 +264,39 @@ func TestPickNaNRateFailsClosed(t *testing.T) {
 	if _, err := json.Marshal(map[string]any{"act_prob": SelectionProb(0, 4, nan)}); err != nil {
 		t.Errorf("propensity is not JSON-encodable: %v", err)
 	}
+}
+
+// G11. With a seed, a rerun explores exactly as the first run did.
+func TestPick_SameSeedSameDraws(t *testing.T) {
+	run := func() []string {
+		d := &Dispatcher{cfg: &config.Config{ExploreRate: 0.5}, rng: newExploreRand(42)}
+		var firsts []string
+		for range 200 {
+			got, _ := d.pick(exploreHeads(5), Options{})
+			firsts = append(firsts, got[0].ID)
+		}
+		return firsts
+	}
+	a, b := run(), run()
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("seed 42 run 2 diverged at pick %d: %s vs %s", i, a[i], b[i])
+		}
+	}
+}
+
+// One Dispatcher serves concurrent requests, so its seeded source must be too.
+func TestPick_SeededRNGIsSafeUnderConcurrentDispatch(t *testing.T) {
+	d := &Dispatcher{cfg: &config.Config{ExploreRate: 0.5}, rng: newExploreRand(42)}
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				d.pick(exploreHeads(5), Options{})
+			}
+		}()
+	}
+	wg.Wait()
 }

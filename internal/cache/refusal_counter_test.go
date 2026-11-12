@@ -13,7 +13,7 @@ func TestLookup_WithoutVectorsCountsAReversalAsRefused(t *testing.T) {
 	s := open(t)
 	put(t, s, "rotate signing key auth service", "x")
 
-	out := s.Lookup("rotate auth service signing key", nil, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "rotate auth service signing key"}, nil, DefaultThreshold)
 
 	if out.Found {
 		t.Fatal("a reversed question must not be served")
@@ -30,7 +30,7 @@ func TestLookup_WithoutVectorsAnUnrelatedPromptIsAMiss(t *testing.T) {
 	s := open(t)
 	put(t, s, "rotate signing key auth service", "x")
 
-	out := s.Lookup("what is the retention window for cost rows", nil, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "what is the retention window for cost rows"}, nil, DefaultThreshold)
 
 	if out.Found || out.Refused {
 		t.Errorf("want a plain miss, got found=%v refused=%v", out.Found, out.Refused)
@@ -43,10 +43,10 @@ func TestSameWordsLocked_RepeatsAreNotCollapsed(t *testing.T) {
 	s := open(t)
 	put(t, s, "test the test runner", "x")
 
-	if s.sameWordsLocked(content(Normalize("test runner runner"))) {
+	if s.sameWordsLocked(content(Normalize("test runner runner")), Query{}) {
 		t.Error("[test test runner] and [test runner runner] are different questions")
 	}
-	if !s.sameWordsLocked(content(Normalize("runner test the test"))) {
+	if !s.sameWordsLocked(content(Normalize("runner test the test")), Query{}) {
 		t.Error("the same words reordered must read as the gate refusing")
 	}
 }
@@ -60,7 +60,7 @@ func TestLookup_FunctionWordsAloneAreAMissNotARefusal(t *testing.T) {
 	s := open(t)
 	put(t, s, "what is it", "x")
 
-	out := s.Lookup("why is it", nil, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "why is it"}, nil, DefaultThreshold)
 
 	if out.Found {
 		t.Fatal("two empty content sequences are not the same question")
@@ -83,7 +83,7 @@ func TestLookup_ContainmentEitherWayIsAMiss(t *testing.T) {
 			s := open(t)
 			put(t, s, tc.stored, "x")
 
-			out := s.Lookup(tc.asked, nil, DefaultThreshold)
+			out := s.Lookup(Query{Prompt: tc.asked}, nil, DefaultThreshold)
 
 			if out.Found || out.Refused {
 				t.Errorf("a different question is a miss: found=%v refused=%v", out.Found, out.Refused)
@@ -98,7 +98,7 @@ func TestLookup_TheLexicalRefusalDoesNotShadowAHit(t *testing.T) {
 	s := open(t)
 	put(t, s, "rotate signing key auth service", "x")
 
-	out := s.Lookup("Please rotate the signing key for the auth service.", nil, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "Please rotate the signing key for the auth service."}, nil, DefaultThreshold)
 
 	if !out.Found || out.Refused {
 		t.Errorf("a restatement must still be served: found=%v refused=%v", out.Found, out.Refused)

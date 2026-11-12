@@ -351,6 +351,23 @@ func TestResolve_RefusesASchemaItCannotRead(t *testing.T) {
 	}
 }
 
+// The rule document's schema was decoded and never compared, so an upstream
+// rename degraded into "no rule matched, nothing reviewed, exit 0", the exact
+// failure the preview's check exists to prevent (#1166).
+func TestResolve_RefusesARuleSchemaItCannotRead(t *testing.T) {
+	fakeOCR(t,
+		`{"schema_version":"1","mode":"workspace","reviewable_files":[{"path":"a.go"}]}`,
+		`{"schema_version":"99","rule_groups":[{"files":["a.go"],"rule":"r"}]}`, 0)
+
+	_, err := Resolve(context.Background(), Options{})
+	if err == nil {
+		t.Fatal("a rule document from an unknown schema was accepted; the run reviews nothing and exits 0")
+	}
+	if !strings.Contains(err.Error(), "schema 99") || !strings.Contains(err.Error(), "rule") {
+		t.Errorf("the refusal does not name the rule call and its schema: %v", err)
+	}
+}
+
 func TestOptionsArgs_CommitAndRangeAreDifferentQuestions(t *testing.T) {
 	got := strings.Join(Options{Commit: "abc", From: "main", To: "dev"}.args(), " ")
 	if strings.Contains(got, "--from") || !strings.Contains(got, "--commit abc") {
@@ -562,11 +579,115 @@ func TestRun_AFailureThatWouldRepeatStopsTheRun(t *testing.T) {
 	if calls == len(files) {
 		t.Errorf("every file was dispatched (%d): the same refusal was paid %d times", calls, calls)
 	}
-	if res.CannotSample() == "" {
-		t.Fatal("the run-stopping reason was not reported, so nothing says why it stopped")
+	stopped := res.Stopped()
+	if len(stopped) == 0 {
+		t.Fatal("the stopping reason was not reported, so nothing says why it stopped")
 	}
-	if !strings.Contains(res.CannotSample(), "nothing is calibrated") {
-		t.Errorf("the reason was lost: %q", res.CannotSample())
+	if !strings.Contains(stopped[0], "nothing is calibrated") {
+		t.Errorf("the reason was lost: %q", stopped[0])
+	}
+	// Every file still has to be in the report: a file skipped and dropped is
+	// one the denominator claims was never in scope (#1157).
+	if len(res.Files) != len(files) {
+		t.Fatalf("%d of %d files are in the report: the rest vanished and the denominator hides it",
+			len(res.Files), len(files))
+	}
+	// One reason for one condition, however many files it skipped.
+	if len(stopped) != 1 {
+		t.Errorf("the same refusal was reported %d times: %q", len(stopped), stopped)
+	}
+}
+
+// Every reviewable file must appear with an outcome whatever the scheduler
+// did. Repeated because which goroutine reaches the refusal first is
+// nondeterministic, and that is precisely what made the loss invisible (#1157).
+func TestRun_AStoppedDomainStillReportsEveryFile(t *testing.T) {
+	dir := gitRepo(t)
+	var files []File
+	var groups []string
+	for _, name := range []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go"} {
+		write(t, dir, name, "package p\n\nfunc F() {}\n")
+		files = append(files, File{Path: name})
+		groups = append(groups, name)
+	}
+	spec := &Spec{
+		Mode: "workspace", Repository: dir,
+		Reviewable: files,
+		Groups:     []Group{{Files: groups, Rule: "r"}},
+	}
+	r := &stubRouter{reply: func(string) (Answer, error) {
+		return Answer{}, fmt.Errorf("%w: nothing is calibrated", ErrCannotSample)
+	}}
+
+	for i := 0; i < 5; i++ {
+		res, err := Run(context.Background(), r, spec, RunOptions{Concurrency: 4})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Files) != len(files) {
+			t.Fatalf("run %d reported %d of %d files; the missing ones are not listed, not counted, "+
+				"and the denominator hides the loss", i, len(res.Files), len(files))
+		}
+		for _, f := range res.Files {
+			if f.Err == "" {
+				t.Errorf("run %d: %s is in the report with no outcome at all", i, f.File)
+			}
+		}
+	}
+}
+
+// Calibration is keyed per domain, so a Go file's refusal says nothing about
+// the JavaScript files the ensemble could have reviewed. Marking it fatal for
+// the run stopped work that had no problem (#1157).
+func TestRun_AStoppedDomainDoesNotStopAnother(t *testing.T) {
+	dir := gitRepo(t)
+	var files []File
+	var groups []string
+	// The JavaScript file is listed first so a Go file is the one the scheduler
+	// picks up first: its refusal has to land before the JavaScript file is
+	// reached for the scoping to be under test at all.
+	for _, name := range []string{"a.js", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go"} {
+		write(t, dir, name, "// content\nfunc F() {}\n")
+		files = append(files, File{Path: name})
+		groups = append(groups, name)
+	}
+	spec := &Spec{
+		Mode: "workspace", Repository: dir,
+		Reviewable: files,
+		Groups:     []Group{{Files: groups, Rule: "r"}},
+	}
+	r := &stubRouter{reply: func(path string) (Answer, error) {
+		if strings.HasSuffix(path, ".js") {
+			return Answer{Output: `[{"line":1,"severity":"blocking","title":"js defect"}]`, Head: "h"}, nil
+		}
+		return Answer{}, fmt.Errorf("%w: no Head is calibrated in domain \"go\"", ErrCannotSample)
+	}}
+
+	// Repeated because only the scheduler decides the order, and a run where
+	// the JavaScript file happened to go first says nothing either way.
+	for i := 0; i < 10; i++ {
+		res, err := Run(context.Background(), r, spec, RunOptions{Concurrency: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Reviewed() != 1 || res.BlockingCount() != 1 {
+			t.Fatalf("run %d: the Go refusal stopped the JavaScript file too (%d reviewed, %d blocking)",
+				i, res.Reviewed(), res.BlockingCount())
+		}
+	}
+}
+
+// A machine with no routable head refuses every file identically whatever the
+// domain, so it stops the whole run and is said once (#1152).
+func TestScopeOf_SeparatesTheMachineFromTheDomain(t *testing.T) {
+	if got := scopeOf(fmt.Errorf("%w: nothing is calibrated", ErrCannotSample)); got != stopDomain {
+		t.Errorf("an uncalibrated domain scoped %v, want stopDomain", got)
+	}
+	if got := scopeOf(fmt.Errorf("%w: no routable heads", ErrNoHeads)); got != stopRun {
+		t.Errorf("a machine with no head scoped %v, want stopRun", got)
+	}
+	if got := scopeOf(errors.New("this head fell over")); got != stopNone {
+		t.Errorf("one head failing scoped %v, want stopNone: the other files are still reviewable", got)
 	}
 }
 
@@ -590,7 +711,7 @@ func TestRun_AnOrdinaryFailureDoesNotStopTheRun(t *testing.T) {
 	}}
 
 	res, _ := Run(context.Background(), r, spec, RunOptions{Concurrency: 1})
-	if res.CannotSample() != "" {
+	if len(res.Stopped()) != 0 {
 		t.Error("one head failing was treated as fatal to the whole run")
 	}
 	if res.BlockingCount() != 1 {

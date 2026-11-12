@@ -15,7 +15,7 @@
 *One command. Every model. Provable trust.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
-[![Go 1.24](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](https://hydra.uvansa.com#platform-support)
 [![GitHub Stars](https://img.shields.io/github/stars/ankit373/hydra?style=flat&color=8b5cf6)](https://github.com/ankit373/hydra/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/ankit373/hydra?color=06b6d4)](https://github.com/ankit373/hydra/issues)
@@ -856,7 +856,10 @@ hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is 
 # Serve the router to anything that speaks OpenAI
 hyctl serve                             # OpenAI-compatible endpoint, loopback only
 #   the `model` field is the routing instruction: `hydra`, `hydra/hard`, `hydra/t4`, or a head id.
+#   `hydra` takes --enum (STANDARD); --objective quality|cost or X-Hydra-Objective opts into routing by objective.
 #   streams as server-sent events, and passes tool calls through on every dialect it speaks.
+hyctl serve --task-class classification.banking77   # class for requests that send no X-Hydra-Task-Class
+#   X-Hydra-Task-Class routes on that class (and enables temperature); X-Hydra-Max-Cost-USD only lowers the ceiling.
 
 # Tasks waiting on you
 # A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops
@@ -971,7 +974,7 @@ Chat has **modes**: what a task does (`shift+tab` cycles the basics, `m` opens t
 | **Careful** | Auto, but every file write needs a `y/n` confirm before it lands |
 | **Unattended** | Auto with no confirms and a hard $0.50 per-task cost cap, it stops visibly at the cap |
 
-Where a task runs is separate: `ctrl+o` overrides the **next** task's routing (auto / force tier / local only / best of 3 / consensus check at 90-99.9%). After an edit: `d` shows the diff, `x` restores the pre-task snapshot exactly, `o` opens the file, and the footer's trace id jumps into the activity view.
+Where a task runs is separate: `ctrl+o` overrides the **next** task's routing (auto / force tier / local only / best of 3 / consensus check at 90-99.9%). After an edit, type `/diff` for the diff, `/undo` to restore the pre-task snapshot exactly (it asks y/n first), `/open` to open the file; the footer's trace id jumps into the activity view. These are typed commands, not bare letters, so a message starting with `x` or `a` is just text.
 
 Chat runs **parallel threads**: several tasks at once, safely:
 
@@ -982,11 +985,12 @@ Chat runs **parallel threads**: several tasks at once, safely:
 | `ctrl+\` | Split: pin a second thread beside the active one (needs ≥100 cols); `ctrl+←/→` moves focus, each side scrolls on its own |
 | `ctrl+b` | Background the thread into the **agents** view, it keeps running and pings chat (`hydra ▸`) when it finishes or needs you |
 | `ctrl+g` | Jump to the next thread needing input (plan gates, confirms, failures); the status bar counts `⠸ running · ● needs you · ◱ queued` |
-| `a` / `x x` | Apply an isolated thread's worktree back to your tree / discard it (twice, it deletes the thread's edits) |
+| `/apply` / `/undo` | Apply an isolated thread's worktree back to your tree / discard it (asks y/n, it deletes the thread's edits) |
+| `ctrl+s` | Select mode: hand the mouse back to the terminal so you can select and copy text; again restores wheel scrolling |
 
-**Isolation**: read-only work shares your checkout; each edit-capable thread gets its own git worktree (`~/.hydra/worktrees/tN-…`, branch `hydra/task-tN-…`) cut from your repo, the header shows `worktree tN-… · merges on apply`. `a` merges it back with standard git: clean applies stage the diff; a divergence leaves ordinary `<<<<<<<` conflict markers (the branch is kept until you resolve); and **unsaved** edits of your own to a file the thread touched block the merge before it starts, nothing half-lands, and work that exists only in your editor is never merged over. Two threads editing the same (or graph-coupled) files never race: the second queues visibly (`◱ queued behind 1 · both touch <path>`) and auto-starts when the first applies or discards. Outside a git repo the TUI says so and runs edits one at a time, in place. Worktrees left behind by a crash are listed at startup, never auto-deleted. Terminal note: `alt+1-9` needs the option/alt key sending ESC (iTerm2: "Esc+"; Terminal.app: "Use Option as Meta key"), and `ctrl+b` is tmux's default prefix, rebind tmux or press `ctrl+b ctrl+b`.
+**Isolation**: read-only work shares your checkout; each edit-capable thread gets its own git worktree (`~/.hydra/worktrees/tN-…`, branch `hydra/task-tN-…`) cut from your repo, the header shows `worktree tN-… · merges on apply`. `/apply` merges it back with standard git: clean applies stage the diff; a divergence leaves ordinary `<<<<<<<` conflict markers (the branch is kept until you resolve); and **unsaved** edits of your own to a file the thread touched block the merge before it starts, nothing half-lands, and work that exists only in your editor is never merged over. Two threads editing the same (or graph-coupled) files never race: the second queues visibly (`◱ queued behind 1 · both touch <path>`) and auto-starts when the first applies or discards. Outside a git repo the TUI says so and runs edits one at a time, in place. Worktrees left behind by a crash are listed at startup, never auto-deleted. Terminal note: `alt+1-9` needs the option/alt key sending ESC (iTerm2: "Esc+"; Terminal.app: "Use Option as Meta key"), and `ctrl+b` is tmux's default prefix, rebind tmux or press `ctrl+b ctrl+b`.
 
-Everything shown is measured from the machine's real logs, a figure that cannot be computed renders `—`, never an invented number. Lists, overlays and the audit view all scroll (`j/k`, `↑/↓`, `pgup/pgdn`, mouse wheel), so nothing is reachable only by resizing the terminal; `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports.
+Everything shown is measured from the machine's real logs, a figure that cannot be computed renders `—`, never an invented number. Lists, overlays and the audit view all scroll (`j/k`, `↑/↓`, `pgup/pgdn`, mouse wheel), so nothing is reachable only by resizing the terminal; `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports. Colours adapt to light and dark terminals (override the detection with `HYDRA_THEME=light|dark`), body text uses your terminal's own foreground, and under `NO_COLOR` the active tab still reads `[chat]`. Log output from background work goes to `~/.hydra/logs/tui.log` while the TUI owns the screen.
 
 ---
 
@@ -1045,6 +1049,30 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]
 is enabled ("2 of 423"). A name the catalogue does not have is shown as not
 routable with the reason, rather than quietly dropped. Naming nothing changes
 nothing: the single key-derived head is exactly as before.
+
+### Routing objective for `hyctl serve`
+
+A `model: "hydra"` request routes as `--enum` (`STANDARD` by default). Routing
+by objective is opt-in:
+
+| Objective | Tries first | How to choose it |
+|---|---|---|
+| `quality` | the head measured strongest in the task class (often the priciest) | `hyctl serve --objective quality`, or `X-Hydra-Objective: quality` per request |
+| `cost` | the cheapest head measured competent | `hyctl serve --objective cost`, or `X-Hydra-Objective: cost` |
+
+A routed answer echoes `X-Hydra-Objective` and `X-Hydra-P-Pass-Basis`
+(`measured`, `borrowed` or `catalogue_prior`). Under quota pressure the
+governor routes it as `STANDARD`.
+
+**Deprecated: the implicit default.** In v2.0.0 `quality` becomes the default
+for `hydra`. Until then, a `hydra` request naming no objective, on a server
+started with neither `--enum` nor `--objective`, still routes as `STANDARD`
+but gets `Deprecation: @1794441600` (RFC 9745) and a `Link` to this section,
+and the server prints one stderr warning per start
+(`HYDRA_NO_DEPRECATION_WARNINGS=1` silences it). To keep today's route after
+v2.0.0, send `model: "hydra/standard"` or start the server with an explicit
+`--enum STANDARD`. To opt in now, use `--objective` or the header. Setting
+policy.yaml `max_cost_usd` caps what `quality` may spend.
 
 ---
 
@@ -1207,6 +1235,16 @@ question appears inline in the chat transcript, answerable there.
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
 Usage totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
 
+**No terminal needed.** The app runs Hydra in-process, so it needs no separate `hyctl`. On first
+launch it asks you to connect a model: paste an API key for any single-key provider Hydra
+discovers, or start a local model server, and it then answers a sample question. Keys go to the
+macOS Keychain or Windows Credential Manager (a `0600` file under `~/.hydra` elsewhere, or with
+`HYDRA_KEYSTORE=file`), only their last four characters are ever shown, and **Settings → AI
+providers** adds, tests (one tiny request) and removes them. `hyctl` reads the same stored keys at
+startup; an exported variable still wins. A stored key never enters the process environment, so
+no subprocess inherits it: a CLI agent such as Claude Code keeps its own login rather than billing
+the API key, and a test suite Hydra runs does not see it.
+
 **Install**: macOS and Linux:
 
 ```bash
@@ -1216,7 +1254,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications`, or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.6.1` pins
+Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.7.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 **Or take the artifact directly**, from the
@@ -1246,9 +1284,10 @@ $f = "hydra-desktop_<version>_windows_amd64.zip"
 
 **The builds are not code-signed yet**, so the first launch takes one extra step:
 
-- **macOS**: Gatekeeper will say Hydra "cannot be opened because it is from an unidentified
-  developer". Right-click the app → **Open** → **Open**. Once only. If you unzipped from Terminal
-  and macOS still refuses, clear the quarantine flag: `xattr -dr com.apple.quarantine Hydra.app`
+- **macOS**: macOS will say it cannot check Hydra. Choose **Done**, open **System Settings** →
+  **Privacy & Security**, scroll to **Security** and click **Open Anyway** next to the message about
+  Hydra. Once only. A "damaged" message means the download was altered: download it again and
+  unzip it in Finder. (Developers: `xattr -dr com.apple.quarantine Hydra.app` does the same.)
 - **Windows**: SmartScreen may show "Windows protected your PC". Click **More info** → **Run
   anyway**
 - **Linux**: needs `libgtk-3-0` and `libwebkit2gtk-4.1-0`, which most desktop distributions

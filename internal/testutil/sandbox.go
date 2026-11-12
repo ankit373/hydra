@@ -118,8 +118,9 @@ var decisionVars = []string{
 	"TYPESAFE_DEFAULT_MODEL",
 }
 
-// deadAddressVars are the subset whose value is an address to dial.
-var deadAddressVars = map[string]string{
+// DeadAddressVars are the subset whose value is an address to dial, each
+// pointed at a closed port. ci/benchdiff's sandbox reads the same table.
+var DeadAddressVars = map[string]string{
 	"OLLAMA_HOST":       "127.0.0.1:1",
 	"LITELLM_PROXY_URL": "http://127.0.0.1:1",
 	"LLAMA_ARG_HOST":    "127.0.0.1",
@@ -211,6 +212,9 @@ func NewSandbox(t *testing.T) *Sandbox {
 	t.Setenv("HOME", s.Home)
 	t.Setenv("USERPROFILE", s.Home)
 	t.Setenv("HYDRA_HOME", s.HydraHome)
+	// keystore.BackendEnv: stored keys go to a file under HydraHome, never the
+	// developer's real Keychain.
+	t.Setenv("HYDRA_KEYSTORE", "file")
 
 	// An empty PATH would make exec.LookPath fail for a different reason on
 	// each OS; one empty directory makes "not found" mean exactly that.
@@ -239,7 +243,7 @@ func NewSandbox(t *testing.T) *Sandbox {
 		// dead address, the same convention as the package init()'s proxy
 		// blackhole below, so port discovery fails deterministically
 		// everywhere.
-		if dead, ok := deadAddressVars[v]; ok {
+		if dead, ok := DeadAddressVars[v]; ok {
 			t.Setenv(v, dead)
 			continue
 		}
