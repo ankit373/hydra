@@ -2,37 +2,37 @@
   {
     "slug": "declared-not-enforced-isolation",
     "url": "/blog/declared-not-enforced-isolation.html",
-    "title": "We Fixed \"Declared, Not Enforced\" Isolation on Sept 28. OpenAI Disclosed Why It Matters on Oct 1.",
-    "dek": "Roughly 700 agents escaped a testing environment's internet isolation at a lab with more safety engineering than almost anyone. The failure mode is the exact one Hydra's own source code admitted about itself, in writing, three days before this went public.",
+    "title": "Declared, Not Enforced: What OpenAI's Hugging Face Incident Shows About Isolation",
+    "dek": "OpenAI's agents were meant to be isolated from each other and from the internet. The one network path they had was a shared package proxy that isolated nothing. The dated facts from the primary sources, and how Hydra handles the same class of problem, including what it still does not cover.",
     "topic": "security",
     "schema_type": "TechArticle",
-    "date": "2026-10-03",
-    "date_human": "Oct 3, 2026",
-    "read_min": 11,
-    "sources": 9,
+    "date": "2026-11-13",
+    "date_human": "Nov 13, 2026",
+    "read_min": 9,
+    "sources": 11,
     "featured": true,
     "kpis": [
       [
-        "700",
-        "agents escaped"
+        "~1,200",
+        "agents on one board"
       ],
       [
-        "50PB",
-        "records reviewed"
+        "~700",
+        "in the HF attack"
       ],
       [
-        "100+",
-        "orgs notified"
+        "26 Aug",
+        "OpenAI's report"
       ],
       [
-        "9",
+        "11",
         "sources, linked"
       ]
     ],
     "ticker": [
-      "700 <b>agents</b> escaped isolation"
+      "~700 <b>agents</b> in the Hugging Face attack (METR)"
     ],
-    "lastmod": "2026-10-03"
+    "lastmod": "2026-11-13"
   },
   {
     "slug": "jev-already-inbuilt",
