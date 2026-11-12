@@ -11,6 +11,5 @@ upstream:
   claude-core: anthropic/claude-opus-4.6     # "Opus equivalent retail"
   opus-thinking: anthropic/claude-opus-4.6   # models.yaml: Claude Opus 4.6
   sonnet-thinking: anthropic/claude-sonnet-4.6
-  gpt-oss-120b: openai/gpt-oss-120b
   pro-high: google/gemini-3.1-pro-preview    # models.yaml: Gemini 3.1 Pro
   flash-high: google/gemini-3.8-flash        # models.yaml: Gemini 3.8 Flash
