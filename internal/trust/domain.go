@@ -3,7 +3,10 @@
 package trust
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -43,6 +46,27 @@ func Domain(s string) string {
 func DomainForFile(path string) string {
 	ext := strings.TrimPrefix(filepath.Ext(strings.TrimSpace(path)), ".")
 	return Domain(strings.ToLower(ext))
+}
+
+// ErrTaskClass refuses a class outside the key grammar.
+var ErrTaskClass = errors.New("task class must be dotted lowercase, e.g. classification.banking77")
+
+// taskClassGrammar requires a dot, which DomainForFile can never produce, so a
+// served class and a coding cell cannot share a calibration key (#888).
+var taskClassGrammar = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+$`)
+
+// maxTaskClass bounds a client-supplied key before it reaches every log row.
+const maxTaskClass = 128
+
+// TaskClass normalises a client- or route-supplied class (trim, lowercase) and
+// refuses anything outside the grammar, so a bare extension or a `/` path is
+// never accepted as a served class.
+func TaskClass(s string) (string, error) {
+	c := strings.ToLower(strings.TrimSpace(s))
+	if len(c) > maxTaskClass || !taskClassGrammar.MatchString(c) {
+		return "", fmt.Errorf("%w: got %q", ErrTaskClass, s)
+	}
+	return c, nil
 }
 
 // unreadableSourcePrefixes are the source-key shapes the router never looks up.

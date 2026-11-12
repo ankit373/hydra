@@ -92,6 +92,19 @@ func (e *HTTPExecutor) Execute(ctx context.Context, req Request) (*Response, err
 	}
 }
 
+// MaxTemperature is the highest temperature h's dialect accepts. Anthropic,
+// Cohere and Bedrock's Converse cap it at 1 where OpenAI and Gemini take 2;
+// CLI and agy heads ignore it, so any value is theirs to drop.
+func MaxTemperature(h provider.Head) float64 {
+	if _, ok := For(h).(*HTTPExecutor); ok {
+		switch h.Provider {
+		case "anthropic", "cohere", "bedrock":
+			return 1
+		}
+	}
+	return 2
+}
+
 // SupportsHTTP reports whether Hydra can execute the head over HTTP today.
 func SupportsHTTP(h provider.Head) bool {
 	switch h.Provider {
