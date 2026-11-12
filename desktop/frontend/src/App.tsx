@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckHyctl,
   GetDashboard,
   GetEdits,
   GetFleet,
@@ -15,7 +14,6 @@ import type {
   Edit,
   Fleet as FleetData,
   HeadPanel,
-  HyctlStatus,
   SecurityReport,
   Session as SessionData,
   Version,
@@ -28,7 +26,7 @@ import { Models } from "./views/Models";
 import { Settings } from "./views/Settings";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ChatView } from "./views/ChatView";
-import { SetupBanner } from "./views/SetupBanner";
+import { FirstRun } from "./views/FirstRun";
 import { AppHeader } from "./views/AppHeader";
 import { AppFooter } from "./views/AppFooter";
 import { ErrorState } from "./views/ErrorState";
@@ -108,7 +106,9 @@ export default function App() {
   // used to render as null. "probing…" was what a dead backend looked like.
   const [headsError, setHeadsError] = useState<string | null>(null);
   const [fleetError, setFleetError] = useState<string | null>(null);
-  const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null);
+  // Open from the first probe that finds nothing able to answer until the
+  // person has seen a first answer, so adding a key does not cut it short.
+  const [setupOpen, setSetupOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Fleet's empty state sends people here to start a task (#422). A counter
@@ -195,37 +195,43 @@ export default function App() {
 
   // Heads drive the header's routable count and the footer. probe.Run scans
   // the machine, so this ticks an order of magnitude slower than the rest.
-  useEffect(() => {
-    const tick = () =>
-      void GetHeads()
+  const refreshHeads = useCallback(
+    () =>
+      GetHeads()
         .then((h) => {
           setHeads(h);
           setHeadsError(null);
+          return h.routable > 0;
         })
         // The last count is still kept rather than reported as zero heads;
         // what is recorded is that the probe is no longer answering.
-        .catch((e) => setHeadsError(msg(e)));
-    tick();
-    const t = setInterval(tick, HEADS_MS);
+        .catch((e) => {
+          setHeadsError(msg(e));
+          return false;
+        }),
+    [],
+  );
+  useEffect(() => {
+    void refreshHeads();
+    const t = setInterval(() => void refreshHeads(), HEADS_MS);
     return () => clearInterval(t);
-  }, []);
+  }, [refreshHeads]);
+
+  // Only the first probe decides: a head parked mid-session must not swap
+  // the conversation for the setup screen. A reply that finds nothing to
+  // answer it offers the way back in (ChatView's onSetup).
+  const setupDecided = useRef(false);
+  useEffect(() => {
+    if (!heads || setupDecided.current) return;
+    setupDecided.current = true;
+    if (heads.routable === 0) setSetupOpen(true);
+  }, [heads]);
 
   useEffect(() => {
     GetVersion()
       .then(setVersion)
       .catch(() => {
         /* Version is decoration; failing to read it must not blank the window. */
-      });
-  }, []);
-
-  // One-shot, not polled: this is a first-run check (#383), not a live value.
-  // A machine with hyctl already on PATH, the common case, never shows
-  // anything, since the banner below renders only when Found is false.
-  useEffect(() => {
-    CheckHyctl()
-      .then(setHyctlStatus)
-      .catch(() => {
-        /* Same as GetVersion: decoration, not worth blanking the window over. */
       });
   }, []);
 
@@ -334,17 +340,6 @@ export default function App() {
       />
 
       <main className={view === "chat" ? "main main--chat" : "main"}>
-        {/* Non-blocking: it sits above whichever view is open rather than
-            replacing it, and renders nothing at all once hyctl is found. */}
-        {hyctlStatus && !hyctlStatus.found && (
-          // Padded by its own wrapper: .main--chat has no padding of its own,
-          // so an unwrapped banner sat flush against the window edge with its
-          // accent bar clipped.
-          <div className="banners">
-            <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
-          </div>
-        )}
-
         {/* An error replaces the body but never the shell, a broken read
             should not look like a crashed app. */}
         {error && (
@@ -355,9 +350,15 @@ export default function App() {
             onRetry={() => void load(view, runID)}
           />
         )}
-        {!error && view === "chat" && (
+        {!error && view === "chat" && setupOpen && (
+          <ErrorBoundary label="Setup">
+            <FirstRun onRecheck={refreshHeads} onDone={() => setSetupOpen(false)} />
+          </ErrorBoundary>
+        )}
+        {!error && view === "chat" && !setupOpen && (
           <ErrorBoundary label="Chat">
             <ChatView
+              onSetup={() => setSetupOpen(true)}
               onOpenRun={openSession}
               focusSignal={chatFocusSignal}
               runs={fleet?.runs ?? null}
@@ -372,7 +373,7 @@ export default function App() {
         )}
         {!error && view === "settings" && (
           <ErrorBoundary label="Settings">
-            <Settings />
+            <Settings onProvidersChanged={() => void refreshHeads()} />
           </ErrorBoundary>
         )}
         {!error && view === "usage" && (

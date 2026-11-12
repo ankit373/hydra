@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/awsconf"
+	"github.com/ankit373/hydra/internal/keystore"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -994,8 +995,10 @@ var apiKeyEnvs = func() map[string][]string {
 	return envs
 }()
 
+// apiKeyFor reads through keystore.Lookup, so a key saved in the desktop app
+// reaches an HTTP head while an exported one still wins.
 func apiKeyFor(providerID string) string {
-	return firstEnv(apiKeyEnvs[providerID]...)
+	return keystore.Lookup(apiKeyEnvs[providerID]...)
 }
 
 func azureEndpoint() string   { return firstEnv("AZURE_OPENAI_ENDPOINT") }

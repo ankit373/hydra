@@ -1209,6 +1209,16 @@ question appears inline in the chat transcript, answerable there.
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
 Usage totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
 
+**No terminal needed.** The app runs Hydra in-process, so it needs no separate `hyctl`. On first
+launch it asks you to connect a model: paste an API key for any single-key provider Hydra
+discovers, or start a local model server, and it then answers a sample question. Keys go to the
+macOS Keychain or Windows Credential Manager (a `0600` file under `~/.hydra` elsewhere, or with
+`HYDRA_KEYSTORE=file`), only their last four characters are ever shown, and **Settings → AI
+providers** adds, tests (one tiny request) and removes them. `hyctl` reads the same stored keys at
+startup; an exported variable still wins. A stored key never enters the process environment, so
+no subprocess inherits it: a CLI agent such as Claude Code keeps its own login rather than billing
+the API key, and a test suite Hydra runs does not see it.
+
 **Install**: macOS and Linux:
 
 ```bash
@@ -1248,9 +1258,10 @@ $f = "hydra-desktop_<version>_windows_amd64.zip"
 
 **The builds are not code-signed yet**, so the first launch takes one extra step:
 
-- **macOS**: Gatekeeper will say Hydra "cannot be opened because it is from an unidentified
-  developer". Right-click the app → **Open** → **Open**. Once only. If you unzipped from Terminal
-  and macOS still refuses, clear the quarantine flag: `xattr -dr com.apple.quarantine Hydra.app`
+- **macOS**: macOS will say it cannot check Hydra. Choose **Done**, open **System Settings** →
+  **Privacy & Security**, scroll to **Security** and click **Open Anyway** next to the message about
+  Hydra. Once only. A "damaged" message means the download was altered: download it again and
+  unzip it in Finder. (Developers: `xattr -dr com.apple.quarantine Hydra.app` does the same.)
 - **Windows**: SmartScreen may show "Windows protected your PC". Click **More info** → **Run
   anyway**
 - **Linux**: needs `libgtk-3-0` and `libwebkit2gtk-4.1-0`, which most desktop distributions
