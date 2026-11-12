@@ -10,3 +10,8 @@ bench/** text eol=lf
 README.md text eol=lf
 docs/app.html text eol=lf
 docs/index.html text eol=lf
+
+# The workflow tests read these line by line and bash runs the scripts, so a
+# Windows checkout must keep LF here too.
+.github/** text eol=lf
+scripts/** text eol=lf
