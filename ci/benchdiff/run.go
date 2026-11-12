@@ -22,8 +22,8 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
-	// The same discovery hyctl registers; env and port find nothing in the sandbox.
 	"github.com/ankit373/hydra/internal/policy"
+	// The same discovery hyctl registers; env and port find nothing in the sandbox.
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 	_ "github.com/ankit373/hydra/internal/provider/env"
@@ -31,6 +31,7 @@ import (
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/swarm"
+	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
@@ -70,19 +71,8 @@ type Prompt struct {
 	Expected   string            `json:"expected,omitempty"`
 }
 
-// deadAddresses point every local-server probe at a closed port, as
-// testutil's sandbox does, so a server on the developer's machine is not found.
-var deadAddresses = map[string]string{
-	"OLLAMA_HOST":         "127.0.0.1:1",
-	"LITELLM_PROXY_URL":   "http://127.0.0.1:1",
-	"LLAMA_ARG_HOST":      "127.0.0.1",
-	"LLAMA_ARG_PORT":      "1",
-	"HYDRA_LMSTUDIO_HOST": "http://127.0.0.1:1",
-	"HYDRA_SGLANG_HOST":   "http://127.0.0.1:1",
-	// Loopback is never proxied, so this blocks only real egress (pricing fetch).
-	"HTTP_PROXY":  "127.0.0.1:1",
-	"HTTPS_PROXY": "127.0.0.1:1",
-}
+// deadProxy blocks real egress (the pricing fetch); loopback is never proxied.
+var deadProxy = map[string]string{"HTTP_PROXY": "127.0.0.1:1", "HTTPS_PROXY": "127.0.0.1:1"}
 
 // runSuite routes every prompt in a hermetic home and returns the decisions.
 // It clears the whole environment first: no key, host or override can leak in.
@@ -137,8 +127,11 @@ func sandbox(root string, s Suite) error {
 	env := map[string]string{"HOME": home, "USERPROFILE": home, "HYDRA_HOME": hydra, "PATH": bin,
 		"TMPDIR": tmp, "TMP": tmp, "TEMP": tmp, "SYSTEMROOT": os.Getenv("SYSTEMROOT")}
 	os.Clearenv()
-	for k, v := range deadAddresses {
-		env[k] = v
+	// Every local-server probe hits a closed port, so a developer's server is not found.
+	for _, dead := range []map[string]string{testutil.DeadAddressVars, deadProxy} {
+		for k, v := range dead {
+			env[k] = v
+		}
 	}
 	for k, v := range env {
 		if err := os.Setenv(k, v); err != nil {

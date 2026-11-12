@@ -118,8 +118,9 @@ var decisionVars = []string{
 	"TYPESAFE_DEFAULT_MODEL",
 }
 
-// deadAddressVars are the subset whose value is an address to dial.
-var deadAddressVars = map[string]string{
+// DeadAddressVars are the subset whose value is an address to dial, each
+// pointed at a closed port. ci/benchdiff's sandbox reads the same table.
+var DeadAddressVars = map[string]string{
 	"OLLAMA_HOST":       "127.0.0.1:1",
 	"LITELLM_PROXY_URL": "http://127.0.0.1:1",
 	"LLAMA_ARG_HOST":    "127.0.0.1",
@@ -239,7 +240,7 @@ func NewSandbox(t *testing.T) *Sandbox {
 		// dead address, the same convention as the package init()'s proxy
 		// blackhole below, so port discovery fails deterministically
 		// everywhere.
-		if dead, ok := deadAddressVars[v]; ok {
+		if dead, ok := DeadAddressVars[v]; ok {
 			t.Setenv(v, dead)
 			continue
 		}
