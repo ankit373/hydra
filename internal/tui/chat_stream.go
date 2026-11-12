@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/ankit373/hydra/internal/dispatch"
 )
@@ -79,7 +80,11 @@ func (s *ckStream) delta(text string) {
 	s.live.WriteString(text)
 	if s.live.Len() > ckLiveCapBytes {
 		kept := s.live.String()
-		kept = kept[len(kept)-ckLiveCapBytes:]
+		cut := len(kept) - ckLiveCapBytes
+		for cut < len(kept) && !utf8.RuneStart(kept[cut]) {
+			cut++ // never keep half a rune, the clip would render as U+FFFD
+		}
+		kept = kept[cut:]
 		s.live.Reset()
 		s.live.WriteString(kept)
 		s.clip = true
@@ -94,7 +99,7 @@ func (s *ckStream) fail(reason, span string) {
 	text := s.live.String()
 	s.gone = append(s.gone, ckAbandoned{
 		head: s.head, reason: ckStreamReason(reason), span: span,
-		text: text, chars: len(text), clip: s.clip,
+		text: text, chars: utf8.RuneCountInString(text), clip: s.clip,
 	})
 	s.live.Reset()
 	s.clip = false
@@ -136,9 +141,9 @@ func ckStreamEntries(gone []ckAbandoned, head, live string, clipped bool) []stri
 			hint = ckFaintS.Render(" · e expands")
 		}
 		out = append(out, ckDimS.Render(fmt.Sprintf("⤺ %s abandoned after ~%d chars: %s",
-			a.head, a.chars, a.reason))+hint)
+			ckSafe(a.head), a.chars, ckSafe(a.reason)))+hint)
 		if a.open {
-			body := a.text
+			body := ckSafeText(a.text)
 			if a.clip {
 				body = ckFaintS.Render("…(clipped)\n") + body
 			}
@@ -146,8 +151,8 @@ func ckStreamEntries(gone []ckAbandoned, head, live string, clipped bool) []stri
 		}
 	}
 	if live != "" {
-		out = append(out, ckAquaS.Render("▍ ")+ckDimS.Render(head))
-		body := live
+		out = append(out, ckAquaS.Render("▍ ")+ckDimS.Render(ckSafe(head)))
+		body := ckSafeText(live)
 		if clipped {
 			body = ckFaintS.Render("…(clipped)\n") + body
 		}

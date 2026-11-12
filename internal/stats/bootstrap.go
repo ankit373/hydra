@@ -41,6 +41,19 @@ type Stat struct {
 	eval func(idx []int) (float64, bool)
 }
 
+// All evaluates stat once over every item in order: the point estimate its bootstrap
+// is an interval around. False when the statistic is undefined on the whole sample.
+func (s Stat) All() (float64, bool) {
+	if s.eval == nil || s.n == 0 {
+		return 0, false
+	}
+	idx := make([]int, s.n)
+	for i := range idx {
+		idx[i] = i
+	}
+	return s.eval(idx)
+}
+
 // Resample draws stat's n indices with replacement, resamples times, and returns the
 // sorted values; undefined resamples are dropped. Seeded so one input gives one
 // interval twice. idx is reused between calls, so a Stat must not keep it.

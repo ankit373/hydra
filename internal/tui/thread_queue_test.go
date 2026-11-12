@@ -83,7 +83,7 @@ func TestQueue_SameFileQueuesThenAutoStartsOnApply(t *testing.T) {
 
 	// Blocker applies → the queued thread auto-starts and lands its own edit.
 	m = altDigit(m, '1')
-	m, acmd := keyRune(m, 'a')
+	m, acmd := command(m, "/apply")
 	m = runCmds(t, m, acmd)
 	th2 = m.threadByID(2)
 	if th2.queued != nil {
@@ -120,8 +120,7 @@ func TestQueue_DiscardAlsoReleases(t *testing.T) {
 	}
 
 	m = altDigit(m, '1')
-	m, _ = keyRune(m, 'x') // arm
-	m, dcmd := keyRune(m, 'x')
+	m, dcmd := undoConfirmed(m)
 	m = runCmds(t, m, dcmd)
 	th2 := m.threadByID(2)
 	if th2.queued != nil || th2.lastDone == nil {
@@ -150,7 +149,7 @@ func TestQueue_ChainRequeuesBehindTheNewBlocker(t *testing.T) {
 	}
 	// Thread 1 applies: 2 starts, 3 requeues behind 2.
 	m = altDigit(m, '1')
-	m, acmd := keyRune(m, 'a')
+	m, acmd := command(m, "/apply")
 	m = runCmds(t, m, acmd)
 	if m.threadByID(2).queued != nil {
 		t.Fatal("thread 2 did not start")
@@ -391,7 +390,7 @@ func TestThreads_ConcurrentWorkersSettleOnTheirOwnThreads(t *testing.T) {
 	for id := 1; id <= 3; id++ {
 		m = altDigit(m, rune('0'+id))
 		var acmd tea.Cmd
-		m, acmd = keyRune(m, 'a')
+		m, acmd = command(m, "/apply")
 		m = runCmds(t, m, acmd)
 		if m.threadByID(id).wt != nil {
 			t.Errorf("thread %d's apply left its worktree", id)
