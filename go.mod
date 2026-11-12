@@ -1,8 +1,8 @@
 module github.com/ankit373/hydra
 
-go 1.24.0
+go 1.25
 
-toolchain go1.26.4
+toolchain go1.26.11
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.10.1
 	github.com/charmbracelet/x/term v0.2.1
-	github.com/klauspost/compress v1.19.0
+	github.com/klauspost/compress v1.20.2
 	github.com/mattn/go-isatty v0.0.22
 	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/cobra v1.10.2
