@@ -16,9 +16,15 @@ function row(d: number, n = 40, source = 'model:claude-sonnet'): CalibrationRow 
 function resolve(expr: string, trackPx: number): number {
   if (expr === '0px') return 0
   const m = /^calc\((?:(\d+)px \+ )?([\d.]+) \* \(100% - (\d+)px\)(?: \+ (\d+)px)?\)$/.exec(expr)
-  if (!m) throw new Error(`unparsed width: ${expr}`)
-  const [, leadPx, scale, sub, tailPx] = m
-  return Number(scale) * (trackPx - Number(sub)) + Number(leadPx ?? tailPx ?? 0)
+  if (m) {
+    const [, leadPx, scale, sub, tailPx] = m
+    return Number(scale) * (trackPx - Number(sub)) + Number(leadPx ?? tailPx ?? 0)
+  }
+  // jsdom 31 serialises style.width simplified, as browsers do: calc(P% ± Qpx), P% or Qpx.
+  const s = /^(?:calc\()?(?:([\d.]+)%)?(?: ?([+-]) ?)?(?:([\d.]+)px)?\)?$/.exec(expr)
+  if (!s || (s[1] === undefined && s[3] === undefined)) throw new Error(`unparsed width: ${expr}`)
+  const [, pct, sign, px] = s
+  return (Number(pct ?? 0) / 100) * trackPx + (sign === '-' ? -1 : 1) * Number(px ?? 0)
 }
 
 describe('a calibration bar cannot exceed its track', () => {
