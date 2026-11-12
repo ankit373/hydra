@@ -46,18 +46,41 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
-      # Idempotent: if this tag's release already has archives (e.g. a re-run or
-      # workflow_dispatch re-publish), skip GoReleaser so it doesn't fail trying
-      # to re-upload existing assets, downstream channels still run.
+      # Safe to re-run. checksums.txt lists every archive and SBOM GoReleaser
+      # made, whatever the format, so it is the manifest to check against:
+      #   none of GoReleaser's assets   -> build
+      #   all of them                   -> skip, the channels below still run
+      #   some of them                  -> fail with the list; rebuilding would
+      #                                    change checksums brew already pinned
       - name: Check for existing artifacts
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          n=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-                --json assets -q '[.assets[].name | select(endswith(".tar.gz"))] | length' 2>/dev/null || echo 0)
-          echo "has_assets=$n" >> "$GITHUB_OUTPUT"
-          echo "Existing archive assets: $n"
+          have=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                   --json assets -q '.assets[].name' 2>/dev/null || true)
+          ours=$(printf '%s\n' "$have" | grep -E '^(hydra_.*|checksums\.txt)$' || true)
+          if [ -z "$ours" ]; then
+            echo "No GoReleaser assets yet, building."
+            echo "has_assets=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! printf '%s\n' "$ours" | grep -qx checksums.txt; then
+            echo "::error::$RELEASE_TAG has some GoReleaser assets but no checksums.txt, so the upload stopped part way:"
+            printf '%s\n' "$ours" | sed 's/^/  /'
+            echo "Delete them (gh release delete-asset $RELEASE_TAG <name>) and re-run."
+            exit 1
+          fi
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" -p checksums.txt -D "$RUNNER_TEMP"
+          missing=$(awk '{print $2}' "$RUNNER_TEMP/checksums.txt" | grep -vxF -f <(printf '%s\n' "$ours") || true)
+          if [ -n "$missing" ]; then
+            echo "::error::$RELEASE_TAG is missing assets listed in checksums.txt:"
+            printf '%s\n' "$missing" | sed 's/^/  /'
+            echo "Delete the GoReleaser assets (hydra_* and checksums.txt) and re-run."
+            exit 1
+          fi
+          echo "All $(wc -l < "$RUNNER_TEMP/checksums.txt") assets in checksums.txt are on the release, skipping GoReleaser."
+          echo "has_assets=1" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
         if: ${{ steps.check.outputs.has_assets == '0' }}
         with:
@@ -122,9 +145,21 @@ jobs:
           # Used only while no trusted publisher is configured; npm prefers OIDC.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          set -o pipefail
           VERSION="${RELEASE_TAG#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
-          npm publish --access public
+          # npm never takes a version twice, so one already there means a re-run.
+          if [ "$(npm view "hyctl@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "hyctl@$VERSION is already on npm, nothing to publish."
+            exit 0
+          fi
+          if ! npm publish --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
+            if grep -q "cannot publish over the previously published versions" "$RUNNER_TEMP/npm.log"; then
+              echo "hyctl@$VERSION was published by an earlier attempt."
+              exit 0
+            fi
+            exit 1
+          fi
 
   pip:
     name: pip / PyPI
@@ -151,7 +186,8 @@ jobs:
           sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" hyctl/__init__.py
           python -m pip install --upgrade build twine
           python -m build
-          python -m twine upload dist/*
+          # PyPI never takes a file twice; skip the ones an earlier run uploaded.
+          python -m twine upload --skip-existing dist/*
       - name: Missing token
         if: ${{ env.PYPI_API_TOKEN == '' }}
         run: echo "::error::PYPI_API_TOKEN is not set, so PyPI did not get this release." && exit 1
@@ -165,4 +201,6 @@ jobs:
     with:
       version: ${{ inputs.tag }}
       tag: ${{ inputs.tag }}
+      # The tag, not the dispatching branch, so re-publishing an old tag builds that tag.
+      ref: ${{ inputs.tag }}
       upload: true
