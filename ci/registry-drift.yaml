@@ -1,0 +1,16 @@
+# The OpenRouter model each registry/pricing.yaml tier stands for, read by
+# `go run ./ci/registrydrift`. The registry records a price but not its source.
+#
+# A tier left out has no upstream twin: tier 10 is local, and pro-low,
+# flash-med and flash-low are discounted effort levels of a model listed here,
+# so comparing their price to the list price would always read as drift.
+#
+# Format:  <pricing.yaml tier id>: <OpenRouter model id>
+
+upstream:
+  claude-core: anthropic/claude-opus-4.6     # "Opus equivalent retail"
+  opus-thinking: anthropic/claude-opus-4.6   # models.yaml: Claude Opus 4.6
+  sonnet-thinking: anthropic/claude-sonnet-4.6
+  gpt-oss-120b: openai/gpt-oss-120b
+  pro-high: google/gemini-3.1-pro-preview    # models.yaml: Gemini 3.1 Pro
+  flash-high: google/gemini-3.8-flash        # models.yaml: Gemini 3.8 Flash
