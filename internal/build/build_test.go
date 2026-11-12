@@ -34,3 +34,20 @@ func TestText_CarriesEveryStampedField(t *testing.T) {
 		}
 	}
 }
+
+// Cloudflare's managed WAF 403s "hydra" in a User-Agent (#1370), so OpenRouter's
+// pricing fetch failed on every install. Checked for a dev and a stamped build.
+func TestUserAgent_AvoidsTheWAFBlockedWord(t *testing.T) {
+	orig := Version
+	t.Cleanup(func() { Version = orig })
+	for _, v := range []string{"dev", "1.4.0"} {
+		Version = v
+		ua := UserAgent()
+		if strings.Contains(strings.ToLower(ua), "hydra") {
+			t.Errorf("UserAgent() = %q contains \"hydra\", which Cloudflare blocks", ua)
+		}
+		if !strings.HasSuffix(ua, "/"+v) {
+			t.Errorf("UserAgent() = %q does not carry the version %q", ua, v)
+		}
+	}
+}

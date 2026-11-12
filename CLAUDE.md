@@ -1166,6 +1166,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 - `internal/pricing.DB` is the single source of truth for all cost estimation, never hardcode $/token values.
 - `internal/swarm` uses `sync.WaitGroup` (not errgroup) for race mode to guarantee goroutine drain and prevent zombie agy subprocesses.
 - All executors must set `Response.Truncated = true` when output was capped.
+- A User-Agent Hydra sets comes from `build.UserAgent()`, never a literal, and must never contain "hydra": Cloudflare's managed WAF 403s it, OpenRouter's included (#1370).
 
 ### Pricing flow
 ```
