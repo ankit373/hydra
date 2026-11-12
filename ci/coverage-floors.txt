@@ -73,6 +73,9 @@ floor internal/glob                 96
 floor internal/graph                88
 floor internal/ground               95
 floor internal/health               82
+# The Keychain binding (ring_os.go) is darwin/windows-only, so Linux measures
+# the logic it wraps through a fake and the file store, not the binding itself.
+floor internal/keystore             84
 floor internal/ledger               86
 # internal/mcpregistry talks to two external APIs (OSV.dev, GitHub) and reads
 # five clients' config files, so its remaining uncovered lines are the

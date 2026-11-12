@@ -14,10 +14,12 @@ import type {
   Fleet,
   HyctlStatus,
   InstallResult,
+  KeyTest,
   MCPPanel,
   MCPSyncResult,
   HeadPanel,
   ModelRegistry,
+  ProviderKeys,
   ReviewOutcome,
   QuestionQueue,
   SecurityReport,
@@ -57,6 +59,10 @@ interface WailsGo {
       GetModels(): Promise<ModelRegistry>
       GetSettings(): Promise<Settings>
       SaveSettings(s: Settings): Promise<Settings>
+      GetProviderKeys(): Promise<ProviderKeys>
+      SaveProviderKey(provider: string, key: string): Promise<ProviderKeys>
+      RemoveProviderKey(provider: string): Promise<ProviderKeys>
+      TestProviderKey(provider: string): Promise<KeyTest>
     }
   }
 }
@@ -66,6 +72,7 @@ declare global {
     go?: WailsGo
     runtime?: {
       EventsOn(name: string, cb: (...data: unknown[]) => void): () => void
+      BrowserOpenURL?(url: string): void
     }
   }
 }
@@ -133,3 +140,20 @@ export const GetSecurity = (): Promise<SecurityReport> => backend().GetSecurity(
 export const GetModels = (): Promise<ModelRegistry> => backend().GetModels()
 export const GetSettings = (): Promise<Settings> => backend().GetSettings()
 export const SaveSettings = (s: Settings): Promise<Settings> => backend().SaveSettings(s)
+export const GetProviderKeys = (): Promise<ProviderKeys> => backend().GetProviderKeys()
+export const SaveProviderKey = (provider: string, key: string): Promise<ProviderKeys> =>
+  backend().SaveProviderKey(provider, key)
+export const RemoveProviderKey = (provider: string): Promise<ProviderKeys> =>
+  backend().RemoveProviderKey(provider)
+export const TestProviderKey = (provider: string): Promise<KeyTest> =>
+  backend().TestProviderKey(provider)
+
+/**
+ * Opens a page in the person's browser. A plain link would navigate the app's
+ * own webview away from Hydra, with no back button to return.
+ */
+export function openExternal(url: string): void {
+  const open = window.runtime?.BrowserOpenURL
+  if (open) open(url)
+  else window.open(url, '_blank', 'noopener')
+}
