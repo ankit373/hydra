@@ -45,6 +45,8 @@ func key(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyDown}
 	case "ctrl+c":
 		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case "esc":
+		return tea.KeyMsg{Type: tea.KeyEsc}
 	}
 	panic("unhandled key " + s)
 }
@@ -82,8 +84,16 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	if im.err != nil {
 		t.Fatalf("the wizard reported an error: %v", im.err)
 	}
-	if cmd == nil {
-		t.Error("the final step returned no command, so the wizard never quits")
+	// The summary must stay on screen until a key: quitting on save closed
+	// the alt screen and wiped it unread (TUI-12).
+	if cmd != nil || im.step != stepDone {
+		t.Errorf("save did not land on the summary: step=%v cmd=%v", im.step, cmd)
+	}
+	if v := stripANSI(im.View()); !strings.Contains(v, "Hydra is ready") || !strings.Contains(v, "hyctl tui") {
+		t.Errorf("the summary is missing its outcome or next step:\n%s", v)
+	}
+	if _, cmd = send(m, "enter"); cmd == nil {
+		t.Error("a key on the summary did not quit")
 	}
 
 	cfg, err := config.Load()

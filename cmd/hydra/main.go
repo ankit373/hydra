@@ -161,7 +161,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdVet(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
-		cmdWorkflow(), cmdServe(),
+		cmdWorkflow(), cmdServe(), cmdBench(),
 		cmdSecurity(), cmdPolicy(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 		cmdRlimitExec(),
 	)
@@ -279,8 +279,9 @@ func cmdTui() *cobra.Command {
 			if err := requireTerminal("hyctl tui"); err != nil {
 				return err
 			}
-			// Mouse support is for wheel scrolling; the keyboard remains
-			// fully sufficient on terminals without it.
+			// Mouse support is for wheel scrolling; ctrl+s hands the mouse back
+			// to the terminal for selecting text.
+			defer tui.OwnTerminal()()
 			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 			_, err := p.Run()
 			return err
@@ -338,6 +339,7 @@ func runInit(ctx context.Context) error {
 
 	fmt.Println(dimStyle.Render("  Scanning your machine for AI models..."))
 	result := probe.Run(ctx)
+	defer tui.OwnTerminal()()
 
 	if len(result.Heads) == 0 {
 		// Nothing found, guide the user through installing something.
