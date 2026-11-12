@@ -418,7 +418,7 @@ pull_request_rules:
       - "#assignee=0"
     actions:
       assign:
-        add_users: ["{{author}}"]
+        add_users: ["{{ author }}"]
 
   # Add only: the label itself bumps updated-at, so an auto-remove rule would flap.
   - name: Stale
