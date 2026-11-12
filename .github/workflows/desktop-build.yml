@@ -68,6 +68,14 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(inputs.targets) }}
+    # Read by the scripts below as variables, never spliced into them as ${{ }}.
+    env:
+      VERSION: ${{ inputs.version }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      PLATFORM: ${{ matrix.platform }}
+      TARGET_OS: ${{ matrix.goos }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      BUILD_TAGS: ${{ matrix.tags }}
 
     steps:
       - uses: actions/checkout@v7
@@ -140,15 +148,15 @@ jobs:
         run: |
           # Same ldflags goreleaser uses for hyctl, so the app reports the
           # release it came from instead of "dev" (#227).
-          LD="-X github.com/ankit373/hydra/internal/build.Version=${{ inputs.version }}"
+          LD="-X github.com/ankit373/hydra/internal/build.Version=${VERSION}"
           LD="$LD -X github.com/ankit373/hydra/internal/build.Commit=$(git rev-parse --short HEAD)"
           LD="$LD -X github.com/ankit373/hydra/internal/build.Date=$(git log -1 --format=%cI)"
           LD="$LD -X github.com/ankit373/hydra/internal/build.BuiltBy=github-actions"
 
           TAGS=""
-          if [ -n "${{ matrix.tags }}" ]; then TAGS="-tags ${{ matrix.tags }}"; fi
+          if [ -n "$BUILD_TAGS" ]; then TAGS="-tags $BUILD_TAGS"; fi
 
-          wails build -clean -platform ${{ matrix.platform }} $TAGS -ldflags "$LD"
+          wails build -clean -platform "$PLATFORM" $TAGS -ldflags "$LD"
 
       # The bundle name comes from wails.json's outputfilename (Hydra), so these
       # are exact rather than globbed, a rename should break the build loudly
@@ -161,7 +169,7 @@ jobs:
           # ditto, not zip: it preserves the bundle's symlinks and extended
           # attributes, which a plain zip mangles into an app that will not launch.
           ditto -c -k --sequesterRsrc --keepParent Hydra.app \
-            "hydra-desktop_${{ inputs.version }}_darwin_universal.zip"
+            "hydra-desktop_${VERSION}_darwin_universal.zip"
 
       # Named from matrix.arch, not hardcoded: with amd64 the only non-macOS
       # target these read the same either way, and an arm64 target added to the
@@ -172,14 +180,14 @@ jobs:
         shell: pwsh
         working-directory: desktop/build/bin
         run: |
-          Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_${{ inputs.version }}_windows_${{ matrix.arch }}.zip"
+          Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_$($env:VERSION)_windows_$($env:TARGET_ARCH).zip"
 
       - name: Package (Linux)
         if: matrix.goos == 'linux'
         shell: bash
         working-directory: desktop/build/bin
         run: |
-          tar czf "hydra-desktop_${{ inputs.version }}_linux_${{ matrix.arch }}.tar.gz" Hydra
+          tar czf "hydra-desktop_${VERSION}_linux_${TARGET_ARCH}.tar.gz" Hydra
 
       # Signing is deliberately absent, not forgotten. macOS will report an
       # unidentified developer until an Apple Developer ID is available; the
@@ -200,7 +208,7 @@ jobs:
             found+=("$f")
           done
           if [ ${#found[@]} -eq 0 ]; then
-            echo "::error::no artifact was produced for ${{ matrix.goos }}/${{ matrix.arch }}"
+            echo "::error::no artifact was produced for ${TARGET_OS}/${TARGET_ARCH}"
             ls -la
             exit 1
           fi
@@ -267,7 +275,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "${{ inputs.tag }}" hydra-desktop_* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" hydra-desktop_* --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Upload as a workflow artifact
         if: ${{ !inputs.upload }}
