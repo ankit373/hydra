@@ -4517,7 +4517,7 @@ func cmdReview() *cobra.Command {
 			return nil
 		},
 	}
-	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD/GPT-OSS)")
+	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD)")
 
 	cmd.AddCommand(sum, diff, approve, reject, qa)
 	return cmd
