@@ -292,6 +292,38 @@ go run ./ci/covergate -profile cover.out -config ci/coverage-floors.txt
 The gate has its own tests (`ci/covergate`), driven to both verdicts, a gate
 that cannot go red is not a gate.
 
+### The routing bench
+
+A PR touching `internal/`, `registry/`, `go.mod` or `go.sum` gets one comment
+showing how its routing decisions moved. The whole of `internal/` because the
+harness imports about 40 of its packages, and any of them can move a decision.
+It is `ci/benchdiff` routing `ci/benchdiff/suite.json` on the PR's base and
+head: the chosen head, tier, fallback depth and estimated cost per prompt, plus
+the SPRT outcome and whether its answer matches the expected one.
+
+It needs no keys and no network. The environment is cleared, the CLI heads are
+fake binaries a dry run never executes, the local head is a fake Ollama on
+loopback, calibration is replayed from the suite, and the SPRT heads answer
+from a script. So it measures **routing, not model quality**.
+
+```bash
+go run ./ci/benchdiff run -out /tmp/head.json        # on your branch
+git worktree add /tmp/hydra-base origin/main         # the base, with your harness on it
+rm -rf /tmp/hydra-base/ci/benchdiff && cp -R ci/benchdiff /tmp/hydra-base/ci/
+(cd /tmp/hydra-base && go run ./ci/benchdiff run -out /tmp/base.json)
+go run ./ci/benchdiff compare -base /tmp/base.json -head /tmp/head.json
+```
+
+It is **advisory**: the job never fails on a diff. The comment lists what
+would fail a required check: a prompt that routed on base and is refused on
+head, a prompt the verifier passed on base and not on head, total estimated
+cost up more than 10%, or the escalation rate (SPRT needing more than one
+head) up more than 10 points. `-fail-on-gate` turns those into exit 1, which
+is the switch to flip once the bars have been watched on real PRs.
+
+A routing change that is meant to move decisions is fine; say so in the PR
+body. If you add a routing behaviour, add a prompt that exercises it.
+
 ---
 
 ## Commit Style
