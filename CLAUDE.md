@@ -663,6 +663,10 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   `close-shipped-issues.yml` reads it at release time and closes the issue then. No keyword, no close.
 - All features/fixes target `develop`. Hotfixes target `main`, and there the keyword *does* fire.
 - Never open a PR directly to `main` from a feature branch.
+- Every author signs the [CLA](CLA.md) once, through CLA Assistant on their first PR. The
+  `license/cla` status gates the queue (mirrored as `Contributor has signed` by `cla.yml` until
+  #1380 step 2); there is no checkbox. `CONTRIBUTORS.md` is a thank-you list, not a gate. CI on a
+  fork PR waits for the signature (`cla-approve-runs.yml`).
 
 ---
 

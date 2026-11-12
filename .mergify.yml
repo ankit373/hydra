@@ -36,6 +36,8 @@ shared:
     - check-success=Workflow security
     - check-success=Mergify config
 
+  # cla.yml mirrors CLA Assistant's license/cla under this name, which main's config still
+  # requires. Step 2 (#1380) points this at license/cla once main has this file.
   # Not in develop's branch protection, so the queues require it (bots pass it).
   cla: &cla check-success=Contributor has signed
 
@@ -134,8 +136,8 @@ queue_rules:
       - and: *release_build
       - and: *security
 
-  # CLA sits in queue_conditions: merge_conditions run on Mergify's draft PR, whose
-  # author (mergify[bot]) the CLA check would fail. Queue conditions hold while queued.
+  # CLA sits in queue_conditions: merge_conditions run on Mergify's draft PR, authored by
+  # mergify[bot], not this PR's author. Queue conditions hold while queued.
   - name: release
     queue_conditions:
       - base~=^release/v
@@ -212,7 +214,7 @@ merge_protections:
 
   # release-please opens its PR with GITHUB_TOKEN, which starts no workflow, so no CLA run.
   - name: CLA signed
-    description: The author has ticked the CLA box and is in CONTRIBUTORS.md.
+    description: Every author has signed the CLA with CLA Assistant (license/cla).
     if:
       - *not_mergify
       - not:
@@ -373,17 +375,6 @@ pull_request_rules:
         message: |
           @{{author}}, `main` only takes `release/vX.Y.Z-to-main`, `hotfix/*` and release-please PRs.
           Retarget this PR to `develop`; it reaches main with the next release.
-
-  - name: CLA not signed
-    conditions:
-      - check-failure=Contributor has signed
-      - -closed
-    actions:
-      comment:
-        message: |
-          @{{author}}, the CLA check failed: tick the CLA box in the description and add yourself to
-          CONTRIBUTORS.md in this PR. [CLA.md](https://github.com/ankit373/hydra/blob/main/CLA.md) explains
-          why it is a CLA and not a DCO.
 
   - name: Release PR missing Release-As footer
     conditions:
