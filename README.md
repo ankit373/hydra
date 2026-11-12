@@ -15,7 +15,7 @@
 *One command. Every model. Provable trust.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
-[![Go 1.24](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go 1.25](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](https://hydra.uvansa.com#platform-support)
 [![GitHub Stars](https://img.shields.io/github/stars/ankit373/hydra?style=flat&color=8b5cf6)](https://github.com/ankit373/hydra/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/ankit373/hydra?color=06b6d4)](https://github.com/ankit373/hydra/issues)
@@ -857,6 +857,8 @@ hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is 
 hyctl serve                             # OpenAI-compatible endpoint, loopback only
 #   the `model` field is the routing instruction: `hydra`, `hydra/hard`, `hydra/t4`, or a head id.
 #   streams as server-sent events, and passes tool calls through on every dialect it speaks.
+hyctl serve --task-class classification.banking77   # class for requests that send no X-Hydra-Task-Class
+#   X-Hydra-Task-Class routes on that class (and enables temperature); X-Hydra-Max-Cost-USD only lowers the ceiling.
 
 # Tasks waiting on you
 # A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops
