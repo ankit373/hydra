@@ -115,8 +115,8 @@ git clone https://github.com/ankit373/hydra && cd hydra && go build ./cmd/hydra
 **Free and open source, MIT License.** No subscription. Bring your own API keys.
 
 You pay the underlying model providers directly:
-- Claude Opus: ~$15/M output tokens (Anthropic)
-- Gemini 3.8 Flash: $0.075-0.30/M input depending on tier (Google, via Antigravity)
+- Claude Opus: ~$25/M output tokens (Anthropic)
+- Gemini 3.8 Flash: $0.075-0.825/M input depending on tier (Google, via Antigravity)
 - Qwen local via Ollama: $0
 
 Typical savings: 75-85% vs routing everything through Claude. Run `hyctl pricing list` for live rates.

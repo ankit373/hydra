@@ -6,6 +6,8 @@ version: 2
 # to main from a feature branch." Every dependency PR was landing on main
 # unreviewed by that policy until this was noticed (#334). main only ever moves
 # via a release-branch PR or a hotfix; a dependency bump is neither.
+# cooldown: a release must be 7 days old before Dependabot proposes it, so a
+# compromised or yanked version has time to be caught upstream first.
 updates:
   # Keep GitHub Actions up to date
   - package-ecosystem: "github-actions"
@@ -13,8 +15,30 @@ updates:
     target-branch: develop
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # The hyctl module at the root. Majors stay ungrouped so each one is reviewed alone.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 3
+    groups:
+      hyctl-go:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The desktop app is its own Go module (see desktop/go.mod), so the root
   # ecosystem entry does not reach it. Grouped into one PR per week, Wails
@@ -24,6 +48,8 @@ updates:
     target-branch: develop
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(deps)"
     open-pull-requests-limit: 3
@@ -37,6 +63,8 @@ updates:
     target-branch: develop
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(deps)"
     open-pull-requests-limit: 3
