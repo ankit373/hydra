@@ -544,3 +544,70 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.tag }}
+
+  # The soak rules in RELEASING.md section 3: a large release needs an RC of
+  # this version at least 48 hours old, a major one an RC at least 7 days old
+  # with no feat since. Only the release-please queue requires this check.
+  release-gates:
+    name: Release gates
+    if: startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Size
+        id: size
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: ./scripts/release-size.sh HEAD "origin/$BASE_REF" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Check the RC soak
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SIZE: ${{ steps.size.outputs.size }}
+        run: |
+          next="v$(jq -r '."."' .release-please-manifest.json)"
+          case "$SIZE" in
+            large) need_hours=48 ;;
+            major) need_hours=168 ;;
+            *) echo "$next is $SIZE: no RC needed."; exit 0 ;;
+          esac
+
+          # Read now, not from the event: a label added later and a re-run of
+          # this job is how the fast lane gets through.
+          labels=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels -q '.labels[].name')
+          if grep -qx release:urgent <<<"$labels"; then
+            echo "::warning::$next is $SIZE but labelled release:urgent, so the RC soak is skipped."
+            exit 0
+          fi
+
+          rc=$(git for-each-ref --sort=-creatordate --count=1 \
+                 --format='%(refname:short) %(creatordate:unix)' "refs/tags/$next-rc.*")
+          if [ -z "$rc" ]; then
+            echo "::error::$next is $SIZE and has no RC. Cut one with: gh workflow run rc.yml -f sha=<sha>. Or label the PR release:urgent and re-run this check."
+            exit 1
+          fi
+          rc_tag=${rc% *}
+          age_hours=$(( ($(date +%s) - ${rc#* }) / 3600 ))
+          if [ "$age_hours" -lt "$need_hours" ]; then
+            echo "::error::$rc_tag is ${age_hours}h old; a $SIZE release needs ${need_hours}h."
+            exit 1
+          fi
+
+          if [ "$SIZE" = major ]; then
+            feats=$(git log --no-merges --format=%s "$rc_tag..HEAD" | grep -E '^feat(\(.+\))?!?: ' || true)
+            if [ -n "$feats" ]; then
+              echo "::error::features landed after $rc_tag; a major release takes only fixes after its RC. Cut a new RC."
+              echo "$feats"
+              exit 1
+            fi
+          fi
+          echo "$next is $SIZE and $rc_tag is ${age_hours}h old: ok."
+

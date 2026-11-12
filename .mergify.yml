@@ -120,6 +120,8 @@ queue_rules:
       - and: *ci
       - and: *release_build
       - and: *security
+      # RC soak for large and major releases (ci.yml release-gates).
+      - check-success=Release gates
     merge_conditions: []
 
   # Promotion to main from a hand-built carry (commit-tree: release tree, main

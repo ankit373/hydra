@@ -60,9 +60,16 @@ is not a library.
 | Hold | `release:hold` on the PR, `release:blocked` on the PR, any open `release:blocked` issue, red CI on main | do not approve. Mergify will not queue a PR labelled `release:hold`, `release:blocked` or `hold` |
 | Rate cap | 2 releases outside the fast lane already in the last 7 days | wait for the next train |
 
-These are checked by hand today. Mergify enforces only the approval and the hold labels.
+release-train.yml checks the overdue limits every Wednesday. On the release PR it sets a size label
+(`release:small`, `release:medium`, `release:large`, `release:major`), adds `release:overdue`,
+copies `release:blocked` from any open issue, and keeps one comment with the numbers. It never
+approves or merges. The fast lane and the rate cap are still checked by hand.
 
 ## 3. Size and gates
+
+The `Release gates` check on the release PR enforces the RC age and the major's fix-only rule, and
+the queue requires it. `release:urgent` on the PR skips the RC soak for the fast lane: add the
+label, then re-run the check.
 
 | Size | What it is | Gates (all sizes: CI + release build + security in the queue) |
 |---|---|---|
