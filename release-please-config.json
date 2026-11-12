@@ -1,26 +1,32 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "go",
+  "pull-request-header": "Release train. It merges only after @ankit373 approves it; see RELEASING.md.",
   "packages": {
     ".": {
       "release-type": "go",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
       "draft": false,
-      "prerelease": false
+      "prerelease": false,
+      "extra-files": [
+        { "type": "generic", "path": "README.md" },
+        { "type": "generic", "path": "docs/app.html" },
+        { "type": "generic", "path": "docs/index.html" }
+      ]
     }
   },
   "separate-pull-requests": false,
   "tag-separator": "",
   "include-v-in-tag": true,
   "changelog-sections": [
-    { "type": "feat",     "section": "✨ New Features"    },
-    { "type": "fix",      "section": "🐛 Bug Fixes"       },
-    { "type": "perf",     "section": "⚡ Performance"      },
-    { "type": "refactor", "section": "🏗 Internal",   "hidden": true },
-    { "type": "chore",    "section": "📦 Dependencies","hidden": true },
-    { "type": "docs",     "section": "📚 Docs",        "hidden": true },
-    { "type": "ci",       "section": "🔧 CI",          "hidden": true }
+    { "type": "feat",     "section": "Features" },
+    { "type": "fix",      "section": "Bug Fixes" },
+    { "type": "perf",     "section": "Performance Improvements" },
+    { "type": "revert",   "section": "Reverts" },
+    { "type": "refactor", "section": "Internal",     "hidden": true },
+    { "type": "chore",    "section": "Dependencies", "hidden": true },
+    { "type": "docs",     "section": "Docs",         "hidden": true },
+    { "type": "ci",       "section": "CI",           "hidden": true },
+    { "type": "test",     "section": "Tests",        "hidden": true }
   ]
 }

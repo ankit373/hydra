@@ -1,11 +1,23 @@
 name: RC Build
 
+# An RC is cut from a commit on main by hand: `gh workflow run rc.yml -f sha=<sha>`.
+# The version defaults to the one in release-please's open release PR (RELEASING.md).
+# A push to a release/vX.Y.Z branch still builds one, for a release cut that way.
 on:
   push:
     # Version-shaped only: a carry branch (release/vX.Y.Z-to-main) is not a release (#1317).
     branches:
       - "release/v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit on main to build (default: main's head)"
+        required: false
+        type: string
+      release:
+        description: "Release the RC is for, e.g. 1.8.0 (default: the open release PR's version)"
+        required: false
+        type: string
 
 # Write is granted per job, to the jobs that publish.
 permissions:
@@ -20,10 +32,12 @@ jobs:
     outputs:
       tag: ${{ steps.ver.outputs.tag }}
       version: ${{ steps.ver.outputs.version }}
+      commit: ${{ steps.ver.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Go
@@ -35,11 +49,41 @@ jobs:
 
       - name: Compute RC version
         id: ver
+        env:
+          INPUT_RELEASE: ${{ inputs.release }}
         run: |
-          # Branch is release/v1.2.0 → extract semver
-          BRANCH="${GITHUB_REF_NAME}"
-          SEMVER="${BRANCH#release/}"
+          set -euo pipefail
           SHA=$(git rev-parse --short HEAD)
+
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            # An RC is a candidate for main's next release, so it must come from main.
+            if ! git merge-base --is-ancestor HEAD origin/main; then
+              echo "::error::$(git rev-parse HEAD) is not on main; an RC is cut from main"
+              exit 1
+            fi
+            V="${INPUT_RELEASE#v}"
+            if [ -z "$V" ]; then
+              # The release PR's manifest holds the version the next release will take.
+              PR_BRANCH=$(git for-each-ref --count=1 --format='%(refname)' \
+                'refs/remotes/origin/release-please--branches--main*')
+              if [ -z "$PR_BRANCH" ]; then
+                echo "::error::no open release PR to take the version from; pass -f release=X.Y.Z"
+                exit 1
+              fi
+              V=$(git show "${PR_BRANCH}:.release-please-manifest.json" \
+                | python3 -c 'import json,sys; print(json.load(sys.stdin)["."])')
+            fi
+            SOURCE=main
+          else
+            # Branch is release/v1.2.0 → extract semver
+            V="${GITHUB_REF_NAME#release/v}"
+            SOURCE="${GITHUB_REF_NAME}"
+          fi
+          if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::RC version '$V' is not X.Y.Z"
+            exit 1
+          fi
+          SEMVER="v${V}"
 
           # Count how many RC tags already exist for this version
           RC_COUNT=$(git tag --list "${SEMVER}-rc.*" | wc -l | tr -d ' ')
@@ -49,6 +93,8 @@ jobs:
           echo "version=${RC_TAG}" >> "$GITHUB_OUTPUT"
           echo "tag=${RC_TAG}" >> "$GITHUB_OUTPUT"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
           # GoReleaser's {{ .Version }} is the semver without the leading v, so
           # the archive filenames need this form and not the tag (#759).
           echo "semver=${RC_TAG#v}" >> "$GITHUB_OUTPUT"
@@ -91,13 +137,13 @@ jobs:
       - name: Publish RC release
         run: |
           gh release create "${{ steps.ver.outputs.tag }}" dist/*.tar.gz dist/*.zip dist/checksums.txt \
-            --target "$GITHUB_SHA" \
+            --target "$COMMIT" \
             --title "RC, ${{ steps.ver.outputs.version }}" \
             --notes "$(cat <<EOF
-          > 🧪 **This is a release candidate**, built from \`${GITHUB_REF_NAME}\` for UAT testing.
+          > 🧪 **This is a release candidate**, built from \`${SOURCE}\` for testing.
           > Do not use in production. Stable release pending sign-off.
 
-          **Branch**: \`${GITHUB_REF_NAME}\`
+          **Branch**: \`${SOURCE}\`
           **Commit**: \`${{ steps.ver.outputs.sha }}\`
           **Version**: \`${{ steps.ver.outputs.version }}\`
 
@@ -113,9 +159,11 @@ jobs:
             --latest=false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT: ${{ steps.ver.outputs.commit }}
+          SOURCE: ${{ steps.ver.outputs.source }}
 
-  # UAT needs the app, not just the CLI. Without this the RC that testers sign
-  # off on contains no desktop build at all (#227).
+  # An RC needs the app, not just the CLI. Without this the RC that gets signed
+  # off contains no desktop build at all (#227).
   desktop:
     name: Desktop app
     needs: rc
@@ -125,4 +173,5 @@ jobs:
     with:
       version: ${{ needs.rc.outputs.version }}
       tag: ${{ needs.rc.outputs.tag }}
+      ref: ${{ needs.rc.outputs.commit }}
       upload: true

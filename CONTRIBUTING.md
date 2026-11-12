@@ -115,9 +115,9 @@ No secrets or API keys are needed just to browse, modify, or test the routing lo
 
 ## Making Changes
 
-1. Fork the repository and create a branch from `develop`:
+1. Fork the repository and create a branch from `main`:
    ```bash
-   git checkout -b feat/my-feature
+   git checkout -b feat/my-feature origin/main
    ```
 2. Make your changes (see standards below).
 3. Everything CI gates on, before you push:
@@ -141,7 +141,9 @@ No secrets or API keys are needed just to browse, modify, or test the routing lo
    go run ./cmd/hydra probe         # what this machine can route to
    go run ./cmd/hydra dispatch --dry-run --enum SIMPLE "add a helper"
    ```
-5. Commit and push, then open a pull request against `develop`.
+5. Commit and push, then open a pull request against `main`. A branch made from the old
+   `develop` branch shares no recent history with `main`: move it over with
+   `git rebase --onto origin/main origin/develop` before you open the PR.
 
 ---
 

@@ -1,8 +1,10 @@
 name: Release Please
 
 # release-please watches for conventional commits on main and:
-#   1. Opens a "Release PR" with bumped version + updated CHANGELOG.md
+#   1. Opens a "Release PR" with bumped version + updated CHANGELOG.md, and the
+#      docs version pins listed under extra-files in release-please-config.json
 #   2. When the Release PR is merged, creates the tag + GitHub release
+#      (it merges only after the maintainer approves it, see RELEASING.md)
 #   3. This workflow then fans the release out to every channel (binaries,
 #      Homebrew, npm, pip) via publish.yml, so a feature release auto-updates
 #      everywhere with no manual steps. curl (install.sh) always resolves the
@@ -32,11 +34,9 @@ jobs:
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: go
-          # Conventional commits determine version bump:
-          #   feat:     → minor bump (1.1.0 → 1.2.0)
-          #   fix:      → patch bump (1.1.0 → 1.1.1)
-          #   feat!: or BREAKING CHANGE → major bump (1.1.0 → 2.0.0)
+          # No release-type input: with one set, the action ignores the config file,
+          # and with it the extra-files that keep the docs version pins in step.
+          # feat bumps minor, fix/perf patch, `!` or BREAKING CHANGE major.
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
@@ -52,16 +52,3 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets: inherit
-
-  # The tag release-please creates is made with GITHUB_TOKEN, and events raised by
-  # that token start no workflow, so this has to hang off the job graph, like publish.
-  close-issues:
-    name: Close shipped issues
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    permissions:
-      contents: read
-      issues: write
-    uses: ./.github/workflows/close-shipped-issues.yml
-    with:
-      tag: ${{ needs.release-please.outputs.tag_name }}

@@ -1,18 +1,13 @@
 version: 2
 
-# target-branch: develop on every entry, and NOT the omit-and-let-it-default
-# option. Dependabot's default is the repo's default branch, main here, which
-# is exactly what CLAUDE.md's branch policy forbids: "Never open a PR directly
-# to main from a feature branch." Every dependency PR was landing on main
-# unreviewed by that policy until this was noticed (#334). main only ever moves
-# via a release-branch PR or a hotfix; a dependency bump is neither.
+# No target-branch: Dependabot opens PRs against the default branch, main, where
+# every change lands through the merge queue like any other PR.
 # cooldown: a release must be 7 days old before Dependabot proposes it, so a
 # compromised or yanked version has time to be caught upstream first.
 updates:
   # Keep GitHub Actions up to date
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: develop
     schedule:
       interval: "weekly"
     cooldown:
@@ -27,7 +22,6 @@ updates:
   # The hyctl module at the root. Majors stay ungrouped so each one is reviewed alone.
   - package-ecosystem: "gomod"
     directory: "/"
-    target-branch: develop
     schedule:
       interval: "weekly"
     cooldown:
@@ -45,7 +39,6 @@ updates:
   # pulls ~25 transitive deps and ungrouped updates would bury the queue.
   - package-ecosystem: "gomod"
     directory: "/desktop"
-    target-branch: develop
     schedule:
       interval: "weekly"
     cooldown:
@@ -60,7 +53,6 @@ updates:
   # Desktop frontend (React/TS).
   - package-ecosystem: "npm"
     directory: "/desktop/frontend"
-    target-branch: develop
     schedule:
       interval: "weekly"
     cooldown:

@@ -3,14 +3,14 @@ name: Edge Build
 on:
   push:
     branches:
-      - develop
+      - main
   workflow_dispatch:
 
 # Write is granted per job, to the jobs that publish.
 permissions:
   contents: read
 
-# Multiple pushes to develop within seconds of each other (three squash-merges
+# Multiple pushes to main within seconds of each other (three squash-merges
 # in a row, say) each fire their own run, and the "delete previous edge
 # release, then recreate it" step below is not atomic across concurrent runs:
 # two runs can both pass the delete before either recreates, and whichever
@@ -19,8 +19,10 @@ permissions:
 # publish a stale edge build under a "successful" green check. Cancelling an
 # in-flight run for a superseded commit is correct here, this is a nightly
 # convenience build, not a gated release, so there is nothing worth finishing.
+# One group for every ref: a manual run on another branch would race the same
+# `edge` release just the same.
 concurrency:
-  group: edge-build-${{ github.ref }}
+  group: edge-build
   cancel-in-progress: true
 
 jobs:
@@ -47,15 +49,9 @@ jobs:
         run: |
           SHA=$(git rev-parse --short HEAD)
 
-          # `git describe` cannot name a release from here. Release tags live on
-          # main, and develop's history does not contain them because every
-          # release lands as a squash merge, so describe either finds an RC tag
-          # on a release branch or nothing at all. It found neither: the most
-          # recent tag it could reach was `edge`, the one this workflow pushed
-          # last time, so BASE became "edge", the version became
-          # "edge-edge.<sha>", and GoReleaser discarded that as invalid semver
-          # and fell back to 0.0.0. That is why GORELEASER_CURRENT_TAG looked
-          # like it did nothing (#759).
+          # `git describe` cannot be trusted here: it reaches the `edge` tag this
+          # workflow pushed last time, so BASE became "edge", the version
+          # "edge-edge.<sha>", and GoReleaser fell back to 0.0.0 (#759).
           #
           # The release-please manifest is the version release-please itself
           # reads instead of tags (#215), and it is in this checkout, so it is
@@ -138,7 +134,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Edge, ${{ steps.ver.outputs.version }}" \
             --notes "$(cat <<EOF
-          > ⚠️ **This is an edge/nightly build**, built from the latest commit on \`develop\`.
+          > ⚠️ **This is an edge/nightly build**, built from the latest commit on \`main\`.
           > It may be unstable. Use the [stable release](https://github.com/ankit373/hydra/releases/latest) for production.
 
           **Commit**: \`${{ steps.ver.outputs.sha }}\`
