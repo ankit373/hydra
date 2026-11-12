@@ -13,6 +13,12 @@ var (
 	BuiltBy = "source"
 )
 
+// UserAgent is the one User-Agent hydra sends. It must not contain "hydra":
+// Cloudflare's managed WAF 403s it as the THC-Hydra cracker, OpenRouter included.
+func UserAgent() string {
+	return "hyctl/" + Version
+}
+
 // Text renders the stamp for one binary. Shared, so two binaries shipped in one
 // archive cannot report their build differently (#1058).
 func Text(binary string) string {
