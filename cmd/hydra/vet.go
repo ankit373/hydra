@@ -182,8 +182,8 @@ func (r vetRouter) Review(ctx context.Context, prompt, domain, resource string) 
 	}
 	if res.Response != nil {
 		a.InputTokens, a.OutputTokens = res.Response.InputTokens, res.Response.OutputTokens
-		a.CostUSD = r.d.EstimateCost(a.Tier, a.InputTokens, a.OutputTokens)
 	}
+	a.CostUSD = res.CostUSD
 	return a, nil
 }
 
