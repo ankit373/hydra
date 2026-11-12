@@ -73,28 +73,53 @@ var (
 	ckOnSolar = [3]float64{0xFD, 0xF6, 0xE3} // Solarized Light
 )
 
-// Every text role reads at 4.5:1 on a dark terminal and on two light ones, at
-// both truecolor and ANSI-256 (macOS Terminal's default is white and 256).
+// Every generated role meets its token floor on a dark terminal and on two
+// light ones, at truecolor and ANSI-256 (macOS Terminal is white and 256).
+// The text roles the views use must carry the 4.5:1 floor.
 func TestPalette_TextRolesMeetAAOnLightAndDark(t *testing.T) {
-	roles := map[string]lipgloss.CompleteAdaptiveColor{
-		"aqua": ckAqua, "cyan": ckCyan, "violet": ckViolet, "magenta": ckMagenta,
-		"dim": ckDimc, "faint": ckFaint, "cheap": ckCheap, "mid": ckMid, "exp": ckExp,
-	}
-	for name, c := range roles {
-		for _, v := range []string{c.Dark.TrueColor, c.Dark.ANSI256} {
-			if r := ckContrast(ckRGB(t, v), ckOnDark); r < 4.5 {
-				t.Errorf("%s dark %s is %.2f:1 on #1E1E1E", name, v, r)
+	floors := map[string]float64{}
+	for _, r := range tokRoles {
+		floors[r.path] = r.min
+		for _, v := range []string{r.c.Dark.TrueColor, r.c.Dark.ANSI256} {
+			if c := ckContrast(ckRGB(t, v), ckOnDark); c < r.min {
+				t.Errorf("%s dark %s is %.2f:1 on #1E1E1E, floor %.1f", r.path, v, c, r.min)
 			}
 		}
-		for _, v := range []string{c.Light.TrueColor, c.Light.ANSI256} {
+		for _, v := range []string{r.c.Light.TrueColor, r.c.Light.ANSI256} {
 			for _, bg := range [][3]float64{ckOnWhite, ckOnSolar} {
-				if r := ckContrast(ckRGB(t, v), bg); r < 4.5 {
-					t.Errorf("%s light %s is %.2f:1 on %v", name, v, r, bg)
+				if c := ckContrast(ckRGB(t, v), bg); c < r.min {
+					t.Errorf("%s light %s is %.2f:1 on %v, floor %.1f", r.path, v, c, bg, r.min)
 				}
 			}
 		}
-		if c.Dark.ANSI == "" || c.Light.ANSI == "" {
-			t.Errorf("%s has no explicit ANSI-16 slot, termenv would guess one", name)
+		for _, a := range []string{r.c.Dark.ANSI, r.c.Light.ANSI} {
+			if n, err := strconv.Atoi(a); err != nil || n < 0 || n > 15 {
+				t.Errorf("%s has ANSI-16 slot %q; termenv would guess one", r.path, a)
+			}
+		}
+	}
+	for _, path := range []string{"color.text.muted", "color.text.subtle", "color.accent.default",
+		"color.accent.strong", "color.accent.secondary", "color.status.success", "color.status.warning", "color.status.danger"} {
+		if floors[path] < 4.5 {
+			t.Errorf("text role %s has floor %.1f, want 4.5", path, floors[path])
+		}
+	}
+	// Dim and faint must stay apart at 256 colours, or the label hierarchy
+	// flattens on macOS Terminal's default profile.
+	if tokTextMuted.Light.ANSI256 == tokTextSubtle.Light.ANSI256 || tokTextMuted.Dark.ANSI256 == tokTextSubtle.Dark.ANSI256 {
+		t.Errorf("text.muted and text.subtle share an ANSI-256 index: %v %v", tokTextMuted, tokTextSubtle)
+	}
+	text := map[string]lipgloss.CompleteAdaptiveColor{
+		"aqua": ckAqua, "cyan": ckCyan, "violet": ckViolet, "magenta": ckMagenta, "dim": ckDimc, "faint": ckFaint,
+		"cheap": ckCheap, "mid": ckMid, "exp": ckExp,
+	}
+	for name, c := range text {
+		found := false
+		for _, r := range tokRoles {
+			found = found || (r.c == c && r.min >= 4.5)
+		}
+		if !found {
+			t.Errorf("ck%s is not a generated text role", name)
 		}
 	}
 	wizard := map[string]lipgloss.Style{

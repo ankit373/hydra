@@ -66,9 +66,9 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		// --hy-bg from brand/tokens.css. Set here too so the native window does
-		// not flash white before the first paint.
-		BackgroundColour: &options.RGBA{R: 0x06, G: 0x07, B: 0x0F, A: 1},
+		// Generated from design/tokens (window_gen.go), so the native window
+		// matches the page background and does not flash before the first paint.
+		BackgroundColour: &windowBackground,
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
 		},

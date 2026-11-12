@@ -1,0 +1,15 @@
+{
+  "name": "hydra-design-tokens",
+  "private": true,
+  "type": "module",
+  "description": "One DTCG token source for the website, the desktop app and the TUI.",
+  "scripts": {
+    "build": "node scripts/palette.mjs && terrazzo build && node scripts/emit.mjs"
+  },
+  "devDependencies": {
+    "@adobe/leonardo-contrast-colors": "1.1.0",
+    "@terrazzo/cli": "2.10.0",
+    "@terrazzo/plugin-css": "2.10.0",
+    "colorjs.io": "0.5.2"
+  }
+}
