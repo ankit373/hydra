@@ -54,7 +54,7 @@ func stream(t *testing.T, r Router, body string) *flushRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
 	w := &flushRecorder{ResponseRecorder: httptest.NewRecorder()}
-	Handler(r, "").ServeHTTP(w, req)
+	Handler(r, nil, "").ServeHTTP(w, req)
 	return w
 }
 
@@ -372,7 +372,7 @@ func TestStream_ADisconnectedClientCancelsTheDispatch(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
 		strings.NewReader(streamTurn)).WithContext(ctx)
 	r := &streamRouter{answer: Answer{Output: "x"}}
-	Handler(r, "").ServeHTTP(&flushRecorder{ResponseRecorder: httptest.NewRecorder()}, req)
+	Handler(r, nil, "").ServeHTTP(&flushRecorder{ResponseRecorder: httptest.NewRecorder()}, req)
 
 	if !r.cancelled {
 		t.Error("the router's context outlived the client")

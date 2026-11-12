@@ -23,7 +23,7 @@ export function securityReport(over: Partial<SecurityReport> = {}): SecurityRepo
   return {
     hasData: true,
     integrityIntact: true,
-    ledger: { total: 42, allowed: 40, denied: 2, flagged: 0 },
+    ledger: { total: 42, allowed: 39, denied: 2, asked: 1, flagged: 0 },
     byHead: [],
     checks: [],
     coverage: { categories: [], applicable: 10, covered: 8, partial: 0, percentCovered: 80, edition: '2025' },

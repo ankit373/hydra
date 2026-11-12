@@ -3,6 +3,7 @@
 package security
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/ledger"
@@ -106,5 +107,33 @@ func TestRuleIndex_ParsesOnlyDecideReasons(t *testing.T) {
 		if ok != tc.ok || (ok && got != tc.want) {
 			t.Errorf("ruleIndex(%q) = %d,%v want %d,%v", tc.reason, got, ok, tc.want, tc.ok)
 		}
+	}
+}
+
+// The three DefaultPolicy rules differ in nothing but Classification, so a
+// summary that drops it rendered all three as "* */* *", and a pii-scoped
+// network deny read as a universal one (#1169).
+func TestRuleSummary_RendersTheClassificationScope(t *testing.T) {
+	scoped := ruleSummary(ledger.Rule{Action: ledger.Network, Classification: "pii", Decision: ledger.Deny})
+	universal := ruleSummary(ledger.Rule{Action: ledger.Network, Decision: ledger.Deny})
+	if scoped == universal {
+		t.Fatalf("a pii-scoped network deny and a universal one both summarise as %q", scoped)
+	}
+	if !strings.Contains(scoped, "pii") {
+		t.Errorf("summary = %q, does not name the classification it is scoped to", scoped)
+	}
+
+	a := AuditPolicy(ledger.DefaultPolicy(), nil)
+	seen := map[string]int{}
+	for _, r := range a.Rules {
+		if prev, dup := seen[r.Summary]; dup {
+			t.Errorf("rules %d and %d both render as %q, so the quarantine deny is "+
+				"indistinguishable from the rest", prev, r.Index, r.Summary)
+		}
+		seen[r.Summary] = r.Index
+	}
+	// Carried as its own field too, so a dashboard need not parse the string.
+	if a.Rules[0].Classification == "" {
+		t.Error("RuleStat.Classification is empty on a classification-scoped rule")
 	}
 }

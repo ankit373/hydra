@@ -396,6 +396,8 @@ export interface LedgerPanel {
   total: number
   allowed: number
   denied: number
+  /** Permission withheld pending a human; counted apart from denied. */
+  asked: number
   flagged: number
 }
 
@@ -556,6 +558,8 @@ export interface RuleStat {
   index: number
   summary: string
   decision: string
+  /** The data-sensitivity tag the rule is scoped to. Absent when it matches any. */
+  classification?: string
   hits: number
   /** Never matched anything recorded. */
   dead: boolean

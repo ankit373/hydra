@@ -74,12 +74,13 @@ func TestBuildEditPrompt_AFenceInTheFileCannotImpersonateTheRealOne(t *testing.T
 // write between the same markers it was reading between.
 func TestBuildEditPrompt_TheMarkersDelimitOnlyTheAnswer(t *testing.T) {
 	p := buildEditPrompt("a.go", "The file currently exists.", "add a helper", sampleFile)
+	m := markersFor(sampleFile)
 
-	if n := strings.Count(p, markerStart); n != 1 {
-		t.Errorf("markerStart appears %d times, want 1: it now delimits only the answer", n)
+	if n := strings.Count(p, m.start); n != 1 {
+		t.Errorf("the start marker appears %d times, want 1: it now delimits only the answer", n)
 	}
-	if n := strings.Count(p, markerEnd); n != 1 {
-		t.Errorf("markerEnd appears %d times, want 1", n)
+	if n := strings.Count(p, m.end); n != 1 {
+		t.Errorf("the end marker appears %d times, want 1", n)
 	}
 	// The content still has to be there, just not between those markers.
 	if !strings.Contains(p, "func Existing()") {

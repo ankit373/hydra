@@ -68,15 +68,16 @@ function coverageSegments(categories: Category[]): DonutSegment[] {
   })
 }
 
-// Allowed/Denied are mutually exclusive (Decision is one or the other) and
+// Allowed/Denied/Ask are mutually exclusive (a Decision is exactly one) and
 // sum to Total, a real part-to-whole pie. Flagged is a different,
 // independent dimension (a flagged event can be either allowed or denied),
-// so it can't be a third slice without double-counting; it's called out
+// so it can't be a further slice without double-counting; it's called out
 // separately instead of drawn into the same pie.
 function ledgerSegments(ledger: LedgerPanel): DonutSegment[] {
   return [
     { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-cheap)' },
     { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-expensive)' },
+    { label: 'Ask', value: ledger.asked, colorVar: 'var(--hy-mid)' },
   ]
 }
 
@@ -344,9 +345,9 @@ function Hero({ data }: { data: SecurityReport }) {
           )}
         </div>
         <div className="card sec-top__risk">
-          <div className="card__label">Blocked · flagged</div>
+          <div className="card__label">Blocked · awaiting · flagged</div>
           <div className="card__value--sm">
-            {data.ledger.denied} blocked · {data.ledger.flagged} flagged
+            {data.ledger.denied} blocked · {data.ledger.asked} awaiting · {data.ledger.flagged} flagged
           </div>
           {data.riskHistory && data.riskHistory.length >= 2 ? (
             <div className="sec-hero__history">
