@@ -1,0 +1,183 @@
+name: Roll back a release
+
+# Takes a bad stable release off the defaults on every channel that has one.
+# Nothing is deleted: npm and PyPI never allow a version to be reused, so the
+# real fix is always a new patch release. Steps and the manual PyPI yank are
+# in RUNBOOK-rollback.md.
+#
+# dry_run is on by default and only prints what would change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The bad release tag (e.g. v1.7.0)"
+        required: true
+        type: string
+      reason:
+        description: "One line for the npm deprecation message"
+        required: false
+        type: string
+        default: "this release has a known problem"
+      dry_run:
+        description: "Only print what would change"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Two rollbacks at once would fight over which release is latest.
+concurrency:
+  group: rollback
+  cancel-in-progress: false
+
+# Scripts read these as variables, never spliced into them as ${{ }}.
+env:
+  BAD_TAG: ${{ inputs.tag }}
+  REASON: ${{ inputs.reason }}
+  DRY_RUN: ${{ inputs.dry_run }}
+
+jobs:
+  plan:
+    name: Find the previous stable release
+    runs-on: ubuntu-latest
+    outputs:
+      good: ${{ steps.find.outputs.good }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Find it
+        id: find
+        run: |
+          if ! printf '%s' "$BAD_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::$BAD_TAG is not a stable vX.Y.Z tag"
+            exit 1
+          fi
+          gh release view "$BAD_TAG" --json tagName >/dev/null
+
+          # The highest stable tag below the bad one, by version, not by date:
+          # a hotfix on an older line can be newer than the release it replaces.
+          good=$(gh release list --exclude-drafts --exclude-pre-releases --limit 100 \
+                   --json tagName -q '.[].tagName' \
+                 | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+                 | { cat; echo "$BAD_TAG"; } | sort -uV \
+                 | grep -B1 -xF "$BAD_TAG" | grep -vxF "$BAD_TAG" || true)
+          if [ -z "$good" ]; then
+            echo "::error::no stable release older than $BAD_TAG to fall back to"
+            exit 1
+          fi
+          echo "good=$good" >> "$GITHUB_OUTPUT"
+          echo "## Rolling back $BAD_TAG to $good" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DRY_RUN" = true ]; then
+            echo "Dry run: nothing below was changed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  github:
+    name: GitHub release
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      GOOD_TAG: ${{ needs.plan.outputs.good }}
+    steps:
+      # install.sh installs /releases/latest, and a prerelease can never be latest.
+      - name: Point latest at the previous release
+        run: |
+          do_it() { if [ "$DRY_RUN" = true ]; then echo "would run: $*"; else "$@"; fi; }
+          # Moving latest is only right when the bad release is latest. A bad
+          # patch on an older line must not pull latest back to that line.
+          latest=$(gh release view --json tagName -q .tagName)
+          if [ "$latest" = "$BAD_TAG" ]; then
+            do_it gh release edit "$GOOD_TAG" --latest
+            echo "- GitHub: $GOOD_TAG is latest" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- GitHub: latest is $latest, not $BAD_TAG, so it stays" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          do_it gh release edit "$BAD_TAG" --prerelease
+          echo "- GitHub: $BAD_TAG is a prerelease" >> "$GITHUB_STEP_SUMMARY"
+
+  npm:
+    name: npm
+    needs: plan
+    runs-on: ubuntu-latest
+    env:
+      GOOD_TAG: ${{ needs.plan.outputs.good }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing covers publish and dist-tag from publish.yml only;
+      # deprecate needs a token.
+      - name: Deprecate and move latest
+        run: |
+          do_it() { if [ "$DRY_RUN" = true ]; then echo "would run: $*"; else "$@"; fi; }
+          if [ "$DRY_RUN" != true ] && [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not set. Run the two commands below by hand."
+            DRY_RUN=true
+            failed=1
+          fi
+          bad="${BAD_TAG#v}" good="${GOOD_TAG#v}"
+          do_it npm deprecate "hyctl@$bad" "$REASON; use $good or later"
+          echo "- npm: hyctl@$bad deprecated" >> "$GITHUB_STEP_SUMMARY"
+          latest=$(npm view hyctl dist-tags.latest)
+          if [ "$latest" = "$bad" ]; then
+            do_it npm dist-tag add "hyctl@$good" latest
+            echo "- npm: latest is $good" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- npm: latest is $latest, not $bad, so it stays" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "${failed:-0}"
+
+  homebrew:
+    name: Homebrew tap
+    needs: plan
+    runs-on: ubuntu-latest
+    env:
+      GOOD_TAG: ${{ needs.plan.outputs.good }}
+      GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+    steps:
+      # The script from main, which regenerates the formula for any tag.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Write the formula for the previous release
+        run: |
+          formula=$(curl -fsSL https://raw.githubusercontent.com/ankit373/homebrew-hydra/HEAD/Formula/hyctl.rb)
+          if ! printf '%s\n' "$formula" | grep -qxF "  version \"${BAD_TAG#v}\""; then
+            echo "- Homebrew: the formula is not on $BAD_TAG, so it stays" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$DRY_RUN" = true ]; then
+            echo "would run: scripts/update-tap-formula.sh $GOOD_TAG"
+          elif [ -z "$GH_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_GITHUB_TOKEN is not set, so the tap still offers $BAD_TAG."
+            exit 1
+          else
+            ./scripts/update-tap-formula.sh "$GOOD_TAG"
+          fi
+          echo "- Homebrew: the formula is $GOOD_TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  pypi:
+    name: PyPI (manual)
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      # PyPI documents yanking only in its web UI, so a person does it.
+      - name: Print the yank steps
+        run: |
+          bad="${BAD_TAG#v}"
+          {
+            echo "- PyPI: **yank $bad by hand**. Installers skip a yanked version unless it is pinned with =="
+            echo "  1. Open https://pypi.org/manage/project/hyctl/releases/"
+            echo "  2. Options next to $bad, then Yank, with the same reason: $REASON"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
