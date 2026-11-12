@@ -16,7 +16,7 @@ go 1.26.0
 //, confirmed from the real shipped v1.2.0-rc.2 binary's own `go version -m`
 // output, not assumed. Kept in step with the root module's pin; CI's
 // govulncheck job fails once either falls behind a stdlib fix.
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	github.com/ankit373/hydra v0.0.0
