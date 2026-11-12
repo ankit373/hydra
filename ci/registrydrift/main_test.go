@@ -159,6 +159,16 @@ func TestExceeds(t *testing.T) {
 	}
 }
 
+// A tier renamed in registry/pricing.yaml must fail here, not in the weekly run on main.
+func TestWatchlist_NamesRealTiers(t *testing.T) {
+	opts := fixtureOptions()
+	opts.registryDir = filepath.Join("..", "..", "registry")
+	opts.watchlist = filepath.Join("..", "registry-drift.yaml")
+	if _, err := check(opts, catalog{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // An empty catalog is an outage; reading it as "all retired" would file an issue.
 func TestParseCatalog_RefusesEmpty(t *testing.T) {
 	if _, err := parseCatalog(strings.NewReader(`{"data": []}`)); err == nil {
@@ -171,7 +181,8 @@ func TestParseCatalog_RefusesEmpty(t *testing.T) {
 
 func TestFetch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/fail" {
+		// Cloudflare in front of OpenRouter 403s a User-Agent naming hydra (#1370).
+		if r.URL.Path == "/fail" || strings.Contains(strings.ToLower(r.UserAgent()), "hydra") {
 			http.Error(w, "nope", http.StatusForbidden)
 			return
 		}
