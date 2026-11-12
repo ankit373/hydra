@@ -3,6 +3,8 @@ import { GetSettings, SaveSettings } from '../bindings'
 import type { Settings as SettingsData } from '../types'
 import { PageHeader } from './PageHeader'
 import { ErrorState } from './ErrorState'
+import { Providers } from './Providers'
+import { CliTool } from './CliTool'
 
 /**
  * What this machine is set to do, and the only place in the app that writes
@@ -14,7 +16,7 @@ import { ErrorState } from './ErrorState'
  * `internal/config` already argues every one of them in a paragraph, and that
  * reasoning reached nobody who did not read the source.
  */
-export function Settings() {
+export function Settings({ onProvidersChanged }: { onProvidersChanged?: () => void } = {}) {
   const [data, setData] = useState<SettingsData | null>(null)
   const [draft, setDraft] = useState<SettingsData | null>(null)
   const [readError, setReadError] = useState<string | null>(null)
@@ -112,6 +114,8 @@ export function Settings() {
           <pre className="failure__detail">{draft.error}</pre>
         </div>
       )}
+
+      <Providers onChange={onProvidersChanged} />
 
       <Group
         title="What leaves this machine"
@@ -227,9 +231,25 @@ export function Settings() {
           }
         />
       </Group>
+
+      <CliTool />
+
+      {isMac && (
+        <Group
+          title="If your Mac won't open Hydra"
+          note="This build is not yet notarised by Apple, so the first time a downloaded copy opens, macOS may say it cannot check Hydra and offer only Done or Move to Trash."
+        >
+          <p className="set__detail">
+            Choose Done, then open System Settings, choose Privacy &amp; Security, scroll down to Security, and
+            click Open Anyway next to the message about Hydra. Confirm once, and macOS remembers your choice.
+          </p>
+        </Group>
+      )}
     </div>
   )
 }
+
+const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 
 function Group({
   title,

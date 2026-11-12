@@ -10,6 +10,11 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
+// chatSandbox is hermetic: Chat writes a default config when none exists, so
+// a test that relied on the missing file to stop it would otherwise probe the
+// developer's machine and could dispatch to a real head.
+func chatSandbox(t *testing.T) { testutil.NewSandbox(t) }
+
 // The picker must not offer a routing key the router does not understand.
 // EnumToTier is the authority; anything absent from it silently falls through
 // to default routing while the UI claims otherwise.
@@ -62,7 +67,7 @@ func atoiTier(t *testing.T, s string) int {
 // An empty prompt is a user slip, not an exception. It comes back as a reply
 // carrying the reason so the dock renders it as a message.
 func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
-	sandbox(t)
+	chatSandbox(t)
 
 	r, err := New().Chat("", "", "", "", "")
 	if err != nil {
@@ -79,7 +84,7 @@ func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 // A dispatch that cannot run is a normal outcome, no heads configured is the
 // common first-launch case. It must not blank the window.
 func TestChat_FailedDispatchReturnsAReply(t *testing.T) {
-	sandbox(t)
+	chatSandbox(t)
 
 	r, err := New().Chat("hello", "SIMPLE", "", "", "")
 	if err != nil {
@@ -94,7 +99,7 @@ func TestChat_FailedDispatchReturnsAReply(t *testing.T) {
 // GetSession(runId) while Chat is still in flight (#513). Chat must actually
 // use that id rather than silently minting its own.
 func TestChat_HonoursCallerSuppliedRunID(t *testing.T) {
-	sandbox(t)
+	chatSandbox(t)
 
 	want := New().NewRunID()
 	r, err := New().Chat("hello", "SIMPLE", want, "", "")
@@ -122,7 +127,7 @@ func TestNewRunID_NonEmptyAndUnique(t *testing.T) {
 // typo would otherwise silently route to the single strongest head instead of
 // being reported (#533, mirroring cmd/hydra's own --enum check for #501).
 func TestChat_UnknownEnumIsRejected(t *testing.T) {
-	sandbox(t)
+	chatSandbox(t)
 
 	r, err := New().Chat("hello", "NOT_A_REAL_ENUM", "", "", "")
 	if err != nil {
@@ -163,7 +168,7 @@ func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
 // explicit tier has to outrank whatever the enum would have inferred,
 // otherwise choosing a model silently does nothing (#558).
 func TestChat_ExplicitTierOutranksEnum(t *testing.T) {
-	sandbox(t)
+	chatSandbox(t)
 
 	// GRUNT infers the weakest tier; the explicit "2" must win. With no heads
 	// in the sandbox the dispatch still fails, so this asserts on the reply
@@ -181,7 +186,7 @@ func TestChat_ExplicitTierOutranksEnum(t *testing.T) {
 // Out-of-range tiers are dispatch's call, not something the API should coerce.
 // A silently clamped tier would route somewhere the user never asked for.
 func TestChat_RejectsOutOfRangeTier(t *testing.T) {
-	sandbox(t)
+	chatSandbox(t)
 
 	r, err := New().Chat("hello", "", "", "99", "")
 	if err != nil {

@@ -44,6 +44,9 @@ internal/decision/      ← What a decision source is asked and answers, both wi
                           the one test that refuses a distribution off 1 by more than 1e-6.
 internal/provider/      ← Discovery: cli / env (API keys, plus the OpenRouter model allowlist) / port / agy.
 internal/awsconf/       ← AWS credentials and region: environment, then ~/.aws/credentials and ~/.aws/config.
+internal/keystore/      ← Provider API keys saved from the desktop app: macOS Keychain / Windows Credential
+                          Manager, a 0600 file elsewhere or with HYDRA_KEYSTORE=file. Read through
+                          `keystore.Lookup` (an exported variable wins), never os.Environ, so no subprocess inherits one (#1340).
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
 internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble,
                           a monotone correction of each source's stated probability, and an
