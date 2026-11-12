@@ -14,13 +14,13 @@ func TestNormalize_IsOneDerivation(t *testing.T) {
 		"rotate  the\tsigning\nkey",
 		"\n rotate the signing key\n",
 	}
-	want := Key(Normalize(same[0]))
+	want := Key(Query{Prompt: same[0]})
 	for _, s := range same[1:] {
-		if got := Key(Normalize(s)); got != want {
+		if got := Key(Query{Prompt: s}); got != want {
 			t.Errorf("%q keyed as %s, want %s: whitespace changed the question", s, got[:8], want[:8])
 		}
 	}
-	if Key(Normalize("rotate the signing keys")) == want {
+	if Key(Query{Prompt: "rotate the signing keys"}) == want {
 		t.Error("a different question got the same key")
 	}
 }
@@ -34,7 +34,7 @@ func TestNormalize_RedactsBeforeHashing(t *testing.T) {
 	if norm == withKey {
 		t.Fatalf("Normalize left the credential in place: %q", norm)
 	}
-	if Key(Normalize(withKey)) != Key(norm) {
+	if Key(Query{Prompt: withKey}) != Key(Query{Prompt: norm}) {
 		t.Error("normalizing twice gave two keys, so a write and a read cannot agree")
 	}
 }

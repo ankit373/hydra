@@ -3,10 +3,12 @@
 package cache
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -43,7 +45,7 @@ func TestLookup_ExactMatchIsServed(t *testing.T) {
 	s := open(t)
 	put(t, s, "rotate the signing key", "use hyctl edit")
 
-	out := s.Lookup("  rotate   the signing key ", nil, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "  rotate   the signing key "}, nil, DefaultThreshold)
 	if !out.Found {
 		t.Fatal("the same prompt was not served")
 	}
@@ -66,7 +68,7 @@ func TestLookup_NearMatchNeedsBothGates(t *testing.T) {
 
 	// Different question, similar vector: refused, and counted as refused
 	// rather than as a plain miss.
-	out := s.Lookup("what does --max-heads do", vec, 0.5)
+	out := s.Lookup(Query{Prompt: "what does --max-heads do"}, vec, 0.5)
 	if out.Found {
 		t.Fatalf("served a different question at similarity %.3f", out.Hit.Similarity)
 	}
@@ -75,7 +77,7 @@ func TestLookup_NearMatchNeedsBothGates(t *testing.T) {
 	}
 
 	// Same question, function words differing: served.
-	out = s.Lookup("please what does --max-cost do", vec, 0.5)
+	out = s.Lookup(Query{Prompt: "please what does --max-cost do"}, vec, 0.5)
 	if !out.Found {
 		t.Fatal("refused a restatement of the same question")
 	}
@@ -94,7 +96,7 @@ func TestLookup_ThresholdIsEnforced(t *testing.T) {
 	}
 	far := unit(8, 1, 0)
 
-	if out := s.Lookup("rotate the signing keys now", far, 0.95); out.Found {
+	if out := s.Lookup(Query{Prompt: "rotate the signing keys now"}, far, 0.95); out.Found {
 		t.Errorf("served at similarity %.3f, under the 0.95 asked for", out.Hit.Similarity)
 	}
 }
@@ -106,10 +108,10 @@ func TestLookup_WithoutVectorsStillServesARestatement(t *testing.T) {
 	s := open(t)
 	put(t, s, "rotate the signing key", "x")
 
-	if out := s.Lookup("rotate the signing key", nil, DefaultThreshold); !out.Found {
+	if out := s.Lookup(Query{Prompt: "rotate the signing key"}, nil, DefaultThreshold); !out.Found {
 		t.Error("the exact match stopped working without an embedder")
 	}
-	if out := s.Lookup("please rotate the signing key", nil, DefaultThreshold); !out.Found {
+	if out := s.Lookup(Query{Prompt: "please rotate the signing key"}, nil, DefaultThreshold); !out.Found {
 		t.Error("a restatement was refused with no embedder, which leaves the cache an exact hash map")
 	}
 }
@@ -128,7 +130,7 @@ func TestLookup_WithoutVectorsRefusesADifferentQuestion(t *testing.T) {
 		"rotate the key",                 // a subset
 		"rotate the signing key in prod", // a superset
 	} {
-		if out := s.Lookup(q, nil, DefaultThreshold); out.Found {
+		if out := s.Lookup(Query{Prompt: q}, nil, DefaultThreshold); out.Found {
 			t.Errorf("served the stored answer for a different question: %q", q)
 		}
 	}
@@ -140,14 +142,14 @@ func TestLookup_CountsNothingUntilRecorded(t *testing.T) {
 	s := open(t)
 	put(t, s, "rotate the signing key", "x")
 
-	s.Lookup("rotate the signing key", nil, DefaultThreshold)
-	s.Lookup("something else entirely", nil, DefaultThreshold)
+	s.Lookup(Query{Prompt: "rotate the signing key"}, nil, DefaultThreshold)
+	s.Lookup(Query{Prompt: "something else entirely"}, nil, DefaultThreshold)
 	if st := s.Stat(); st.Hits != 0 || st.Misses != 0 {
 		t.Errorf("a lookup alone moved the tallies: %d hits, %d misses", st.Hits, st.Misses)
 	}
 
-	s.Record(s.Lookup("rotate the signing key", nil, DefaultThreshold))
-	s.Record(s.Lookup("something else entirely", nil, DefaultThreshold))
+	s.Record(s.Lookup(Query{Prompt: "rotate the signing key"}, nil, DefaultThreshold))
+	s.Record(s.Lookup(Query{Prompt: "something else entirely"}, nil, DefaultThreshold))
 	st := s.Stat()
 	if st.Hits != 1 || st.Exact != 1 || st.Misses != 1 {
 		t.Errorf("hits=%d exact=%d misses=%d, want one of each", st.Hits, st.Exact, st.Misses)
@@ -161,8 +163,8 @@ func TestRecord_AvoidedIsWhatTheAnswerCost(t *testing.T) {
 	if err := s.Put(Entry{Prompt: "q", Response: "a", Head: "h1", CostUSD: 0.0125}); err != nil {
 		t.Fatal(err)
 	}
-	s.Record(s.Lookup("q", nil, DefaultThreshold))
-	s.Record(s.Lookup("q", nil, DefaultThreshold))
+	s.Record(s.Lookup(Query{Prompt: "q"}, nil, DefaultThreshold))
+	s.Record(s.Lookup(Query{Prompt: "q"}, nil, DefaultThreshold))
 
 	if got := s.Stat().AvoidedUSD; got != 0.025 {
 		t.Errorf("avoided $%.4f over two hits of a $0.0125 answer, want $0.0250", got)
@@ -189,10 +191,10 @@ func TestPut_EvictsOldestFirst(t *testing.T) {
 	if st.Evicted != 2 {
 		t.Errorf("evicted %d, want 2", st.Evicted)
 	}
-	if out := s.Lookup("question number 0", nil, DefaultThreshold); out.Found {
+	if out := s.Lookup(Query{Prompt: "question number 0"}, nil, DefaultThreshold); out.Found {
 		t.Error("the oldest answer survived eviction")
 	}
-	if out := s.Lookup("question number 4", nil, DefaultThreshold); !out.Found {
+	if out := s.Lookup(Query{Prompt: "question number 4"}, nil, DefaultThreshold); !out.Found {
 		t.Error("the newest answer was evicted")
 	}
 }
@@ -238,7 +240,7 @@ func TestPut_SameQuestionReplaces(t *testing.T) {
 	if st := s.Stat(); st.Entries != 1 {
 		t.Errorf("%d entries, want 1", st.Entries)
 	}
-	out := s.Lookup("rotate the signing key", nil, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "rotate the signing key"}, nil, DefaultThreshold)
 	if out.Hit.Response != "new answer" {
 		t.Errorf("served %q, want the newer answer", out.Hit.Response)
 	}
@@ -268,7 +270,7 @@ func TestStore_SurvivesReopening(t *testing.T) {
 	if err := first.PutVec(Entry{Prompt: "rotate the key", Response: "a", Head: "h1", CostUSD: 0.01}, unit(4, 0, 0)); err != nil {
 		t.Fatal(err)
 	}
-	first.Record(first.Lookup("rotate the key", nil, DefaultThreshold))
+	first.Record(first.Lookup(Query{Prompt: "rotate the key"}, nil, DefaultThreshold))
 
 	second, err := OpenDir(dir)
 	if err != nil {
@@ -278,7 +280,7 @@ func TestStore_SurvivesReopening(t *testing.T) {
 	if st.Entries != 1 || st.Hits != 1 {
 		t.Fatalf("reopened with %d entries and %d hits, want 1 and 1", st.Entries, st.Hits)
 	}
-	out := second.Lookup("rotate the key", nil, DefaultThreshold)
+	out := second.Lookup(Query{Prompt: "rotate the key"}, nil, DefaultThreshold)
 	if !out.Found || out.Hit.CostUSD != 0.01 {
 		t.Errorf("the reopened entry lost what it cost: %+v", out.Hit)
 	}
@@ -295,19 +297,17 @@ func TestLookup_SkipsVectorsOfAnotherWidth(t *testing.T) {
 	if err := s.PutVec(Entry{Prompt: "rotate the key", Response: "a", Head: "h1"}, unit(4, 0, 0)); err != nil {
 		t.Fatal(err)
 	}
-	if out := s.Lookup("please rotate the key", unit(8, 0, 0), 0.1); out.Found {
+	if out := s.Lookup(Query{Prompt: "please rotate the key"}, unit(8, 0, 0), 0.1); out.Found {
 		t.Error("compared vectors of two different widths")
 	}
 }
 
-// A corrupt line must not stop the cache opening: it exists to make dispatches
-// cheaper, and refusing to start would make them impossible.
+// A corrupt line must not stop the cache opening, and must not discard what
+// comes after it either: a decoder cannot resync, so one bad line used to take
+// every later entry with it while the doc comment said it was skipped (#1167).
 func TestOpenDir_SkipsCorruptLines(t *testing.T) {
 	dir := t.TempDir()
-	body := `{"key":"a","prompt":"rotate the key","response":"a","ts":"2026-01-01T00:00:00Z"}
-not json at all
-{"key":"b","prompt":"list the heads","response":"b","ts":"2026-01-01T00:00:00Z"}
-`
+	body := storedLine(t, "rotate the key", "a") + "not json at all\n" + storedLine(t, "list the heads", "b")
 	if err := os.WriteFile(filepath.Join(dir, "answers.jsonl"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -315,9 +315,93 @@ not json at all
 	if err != nil {
 		t.Fatalf("a corrupt line stopped the cache opening: %v", err)
 	}
-	if got := s.Stat().Entries; got != 1 {
-		t.Errorf("%d entries, want 1: the decoder stops at the bad line", got)
+	if got := s.Stat().Entries; got != 2 {
+		t.Errorf("%d entries, want 2: the line after the corrupt one was discarded", got)
 	}
+}
+
+// Two `hyctl` processes is the documented setup, `hyctl serve` beside `hyctl
+// dispatch`. Each rewrites the whole file from what it has in memory, so the
+// one that opened first used to erase the other's answers and tallies (#1167).
+func TestStore_ConcurrentWritersKeepEachOthersEntriesAndCounters(t *testing.T) {
+	dir := t.TempDir()
+	first, second := openDirAt(t, dir), openDirAt(t, dir)
+
+	put(t, first, "rotate the signing key", "a")
+	put(t, second, "list the routable heads", "b")
+	first.Record(Outcome{})
+	second.Record(Outcome{})
+	second.Record(Outcome{})
+
+	st, present := StoredStats(dir)
+	if !present {
+		t.Fatal("no cache on disk after two writers")
+	}
+	if st.Entries != 2 {
+		t.Errorf("%d entries on disk, want 2: one writer erased the other's", st.Entries)
+	}
+	if st.Misses != 3 {
+		t.Errorf("%d misses on disk, want 3: a writer overwrote the other's tallies", st.Misses)
+	}
+}
+
+// The same under -race, which is the only way the in-process half shows up:
+// one mutex per Store covers nothing between two of them.
+func TestStore_ConcurrentWritersRaceOnOneDirectory(t *testing.T) {
+	dir := t.TempDir()
+	var wg sync.WaitGroup
+	for w := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s, err := OpenDir(dir)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			for i := range 5 {
+				if err := s.Put(Entry{
+					Prompt:   fmt.Sprintf("question %d from writer %d", i, w),
+					Response: "a", Head: "h1",
+				}); err != nil {
+					t.Error(err)
+					return
+				}
+				s.Record(Outcome{})
+			}
+		}()
+	}
+	wg.Wait()
+
+	st, _ := StoredStats(dir)
+	if st.Entries != 10 {
+		t.Errorf("%d entries on disk, want 10", st.Entries)
+	}
+	if st.Misses != 10 {
+		t.Errorf("%d misses on disk, want 10", st.Misses)
+	}
+}
+
+func openDirAt(t *testing.T, dir string) *Store {
+	t.Helper()
+	s, err := OpenDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// storedLine is one answers.jsonl record as Put would have written it.
+func storedLine(t *testing.T, prompt, response string) string {
+	t.Helper()
+	q := Query{Prompt: Normalize(prompt)}
+	e := q.Answer(response)
+	e.Key, e.TS = Key(q), time.Unix(0, 0).UTC()
+	raw, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw) + "\n"
 }
 
 // StoredStats reports without opening for writing, and tells "off" apart from
@@ -346,8 +430,8 @@ func TestRecord_SeparatesNearHitsFromRefusals(t *testing.T) {
 	if err := s.PutVec(Entry{Prompt: "what does --max-cost do", Response: "a ceiling", Head: "h1"}, vec); err != nil {
 		t.Fatal(err)
 	}
-	s.Record(s.Lookup("please what does --max-cost do", vec, 0.5))
-	s.Record(s.Lookup("what does --max-heads do", vec, 0.5))
+	s.Record(s.Lookup(Query{Prompt: "please what does --max-cost do"}, vec, 0.5))
+	s.Record(s.Lookup(Query{Prompt: "what does --max-heads do"}, vec, 0.5))
 
 	st := s.Stat()
 	if st.Near != 1 || st.Exact != 0 {

@@ -73,6 +73,9 @@ type Config struct {
 	// top-ranked one, so the logs carry the counterfactual evidence off-policy
 	// evaluation needs. 0 (the default) is pure argmax and changes nothing.
 	ExploreRate float64 `toml:"explore_rate,omitempty"`
+	// ExploreSeed makes exploration draws repeatable across sequential
+	// requests; 0 (the default) is the unseeded source.
+	ExploreSeed uint64 `toml:"explore_seed,omitempty"`
 
 	// CapturePayloads opts into storing prompt and response text. Off by
 	// default and deliberately not inferable from anything else: payloads are
@@ -127,6 +130,14 @@ type Config struct {
 	CacheBudgetMB int `toml:"cache_budget_mb,omitempty"`
 
 	OpenRouter OpenRouter `toml:"openrouter,omitempty"`
+	Serve      Serve      `toml:"serve,omitempty"`
+}
+
+// Serve configures `hyctl serve`.
+type Serve struct {
+	// Heads is the allowlist the server routes among; empty means every discovered head.
+	// `--heads` replaces it for one run.
+	Heads []string `toml:"heads,omitempty"`
 }
 
 // OpenRouterModels is the configured allowlist, or nothing.

@@ -72,11 +72,14 @@ interface Turn {
  */
 export function ChatView({
   onOpenRun,
+  onSetup,
   focusSignal,
   runs,
   runsError,
 }: {
   onOpenRun: (runID: string) => void
+  /** Opens the connect-a-model steps, from a reply that found nothing to answer it. */
+  onSetup?: () => void
   focusSignal: number
   /** Recent runs for the sidebar. Null until the first fleet read answers. */
   runs: Run[] | null
@@ -465,8 +468,13 @@ export function ChatView({
             {t.reply?.needsProbe && (
               <div className="turn__probe">
                 <p className="turn__err">
-                  {t.reply.error} Start a local model or add an API key, then try again.
+                  {t.reply.error} Connect an AI model, then try again.
                 </p>
+                {onSetup && (
+                  <button className="turn__retry" onClick={onSetup} disabled={busy}>
+                    Connect a model
+                  </button>
+                )}
                 <button className="turn__retry" onClick={() => retry(i)} disabled={busy}>
                   Check again
                 </button>

@@ -7,11 +7,12 @@ name: Publish (all channels)
 # Called automatically by release-please.yml when a release is created, and
 # manually via workflow_dispatch (e.g. to (re)publish an existing tag).
 #
-# Each channel is gated on its secret being present, so the release never fails
-# just because a token has not been configured yet:
+# A channel whose credential is missing fails, so a release cannot read green while a
+# registry never got it (#1315):
 #   HOMEBREW_TAP_GITHUB_TOKEN  → PAT with push access to ankit373/homebrew-hydra
-#   NPM_TOKEN                  → npm automation token (publish)
 #   PYPI_API_TOKEN             → PyPI API token (publish)
+# npm uses trusted publishing (OIDC), so it needs no secret; NPM_TOKEN is only a
+# fallback until the trusted publisher is set on npmjs.com.
 
 on:
   workflow_call:
@@ -26,13 +27,20 @@ on:
         required: true
         type: string
 
+# Write only where a job uploads to the release; the rest read.
 permissions:
-  contents: write
+  contents: read
+
+# Scripts read the tag as a variable, never spliced into them as ${{ }}.
+env:
+  RELEASE_TAG: ${{ inputs.tag }}
 
 jobs:
   binaries:
     name: Binaries + checksums (GoReleaser)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,7 +54,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          n=$(gh release view "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+          n=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
                 --json assets -q '[.assets[].name | select(endswith(".tar.gz"))] | length' 2>/dev/null || echo 0)
           echo "has_assets=$n" >> "$GITHUB_OUTPUT"
           echo "Existing archive assets: $n"
@@ -54,12 +62,13 @@ jobs:
         if: ${{ steps.check.outputs.has_assets == '0' }}
         with:
           go-version-file: go.mod
-          cache: true
-      - uses: anchore/sbom-action/download-syft@v0
+          # No cache: a release builds only what it checked out, nothing another run saved.
+          cache: false
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         if: ${{ steps.check.outputs.has_assets == '0' }}
       - name: GoReleaser (build + upload to the release)
         if: ${{ steps.check.outputs.has_assets == '0' }}
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           # Exact, not latest or ~> v2: 2.17.1 and 2.18.1 disagree on whether a
           # missing tag is fatal, which killed 24 edge builds unnoticed (#821).
@@ -83,37 +92,39 @@ jobs:
         if: ${{ env.TAP_TOKEN != '' }}
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-        run: ./scripts/update-tap-formula.sh "${{ inputs.tag }}"
-      - name: Skipped (no token)
+        run: ./scripts/update-tap-formula.sh "$RELEASE_TAG"
+      - name: Missing token
         if: ${{ env.TAP_TOKEN == '' }}
-        run: echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN not set, skipping Homebrew tap update."
+        run: echo "::error::HOMEBREW_TAP_GITHUB_TOKEN is not set, so the tap was not updated." && exit 1
 
   npm:
     name: npm
     needs: binaries
     runs-on: ubuntu-latest
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    # id-token lets npm verify this run by OIDC (trusted publishing), so no token can expire.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: Update npm
+        run: npm install -g npm@11
       - name: Publish
-        if: ${{ env.NPM_TOKEN != '' }}
         working-directory: npm
         env:
+          # Used only while no trusted publisher is configured; npm prefers OIDC.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          VERSION="${{ inputs.tag }}"; VERSION="${VERSION#v}"
+          VERSION="${RELEASE_TAG#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           npm publish --access public
-      - name: Skipped (no token)
-        if: ${{ env.NPM_TOKEN == '' }}
-        run: echo "::warning::NPM_TOKEN not set, skipping npm publish."
 
   pip:
     name: pip / PyPI
@@ -135,19 +146,21 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          VERSION="${{ inputs.tag }}"; VERSION="${VERSION#v}"
+          VERSION="${RELEASE_TAG#v}"
           sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
           sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" hyctl/__init__.py
           python -m pip install --upgrade build twine
           python -m build
           python -m twine upload dist/*
-      - name: Skipped (no token)
+      - name: Missing token
         if: ${{ env.PYPI_API_TOKEN == '' }}
-        run: echo "::warning::PYPI_API_TOKEN not set, skipping PyPI publish."
+        run: echo "::error::PYPI_API_TOKEN is not set, so PyPI did not get this release." && exit 1
 
   desktop:
     name: Desktop app
     needs: binaries
+    permissions:
+      contents: write
     uses: ./.github/workflows/desktop-build.yml
     with:
       version: ${{ inputs.tag }}

@@ -1,72 +1,56 @@
 name: CLA
 
-# A published CLA that nothing checks is a document, not an agreement. This is
-# the check. It is deliberately self-contained: no third-party app, no bot
-# account, no storing anyone's signature anywhere but the repo itself.
-on:
+# Bridge: CLA Assistant holds the signature and posts license/cla. Until main's
+# .mergify.yml requires license/cla itself, this check mirrors it under the old name.
+# A signature after this ran is picked up by re-running this check or by the next push.
+# zizmor flags this trigger; safe here as nothing is checked out and only the API is read.
+on:  # zizmor: ignore[dangerous-triggers]
   pull_request_target:
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, synchronize, reopened]
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 jobs:
   signed:
     name: Contributor has signed
     runs-on: ubuntu-latest
+    permissions:
+      statuses: read
     steps:
-      - uses: actions/checkout@v5
-        with:
-          # pull_request_target runs against the base, which is the point: a
-          # fork must not be able to edit the workflow that checks it, nor add
-          # itself to CONTRIBUTORS.md in a commit this job then trusts.
-          ref: ${{ github.base_ref }}
-
-      - name: Check the acknowledgement and the roster
+      - name: Read CLA Assistant's license/cla status
         env:
-          BODY: ${{ github.event.pull_request.body }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
-          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          # Dependabot and the release bot open PRs on the repo's own behalf.
-          # Quoted: unquoted, [bot] is a character class, not literal
-          # brackets, so this matched nothing and blocked every bot PR.
+          # Bots act for this repo and cannot sign; CLA Assistant allowlists them too.
           case "$AUTHOR" in
             'dependabot[bot]'|'github-actions[bot]'|'release-please[bot]')
               echo "::notice::$AUTHOR is a bot acting for this repo; CLA does not apply."
               exit 0 ;;
           esac
 
-          ticked=0
-          # Any ticked box whose text mentions the CLA. Matching the whole
-          # template line would fail the day someone rewords it.
-          if printf '%s' "$BODY" | grep -qiE '^\s*-\s*\[[xX]\].*\bCLA\b'; then
-            ticked=1
-          fi
+          # CLA Assistant usually posts within seconds of the push; wait briefly for it.
+          state=""
+          for attempt in 1 2 3; do
+            state="$(gh api "repos/$REPO/commits/$SHA/status" \
+              --jq '[.statuses[] | select(.context == "license/cla") | .state][0] // ""')"
+            [ "$state" = success ] && break
+            [ "$attempt" = 3 ] || sleep 20
+          done
 
-          # The roster is read from the PR head, as data only: first-timers add
-          # their own row in this PR, and the base copy can never contain it.
-          # Nothing from the head is checked out or run.
-          roster="$(gh api -H 'Accept: application/vnd.github.raw' \
-            "repos/$HEAD_REPO/contents/CONTRIBUTORS.md?ref=$HEAD_SHA" || true)"
-          listed=0
-          if printf '%s' "$roster" | grep -qiF "(https://github.com/$AUTHOR)"; then
-            listed=1
-          fi
-
-          if [ "$ticked" = 1 ] && [ "$listed" = 1 ]; then
-            echo "$AUTHOR has signed: acknowledgement ticked and listed in CONTRIBUTORS.md."
+          if [ "$state" = success ]; then
+            echo "$AUTHOR has signed the CLA (license/cla is green)."
             exit 0
           fi
 
-          echo "::error::$AUTHOR has not completed the CLA."
-          [ "$ticked" = 1 ] || echo "::error::The CLA box in the pull request description is not ticked."
-          [ "$listed" = 1 ] || echo "::error::$AUTHOR is not listed in CONTRIBUTORS.md. Add yourself in this PR."
-          echo "Read it first: https://github.com/${{ github.repository }}/blob/main/CLA.md"
-          echo "It explains why this project asks for a CLA rather than the DCO most projects use."
+          link="https://cla-assistant.io/$REPO?pullRequest=$NUMBER"
+          echo "::error::Thanks for the pull request, @$AUTHOR! Before it can merge, please sign the CLA: $link"
+          echo "It is one click with your GitHub account and covers all your future pull requests too."
+          echo "CLA.md explains what it says. Once signed, re-run this check or push again."
+          echo "license/cla is '${state:-not posted yet}'."
           exit 1

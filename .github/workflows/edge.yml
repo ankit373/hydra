@@ -6,8 +6,9 @@ on:
       - develop
   workflow_dispatch:
 
+# Write is granted per job, to the jobs that publish.
 permissions:
-  contents: write
+  contents: read
 
 # Multiple pushes to develop within seconds of each other (three squash-merges
 # in a row, say) each fire their own run, and the "delete previous edge
@@ -26,6 +27,8 @@ jobs:
   edge:
     name: Build & publish edge release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -36,7 +39,8 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: true
+          # No cache: a release builds only what it checked out, nothing another run saved.
+          cache: false
 
       - name: Compute edge version
         id: ver
@@ -111,7 +115,7 @@ jobs:
               tag -a "${{ steps.ver.outputs.version }}" -m "edge ${{ steps.ver.outputs.sha }}"
 
       - name: Build edge binaries
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           # Exact, not latest or ~> v2: 2.17.1 and 2.18.1 disagree on whether a
           # missing tag is fatal, which killed 24 edge builds unnoticed (#821).
@@ -131,9 +135,9 @@ jobs:
       - name: Publish edge release
         run: |
           gh release create edge dist/*.tar.gz dist/*.zip dist/checksums.txt \
-            --target "${{ github.sha }}" \
+            --target "$GITHUB_SHA" \
             --title "Edge, ${{ steps.ver.outputs.version }}" \
-            --notes "$(cat <<'EOF'
+            --notes "$(cat <<EOF
           > ⚠️ **This is an edge/nightly build**, built from the latest commit on \`develop\`.
           > It may be unstable. Use the [stable release](https://github.com/ankit373/hydra/releases/latest) for production.
 

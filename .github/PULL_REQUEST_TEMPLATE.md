@@ -30,7 +30,6 @@ release time, so a PR with no keyword is an issue that never closes.
 - [ ] `registry/` YAML validated, if touched: `yq '.' <file> > /dev/null`
 - [ ] Docs shipped with the change, not left for later: README, `docs/llms.txt`, `CLAUDE.md`
 - [ ] No API keys, tokens, personal paths, or other secrets added
-- [ ] I have signed the [CLA](../CLA.md) and am listed in `CONTRIBUTORS.md`
 
 ## If this PR adds a guard
 

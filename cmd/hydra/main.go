@@ -71,7 +71,7 @@ import (
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
-	_ "github.com/ankit373/hydra/internal/provider/env"
+	envprovider "github.com/ankit373/hydra/internal/provider/env"
 	_ "github.com/ankit373/hydra/internal/provider/port"
 )
 
@@ -142,6 +142,13 @@ func rootCmd() *cobra.Command {
 		// main prints the error instead, in Cobra's own format, so that a
 		// cancelled run can read as "interrupted" rather than as a failure.
 		SilenceErrors: true,
+		// Before any command discovers heads, so a key saved in the desktop
+		// app reaches every reader of the environment with no second lookup.
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if err := envprovider.LoadStoredKeys(); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "  ⚠ stored API keys could not be read: %v\n", err)
+			}
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !config.Exists() {
 				return runInit(cmd.Context())
@@ -154,7 +161,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdVet(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
-		cmdWorkflow(), cmdServe(),
+		cmdWorkflow(), cmdServe(), cmdBench(),
 		cmdSecurity(), cmdPolicy(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 		cmdRlimitExec(),
 	)
@@ -272,8 +279,9 @@ func cmdTui() *cobra.Command {
 			if err := requireTerminal("hyctl tui"); err != nil {
 				return err
 			}
-			// Mouse support is for wheel scrolling; the keyboard remains
-			// fully sufficient on terminals without it.
+			// Mouse support is for wheel scrolling; ctrl+s hands the mouse back
+			// to the terminal for selecting text.
+			defer tui.OwnTerminal()()
 			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 			_, err := p.Run()
 			return err
@@ -331,6 +339,7 @@ func runInit(ctx context.Context) error {
 
 	fmt.Println(dimStyle.Render("  Scanning your machine for AI models..."))
 	result := probe.Run(ctx)
+	defer tui.OwnTerminal()()
 
 	if len(result.Heads) == 0 {
 		// Nothing found, guide the user through installing something.
@@ -706,34 +715,29 @@ func printBudgetStatus(names map[string]string) {
 	if err != nil {
 		return
 	}
-	var state struct {
-		ClaudePct        int                       `json:"claude_pct"`
-		ClaudePctHistory []int                     `json:"claude_pct_history"`
-		Budget           map[string]map[string]any `json:"budget"`
-	}
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return
-	}
+	state := budget.ParseState(raw)
 
-	// claude_pct block (orchestrator context window). When enough history has
-	// accumulated, show the rate-aware effective mode (first-passage risk), a
+	// The session quota with its rate-aware mode, labelled as it always was: a
 	// fast burn escalates above the static level band before it crosses a line.
-	if state.ClaudePct > 0 {
-		burnRate, risk := budget.RiskFromHistory(state.ClaudePctHistory)
-		eff := budget.EffectiveMode(state.ClaudePct, risk)
-		bar := budgetBar(state.ClaudePct)
+	for _, q := range state.Quotas {
+		pct, eff := q.Pct(), q.Mode()
+		if pct <= 0 {
+			continue
+		}
 		line := fmt.Sprintf("  %s  %s %3d%%  %s",
 			dimStyle.Render("Claude  :"),
-			bar, state.ClaudePct, budgetModeStyle(eff.String()).Render(eff.String()),
+			budgetBar(pct), pct, budgetModeStyle(eff.String()).Render(eff.String()),
 		)
-		if eff > budget.ModeFor(state.ClaudePct) {
+		if eff > budget.ModeFor(pct) {
+			burnRate, risk := q.Burn()
 			line += "  " + dimStyle.Render(fmt.Sprintf("↑ burning +%.0f%%/step, %.0f%% risk of 80%%",
 				burnRate, risk*100))
 		}
 		fmt.Println(line)
 	}
 
-	if len(state.Budget) == 0 {
+	models := state.Budget()
+	if len(models) == 0 {
 		return
 	}
 
@@ -747,8 +751,8 @@ func printBudgetStatus(names map[string]string) {
 		label string
 		id    string
 	}
-	rows := make([]row, 0, len(state.Budget))
-	for id := range state.Budget {
+	rows := make([]row, 0, len(models))
+	for id := range models {
 		// Discovery's display name where it has one, so this table names a head
 		// the way `probe` and the tier table above do (#714).
 		label := id
@@ -764,7 +768,7 @@ func printBudgetStatus(names map[string]string) {
 		return rows[i].id < rows[j].id
 	})
 	for _, r := range rows {
-		snap := state.Budget[r.id]
+		snap := models[r.id]
 		pct := int(toFloat(snap["pct"]))
 		used := int(toFloat(snap["used"]))
 		window := int(toFloat(snap["window"]))
@@ -1032,8 +1036,9 @@ func cmdDispatch() *cobra.Command {
 
 			// Evaluated once for this dispatch, whichever of the plain, swarm
 			// and SPRT paths runs, and handed to Dispatch so no candidate
-			// re-derives it.
-			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius, nil)
+			// re-derives it. No head is pinned here, so the per-head signals
+			// read absent.
+			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius, nil, "")
 			if ruleDecision.Action.Type == signals.ActionBlock {
 				return &dispatch.ErrBlocked{Rule: ruleDecision.Rule, Reason: ruleDecision.Action.Reason}
 			}
@@ -4521,7 +4526,7 @@ func cmdReview() *cobra.Command {
 			return nil
 		},
 	}
-	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD/GPT-OSS)")
+	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD)")
 
 	cmd.AddCommand(sum, diff, approve, reject, qa)
 	return cmd
