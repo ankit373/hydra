@@ -15,7 +15,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
@@ -167,7 +169,10 @@ func (r vetRouter) Review(ctx context.Context, prompt, domain, resource string) 
 		MaxCostSource: "--max-cost",
 	})
 	if err != nil {
-		return vet.Answer{}, scopeRouterErr(err)
+		if !r.contentCanForceLocal(resource) {
+			err = scopeRouterErr(err)
+		}
+		return vet.Answer{}, err
 	}
 	a := vet.Answer{
 		Output: res.Output,
@@ -190,6 +195,24 @@ func scopeRouterErr(err error) error {
 		return fmt.Errorf("%w: %s", vet.ErrNoHeads, err)
 	}
 	return err
+}
+
+// contentCanForceLocal reports whether dispatch may route this one file
+// local-only: a secret path, or PII under a local-only pii policy. A no-head
+// refusal is then about the file, and stopping the run on it skips the rest.
+func (r vetRouter) contentCanForceLocal(resource string) bool {
+	if r.local {
+		return false // already local-only, so content cannot narrow it further
+	}
+	if r.d.PIILocalOnly() {
+		return true
+	}
+	rules, err := egress.LoadRules(config.ScriptHome())
+	if err != nil {
+		return true // unknown, so do not widen the refusal past this file
+	}
+	sens, _ := rules.ClassifyPath(resource)
+	return sens == egress.Secret
 }
 
 // noSampleReason says why an ensemble produced no answer at all. A cost

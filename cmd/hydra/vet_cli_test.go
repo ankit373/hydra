@@ -470,6 +470,29 @@ func TestVetRouter_NoRoutableHeadStopsTheWholeRun(t *testing.T) {
 	}
 }
 
+// Dispatch refuses a file on a secret path with ErrNoHeads when no local head
+// can take it. That is a fact about one file, so it must not stop the run
+// and skip every other file in the diff.
+func TestVetRouter_ASecretInOneFileDoesNotStopTheRun(t *testing.T) {
+	dispatchable(t, "[]")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	r := vetRouter{d: d, runID: "run-1", enum: "MODERATE", tier: dispatch.EnumToTier("MODERATE")}
+	_, err = r.Review(ctx, "review this", "env", "config/.env")
+	if !errors.Is(err, dispatch.ErrNoHeads) {
+		t.Fatalf("want the egress refusal for this file, got %v", err)
+	}
+	if errors.Is(err, vet.ErrNoHeads) {
+		t.Fatalf("one file's secret was scoped to the whole run: %v", err)
+	}
+}
+
 // The flag's whole job is refusing a Head before it spends. It reached the
 // ensemble and never the single-dispatch path, which is the one that runs by
 // default, so on that path it was inert (#1166).
