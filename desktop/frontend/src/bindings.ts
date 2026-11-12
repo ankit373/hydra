@@ -59,6 +59,7 @@ interface WailsGo {
       GetModels(): Promise<ModelRegistry>
       GetSettings(): Promise<Settings>
       SaveSettings(s: Settings): Promise<Settings>
+      SaveTheme(mode: string): Promise<void>
       GetProviderKeys(): Promise<ProviderKeys>
       SaveProviderKey(provider: string, key: string): Promise<ProviderKeys>
       RemoveProviderKey(provider: string): Promise<ProviderKeys>
@@ -72,6 +73,7 @@ declare global {
     go?: WailsGo
     runtime?: {
       EventsOn(name: string, cb: (...data: unknown[]) => void): () => void
+      WindowSetBackgroundColour?(r: number, g: number, b: number, a: number): void
       BrowserOpenURL?(url: string): void
     }
   }
@@ -140,6 +142,11 @@ export const GetSecurity = (): Promise<SecurityReport> => backend().GetSecurity(
 export const GetModels = (): Promise<ModelRegistry> => backend().GetModels()
 export const GetSettings = (): Promise<Settings> => backend().GetSettings()
 export const SaveSettings = (s: Settings): Promise<Settings> => backend().SaveSettings(s)
+/** Records the theme so the native window opens in it next launch. No backend is
+ *  not an error here: `vite` alone has no native window to paint. */
+export const SaveTheme = (mode: string): Promise<void> =>
+  window.go?.api?.API ? backend().SaveTheme(mode) : Promise.resolve()
+
 export const GetProviderKeys = (): Promise<ProviderKeys> => backend().GetProviderKeys()
 export const SaveProviderKey = (provider: string, key: string): Promise<ProviderKeys> =>
   backend().SaveProviderKey(provider, key)

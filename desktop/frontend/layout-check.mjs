@@ -9,6 +9,7 @@
 // It asserts properties, never pixel values: nothing here breaks because a
 // label was reworded or a margin changed.
 import { chromium } from 'playwright'
+import AxeBuilder from '@axe-core/playwright'
 import { spawn } from 'node:child_process'
 import process from 'node:process'
 
@@ -18,6 +19,7 @@ const URL = `http://localhost:${PORT}/__mock.html`
 // 980 is main.go's MinWidth, so the window cannot be dragged narrower. The rest
 // are reachable by zooming in, which is what narrows the CSS viewport.
 const WIDTHS = [1440, 980, 900, 820]
+const THEMES = ['light', 'dark']
 
 const failures = []
 const fail = (where, msg) => failures.push(`${where}: ${msg}`)
@@ -94,6 +96,39 @@ async function measure(page, where) {
   if (r.clipped.length) fail(where, `content cut off with no way to scroll it: ${r.clipped.join(', ')}`)
 }
 
+// Every surface the app can show, with the check run on each: the six nav views,
+// Audit's detailed strip, and the Session tabs, which only opening a run reaches.
+async function sweep(page, where, check) {
+  for (const view of ['Chat', 'Models', 'Activity', 'Usage', 'Audit', 'Settings']) {
+    await page.locator(`.apphead__tab:has-text("${view}")`).first().click()
+    await page.waitForTimeout(600)
+    await check(page, `${where}/${view}`)
+
+    // Audit's second strip is eleven tabs and is where #1125 hid two panels.
+    if (view === 'Audit') {
+      await page.locator('[role="tab"]:has-text("Detailed")').first().click()
+      await page.waitForTimeout(600)
+      await check(page, `${where}/Audit:Detailed`)
+    }
+  }
+  await page.locator('.apphead__tab:has-text("Activity")').first().click()
+  await page.waitForTimeout(500)
+  await page.locator('.run__open').first().click()
+  await page.waitForTimeout(700)
+  for (const tab of ['Timeline', 'Code', 'Graph']) {
+    await page.locator(`[role="tab"]:has-text("${tab}")`).first().click()
+    await page.waitForTimeout(600)
+    await check(page, `${where}/Session:${tab}`)
+  }
+}
+
+// Contrast and every other axe rule, in both themes (#1355): a colour that reads
+// on one theme's surfaces is no evidence about the other's.
+async function axe(page, where) {
+  const { violations } = await new AxeBuilder({ page }).analyze()
+  for (const v of violations) fail(where, `axe ${v.id} (${v.impact}) x${v.nodes.length}: ${v.nodes[0].target.join(' ')}`)
+}
+
 async function run() {
   const browser = await chromium.launch()
   for (const width of WIDTHS) {
@@ -101,32 +136,18 @@ async function run() {
     page.on('pageerror', (e) => fail(`${width}`, `page error: ${e.message}`))
     await page.goto(URL, { waitUntil: 'networkidle' })
     await page.waitForTimeout(700)
-
-    for (const view of ['Chat', 'Models', 'Activity', 'Usage', 'Audit', 'Settings']) {
-      await page.locator(`.apphead__tab:has-text("${view}")`).first().click()
-      await page.waitForTimeout(600)
-      await measure(page, `${width}/${view}`)
-
-      // Audit's second strip is eleven tabs and is where #1125 hid two panels.
-      if (view === 'Audit') {
-        await page.locator('[role="tab"]:has-text("Detailed")').first().click()
-        await page.waitForTimeout(600)
-        await measure(page, `${width}/Audit:Detailed`)
-      }
-    }
-
-    // Session is reached by opening a run, never from the nav, so a sweep of
-    // the nav alone never renders it.
-    await page.locator('.apphead__tab:has-text("Activity")').first().click()
-    await page.waitForTimeout(500)
-    await page.locator('.run__open').first().click()
-    await page.waitForTimeout(700)
-    for (const tab of ['Timeline', 'Code', 'Graph']) {
-      await page.locator(`[role="tab"]:has-text("${tab}")`).first().click()
-      await page.waitForTimeout(600)
-      await measure(page, `${width}/Session:${tab}`)
-    }
+    await sweep(page, `${width}`, measure)
     await page.close()
+  }
+  for (const colorScheme of THEMES) {
+    // axe needs a page it can open siblings beside, which browser.newPage() is not.
+    const ctx = await browser.newContext({ viewport: { width: WIDTHS[0], height: 900 }, reducedMotion: 'reduce', colorScheme })
+    const page = await ctx.newPage()
+    page.on('pageerror', (e) => fail(colorScheme, `page error: ${e.message}`))
+    await page.goto(URL, { waitUntil: 'networkidle' })
+    await page.waitForTimeout(700)
+    await sweep(page, colorScheme, axe)
+    await ctx.close()
   }
   await browser.close()
 }
@@ -153,4 +174,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  ${f}`)
   process.exit(1)
 }
-console.log(`Layout check clean: ${WIDTHS.length} widths x 10 surfaces.`)
+console.log(`Layout check clean: ${WIDTHS.length} widths x 10 surfaces, and axe clean on all 10 in light and dark.`)

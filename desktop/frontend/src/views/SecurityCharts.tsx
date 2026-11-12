@@ -210,16 +210,31 @@ export function RiskTrend({ history }: { history: DayRisk[] }) {
   const deniedLine = toLine(history.map((d, i) => [xAt(i), yAt(d.denied)] as const))
   const flaggedLine = toLine(history.map((d, i) => [xAt(i), yAt(d.flagged)] as const))
 
+  // Two series, so a legend: the lines alone said which was which by colour only.
+  const key = (cls: string, label: string) => (
+    <span>
+      <svg width="16" height="6" aria-hidden="true">
+        <line className={cls} x1="0" y1="3" x2="16" y2="3" />
+      </svg>
+      {label}
+    </span>
+  )
   return (
-    <svg
-      className="sec-risktrend"
-      width={RISK_W}
-      height={RISK_H}
-      role="img"
-      aria-label={`Denied and flagged accesses over ${history.length} days`}
-    >
-      <polyline className="sec-risktrend__denied" points={deniedLine} fill="none" />
-      <polyline className="sec-risktrend__flagged" points={flaggedLine} fill="none" />
-    </svg>
+    <>
+      <svg
+        className="sec-risktrend"
+        width={RISK_W}
+        height={RISK_H}
+        role="img"
+        aria-label={`Denied and flagged accesses over ${history.length} days`}
+      >
+        <polyline className="sec-risktrend__denied" points={deniedLine} fill="none" />
+        <polyline className="sec-risktrend__flagged" points={flaggedLine} fill="none" />
+      </svg>
+      <div className="sec-risktrend-legend" aria-hidden="true">
+        {key('sec-risktrend__denied', 'denied')}
+        {key('sec-risktrend__flagged', 'flagged')}
+      </div>
+    </>
   )
 }

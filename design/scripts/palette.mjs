@@ -104,6 +104,40 @@ for (const mode of MODES) {
   }
 }
 for (const [path, r] of Object.entries(report)) if (!r.light || !r.dark) failures.push(`${path} is checked in one theme only; declare it in both`);
+
+// Series identity rides on hue alone, so neighbours must stay apart for full colour
+// vision (ΔE ≥ 15) and under protan/deutan (ΔE ≥ 8): the dataviz method's floors,
+// OKLab ×100, simulated with Machado et al. 2009 at severity 1, which they assume.
+const MACHADO = {
+  protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+  deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]],
+};
+function lab(h, m) {
+  let c = new ColorJS(h).to('srgb-linear').coords;
+  if (m) c = m.map((r) => Math.min(1, Math.max(0, r[0] * c[0] + r[1] * c[1] + r[2] * c[2])));
+  return new ColorJS('srgb-linear', c).to('oklab').coords;
+}
+const dE = (a, b, m) => 100 * Math.hypot(...lab(a, m).map((v, i) => v - lab(b, m)[i]));
+for (const mode of MODES) {
+  const tokens = index(primitives, base, themes[mode]);
+  const series = [...walk(themes[mode])].filter(([p]) => p.startsWith('color.chart.series-')).map(([p]) => [p, resolveHex(tokens, p)]);
+  for (let i = 1; i < series.length; i++) {
+    const [[pa, a], [pb, b]] = [series[i - 1], series[i]];
+    if (dE(a, b) < 15) failures.push(`${mode} ${pa} ${a} and ${pb} ${b} are ΔE ${dE(a, b).toFixed(1)} apart, floor 15`);
+    const cvd = Math.min(dE(a, b, MACHADO.protan), dE(a, b, MACHADO.deutan));
+    if (cvd < 8) failures.push(`${mode} ${pa} ${a} and ${pb} ${b} are ΔE ${cvd.toFixed(1)} apart under protan/deutan, floor 8`);
+  }
+  // cost.* is a sequential scale: each step further from the page than the last,
+  // in lightness steps a reader can see (OKLCH ΔL ≥ 0.06), whichever way the theme runs.
+  const L = (h) => new ColorJS(h).to('oklch').coords[0];
+  const page = L(resolveHex(tokens, SURFACES[0]));
+  const cost = ['low', 'mid', 'high'].map((k) => [`color.cost.${k}`, resolveHex(tokens, `color.cost.${k}`)]);
+  for (let i = 1; i < cost.length; i++) {
+    const [[pa, a], [pb, b]] = [cost[i - 1], cost[i]];
+    const step = Math.abs(page - L(b)) - Math.abs(page - L(a));
+    if (step < 0.06) failures.push(`${mode} ${pb} ${b} is only ${step.toFixed(3)} further from the page in OKLCH L than ${pa} ${a}; a sequential step needs 0.06`);
+  }
+}
 if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
 for (const mode of MODES) write(`themes/${mode}.tokens.json`, themes[mode]);
 

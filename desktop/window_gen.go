@@ -6,5 +6,8 @@ package main
 
 import "github.com/wailsapp/wails/v2/pkg/options"
 
-// windowBackground is the dark theme's color.surface.base.
-var windowBackground = options.RGBA{R: 0x06, G: 0x07, B: 0x0f, A: 1}
+// windowBackgroundLight and windowBackgroundDark are each theme's color.surface.base.
+var (
+	windowBackgroundLight = options.RGBA{R: 0xf7, G: 0xf8, B: 0xfc, A: 255}
+	windowBackgroundDark  = options.RGBA{R: 0x06, G: 0x07, B: 0x0f, A: 255}
+)

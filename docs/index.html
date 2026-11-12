@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -237,6 +237,7 @@
   }
   </script>
 
+<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/site.js"></script>
@@ -294,7 +295,7 @@
 .install .cmd b{color:var(--hy-color-accent-default);font-weight:600;}
 .install .cp{font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);border-left:1px solid var(--hy-color-border-subtle);padding-left:var(--hy-space-3);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
 .install:hover .cp{color:var(--hy-color-accent-default);}
-.install.copied .cp{color:var(--hy-color-cost-low);}
+.install.copied .cp{color:var(--hy-color-status-success);}
 .scrollhint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:3;font-family:var(--hy-font-family-mono);
   font-size:var(--hy-font-size-xs);letter-spacing:2px;color:var(--hy-color-text-subtle);text-transform:uppercase;animation:bob 2.6s ease-in-out infinite;
   transition:opacity var(--hy-motion-duration-fast) linear;}
@@ -313,7 +314,7 @@ h2.big{font-size:clamp(var(--hy-font-size-2xl),4.4vw,var(--hy-font-size-4xl));le
 /* ── section 2 · universe / galaxy ─────────────────────────────────────── */
 .galaxy-frame{position:relative;margin-top:var(--hy-space-8);border:1px solid var(--hy-color-border-default);border-radius:16px;overflow:hidden;
   background:radial-gradient(140% 100% at 72% 68%,color-mix(in srgb,var(--hy-color-accent-default) 6%,transparent),transparent 46%),linear-gradient(180deg,var(--hy-color-surface-raised),var(--hy-color-surface-base));
-  box-shadow:0 40px 120px color-mix(in srgb,var(--hy-color-surface-base) 50%,transparent),inset 0 0 100px color-mix(in srgb,var(--hy-color-brand-mid) 6%,transparent);}
+  box-shadow:0 40px 120px var(--site-shadow),inset 0 0 100px color-mix(in srgb,var(--hy-color-brand-mid) 6%,transparent);}
 #galaxy{display:block;width:100%;height:clamp(420px,62vw,640px);touch-action:none;}
 .axislbl{position:absolute;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;
   color:var(--hy-color-text-subtle);pointer-events:none;z-index:2;white-space:nowrap;}
@@ -326,13 +327,13 @@ h2.big{font-size:clamp(var(--hy-font-size-2xl),4.4vw,var(--hy-font-size-4xl));le
 .quadtag .em{color:var(--hy-color-text-subtle);text-transform:uppercase;letter-spacing:1.5px;font-size:var(--hy-font-size-xs);}
 .gtip{position:absolute;z-index:5;pointer-events:none;transform:translate(-50%,-142%);opacity:0;transition:opacity var(--hy-motion-duration-fast);
   font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);background:color-mix(in srgb,var(--hy-color-surface-raised) 94%,transparent);border:1px solid var(--hy-color-border-default);border-radius:8px;
-  padding:var(--hy-space-2) var(--hy-space-3);max-width:230px;box-shadow:0 12px 40px color-mix(in srgb,var(--hy-color-surface-base) 60%,transparent);}
+  padding:var(--hy-space-2) var(--hy-space-3);max-width:230px;box-shadow:0 12px 40px var(--site-shadow);}
 .gtip.show{opacity:1;}
 .gtip .nm{color:var(--hy-color-text-default);font-weight:600;}.gtip .cat{color:var(--hy-color-text-subtle);font-size:var(--hy-font-size-xs);text-transform:uppercase;letter-spacing:1px;}
 .gtip .tg{color:var(--hy-color-text-muted);margin-top:var(--hy-space-1);font-family:var(--hy-font-family-text);}
 .glegend{display:flex;flex-wrap:wrap;gap:var(--hy-space-2) var(--hy-space-4);margin-top:var(--hy-space-4);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);}
 .glegend span{display:inline-flex;align-items:center;gap:var(--hy-space-2);}
-.glegend i{width:9px;height:9px;border-radius:50%;box-shadow:0 0 10px currentColor;}
+.glegend i{width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor;}
 
 /* ── section 3 · math charts ───────────────────────────────────────────── */
 .chartgrid{display:grid;gap:var(--hy-space-4);margin-top:var(--hy-space-8);grid-template-columns:1fr;}
@@ -366,7 +367,7 @@ h2.big{font-size:clamp(var(--hy-font-size-2xl),4.4vw,var(--hy-font-size-4xl));le
 .pg-node.hot circle{fill:var(--hy-color-accent-default)!important;}
 .pg-node.dep.hot circle{fill:color-mix(in srgb,var(--hy-color-accent-default) 55%,transparent)!important;}
 .pg-readout{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-subtle);}
-.pg-readout tspan.k{fill:var(--hy-color-cost-high);}
+.pg-readout tspan.k{fill:var(--hy-color-status-danger);}
 
 /* ── section 5 · crazy numbers bento ───────────────────────────────────── */
 .bento{display:grid;gap:var(--hy-space-4);margin-top:var(--hy-space-8);grid-template-columns:repeat(6,1fr);}
@@ -410,7 +411,7 @@ table.cmp td:first-child,table.cmp th[scope=row]{text-align:left;font-family:var
 .yes{color:var(--hy-color-accent-default);font-weight:700;}
 .hydcol .yes{text-shadow:0 0 12px color-mix(in srgb,var(--hy-color-accent-default) 50%,transparent);}
 .no{color:var(--hy-color-text-subtle);}
-.part{color:var(--hy-color-cost-mid);font-size:var(--hy-font-size-xs);}
+.part{color:var(--hy-color-status-warning);font-size:var(--hy-font-size-xs);}
 table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:none;}
 /* These carry prose, not code: nine of them, up to 527 characters. As 12px mono
    with no cap they ran ~192 characters a line, and --faint is 3.26:1, under AA. */
@@ -471,7 +472,7 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">v1.x · MIT</span>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span><span class="nav-toggle-label">Menu</span></button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
@@ -532,8 +533,8 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
   </div>
   <div class="glegend">
     <span><i style="color:var(--hy-color-chart-series-1)"></i> Cloud gateways</span>
-    <span><i style="color:var(--hy-color-brand-mid)"></i> Eval &amp; observability</span>
-    <span><i style="color:var(--hy-color-brand-end)"></i> Local runtimes</span>
+    <span><i style="color:var(--hy-color-chart-series-2)"></i> Eval &amp; observability</span>
+    <span><i style="color:var(--hy-color-chart-series-3)"></i> Local runtimes</span>
     <span><i style="color:var(--hy-color-text-subtle)"></i> Hosted models (destinations)</span>
     <span><i style="color:var(--hy-color-accent-default)"></i> Hydra</span>
   </div>
@@ -565,15 +566,15 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
         <path class="draw" id="paretoLine" d="M56,150 C110,70 180,52 250,46 C285,44 305,44 320,44"
           fill="none" stroke="var(--hy-color-accent-default)" stroke-width="2.4" stroke-linecap="round"
           filter="drop-shadow(0 0 6px color-mix(in srgb,var(--hy-color-accent-default) 55%,transparent))"/>
-        <!-- competitor dots (below-right of frontier) -->
+        <!-- single models: one series each, in palette order -->
         <g class="dots">
-          <circle class="pop" cx="96"  cy="150" r="4.5" fill="var(--hy-color-status-danger)" style="transition-delay:.15s"/>
+          <circle class="pop" cx="96"  cy="150" r="4.5" fill="var(--hy-color-chart-series-1)" style="transition-delay:.15s"/>
           <text class="dotlbl pop" x="102" y="153" style="transition-delay:.2s">Haiku</text>
-          <circle class="pop" cx="150" cy="120" r="4.5" fill="var(--hy-color-status-warning)" style="transition-delay:.25s"/>
+          <circle class="pop" cx="150" cy="120" r="4.5" fill="var(--hy-color-chart-series-2)" style="transition-delay:.25s"/>
           <text class="dotlbl pop" x="156" y="123" style="transition-delay:.3s">Flash</text>
-          <circle class="pop" cx="214" cy="96"  r="4.5" fill="var(--hy-color-status-warning)" style="transition-delay:.35s"/>
+          <circle class="pop" cx="214" cy="96"  r="4.5" fill="var(--hy-color-chart-series-3)" style="transition-delay:.35s"/>
           <text class="dotlbl pop" x="220" y="99" style="transition-delay:.4s">GPT-class</text>
-          <circle class="pop" cx="286" cy="76"  r="4.5" fill="var(--hy-color-brand-mid)" style="transition-delay:.45s"/>
+          <circle class="pop" cx="286" cy="76"  r="4.5" fill="var(--hy-color-chart-series-4)" style="transition-delay:.45s"/>
           <text class="dotlbl pop" x="238" y="70" style="transition-delay:.5s">top model</text>
         </g>
         <!-- hyctl markers on the frontier -->
@@ -601,14 +602,14 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
         <text class="axtx" x="322" y="48" text-anchor="end" fill="var(--hy-color-accent-default)">target 0.95</text>
         <!-- convergence curve climbing to target -->
         <path class="draw" id="sprtLine" d="M60,196 L110,170 L160,132 L210,88 L246,54"
-          fill="none" stroke="var(--hy-color-brand-mid)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"
-          filter="drop-shadow(0 0 5px color-mix(in srgb,var(--hy-color-brand-mid) 50%,transparent))"/>
+          fill="none" stroke="var(--hy-color-chart-series-1)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"
+          filter="drop-shadow(0 0 5px color-mix(in srgb,var(--hy-color-chart-series-1) 50%,transparent))"/>
         <!-- sample dots -->
         <g class="dots">
-          <circle class="pop" cx="60"  cy="196" r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:.4s"/>
-          <circle class="pop" cx="110" cy="170" r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:.7s"/>
-          <circle class="pop" cx="160" cy="132" r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:1s"/>
-          <circle class="pop" cx="210" cy="88"  r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:1.3s"/>
+          <circle class="pop" cx="60"  cy="196" r="4" fill="var(--hy-color-chart-series-1)" style="transition-delay:.4s"/>
+          <circle class="pop" cx="110" cy="170" r="4" fill="var(--hy-color-chart-series-1)" style="transition-delay:.7s"/>
+          <circle class="pop" cx="160" cy="132" r="4" fill="var(--hy-color-chart-series-1)" style="transition-delay:1s"/>
+          <circle class="pop" cx="210" cy="88"  r="4" fill="var(--hy-color-chart-series-1)" style="transition-delay:1.3s"/>
         </g>
         <!-- accept marker -->
         <circle class="pop" cx="246" cy="54" r="6.5" fill="var(--hy-color-accent-default)" style="transition-delay:1.65s;filter:drop-shadow(0 0 7px var(--hy-color-accent-default))"/>
@@ -1022,13 +1023,20 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var heroCopy=$('#heroCopy'), scrollHint=$('#scrollHint');
   // Canvas colours read the generated tokens, so the drawing follows design/tokens.
   var tok=Hydra.color;
-  var C={cyan:tok('accent-strong'),violet:tok('brand-mid'),magenta:tok('brand-end'),aqua:tok('accent-default'),cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high'),dim:tok('text-subtle'),ink:tok('text-default'),muted:tok('text-muted'),edge:tok('border-strong')};
+  // Nodes keep a recipe of role names, so every colour is re-read when the theme changes.
+  var ROLE={cyan:'accent-strong',violet:'brand-mid',magenta:'brand-end',aqua:'accent-default',cheap:'cost-low',mid:'cost-mid',exp:'cost-high',ok:'status-success',warn:'status-warning',bad:'status-danger',dim:'text-subtle',ink:'text-default',muted:'text-muted',edge:'border-strong'};
+  var C={}, LIGHT=false;
+  // Additive glows vanish on a light page, so light draws over rather than adds light.
+  function readColours(){for(var k in ROLE)C[k]=tok(ROLE[k]);LIGHT=!Hydra.dark();}
+  function col(r){return typeof r==='string'?C[r]:mixHex(col(r[0]),col(r[1]),r[2]);}
+  function grad(){return'linear-gradient(90deg,'+[].join.call(arguments,',')+')';}
+  readColours();
 
   // ── graph model ──────────────────────────────────────────────────────────
   var seed=20260726; function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
   var currentElapsed=0;
   var nodes=[], edges=[];
-  function N(p,color,r,type,label,stats,bornAt){nodes.push({p:p,color:color,r:r,type:type,label:label,stats:stats,bornAt:bornAt||0,age:0,sx:0,sy:0,sr:1,depth:1});return nodes.length-1;}
+  function N(p,recipe,r,type,label,stats,bornAt){nodes.push({p:p,recipe:recipe,color:col(recipe),r:r,type:type,label:label,stats:stats,bornAt:bornAt||0,age:0,sx:0,sy:0,sr:1,depth:1});return nodes.length-1;}
   function E(a,b,kind,w){edges.push({a:a,b:b,kind:kind,w:w||1});}
   function hx(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
   function mixHex(a,b,t){var A=hx(a),B=hx(b),c=[];for(var i=0;i<3;i++)c.push(Math.round(A[i]+(B[i]-A[i])*t));
@@ -1039,25 +1047,25 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   function pt(base,vs){var r=[base[0],base[1],base[2]];for(var i=0;i<vs.length;i++){var s=vs[i][0],v=vs[i][1];r[0]+=s*v[0];r[1]+=s*v[1];r[2]+=s*v[2];}return r;}
   function eob(x){var c1=1.70158,c3=c1+1;return Math.max(0,1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2));}
 
-  var CORTEX=N([0,-1.25,0],C.aqua,10,'cortex','ROUTER',{k:'router · SPRT'},0);
+  var CORTEX=N([0,-1.25,0],'aqua',10,'cortex','ROUTER',{k:'router · SPRT'},0);
 
   // fractal micro-core: the same many-heads-one-cortex pattern, spinning fast, at small scale,
   // inside the router -- a visual echo of everything the ensemble is doing right now.
   var MICRO_SCALE=0.85;
-  var microCortex=N([0,0,0],C.aqua,3.4,'mcortex',null,null,30);
+  var microCortex=N([0,0,0],'aqua',3.4,'mcortex',null,null,30);
   nodes[microCortex].local=[0,0,0]; nodes[microCortex].micro=true;
   var MICRO_DIRS=[
-    {dir:[0,1.05,0.15],  col:C.cyan},
-    {dir:[-0.85,0.55,-0.25],col:C.magenta},
-    {dir:[0.85,0.55,0.30],  col:C.magenta}
+    {dir:[0,1.05,0.15],  col:'cyan'},
+    {dir:[-0.85,0.55,-0.25],col:'magenta'},
+    {dir:[0.85,0.55,0.30],  col:'magenta'}
   ];
   MICRO_DIRS.forEach(function(m,mi){
     var b0=90+mi*60, b1=150+mi*60, b2=280+mi*60;
     var r1local=[m.dir[0]*0.42,m.dir[1]*0.42,m.dir[2]*0.42];
     var r2local=[m.dir[0]*0.74,m.dir[1]*0.74,m.dir[2]*0.74];
-    var r1=N(r1local, mixHex(C.violet,m.col,0.4),1.3,'mrelay',null,null,b0);
+    var r1=N(r1local, ['violet',m.col,0.4],1.3,'mrelay',null,null,b0);
     nodes[r1].local=r1local; nodes[r1].micro=true;
-    var r2=N(r2local, mixHex(C.violet,m.col,0.75),1.1,'mrelay',null,null,b1);
+    var r2=N(r2local, ['violet',m.col,0.75],1.1,'mrelay',null,null,b1);
     nodes[r2].local=r2local; nodes[r2].micro=true;
     var mh=N(m.dir.slice(), m.col,1.8,'mhead',null,null,b2);
     nodes[mh].local=m.dir.slice(); nodes[mh].micro=true;
@@ -1071,7 +1079,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       var p=[A[0]+(B[0]-A[0])*t + (rnd()-.5)*0.18,
               A[1]+(B[1]-A[1])*t + Math.sin(t*3.14)*0.25,
               A[2]+(B[2]-A[2])*t + (rnd()-.5)*0.18];
-      relays.push(N(p, mixHex(C.violet,h.col,t), 2.6+t*1.2,'relay',null,null, neckStart+(i-1)*74));
+      relays.push(N(p, ['violet',h.col,t], 2.6+t*1.2,'relay',null,null, neckStart+(i-1)*74));
     }
     var headBorn=neckStart+M*74+160;
     var head=N(B,h.col,7,'head',h.name,{tier:h.tier,lat:h.lat,cost:h.cost,conf:h.conf,local:h.local},headBorn);
@@ -1083,7 +1091,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     // crystalline head detail: assembles point by point, one vertex snapping in after another
     var prevP=nodes[relays[relays.length-1]].p;
     var T=vnorm(vsub(B,prevP)); var U=vnorm(vcross(T,[0,1,0])); if(Math.hypot(U[0],U[1],U[2])<0.2)U=[1,0,0]; var V=vnorm(vcross(U,T));
-    var hb=headBorn+90, hCol=mixHex(h.col,C.ink,0.32), STAG=95;
+    var hb=headBorn+90, hCol=[h.col,'ink',0.32], STAG=95;
     var hL=N(pt(B,[[0.16,V],[0.05,T]]),hCol,1.4,'horn',null,null,hb+STAG*0);
     var hR=N(pt(B,[[-0.16,V],[0.05,T]]),hCol,1.4,'horn',null,null,hb+STAG*1);
     var sn=N(pt(B,[[0.24,T],[-0.02,V]]),hCol,1.2,'horn',null,null,hb+STAG*2);
@@ -1096,22 +1104,22 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
 
   // the three heads Hydra ships with today
   var HEADS=[
-    {name:'claude · agy',tier:'T2',col:C.cyan, lat:1180,cost:'$0.90',conf:0.97,dir:[-1.7,1.9,-0.4],local:false},
-    {name:'ollama · qwen',tier:'T10',col:C.cheap,lat:41,cost:'$0.00',conf:0.90,dir:[0,2.55,0.35],local:true},
-    {name:'openrouter',   tier:'T6',col:C.magenta,lat:430,cost:'$0.12',conf:0.93,dir:[1.7,1.9,0.55],local:false}
+    {name:'claude · agy',tier:'T2',col:'cyan', lat:1180,cost:'$0.90',conf:0.97,dir:[-1.7,1.9,-0.4],local:false},
+    {name:'ollama · qwen',tier:'T10',col:'cheap',lat:41,cost:'$0.00',conf:0.90,dir:[0,2.55,0.35],local:true},
+    {name:'openrouter',   tier:'T6',col:'magenta',lat:430,cost:'$0.12',conf:0.93,dir:[1.7,1.9,0.55],local:false}
   ];
   HEADS.forEach(function(h,hi){spawnHead(h,hi,880+hi*260);});
 
   // more heads keep being "discovered" over time -- first at 10s, next at 30s, then every 20s
   // until the fleet reaches ten, then it settles
   var EXTRA_HEADS=[
-    {name:'gemini · flash',    tier:'T5', col:C.cyan,    lat:520, cost:'$0.08',conf:0.91,dir:[-2.4,0.9,1.4],  local:false},
-    {name:'groq · llama3',     tier:'T7', col:C.cheap,   lat:95,  cost:'$0.02',conf:0.89,dir:[2.4,0.7,1.5],   local:false},
-    {name:'mistral · large',   tier:'T4', col:C.magenta, lat:610, cost:'$0.24',conf:0.94,dir:[-1.5,-0.8,-1.9],local:false},
-    {name:'ollama · phi3',     tier:'T10',col:C.cheap,   lat:18,  cost:'$0.00',conf:0.86,dir:[1.5,-0.8,-1.9], local:true},
-    {name:'deepseek · v3',     tier:'T8', col:C.violet,  lat:340, cost:'$0.05',conf:0.90,dir:[0,-1.1,-2.7],   local:false},
-    {name:'together · qwen2',  tier:'T9', col:C.cheap,   lat:210, cost:'$0.03',conf:0.88,dir:[-2.95,0.05,0.35], local:false},
-    {name:'fireworks · mixtral',tier:'T6',col:C.magenta, lat:280, cost:'$0.09',conf:0.92,dir:[2.95,0.05,0.35],  local:false}
+    {name:'gemini · flash',    tier:'T5', col:'cyan',    lat:520, cost:'$0.08',conf:0.91,dir:[-2.4,0.9,1.4],  local:false},
+    {name:'groq · llama3',     tier:'T7', col:'cheap',   lat:95,  cost:'$0.02',conf:0.89,dir:[2.4,0.7,1.5],   local:false},
+    {name:'mistral · large',   tier:'T4', col:'magenta', lat:610, cost:'$0.24',conf:0.94,dir:[-1.5,-0.8,-1.9],local:false},
+    {name:'ollama · phi3',     tier:'T10',col:'cheap',   lat:18,  cost:'$0.00',conf:0.86,dir:[1.5,-0.8,-1.9], local:true},
+    {name:'deepseek · v3',     tier:'T8', col:'violet',  lat:340, cost:'$0.05',conf:0.90,dir:[0,-1.1,-2.7],   local:false},
+    {name:'together · qwen2',  tier:'T9', col:'cheap',   lat:210, cost:'$0.03',conf:0.88,dir:[-2.95,0.05,0.35], local:false},
+    {name:'fireworks · mixtral',tier:'T6',col:'magenta', lat:280, cost:'$0.09',conf:0.92,dir:[2.95,0.05,0.35],  local:false}
   ];
   var SPAWN_DELAYS=[10000,30000,50000,70000,90000,110000,130000];
   if(!reduce)EXTRA_HEADS.forEach(function(h,idx){
@@ -1141,12 +1149,19 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var deepEl=$('#hudDeep'), deepTitleEl=$('#hudDeepTitle'), deepBodyEl=$('#hudDeepBody');
   var DIVE_VH=1.0, PER_VH=0.65;
   var FEATURES=[
-    {title:'ROUTING BY MEASURED RECORD', body:'each request goes to a model with a measured record on that kind of task.', accent:'linear-gradient(90deg,'+C.exp+','+C.mid+','+C.cheap+')'},
-    {title:'CHECKED ANSWERS',         body:'with a target set, models and checkers add evidence until the answer clears it, then Hydra stops.', accent:'linear-gradient(90deg,'+C.aqua+','+C.cyan+')'},
-    {title:'SWARM · RACE / BEST-OF-N', body:'send a task to several models at once, judge the answers, keep the best.', accent:'linear-gradient(90deg,'+C.violet+','+C.magenta+')'},
-    {title:'BUDGET GOVERNOR',         body:'a rate-aware governor watches spend and context use, and moves work to lower-cost models before you hit a limit.', accent:C.cheap},
-    {title:'LOCAL-FIRST POLICY',      body:'a prompt matching a PII detector goes to a local model, and whatever is not yet enforced is reported as exactly that.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
+    {title:'ROUTING BY MEASURED RECORD', body:'each request goes to a model with a measured record on that kind of task.', accent:function(){return grad(C.exp,C.mid,C.cheap);}},
+    {title:'CHECKED ANSWERS',         body:'with a target set, models and checkers add evidence until the answer clears it, then Hydra stops.', accent:function(){return grad(C.aqua,C.cyan);}},
+    {title:'SWARM · RACE / BEST-OF-N', body:'send a task to several models at once, judge the answers, keep the best.', accent:function(){return grad(C.violet,C.magenta);}},
+    {title:'BUDGET GOVERNOR',         body:'a rate-aware governor watches spend and context use, and moves work to lower-cost models before you hit a limit.', accent:function(){return grad(govCol(),govCol());}},
+    {title:'LOCAL-FIRST POLICY',      body:'a prompt matching a PII detector goes to a local model, and whatever is not yet enforced is reported as exactly that.', accent:function(){return grad(C.ok,C.aqua);}}
   ];
+  // Governor load is a state, so it wears the status hues, not the price scale.
+  function govCol(){return govPct<50?C.ok:govPct<75?C.warn:C.bad;}
+  Hydra.onTheme(function(){
+    readColours(); spriteCache={};
+    for(var i=0;i<nodes.length;i++)nodes[i].color=col(nodes[i].recipe);
+    if(activeFeature>=0&&deepTitleEl)deepTitleEl.style.backgroundImage=FEATURES[activeFeature].accent();
+  });
   heroPin.style.height=((DIVE_VH+FEATURES.length*PER_VH)*100)+'vh';
   var zoomT=0, featureT=0, activeFeature=-1, switching=false, featureSwitchStart=-1e9, released=false;
 
@@ -1202,20 +1217,20 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     x.globalAlpha=1;
   }
   function featGovernor(cn,cR,a){
-    var pct=govPct/100,col=govPct<50?C.cheap:govPct<75?C.mid:C.exp,R=cR*3.9;
+    var pct=govPct/100,gc=govCol(),R=cR*3.9;
     x.globalAlpha=a;x.strokeStyle=hexA(C.edge,0.55);x.lineWidth=4;
     x.beginPath();x.arc(cn.sx,cn.sy,R,2.356,7.925);x.stroke();
-    x.strokeStyle=hexA(col,0.95);x.lineWidth=4.4;
+    x.strokeStyle=hexA(gc,0.95);x.lineWidth=4.4;
     x.beginPath();x.arc(cn.sx,cn.sy,R,2.356,2.356+4.712*pct);x.stroke();
-    x.fillStyle=hexA(col,0.95);x.font='12px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
+    x.fillStyle=hexA(gc,0.95);x.font='12px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
     x.fillText(Math.round(govPct)+'%',cn.sx,cn.sy+R+18);
     x.globalAlpha=1;x.textAlign='left';
   }
   function featLocal(cn,cR,a){
     var R=cR*3.2;
-    x.globalAlpha=a;x.strokeStyle=hexA(C.cheap,0.85);x.lineWidth=2.2;
+    x.globalAlpha=a;x.strokeStyle=hexA(C.ok,0.85);x.lineWidth=2.2;
     x.beginPath();x.arc(cn.sx,cn.sy,R,0,6.2832);x.stroke();
-    x.fillStyle=hexA(C.cheap,0.95);x.font='12px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
+    x.fillStyle=hexA(C.ok,0.95);x.font='12px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
     x.fillText('LOCAL-ONLY ✓',cn.sx,cn.sy+R+16);
     x.globalAlpha=1;x.textAlign='left';
   }
@@ -1246,7 +1261,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
         // so applying the live value here is what keeps the caption from sticking on a stale stop
         var latest=Math.max(0,Math.min(FEATURES.length-1,Math.floor(featureT)));
         activeFeature=latest; var f=FEATURES[latest]; featureSwitchStart=currentElapsed;
-        if(deepTitleEl){deepTitleEl.textContent=f.title; deepTitleEl.style.background=f.accent; deepTitleEl.style.opacity=1;}
+        if(deepTitleEl){deepTitleEl.textContent=f.title; deepTitleEl.style.backgroundImage=f.accent(); deepTitleEl.style.opacity=1;}
         if(deepBodyEl){deepBodyEl.textContent=f.body; deepBodyEl.style.opacity=1;}
         switching=false;
       },150);
@@ -1260,10 +1275,10 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   // ── flow packets (dispatch → head, response → cortex) ───────────────────────
   var packets=[], cortexPulses=[];
   function spawnDispatch(h){
-    var col=h.local?C.cheap:(h.headIdx!=null&&nodes[h.headIdx].color)||C.aqua;
-    packets.push({path:h.path,t:0,sp:0.9+Math.random()*0.3,col:C.aqua,dir:1});
-    cortexPulses.push({born:currentElapsed,col:C.aqua});
-    setTimeout(function(){packets.push({path:h.path.slice().reverse(),t:0,sp:0.8,col:col,dir:-1});cortexPulses.push({born:currentElapsed,col:col});}, 260);
+    var back=h.local?'cheap':h.headIdx!=null?nodes[h.headIdx].recipe:'aqua';
+    packets.push({path:h.path,t:0,sp:0.9+Math.random()*0.3,col:'aqua',dir:1});
+    cortexPulses.push({born:currentElapsed,col:'aqua'});
+    setTimeout(function(){packets.push({path:h.path.slice().reverse(),t:0,sp:0.8,col:back,dir:-1});cortexPulses.push({born:currentElapsed,col:back});}, 260);
   }
 
   // ── telemetry sim ───────────────────────────────────────────────────────────
@@ -1278,7 +1293,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     lastConf=h.conf-0.02+Math.random()*0.04;
     spawnDispatch(h);
     govPct=Math.max(20,Math.min(96,govPct+(Math.random()-0.45)*8));
-    if(activeFeature===3&&deepTitleEl)deepTitleEl.style.background=govPct<50?C.cheap:govPct<75?C.mid:C.exp;
+    if(activeFeature===3&&deepTitleEl)deepTitleEl.style.backgroundImage=FEATURES[3].accent();
   }
   if(!reduce){setInterval(tick,1400);setTimeout(tick,400);}
 
@@ -1306,7 +1321,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
 
     // edges (additive) -- a not-yet-born endpoint means the edge hasn't been discovered yet; the
     // later-born endpoint's age drives both a "growing wire" length and its fade-in
-    x.globalCompositeOperation='lighter';x.lineWidth=1;
+    x.globalCompositeOperation=LIGHT?'source-over':'lighter';x.lineWidth=1;
     for(var ei=0;ei<edges.length;ei++){var e=edges[ei];var a=nodes[e.a],b=nodes[e.b];
       if(a.sx<-40||a.sx>W+40||a.sy<-40||a.sy>H+40||b.sx<-40||b.sx>W+40||b.sy<-40||b.sy>H+40)continue;
       var early=b.bornAt>=a.bornAt?a:b, late=b.bornAt>=a.bornAt?b:a;
@@ -1326,7 +1341,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       var fp=pk.t*(pk.path.length-1);var s=Math.floor(fp),f=fp-s;
       if(s>=pk.path.length-1){packets.splice(pi,1);continue;}
       var pa=nodes[pk.path[s]],pb=nodes[pk.path[s+1]];var px=pa.sx+(pb.sx-pa.sx)*f,py=pa.sy+(pb.sy-pa.sy)*f;
-      var sp=glow(pk.col,7);x.globalAlpha=0.95;x.drawImage(sp,px-14,py-14,28,28);x.globalAlpha=1;}
+      var sp=glow(col(pk.col),7);x.globalAlpha=0.95;x.drawImage(sp,px-14,py-14,28,28);x.globalAlpha=1;}
 
     // nodes far->near -- pop in with an overshoot ease once born; the cortex breathes
     var ord=[]; for(var oi=0;oi<nodes.length;oi++)ord.push(oi);
@@ -1344,8 +1359,8 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       var flashT=Math.min(1,grow*1.6); var fc=flashT<1?mixHex(C.ink,n3.color,flashT):n3.color;
       var sp2=glow(fc,R*1.1);x.globalAlpha=Math.min(1,dep2)*alphaMul;x.drawImage(sp2,n3.sx-R*2.2,n3.sy-R*2.2,R*4.4,R*4.4);
       // crisp core
-      var rgb=hx(fc),r0=rgb[0],g0=rgb[1],b0=rgb[2];
-      x.fillStyle='rgba('+Math.min(255,r0+70)+','+Math.min(255,g0+70)+','+Math.min(255,b0+70)+','+(Math.min(1,dep2)*alphaMul)+')';
+      var rgb=hx(fc),lift=LIGHT?-40:70,cl=function(v){return Math.max(0,Math.min(255,v+lift));};
+      x.fillStyle='rgba('+cl(rgb[0])+','+cl(rgb[1])+','+cl(rgb[2])+','+(Math.min(1,dep2)*alphaMul)+')';
       x.beginPath();x.arc(n3.sx,n3.sy,Math.max(0.7,R*0.5),0,6.2832);x.fill();}
     x.globalAlpha=1;x.globalCompositeOperation='source-over';
 
@@ -1353,11 +1368,11 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     // independently-rotating containment rings so it reads as a live core even before any scrolling
     if(nodes[CORTEX].age>=0){var cn=nodes[CORTEX];
       var cdep=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(cn.depth+1.2))); var cR=qR(cn.r*cdep*zoomFactor);
-      x.globalCompositeOperation='lighter';
+      x.globalCompositeOperation=LIGHT?'source-over':'lighter';
       for(var ci=cortexPulses.length-1;ci>=0;ci--){var pu=cortexPulses[ci],page=elapsed-pu.born;
         if(page>900){cortexPulses.splice(ci,1);continue;}
         var ptt=page/900,pr=cR*(1.1+ptt*3.2);
-        x.strokeStyle=hexA(pu.col,(1-ptt)*0.55);x.lineWidth=Math.max(0.6,1.6*(1-ptt));
+        x.strokeStyle=hexA(col(pu.col),(1-ptt)*0.55);x.lineWidth=Math.max(0.6,1.6*(1-ptt));
         x.beginPath();x.arc(cn.sx,cn.sy,pr,0,6.2832);x.stroke();}
       var r1a=elapsed*0.00046,r2a=-elapsed*0.00033+1.1;
       x.strokeStyle=hexA(C.aqua,0.22);x.lineWidth=1;
@@ -1434,13 +1449,18 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var cv=$('#galaxy'); if(!cv) return;
   var ctx=cv.getContext('2d'), W=0,H=0,DPR=1, padX=64, padY=54;
   var tip=$('#gtip'),tipNm=$('#gtipNm'),tipCat=$('#gtipCat'),tipTg=$('#gtipTg');
+  // Three categories take the first three chart series; destinations recede, Hydra is the accent.
   var CATS={
-    gateway:{col:Hydra.rgb('chart-series-1'),label:'Cloud gateway'},
-    eval:{col:Hydra.rgb('brand-mid'),label:'Eval / observability'},
-    local:{col:Hydra.rgb('brand-end'),label:'Local runtime'},
-    frontier:{col:Hydra.rgb('text-subtle'),label:'Hosted model'},
-    hyctl:{col:Hydra.rgb('accent-default'),label:'Verified cascade gateway'}
+    gateway:{role:'chart-series-1',label:'Cloud gateway'},
+    eval:{role:'chart-series-2',label:'Eval / observability'},
+    local:{role:'chart-series-3',label:'Local runtime'},
+    frontier:{role:'text-subtle',label:'Hosted model'},
+    hyctl:{role:'accent-default',label:'Verified cascade gateway'}
   };
+  // A star's core is lit on dark; on light an ink core reads as a hole, so it takes its own colour.
+  var inkCore=true;
+  function readCats(){for(var k in CATS)CATS[k].col=Hydra.rgb(CATS[k].role);var i=Hydra.rgb('text-default');inkCore=i[0]+i[1]+i[2]>=384;}
+  readCats(); Hydra.onTheme(readCats);
   /* x: -1 hosted … +1 local-first ; y: -1 cost/latency … +1 checked answers */
   var STARS=[
     // cloud gateways, hosted + cost/latency (bottom-left)
@@ -1588,7 +1608,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       g2.addColorStop(0.4,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.35*tw)+')');
       g2.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
       ctx.fillStyle=g2;ctx.beginPath();ctx.arc(s.px,s.py,rad*5,0,6.283);ctx.fill();
-      ctx.fillStyle=Hydra.rgba('text-default',s.c==='frontier'?0.6:0.95);ctx.beginPath();ctx.arc(s.px,s.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
+      ctx.fillStyle=inkCore?Hydra.rgba('text-default',s.c==='frontier'?0.6:0.95):'rgba('+col.join(',')+',1)';ctx.beginPath();ctx.arc(s.px,s.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
       // permanent hyctl label, drawn last, tracks its (barely-moving) star so it stays readable
       if(s.hydra){
         ctx.font='700 14px ui-monospace,Menlo,monospace';ctx.fillStyle=Hydra.rgba('accent-default',.95);ctx.textAlign='left';
@@ -1663,9 +1683,9 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var g=svg('g',{class:'pg-node'+(n.hub?' hub':' dep')});
     g.setAttribute('data-id',n.id);
     var r=n.hub?11:5.5;
-    var fill=n.hub?Hydra.color(n.id==='token'?'status-danger':'status-success'):Hydra.rgba('accent-secondary',.5);
-    var c=svg('circle',{cx:n.x,cy:n.y,r:r,fill:fill});
-    if(n.hub&&n.id==='token'&&!reduce)c.setAttribute('filter','drop-shadow(0 0 5px '+Hydra.rgba('status-danger',.7)+')');
+    var c=svg('circle',{cx:n.x,cy:n.y,r:r});
+    c.style.fill=n.hub?'var(--hy-color-'+(n.id==='token'?'status-danger':'status-success')+')':'color-mix(in srgb,var(--hy-color-accent-secondary) 50%,transparent)';
+    if(n.hub&&n.id==='token'&&!reduce)c.style.filter='drop-shadow(0 0 5px color-mix(in srgb,var(--hy-color-status-danger) 70%,transparent))';
     g.appendChild(c);
     if(n.label){var tx=svg('text',{x:n.x,y:n.y-15,'text-anchor':'middle'});tx.textContent=n.label;g.appendChild(tx);}
     gN.appendChild(g);
@@ -1694,12 +1714,12 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var t2=svg('tspan',{class:'k'});t2.textContent='κ='+n.k;
     var t3=svg('tspan',{});t3.textContent=' · '+n.deps+' dependents · bar → '+bar;
     ro.appendChild(t1);ro.appendChild(t2);ro.appendChild(t3);
-    ro.setAttribute('fill', Hydra.color(n.id==='token'?'text-default':'text-muted'));
+    ro.style.fill='var(--hy-color-'+(n.id==='token'?'text-default':'text-muted')+')';
   }
   function clearHi(){
     $all('.pg-node',gN).forEach(function(g){g.classList.remove('hot');});
     $all('.pg-edge',gE).forEach(function(l){l.classList.remove('hot');});
-    ro.textContent='hover a node, κ & blast radius';ro.removeAttribute('fill');
+    ro.textContent='hover a node, κ & blast radius';ro.style.fill='';
   }
   // idle demo: briefly pulse the token hub once visible (reduced-motion skips)
   if(!reduce){

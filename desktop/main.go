@@ -68,7 +68,7 @@ func main() {
 		},
 		// Generated from design/tokens (window_gen.go), so the native window
 		// matches the page background and does not flash before the first paint.
-		BackgroundColour: &windowBackground,
+		BackgroundColour: windowBackground(),
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
 		},
@@ -85,4 +85,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("hydradesk: %v", err)
 	}
+}
+
+// windowBackground is the page colour of the theme the page will open in: the
+// viewer's saved choice (src/theme.ts records it), else the OS appearance.
+func windowBackground() *options.RGBA {
+	switch api.SavedTheme() {
+	case "dark":
+		return &windowBackgroundDark
+	case "light":
+		return &windowBackgroundLight
+	}
+	if systemPrefersDark() {
+		return &windowBackgroundDark
+	}
+	return &windowBackgroundLight
 }

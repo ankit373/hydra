@@ -595,7 +595,7 @@ export function RecentTable({
               <th className="num">Level</th>
               <th className="num">Time taken</th>
               <th className="num">Cost</th>
-              <th></th>
+              <th><span className="visually-hidden">Open</span></th>
             </tr>
           </thead>
           <tbody>
@@ -605,20 +605,7 @@ export function RecentTable({
                 <tr
                   key={`${r.ts}-${i}`}
                   className={openable ? 'row--open' : undefined}
-                  tabIndex={openable ? 0 : undefined}
-                  role={openable ? 'button' : undefined}
-                  aria-label={openable ? `Open ${r.runId}` : undefined}
                   onClick={openable ? () => onOpenRun!(r.runId) : undefined}
-                  onKeyDown={
-                    openable
-                      ? (e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            onOpenRun!(r.runId)
-                          }
-                        }
-                      : undefined
-                  }
                 >
                   <td className="mono">{clockTime(r.ts)}</td>
                   <td>{r.model}</td>
@@ -627,7 +614,24 @@ export function RecentTable({
                   <td className={`num cost--${costBand(r.costUsd, max)}`}>{usdExact(r.costUsd)}</td>
                   {/* A request with no run id has no run to open, say so rather
                       than rendering a control that does nothing. */}
-                  <td className="mono">{openable ? 'open →' : '—'}</td>
+                  {/* The row stays clickable; the keyboard gets a real button, since a
+                      row posing as one hid the table's cells behind a label (axe). */}
+                  <td className="mono">
+                    {openable ? (
+                      <button
+                        className="row__open"
+                        aria-label={`Open ${r.runId}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onOpenRun!(r.runId)
+                        }}
+                      >
+                        open →
+                      </button>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                 </tr>
               )
             })}
