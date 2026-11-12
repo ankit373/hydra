@@ -27,13 +27,20 @@ on:
         required: true
         type: string
 
+# Write only where a job uploads to the release; the rest read.
 permissions:
-  contents: write
+  contents: read
+
+# Scripts read the tag as a variable, never spliced into them as ${{ }}.
+env:
+  RELEASE_TAG: ${{ inputs.tag }}
 
 jobs:
   binaries:
     name: Binaries + checksums (GoReleaser)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,7 +54,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          n=$(gh release view "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+          n=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
                 --json assets -q '[.assets[].name | select(endswith(".tar.gz"))] | length' 2>/dev/null || echo 0)
           echo "has_assets=$n" >> "$GITHUB_OUTPUT"
           echo "Existing archive assets: $n"
@@ -55,12 +62,13 @@ jobs:
         if: ${{ steps.check.outputs.has_assets == '0' }}
         with:
           go-version-file: go.mod
-          cache: true
-      - uses: anchore/sbom-action/download-syft@v0
+          # No cache: a release builds only what it checked out, nothing another run saved.
+          cache: false
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         if: ${{ steps.check.outputs.has_assets == '0' }}
       - name: GoReleaser (build + upload to the release)
         if: ${{ steps.check.outputs.has_assets == '0' }}
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           # Exact, not latest or ~> v2: 2.17.1 and 2.18.1 disagree on whether a
           # missing tag is fatal, which killed 24 edge builds unnoticed (#821).
@@ -84,7 +92,7 @@ jobs:
         if: ${{ env.TAP_TOKEN != '' }}
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-        run: ./scripts/update-tap-formula.sh "${{ inputs.tag }}"
+        run: ./scripts/update-tap-formula.sh "$RELEASE_TAG"
       - name: Missing token
         if: ${{ env.TAP_TOKEN == '' }}
         run: echo "::error::HOMEBREW_TAP_GITHUB_TOKEN is not set, so the tap was not updated." && exit 1
@@ -114,7 +122,7 @@ jobs:
           # Used only while no trusted publisher is configured; npm prefers OIDC.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          VERSION="${{ inputs.tag }}"; VERSION="${VERSION#v}"
+          VERSION="${RELEASE_TAG#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           npm publish --access public
 
@@ -138,7 +146,7 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          VERSION="${{ inputs.tag }}"; VERSION="${VERSION#v}"
+          VERSION="${RELEASE_TAG#v}"
           sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
           sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" hyctl/__init__.py
           python -m pip install --upgrade build twine
@@ -151,6 +159,8 @@ jobs:
   desktop:
     name: Desktop app
     needs: binaries
+    permissions:
+      contents: write
     uses: ./.github/workflows/desktop-build.yml
     with:
       version: ${{ inputs.tag }}

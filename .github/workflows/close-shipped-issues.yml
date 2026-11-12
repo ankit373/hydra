@@ -46,6 +46,7 @@ jobs:
       # The lineage lives in a script so it can be tested against a real git
       # history rather than asserted as workflow text (cmd/hydra/shipped_lineage_test.go).
       - name: Collect the PRs in this release
+        id: lineage
         env:
           TAG: ${{ inputs.tag }}
         run: .github/workflows/shipped_lineage.sh "${TAG}"
@@ -58,6 +59,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           # A release that resolves nothing is the anomaly, and two in a row read
           # green while 89 issues stranded. A manual backfill resolving nothing is
-          # ordinary, since re-running is documented as a no-op (#1140).
-          STRICT: ${{ github.event_name != 'workflow_dispatch' }}
+          # ordinary, since re-running is documented as a no-op (#1140). So is a
+          # hotfix release: Closes #n closed its issues on merge into main (#1351).
+          STRICT: ${{ github.event_name != 'workflow_dispatch' && steps.lineage.outputs.promoted == 'true' }}
         run: python3 .github/workflows/close_shipped_issues.py
