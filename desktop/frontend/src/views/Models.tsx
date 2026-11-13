@@ -291,7 +291,7 @@ function ModelRow({ row, active, onSelect }: { row: Row; active: boolean; onSele
             className="mcard__used"
             title="What Hydra logged against this quota. Not a reading of the provider's remaining balance."
           >
-            {poolLabel(row.pool)} &middot; {row.calls} requests &middot;{' '}
+            {poolLabel(row.pool)}, {row.calls} requests,{' '}
             {/* usdExact renders 0 as an em-dash, which would read "— logged". */}
             {row.costUsd > 0 ? `${usdExact(row.costUsd)} logged` : 'no cost'}
           </span>
@@ -314,7 +314,7 @@ function Scorecard({ row, cal }: { row: Row; cal: CalibrationRow[] }) {
     <aside className="scard">
       <div className="scard__name">{label(model)}</div>
       <div className="scard__sub">
-        {model.provider} &middot; routing level (1 = most capable) <span className="scard__hl">T{model.tier}</span>
+        {model.provider}, routing level (1 = most capable) <span className="scard__hl">T{model.tier}</span>
       </div>
 
       <div className="scard__rule" />
@@ -342,8 +342,8 @@ function Scorecard({ row, cal }: { row: Row; cal: CalibrationRow[] }) {
               <span className={`scard__calD scard__calD--${weight(r)}`}>{r.d.toFixed(2)}</span>
             </div>
             <div className="scard__calSub">
-              evidence weight &middot; {r.n} {r.n === 1 ? 'outcome' : 'outcomes'}
-              {r.n < 10 && <span className="scard__thin"> &middot; too few to rely on</span>}
+              evidence weight, {r.n} {r.n === 1 ? 'outcome' : 'outcomes'}
+              {r.n < 10 && <span className="scard__thin">, too few to rely on</span>}
             </div>
           </div>
         ))
