@@ -65,8 +65,11 @@ func ckGlyphs() statusGlyphs { return ckGlyphSet }
 // centre head cyan, the side heads magenta, the meeting point in the accent.
 // Without colour the shape alone carries it.
 func Mark() string {
-	return renderMark(markFor(runtime.GOOS, os.Getenv))
+	return renderMark(ckMarkSet)
 }
+
+// ckMarkSet is the mark's glyph set for this terminal, read once at start.
+var ckMarkSet = markFor(runtime.GOOS, os.Getenv)
 
 func renderMark(g markGlyphs) string {
 	at := func(c tokColor) lipgloss.Style {

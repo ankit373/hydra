@@ -7,9 +7,10 @@ import (
 	"testing"
 )
 
-// Frames are pinned in the Unicode glyph set on every platform, so a golden
-// reads the same on the Windows runner; glyphsFor has its own test.
+// Frames are pinned in the Unicode glyph sets on every platform, so a golden
+// reads the same on the Windows runner; markFor and glyphsFor have their own
+// tests.
 func TestMain(m *testing.M) {
-	ckGlyphSet = glyphsUnicode
+	ckGlyphSet, ckMarkSet = glyphsUnicode, markUnicode
 	os.Exit(m.Run())
 }
