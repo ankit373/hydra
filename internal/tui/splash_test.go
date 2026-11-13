@@ -84,6 +84,9 @@ func TestMarkFor_PicksGlyphsTheTerminalCanDraw(t *testing.T) {
 // a 160-column terminal.
 func TestChat_EmptyThreadShowsTheMark(t *testing.T) {
 	withTheme(t, colorprofile.NoTTY, true)
+	was := termMark
+	termMark = func() markGlyphs { return markUnicode }
+	t.Cleanup(func() { termMark = was })
 	m := testCockpit()
 	m.th().log = []string{
 		"14 models found by the scan.",
