@@ -18,7 +18,7 @@ const URL = `http://localhost:${PORT}/__mock.html`
 
 // 980 is main.go's MinWidth, so the window cannot be dragged narrower. The rest
 // are reachable by zooming in, which is what narrows the CSS viewport.
-const WIDTHS = [1440, 980, 900, 820]
+const WIDTHS = [1440, 1280, 980, 900, 820]
 const THEMES = ['light', 'dark']
 
 const failures = []
@@ -96,6 +96,34 @@ async function measure(page, where) {
   if (r.clipped.length) fail(where, `content cut off with no way to scroll it: ${r.clipped.join(', ')}`)
 }
 
+// The thread is the job on Chat. Overflow checks cannot see a side panel that
+// takes its width or is drawn over it, which is how #1431 shipped.
+const CHAT_MIN = 560
+
+async function chatFits(page, where) {
+  const r = await page.evaluate(() => {
+    const box = (sel) => {
+      const e = document.querySelector(sel)
+      if (!e || (e.checkVisibility && !e.checkVisibility())) return null
+      return e.getBoundingClientRect()
+    }
+    const thread = box('.chatv')
+    if (!thread) return { missing: true }
+    const hits = []
+    for (const sel of ['.chatside', '.cockpit']) {
+      const b = box(sel)
+      if (!b || b.width === 0) continue
+      const x = Math.min(b.right, thread.right) - Math.max(b.left, thread.left)
+      const y = Math.min(b.bottom, thread.bottom) - Math.max(b.top, thread.top)
+      if (x > 1 && y > 1) hits.push(sel)
+    }
+    return { width: Math.round(thread.width), hits }
+  })
+  if (r.missing) return fail(where, 'chat thread not rendered')
+  if (r.width < CHAT_MIN) fail(where, `chat thread is ${r.width}px wide, under ${CHAT_MIN}px`)
+  if (r.hits.length) fail(where, `drawn over the chat thread: ${r.hits.join(', ')}`)
+}
+
 // Every surface the app can show, with the check run on each: the six nav views,
 // Audit's detailed strip, and the Session tabs, which only opening a run reaches.
 async function sweep(page, where, check) {
@@ -103,6 +131,7 @@ async function sweep(page, where, check) {
     await page.locator(`.apphead__tab:has-text("${view}")`).first().click()
     await page.waitForTimeout(600)
     await check(page, `${where}/${view}`)
+    if (view === 'Chat' && check === measure) await chatFits(page, `${where}/Chat`)
 
     // Audit's second strip is eleven tabs and is where #1125 hid two panels.
     if (view === 'Audit') {
