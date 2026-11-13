@@ -10,7 +10,7 @@
       font-family:"Courier New",monospace;font-size:8pt;color:#555;}}
 
   /* The screen tokens, re-pointed at ink on paper. :is() lifts this over tokens.css's theme selectors. */
-  :root:is([data-theme],:not([data-theme])){color-scheme:light;
+  :root:is([data-theme],:not([data-theme])){color-scheme:light;--hy-theme-dark:0;
     --hy-color-surface-base:#fff;--hy-color-surface-raised:#fff;--hy-color-surface-card:#f6f6f8;
     --hy-color-surface-overlay:#f6f6f8;
     --hy-color-border-subtle:#d8d8e2;--hy-color-border-default:#d8d8e2;--hy-color-border-strong:#b9b9ca;

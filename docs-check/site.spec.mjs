@@ -52,14 +52,19 @@ for (const path of PAGES) {
     }
 
     for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
-      test(`axe at ${name} width`, async ({ page }) => {
-        await page.setViewportSize(viewport)
-        await page.goto(path)
-        // let scroll-reveal fades finish, or axe measures a half-faded paragraph
-        await page.waitForTimeout(800)
-        const { violations } = await new AxeBuilder({ page }).analyze()
-        const summary = violations.map((v) => `${v.id} (${v.impact}) x${v.nodes.length}: ${v.nodes[0].target.join(' ')}`)
-        expect(summary).toEqual([])
+      // The phone is a touch device, so (hover: none) styles apply: a control shown
+      // only on hover elsewhere is always visible there, and axe must see it (#1355).
+      test.describe(() => {
+        if (name === 'phone') test.use({ isMobile: true, hasTouch: true })
+        test(`axe at ${name} width @themed`, async ({ page }) => {
+          await page.setViewportSize(viewport)
+          await page.goto(path)
+          // let scroll-reveal fades finish, or axe measures a half-faded paragraph
+          await page.waitForTimeout(800)
+          const { violations } = await new AxeBuilder({ page }).analyze()
+          const summary = violations.map((v) => `${v.id} (${v.impact}) x${v.nodes.length}: ${v.nodes[0].target.join(' ')}`)
+          expect(summary).toEqual([])
+        })
       })
     }
 
@@ -161,4 +166,71 @@ test.describe('without JavaScript', () => {
       }
     })
   }
+})
+
+// The theme follows the OS until the viewer picks one, and the pick survives a reload (#1355).
+test.describe('theme', () => {
+  test.skip(({ colorScheme }) => colorScheme !== 'light', 'drives the theme itself')
+
+  test('the toggle is a labelled button a keyboard can cycle, and the choice persists', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 700 })
+    await page.goto('index.html')
+    const toggle = page.locator('.site-header .theme-toggle')
+    await expect(toggle).toBeInViewport()
+    await expect(toggle).toHaveAccessibleName('Theme: match system')
+    const base = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+    const light = await base()
+    // The OS is light here, so the first press must go to dark, or it changes nothing on screen.
+    await toggle.focus()
+    await page.keyboard.press('Enter')
+    await expect(toggle).toHaveAccessibleName('Theme: dark')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+    expect(await base()).not.toBe(light)
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+    await expect(toggle).toHaveAccessibleName('Theme: dark')
+    await toggle.click()
+    await expect(toggle).toHaveAccessibleName('Theme: light')
+    await toggle.click()
+    await expect(toggle).toHaveAccessibleName('Theme: match system')
+    await expect(page.locator('html')).not.toHaveAttribute('data-theme', /./)
+    expect(await base()).toBe(light)
+  })
+
+  // A theme set after a stylesheet is parsed can paint the other theme first.
+  test('a saved choice is in place before any stylesheet loads', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('hydra-theme', 'dark')
+      new MutationObserver(() => { window.__sheetsAtTheme ??= document.styleSheets.length })
+        .observe(document, { subtree: true, attributeFilter: ['data-theme'] })
+    })
+    for (const path of PAGES) {
+      await page.goto(path)
+      expect(await page.evaluate(() => window.__sheetsAtTheme), `${path}: stylesheets parsed before the theme was set`).toBe(0)
+    }
+  })
+
+  // A still frame (reduced motion) is drawn once, so only a repaint on the theme
+  // change can move its pixels; a canvas keeping stale colours would not.
+  test('canvases repaint in the new theme', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.goto('pricing.html')
+    await page.waitForTimeout(400)
+    const pixels = () => page.evaluate(() => document.getElementById('aurora').toDataURL())
+    const before = await pixels()
+    const colour = await page.evaluate(() => Hydra.color('surface-base'))
+    await page.locator('.theme-toggle').click() // the OS is light, so this is dark
+    await page.waitForTimeout(400)
+    expect(await page.evaluate(() => Hydra.color('surface-base'))).not.toBe(colour)
+    expect(await pixels(), 'the aurora kept its light-theme frame').not.toBe(before)
+  })
+
+  test('with storage refused the page still loads and the toggle still works', async ({ page }) => {
+    const errors = collectErrors(page)
+    await page.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new Error('denied') } }))
+    await page.goto('index.html')
+    await page.locator('.theme-toggle').click()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+    expect(errors).toEqual([])
+  })
 })

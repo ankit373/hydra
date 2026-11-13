@@ -61,7 +61,7 @@ body {
   min-width: 120px;
   height: 30px;
   padding: 0 8px 0 10px;
-  border: 1px solid var(--hy-color-border-subtle);
+  border: 1px solid var(--hy-color-border-strong);
   border-radius: var(--hy-radius-sm);
   background: var(--hy-color-surface-overlay);
   color: var(--hy-color-text-subtle);
@@ -70,7 +70,7 @@ body {
   cursor: pointer;
   text-align: left;
 }
-.apphead__search:hover { border-color: var(--hy-color-border-default); color: var(--hy-color-text-muted); }
+.apphead__search:hover { border-color: var(--hy-color-accent-default); color: var(--hy-color-text-muted); }
 .apphead__search:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
 .apphead__searchicon { font-size: 13px; }
 .apphead__searchtext { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -121,7 +121,7 @@ body {
 .apphead__badge--live {
   background: var(--hy-color-accent-default);
   color: var(--hy-color-text-inverse);
-  box-shadow: 0 0 10px -1px var(--hy-color-accent-default);
+  box-shadow: 0 0 10px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent);
 }
 
 .apphead__status { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
@@ -143,9 +143,38 @@ body {
 }
 .apphead__stat:hover { background: var(--hy-color-surface-overlay); color: var(--hy-color-text-default); }
 .apphead__stat:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
+.apphead__theme {
+  --wails-draggable: no-drag;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--hy-color-text-muted);
+  background: transparent;
+  border: 1px solid var(--hy-color-border-strong);
+  border-radius: var(--hy-radius-sm);
+  cursor: pointer;
+}
+.apphead__theme:hover { color: var(--hy-color-accent-default); border-color: var(--hy-color-accent-default); }
+.apphead__theme:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
+.apphead__theme svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.apphead__theme .apphead__themefill { fill: currentColor; stroke: none; }
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .apphead__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.apphead__dot--ok { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px var(--hy-color-accent-default); }
+.apphead__dot--ok { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
 .apphead__dot--none { background: var(--hy-color-status-danger); }
 .apphead__dot--unknown { background: var(--hy-color-text-subtle); }
 
@@ -187,7 +216,7 @@ body {
 .palette__scrim {
   position: fixed;
   inset: 0;
-  background: rgba(3, 4, 10, .66);
+  background: var(--hy-scrim);
   backdrop-filter: blur(3px);
   display: flex;
   justify-content: center;
@@ -203,13 +232,13 @@ body {
   background: var(--hy-color-surface-raised);
   border: 1px solid var(--hy-color-border-default);
   border-radius: var(--hy-radius);
-  box-shadow: 0 24px 70px -12px rgba(0, 0, 0, .8);
+  box-shadow: 0 24px 70px -12px var(--hy-shadow);
   overflow: hidden;
 }
 .palette__input {
   appearance: none;
   border: 0;
-  border-bottom: 1px solid var(--hy-color-border-subtle);
+  border-bottom: 1px solid var(--hy-color-border-strong);
   background: transparent;
   color: var(--hy-color-text-default);
   font: inherit;
@@ -394,7 +423,7 @@ body {
   transition: stroke-dashoffset 1.1s cubic-bezier(.22, .9, .3, 1);
 }
 .arc-fill--baseline { stroke: var(--hy-color-text-muted); }
-.arc-fill--actual   { stroke: var(--hy-color-accent-default); }
+.arc-fill--actual   { stroke: var(--hy-color-chart-series-1); }
 .arc-num {
   font-family: var(--hy-font-family-mono);
   font-size: 19px;
@@ -422,7 +451,7 @@ body {
   margin-right: 5px;
   vertical-align: middle;
 }
-.arc-legend__dot--actual   { background: var(--hy-color-accent-default); }
+.arc-legend__dot--actual   { background: var(--hy-color-chart-series-1); }
 .arc-legend__dot--baseline { background: var(--hy-color-text-muted); }
 
 /* ── Security ──────────────────────────────────────────────────────────── */
@@ -448,6 +477,9 @@ body {
    not tied to any one panel. */
 .delta--good { color: var(--hy-color-status-success); }
 .delta--bad  { color: var(--hy-color-status-danger); }
+/* A state in running text, always beside its word (deny, BROKEN, breached). */
+.tone--good { color: var(--hy-color-status-success); }
+.tone--bad  { color: var(--hy-color-status-danger); }
 
 /* ── Security: verdict banner ─────────────────────────────────────────── */
 /* The answer, before any measurement. Colour carries the state so it reads
@@ -480,9 +512,9 @@ body {
 
 /* Neon, per BRAND.md: the state should carry across the room, and the glow is
    what makes this read as Hydra rather than as a generic admin panel. */
-.sec-verdict--act       .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-danger) 55%, transparent); }
-.sec-verdict--attention .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-warning) 45%, transparent); }
-.sec-verdict--ok        .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-success) 45%, transparent); }
+.sec-verdict--act       .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-danger) calc(55% * var(--hy-glow)), transparent); }
+.sec-verdict--attention .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-warning) calc(45% * var(--hy-glow)), transparent); }
+.sec-verdict--ok        .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-success) calc(45% * var(--hy-glow)), transparent); }
 
 .sec-verdict__trigger { margin-top: 10px; font-size: 15px; line-height: 1.5; }
 .sec-verdict__scope   { margin-top: 6px; font-size: 12px; color: var(--hy-color-text-muted); }
@@ -544,9 +576,9 @@ body {
 }
 
 .sec-history__grid { stroke: var(--hy-color-border-subtle); stroke-width: 1; stroke-dasharray: 2 3; }
-.sec-history__area { fill: color-mix(in srgb, var(--hy-color-accent-default) 14%, transparent); }
-.sec-history__line { stroke: var(--hy-color-accent-default); stroke-width: 1.5; }
-.sec-history__dot  { fill: var(--hy-color-accent-default); }
+.sec-history__area { fill: color-mix(in srgb, var(--hy-color-chart-series-1) 14%, transparent); }
+.sec-history__line { stroke: var(--hy-color-chart-series-1); stroke-width: 2; }
+.sec-history__dot  { fill: var(--hy-color-chart-series-1); }
 
 /* Part-to-whole donut + legend, the "N by status" pattern security
    dashboards (Wiz, Snyk, GitHub) use for a handful of categories summing to
@@ -589,11 +621,16 @@ body {
 .sec-tile__fill { display: block; height: 100%; border-radius: 2px; background: currentColor; }
 .sec-tile__status { margin-top: 5px; font-family: var(--hy-font-family-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
 .sec-tile--enforced   { color: var(--hy-color-status-success); }
-.sec-tile--configured { color: var(--hy-color-accent-default); }
+/* Configured takes info, not the accent: beside success's green, the teal accent read as the same state. */
+.sec-tile--configured { color: var(--hy-color-status-info); }
+.sec-tile--partial    { color: var(--hy-color-status-warning); }
 .sec-tile--gap        { color: var(--hy-color-status-danger); }
 
-.sec-risktrend__denied  { stroke: var(--hy-color-status-danger); stroke-width: 1.5; }
-.sec-risktrend__flagged { stroke: var(--hy-color-status-warning); stroke-width: 1.5; }
+.sec-risktrend__denied  { stroke: var(--hy-color-status-danger); stroke-width: 2; }
+/* Dashed as well as amber: red and amber are close under deuteranopia. */
+.sec-risktrend__flagged { stroke: var(--hy-color-status-warning); stroke-width: 2; stroke-dasharray: 4 3; }
+.sec-risktrend-legend { display: flex; gap: 14px; margin-top: 6px; font-family: var(--hy-font-family-mono); font-size: 10px; color: var(--hy-color-text-muted); }
+.sec-risktrend-legend svg { margin-right: 5px; vertical-align: middle; }
 
 /* Inline proportional bar inside the policy-audit hit column, so the rule
    doing all the work is visible without reading every number. */
@@ -675,7 +712,8 @@ body {
   white-space: nowrap;
 }
 .sec-cat__status--enforced   { color: var(--hy-color-status-success);     border-color: color-mix(in srgb, var(--hy-color-status-success) 40%, transparent); }
-.sec-cat__status--configured { color: var(--hy-color-accent-default);      border-color: color-mix(in srgb, var(--hy-color-accent-default) 40%, transparent); }
+.sec-cat__status--configured { color: var(--hy-color-status-info);         border-color: color-mix(in srgb, var(--hy-color-status-info) 40%, transparent); }
+.sec-cat__status--partial    { color: var(--hy-color-status-warning);      border-color: color-mix(in srgb, var(--hy-color-status-warning) 40%, transparent); }
 .sec-cat__status--gap        { color: var(--hy-color-status-danger); border-color: color-mix(in srgb, var(--hy-color-status-danger) 40%, transparent); }
 
 /* Severity bands differ by fill and weight, not only hue: critical and high
@@ -683,7 +721,7 @@ body {
 .sec-sev--critical {
   color: var(--hy-color-text-inverse); font-weight: 700;
   background: var(--hy-color-status-danger); border-color: var(--hy-color-status-danger);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-color-status-danger) 45%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-color-status-danger) calc(45% * var(--hy-glow)), transparent);
 }
 .sec-sev--high   { color: var(--hy-color-status-danger); font-weight: 700; border-color: var(--hy-color-status-danger); }
 .sec-sev--medium { color: var(--hy-color-status-warning);       border-color: color-mix(in srgb, var(--hy-color-status-warning) 45%, transparent); }
@@ -774,9 +812,9 @@ body {
 /* A larger, lower-opacity rect behind the crisp bar, a layered solid fill,
    never `filter: blur`/`backdrop-filter`, so the glow rasterizes like any
    other shape instead of costing a compositor blur pass. */
-.spend-bar__halo { opacity: .22; }
+.spend-bar__halo { opacity: calc(.22 * var(--hy-glow)); }
 .spend-bar:hover .spend-bar__halo,
-.spend-bar:focus-visible .spend-bar__halo { opacity: .4; }
+.spend-bar:focus-visible .spend-bar__halo { opacity: calc(.4 * var(--hy-glow)); }
 
 .spend-bar__halo--free      { fill: var(--hy-color-text-muted); }
 .spend-bar__halo--cheap     { fill: var(--hy-color-cost-low); }
@@ -806,7 +844,7 @@ body {
 
 .spend-spark { display: block; margin-top: 9px; }
 .spend-spark__line { stroke: var(--hy-color-text-muted); stroke-width: 1.5; }
-.spend-spark__dot  { fill: var(--hy-color-accent-default); }
+.spend-spark__dot  { fill: var(--hy-color-chart-series-1); }
 
 /* ── Dashboard: ranked bar lists (by model / by tier) ─────────────────── */
 
@@ -838,6 +876,9 @@ body {
 .rank__fill--cheap     { background: var(--hy-color-cost-low); }
 .rank__fill--mid       { background: var(--hy-color-cost-mid); }
 .rank__fill--expensive { background: var(--hy-color-cost-high); }
+/* Risk (blocked or flagged events, blast radius) is not a price: status hues, length is the size. */
+.rank__fill--risk      { background: var(--hy-color-status-danger); }
+.rank__fill--safe      { background: var(--hy-color-status-success); }
 
 .rank__value { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -860,7 +901,7 @@ body {
   transition: background .12s;
 }
 .rank__row--detail:hover,
-.rank__row--detail:focus-visible { background: rgba(255, 255, 255, .045); outline: none; }
+.rank__row--detail:focus-visible { background: var(--hy-wash); outline: none; }
 .rank__row--detail:focus-visible { box-shadow: 0 0 0 2px var(--hy-color-accent-default) inset; }
 .rank__row--detail::after {
   content: "\203A";
@@ -929,15 +970,15 @@ body {
 /* Width/height/inset (the halo's HALO_PAD bleed) are set inline per row from
    the absolute nat scale; only the reveal grow-in is CSS. */
 .cal__fill { opacity: .95; }
-.cal__halo { opacity: .3; }
+.cal__halo { opacity: calc(.3 * var(--hy-glow)); }
 
 /* Under ten observations D is a guess, so the bar is drawn as provisional
    rather than left to look like a measurement (#593). */
 .cal__fill--thin { opacity: .38; }
-.cal__halo--thin { opacity: .12; }
+.cal__halo--thin { opacity: calc(.12 * var(--hy-glow)); }
 
-.cal__fill--oracle, .cal__halo--oracle { background: linear-gradient(90deg, color-mix(in srgb, var(--hy-color-accent-default) 50%, transparent), var(--hy-color-accent-default)); }
-.cal__fill--model,  .cal__halo--model  { background: linear-gradient(90deg, color-mix(in srgb, var(--hy-color-accent-secondary) 50%, transparent), var(--hy-color-accent-secondary)); }
+.cal__fill--oracle, .cal__halo--oracle { background: var(--hy-color-chart-series-1); }
+.cal__fill--model,  .cal__halo--model  { background: var(--hy-color-chart-series-2); }
 
 .cal__value {
   display: inline-flex;
@@ -979,8 +1020,8 @@ body {
   margin-right: 5px;
   vertical-align: middle;
 }
-.cal-legend__dot--oracle { background: var(--hy-color-accent-default); }
-.cal-legend__dot--model  { background: var(--hy-color-accent-secondary); }
+.cal-legend__dot--oracle { background: var(--hy-color-chart-series-1); }
+.cal-legend__dot--model  { background: var(--hy-color-chart-series-2); }
 .cal-legend__scale { margin-left: auto; color: var(--hy-color-text-subtle); }
 
 /* ── Dashboard: HUD chrome ─────────────────────────────────────────────── */
@@ -994,7 +1035,7 @@ body {
 .hud-corner {
   position: fixed;
   width: 22px; height: 22px;
-  border: 1px solid rgba(150, 140, 255, .3);
+  border: 1px solid color-mix(in srgb, var(--hy-color-accent-secondary) 30%, transparent);
   z-index: 1;
   pointer-events: none;
 }
@@ -1007,11 +1048,11 @@ body {
   position: fixed; inset: 0; z-index: 1; pointer-events: none;
   opacity: .3;
   mix-blend-mode: overlay;
-  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px);
+  background: repeating-linear-gradient(0deg, var(--hy-wash) 0 1px, transparent 1px 3px);
 }
 .hud-vignette {
   position: fixed; inset: 0; z-index: 1; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 30%, transparent 55%, rgba(2, 3, 9, .65));
+  background: radial-gradient(ellipse at 50% 30%, transparent 55%, var(--hy-vignette));
 }
 
 /* ── Dashboard: skeleton loader ────────────────────────────────────────── */
@@ -1021,7 +1062,7 @@ body {
 
 .skeleton-block {
   border-radius: 6px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, .05) 25%, rgba(255, 255, 255, .11) 37%, rgba(255, 255, 255, .05) 63%);
+  background: linear-gradient(90deg, var(--hy-wash) 25%, var(--hy-wash-strong) 37%, var(--hy-wash) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.6s ease-in-out infinite;
 }
@@ -1042,7 +1083,7 @@ body {
 
 .drawer-backdrop {
   position: fixed; inset: 0;
-  background: rgba(2, 3, 9, .55);
+  background: var(--hy-scrim);
   opacity: 0;
   pointer-events: none;
   transition: opacity .25s ease;
@@ -1102,7 +1143,7 @@ body {
   font-family: var(--hy-font-family-mono);
   font-size: 12px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, .03);
+  background: var(--hy-wash);
   border-radius: 6px;
 }
 
@@ -1189,7 +1230,7 @@ body {
   padding: 7px 15px;
   cursor: pointer;
 }
-.failure__retry:hover { border-color: var(--hy-color-border-default); background: rgba(255, 255, 255, .03); }
+.failure__retry:hover { border-color: var(--hy-color-border-default); background: var(--hy-wash); }
 .failure__retry:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
 
 /* ── Scope note (#725): what the score above is a statement about ────── */
@@ -1328,7 +1369,7 @@ body {
    thing never means two colours across views. */
 .rgroup__head--waiting .rgroup__lbl {
   color: var(--hy-color-status-warning);
-  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-color-status-warning) 45%, transparent);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-color-status-warning) calc(45% * var(--hy-glow)), transparent);
 }
 .rgroup__head--waiting { border-bottom-color: color-mix(in srgb, var(--hy-color-status-warning) 40%, transparent); }
 .rgroup__head--waiting .rgroup__n { color: var(--hy-color-status-warning); border-color: color-mix(in srgb, var(--hy-color-status-warning) 45%, transparent); }
@@ -1633,8 +1674,7 @@ body {
 .file__path {
   grid-column: 1 / -1;
   font-size: 10px;
-  color: var(--hy-color-text-muted);
-  opacity: .7;
+  color: var(--hy-color-text-subtle);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1678,7 +1718,6 @@ body {
   text-align: right;
   padding-right: 8px;
   color: var(--hy-color-text-muted);
-  opacity: .6;
   user-select: none;
 }
 .dl__op { flex: 0 0 18px; text-align: center; color: var(--hy-color-text-muted); user-select: none; }
@@ -1723,7 +1762,7 @@ body {
 }
 .rev__go {
   background: var(--hy-color-accent-default); border: 1px solid var(--hy-color-accent-default); color: var(--hy-color-text-inverse);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--hy-color-accent-default) 28%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--hy-color-accent-default) calc(28% * var(--hy-glow)), transparent);
 }
 /* Undo overwrites the file, so it carries the same colour the diff already
    uses for removed lines rather than reading as a neutral secondary action. */
@@ -1896,7 +1935,7 @@ body {
   max-width: 720px;
   margin: 0 auto;
   background: var(--hy-color-surface-raised);
-  border: 1px solid var(--hy-color-border-default);
+  border: 1px solid var(--hy-color-border-strong);
   border-radius: var(--hy-radius);
   padding: 10px 11px 8px;
 }
@@ -1941,7 +1980,7 @@ body {
   background: var(--hy-color-surface-raised);
   border: 1px solid var(--hy-color-border-default);
   border-radius: var(--hy-radius);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+  box-shadow: 0 18px 50px var(--hy-shadow);
   overflow: hidden;
   z-index: 30;
 }
@@ -2157,7 +2196,7 @@ body {
 .chatside__runName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatside__runCost { font-family: var(--hy-font-family-mono); font-size: 10px; color: var(--hy-color-text-subtle); }
 .chatside__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--hy-color-text-subtle); flex: 0 0 auto; }
-.chatside__dot--live { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px var(--hy-color-accent-default); }
+.chatside__dot--live { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
 .chatside__dot--wait { background: var(--hy-color-status-warning); }
 
 /* ── Chat pane header ──────────────────────────────────────────────────── */
@@ -2318,7 +2357,7 @@ body {
   border: 1px solid color-mix(in srgb, var(--hy-color-status-warning) 38%, transparent);
   border-left: 2px solid var(--hy-color-status-warning);
   border-radius: 0 var(--hy-radius-sm) var(--hy-radius-sm) 0;
-  box-shadow: 0 0 22px color-mix(in srgb, var(--hy-color-status-warning) 13%, transparent);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--hy-color-status-warning) calc(13% * var(--hy-glow)), transparent);
 }
 .waiting__head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .waiting__ico { color: var(--hy-color-status-warning); font-size: 12px; }
@@ -2326,7 +2365,7 @@ body {
   color: var(--hy-color-status-warning);
   font-size: 10.5px; font-weight: 700;
   letter-spacing: .09em; text-transform: uppercase;
-  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-color-status-warning) 45%, transparent);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-color-status-warning) calc(45% * var(--hy-glow)), transparent);
 }
 .waiting__who { color: var(--hy-color-text-muted); font-size: 11px; font-family: var(--hy-font-family-mono); }
 .waiting__q { color: var(--hy-color-text-default); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
@@ -2350,7 +2389,7 @@ body {
 }
 .waiting__go {
   background: var(--hy-color-accent-default); border: 1px solid var(--hy-color-accent-default); color: var(--hy-color-text-inverse);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-accent-default) 30%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-accent-default) calc(30% * var(--hy-glow)), transparent);
 }
 .waiting__no { background: transparent; border: 1px solid var(--hy-color-border-default); color: var(--hy-color-text-muted); }
 .waiting__no:hover:not(:disabled) { color: var(--hy-color-status-danger); border-color: color-mix(in srgb, var(--hy-color-status-danger) 50%, transparent); }
@@ -2365,7 +2404,7 @@ body {
 
 .gn {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(3, 4, 10, .74);
+  background: var(--hy-scrim);
   display: grid; place-items: center;
   padding: 20px;
 }
@@ -2374,7 +2413,7 @@ body {
   background: var(--hy-color-surface-raised);
   border: 1px solid var(--hy-color-border-default);
   border-radius: var(--hy-radius-lg);
-  box-shadow: 0 26px 70px rgba(0, 0, 0, .7);
+  box-shadow: 0 26px 70px var(--hy-shadow);
   overflow: hidden;
 }
 .gn__stripe { height: 3px; background: linear-gradient(90deg, var(--hy-color-status-warning), var(--hy-color-status-danger)); }
@@ -2581,7 +2620,8 @@ body {
 .row--open { cursor: pointer; }
 .row--open:hover { background: var(--hy-color-surface-overlay); }
 .row--open:hover td:last-child { color: var(--hy-color-accent-default); }
-.row--open:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: -2px; }
+.row__open { appearance: none; border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.row__open:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 2px; }
 
 /* ── Toolbar controls ──────────────────────────────────────────────────── */
 
@@ -2590,7 +2630,7 @@ body {
   appearance: none;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid var(--hy-color-border-subtle);
+  border: 1px solid var(--hy-color-border-strong);
   border-radius: var(--hy-radius-sm);
   background: var(--hy-color-surface-overlay);
   color: var(--hy-color-text-default);
@@ -2709,13 +2749,13 @@ body {
   cursor: pointer;
 }
 .mcard:hover { border-color: var(--hy-color-border-default); background: var(--hy-color-surface-overlay); }
-.mcard[aria-current="true"] { border-color: var(--hy-color-accent-default); box-shadow: 0 0 0 1px var(--hy-color-accent-default), 0 0 22px -12px var(--hy-color-accent-default); }
+.mcard[aria-current="true"] { border-color: var(--hy-color-accent-default); box-shadow: 0 0 0 1px var(--hy-color-accent-default), 0 0 22px -12px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
 .mcard:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 2px; }
 
 .mcard__top { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .mcard__spacer { flex: 1; }
 .mcard__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.mcard__dot--on { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px var(--hy-color-accent-default); }
+.mcard__dot--on { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
 .mcard__dot--off { background: var(--hy-color-text-subtle); }
 .mcard__dot--unknown { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hy-color-text-subtle); }
 .mcard__name { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -2847,7 +2887,7 @@ body {
   margin: 1px 0 0;
   border-radius: 999px;
   background: var(--hy-color-surface-overlay);
-  border: 1px solid var(--hy-color-border-default);
+  border: 1px solid var(--hy-color-border-strong);
   position: relative;
   cursor: pointer;
   transition: background .14s ease, border-color .14s ease;
@@ -2881,7 +2921,7 @@ body {
 .set__input {
   width: 92px;
   background: var(--hy-color-surface-overlay);
-  border: 1px solid var(--hy-color-border-subtle);
+  border: 1px solid var(--hy-color-border-strong);
   border-radius: var(--hy-radius-sm);
   color: var(--hy-color-text-default);
   font-family: var(--hy-font-family-mono);

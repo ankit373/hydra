@@ -354,6 +354,8 @@ export function ChatView({
 
   return (
     <div className="chatv-shell">
+      {/* Every other view opens with a PageHeader h1; Chat's crumb is not a heading. */}
+      <h1 className="visually-hidden">Chat</h1>
       <ChatSidebar runs={runs} runsError={runsError} onOpen={onOpenRun} onNew={newThread} />
 
       <section className={turns.length === 0 ? 'chatv chatv--empty' : 'chatv'}>

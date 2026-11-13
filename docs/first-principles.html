@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,6 +39,7 @@
   }
   </script>
 
+<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/site.js"></script>
@@ -63,8 +64,8 @@
 .tag{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.3px;padding:var(--hy-space-1) var(--hy-space-3);border-radius:20px;
   border:1px solid var(--hy-color-border-subtle);background:color-mix(in srgb,var(--hy-color-surface-overlay) 50%,transparent);display:inline-flex;gap:var(--hy-space-2);align-items:center;}
 .tag .g{font-weight:700;}
-.tag.proven .g{color:var(--hy-color-accent-strong);}.tag.measured .g{color:var(--hy-color-cost-low);}
-.tag.synthetic .g{color:var(--hy-color-accent-secondary);}.tag.modeled .g{color:var(--hy-color-cost-mid);}
+.tag.proven .g{color:var(--hy-color-accent-strong);}.tag.measured .g{color:var(--hy-color-status-success);}
+.tag.synthetic .g{color:var(--hy-color-accent-secondary);}.tag.modeled .g{color:var(--hy-color-status-warning);}
 
 /* ── pillar section ──────────────────────────────────────────────────────── */
 .pillar{padding:var(--hy-space-12) 0;border-top:1px solid var(--hy-color-border-subtle);}
@@ -109,7 +110,7 @@
 .viz .ctl input[type=range]::-moz-range-thumb{width:15px;height:15px;border:0;border-radius:50%;
   background:var(--hy-color-accent-default);box-shadow:0 0 10px color-mix(in srgb,var(--hy-color-accent-default) 70%,transparent);cursor:pointer;}
 .viz .ctl button{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);padding:var(--hy-space-2) var(--hy-space-4);border-radius:7px;cursor:pointer;
-  border:1px solid var(--hy-color-border-default);color:var(--hy-color-text-default);background:color-mix(in srgb,var(--hy-color-surface-overlay) 50%,transparent);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
+  border:1px solid var(--hy-color-border-strong);color:var(--hy-color-text-default);background:color-mix(in srgb,var(--hy-color-surface-overlay) 50%,transparent);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
 .viz .ctl button:hover{border-color:var(--hy-color-accent-default);color:var(--hy-color-accent-default);}
 .viz .readout{margin-left:auto;text-align:right;color:var(--hy-color-text-subtle);}
 .viz .readout b{color:var(--hy-color-text-default);font-size:var(--hy-font-size-base);}
@@ -131,7 +132,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">first principles</span>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span><span class="nav-toggle-label">Menu</span></button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
@@ -219,10 +220,10 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
     <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-cal" width="1040" height="340" role="img" aria-label="Vote probability distributions under correct and incorrect hypotheses, with diagnostic power D"></canvas></div>
       <div class="ctl">
-        <label>sensitivity <i>se</i> <span class="v" id="v-cal-se">0.90</span>
+        <label><span>sensitivity <i>se</i></span> <span class="v" id="v-cal-se">0.90</span>
           <input type="range" id="s-cal-se" min="0.5" max="0.99" step="0.01" value="0.90" aria-label="sensitivity">
         </label>
-        <label>specificity <i>sp</i> <span class="v" id="v-cal-sp">0.90</span>
+        <label><span>specificity <i>sp</i></span> <span class="v" id="v-cal-sp">0.90</span>
           <input type="range" id="s-cal-sp" min="0.5" max="0.99" step="0.01" value="0.90" aria-label="specificity">
         </label>
         <div class="readout">diagnostic power <b class="tnum" id="o-cal-d">1.76</b> nats</div>
@@ -252,7 +253,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
     <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-defect" width="1040" height="300" role="img" aria-label="Required probability of a correct answer rising as the defect cost grows"></canvas></div>
       <div class="ctl">
-        <label>defect cost <i>C</i><sub>defect</sub> <span class="v" id="v-def-c">$126</span>
+        <label><span>defect cost <i>C</i><sub>defect</sub></span> <span class="v" id="v-def-c">$126</span>
           <input type="range" id="s-def-c" min="0" max="100" step="1" value="40" aria-label="defect cost (log scale)">
         </label>
         <div class="readout">required P(correct) <b class="tnum" id="o-def-cstar">96.0%</b> &nbsp;·&nbsp; ≈ <b class="tnum" id="o-def-n">2</b> samples</div>
@@ -283,7 +284,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
     <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-perc" width="1040" height="400" role="img" aria-label="Random dependency graph; the giant component appears as mean degree crosses the percolation threshold"></canvas></div>
       <div class="ctl">
-        <label>mean degree ⟨<i>k</i>⟩ <span class="v" id="v-perc-k">1.8</span>
+        <label><span>mean degree ⟨<i>k</i>⟩</span> <span class="v" id="v-perc-k">1.8</span>
           <input type="range" id="s-perc-k" min="0.2" max="4" step="0.1" value="1.8" aria-label="mean degree">
         </label>
         <button id="b-perc-re" type="button">↻ resample graph</button>
@@ -318,10 +319,10 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
     <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-amdahl" width="1040" height="360" role="img" aria-label="Speedup curve versus number of agents, with the optimal n-star marker"></canvas></div>
       <div class="ctl">
-        <label>serial fraction <i>s</i> <span class="v" id="v-amd-s">0.05</span>
+        <label><span>serial fraction <i>s</i></span> <span class="v" id="v-amd-s">0.05</span>
           <input type="range" id="s-amd-s" min="0" max="0.5" step="0.01" value="0.05" aria-label="serial fraction">
         </label>
-        <label>coupling <i>k</i> <span class="v" id="v-amd-k">0.02</span>
+        <label><span>coupling <i>k</i></span> <span class="v" id="v-amd-k">0.02</span>
           <input type="range" id="s-amd-k" min="0.005" max="0.3" step="0.005" value="0.02" aria-label="coupling cost">
         </label>
         <div class="readout">optimum <b class="tnum" id="o-amd-n">6.9</b> agents &nbsp;·&nbsp; peak speedup <b class="tnum" id="o-amd-s">×3.1</b></div>
@@ -395,11 +396,17 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
 (function(){
   "use strict";
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Canvas colours read the generated tokens, so the drawing follows design/tokens.
-  var tok=Hydra.color;
-  var C = {bg:tok('surface-base'),ink:tok('text-default'),dim:tok('text-muted'),faint:tok('text-subtle'),
-           cyan:tok('accent-strong'),aqua:tok('accent-default'),violet:tok('accent-secondary'),magenta:tok('brand-end'),
-           cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high')};
+  // Canvas colours read the generated tokens, and are read again when the theme changes;
+  // each figure registers its own redraw after this. ok/warn/bad are states, not prices.
+  var tok=Hydra.color, C={};
+  function palette(){
+    C = {bg:tok('surface-base'),ink:tok('text-default'),dim:tok('text-muted'),faint:tok('text-subtle'),
+         cyan:tok('accent-strong'),aqua:tok('accent-default'),violet:tok('accent-secondary'),magenta:tok('brand-end'),
+         ok:tok('status-success'),warn:tok('status-warning'),bad:tok('status-danger')};
+  }
+  palette(); Hydra.onTheme(palette);
+  // Readouts are DOM text, so they take the role itself and follow the theme with no redraw.
+  var V={ok:'var(--hy-color-status-success)',warn:'var(--hy-color-status-warning)',bad:'var(--hy-color-status-danger)',faint:'var(--hy-color-text-subtle)'};
 
 
   // retina fit; returns {ctx,w,h}
@@ -436,7 +443,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
         if(L>=A || L<=B) break;
       }
       nOut.textContent = path.length-1;
-      nOut.style.color = (path.length-1) < 5 ? C.cheap : C.mid;
+      nOut.style.color = (path.length-1) < 5 ? V.ok : V.warn;
     }
     function draw(){
       var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h, padL=54, padR=18, padT=26, padB=30;
@@ -455,8 +462,8 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
         ctx.fillStyle=col; ctx.font=mono(11); ctx.textAlign='left';
         ctx.fillText(lab, padL+4, Y(v)+(v>0?-6:14));
       }
-      bound(A, C.cheap, 'A = accept  (ln 19 ≈ +2.94)');
-      bound(B, C.exp,  'B = reject  (−2.94)');
+      bound(A, C.ok, 'A = accept  (ln 19 ≈ +2.94)');
+      bound(B, C.bad,  'B = reject  (−2.94)');
       // axis label
       ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.textAlign='left';
       ctx.fillText('log-odds Λ', 6, padT+4);
@@ -474,7 +481,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       // decision marker
       if(upto>=path.length && path.length>1){
         var last=path[path.length-1]; var decided = last.L>=A;
-        var col=decided?C.cheap:C.exp;
+        var col=decided?C.ok:C.bad;
         ctx.fillStyle=col; glow(ctx,col,14); ctx.beginPath(); ctx.arc(X(last.n),Y(last.L),5.5,0,7); ctx.fill(); noGlow(ctx);
         ctx.font=mono(12); ctx.textAlign='center'; ctx.fillStyle=col;
         ctx.fillText(decided?'✓ accept':'✕ reject', X(last.n), Y(last.L)+(last.L>0?-14:22));
@@ -488,7 +495,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
     }
     relEl.addEventListener('input', function(){ relV.textContent=parseFloat(relEl.value).toFixed(2); run(); });
     runBtn.addEventListener('click', run);
-    addEventListener('resize', draw);
+    addEventListener('resize', draw); Hydra.onTheme(draw);
     run();
   })();
 
@@ -503,7 +510,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       var se=parseFloat(seEl.value), sp=parseFloat(spEl.value);
       seV.textContent=se.toFixed(2); spV.textContent=sp.toFixed(2);
       var d=D(se,sp); dOut.textContent=d.toFixed(2);
-      dOut.style.color = d<0.3? C.faint : d<1.2? C.mid : C.cheap;
+      dOut.style.color = d<0.3? V.faint : d<1.2? V.warn : V.ok;
       var dd=fit(cv), ctx=dd.ctx, w=dd.w, h=dd.h, padT=30, padB=44;
       ctx.clearRect(0,0,w,h);
       // two groups: H1 (correct) and H0 (incorrect); bars = P(vote +), P(vote -)
@@ -534,7 +541,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       ctx.fillText('the gap between these two shapes IS the evidence, D nats per vote', 40, padT-10);
     }
     seEl.addEventListener('input',draw); spEl.addEventListener('input',draw);
-    addEventListener('resize',draw); draw();
+    addEventListener('resize',draw); Hydra.onTheme(draw); draw();
   })();
 
   // ══ 3 · DEFECT COST ════════════════════════════════════════════════════════
@@ -562,8 +569,8 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       [0.5,0.75,0.9,0.99].forEach(function(c){ ctx.beginPath(); ctx.moveTo(padL,Y(c)); ctx.lineTo(w-padR,Y(c)); ctx.stroke(); ctx.fillText((c*100).toFixed(0)+'%',padL-8,Y(c)+3); });
       // curve
       var grad=ctx.createLinearGradient(padL,0,w-padR,0);
-      grad.addColorStop(0,C.cheap); grad.addColorStop(0.6,C.mid); grad.addColorStop(1,C.exp);
-      ctx.strokeStyle=grad; ctx.lineWidth=2.6; glow(ctx,C.mid,7); ctx.beginPath();
+      grad.addColorStop(0,C.ok); grad.addColorStop(0.6,C.warn); grad.addColorStop(1,C.bad);
+      ctx.strokeStyle=grad; ctx.lineWidth=2.6; glow(ctx,C.warn,7); ctx.beginPath();
       for(var tt=0;tt<=100;tt+=1){ var cc=Math.min(0.9995,Math.max(0.5,1-TAUv/cost(tt))); var x=X(tt),y=Y(cc); if(tt===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);} ctx.stroke(); noGlow(ctx);
       // marker
       var mx=X(t), my=Y(cstar);
@@ -572,7 +579,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.textAlign='center'; ctx.fillText('cheap defect', X(6),h-8); ctx.fillText('catastrophic defect', X(92),h-8);
       ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.fillText('required P(correct)  c★', padL, padT-8);
     }
-    cEl.addEventListener('input',draw); addEventListener('resize',draw); draw();
+    cEl.addEventListener('input',draw); addEventListener('resize',draw); Hydra.onTheme(draw); draw();
   })();
 
   // ══ 4 · PERCOLATION ════════════════════════════════════════════════════════
@@ -603,13 +610,14 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       return {deg:deg,giant:giant,kappa:kappa,frac:big/N,find:find,bigRoot:bigRoot,big:big};
     }
     var state;
-    function draw(){
-      state=build();
+    // A theme change repaints this graph; anything else draws a fresh one.
+    function draw(keep){
+      if(keep!==true || !state) state=build();
       kapOut.textContent=state.kappa.toFixed(1);
       var core = state.kappa>=2;
       stOut.textContent = core?'cascade core':'fragmented';
-      stOut.style.color = core?C.exp:C.cheap;
-      kapOut.style.color = core?C.exp:C.cheap;
+      stOut.style.color = core?V.bad:V.ok;
+      kapOut.style.color = core?V.bad:V.ok;
       frOut.textContent=Math.round(state.frac*100)+'%';
       var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h;
       ctx.clearRect(0,0,w,h);
@@ -634,11 +642,11 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       ctx.strokeStyle=Hydra.rgba('accent-secondary',.16); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(gx,gy0); ctx.lineTo(gx,gy1); ctx.stroke();
       function GY(kap){ var t=Math.min(kap,5)/5; return gy1-(gy1-gy0)*t; }
       // threshold at kappa=2
-      var ty=GY(2); ctx.strokeStyle=C.exp; ctx.setLineDash([5,5]); glow(ctx,C.exp,8);
+      var ty=GY(2); ctx.strokeStyle=C.bad; ctx.setLineDash([5,5]); glow(ctx,C.bad,8);
       ctx.beginPath(); ctx.moveTo(gx-8,ty); ctx.lineTo(gx+120,ty); ctx.stroke(); noGlow(ctx); ctx.setLineDash([]);
-      ctx.fillStyle=C.exp; ctx.font=mono(11); ctx.textAlign='left'; ctx.fillText('κ = 2  threshold', gx+10, ty-7);
+      ctx.fillStyle=C.bad; ctx.font=mono(11); ctx.textAlign='left'; ctx.fillText('κ = 2  threshold', gx+10, ty-7);
       // current kappa marker
-      var ky=GY(state.kappa); ctx.fillStyle= core?C.exp:C.cheap; glow(ctx,core?C.exp:C.cheap,14);
+      var ky=GY(state.kappa); ctx.fillStyle= core?C.bad:C.ok; glow(ctx,core?C.bad:C.ok,14);
       ctx.beginPath(); ctx.arc(gx,ky,6,0,7); ctx.fill(); noGlow(ctx);
       ctx.fillStyle=C.ink; ctx.font=mono(13); ctx.fillText('κ = '+state.kappa.toFixed(1), gx+12, ky+4);
       ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.fillText('giant component', gx-4, gy0-14);
@@ -646,7 +654,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
     kEl.addEventListener('input',draw);
     // each build() advances the PRNG, so redrawing already yields a fresh graph
     reBtn.addEventListener('click', draw);
-    addEventListener('resize',draw); draw();
+    addEventListener('resize',draw); Hydra.onTheme(function(){ draw(true); }); draw();
   })();
 
   // ══ 5 · AMDAHL ═════════════════════════════════════════════════════════════
@@ -688,7 +696,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       ctx.fillStyle=C.aqua; ctx.font=mono(12); ctx.textAlign='center';
       ctx.fillText('n★ ≈ '+nstar.toFixed(1), nx, ny-12);
     }
-    sEl.addEventListener('input',draw); kEl.addEventListener('input',draw); addEventListener('resize',draw); draw();
+    sEl.addEventListener('input',draw); kEl.addEventListener('input',draw); addEventListener('resize',draw); Hydra.onTheme(draw); draw();
   })();
 
   // ══ 6 · ENTROPY ════════════════════════════════════════════════════════════
@@ -702,8 +710,8 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       var rho=1-r; var useful=Math.round(L*rho);
       rhoOut.textContent=rho.toFixed(2);
       uOut.textContent=(useful/1000).toFixed(0)+'k';
-      uOut.style.color = rho<0.35?C.exp:rho<0.6?C.mid:C.cheap;
-      var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h, padL=20, padR=20, padT=40, padB=40;
+      uOut.style.color = rho<0.35?V.bad:rho<0.6?V.warn:V.ok;
+      var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h, padL=20, padR=20, padT=40, padB=56; // room for both lines under the bar
       ctx.clearRect(0,0,w,h);
       var bx=padL, bw=w-padL-padR, by=padT+20, bh=h-padT-padB-20;
       // full window (faint)
@@ -720,16 +728,16 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       // labels
       ctx.font=mono(12); ctx.textAlign='left'; ctx.fillStyle=C.ink;
       ctx.fillText('useful signal · '+(useful/1000).toFixed(0)+'k tokens', bx+10, by-10);
-      ctx.textAlign='right'; ctx.fillStyle=C.exp;
+      ctx.textAlign='right'; ctx.fillStyle=C.bad;
       if(r>0.05) ctx.fillText('redundant · compacted away', bx+bw-10, by-10);
       ctx.textAlign='center'; ctx.fillStyle=C.faint; ctx.font=mono(11);
       ctx.fillText('a '+(L/1000)+'k window carries only '+(useful/1000).toFixed(0)+'k of real signal at ρ='+rho.toFixed(2), w/2, by+bh+26);
       // compaction threshold
       var thr=0.4, tx=bx+bw*thr;
-      ctx.strokeStyle=C.mid; ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(tx,by-4); ctx.lineTo(tx,by+bh+4); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle=C.mid; ctx.font=mono(10); ctx.textAlign='center'; ctx.fillText('compact below ρ=0.40', tx, by+bh+40);
+      ctx.strokeStyle=C.warn; ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(tx,by-4); ctx.lineTo(tx,by+bh+4); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=C.warn; ctx.font=mono(10); ctx.textAlign='center'; ctx.fillText('compact below ρ=0.40', tx, by+bh+40);
     }
-    rEl.addEventListener('input',draw); addEventListener('resize',draw); draw();
+    rEl.addEventListener('input',draw); addEventListener('resize',draw); Hydra.onTheme(draw); draw();
   })();
 
 })();

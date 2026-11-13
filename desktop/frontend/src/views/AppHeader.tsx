@@ -1,5 +1,6 @@
 import { HydraMark } from '../brand'
 import { UpdateNotice } from './UpdateNotice'
+import { ThemeToggle } from './ThemeToggle'
 import { usd } from '../format'
 
 export interface NavItem {
@@ -108,6 +109,7 @@ export function AppHeader({
         <button className="apphead__stat" onClick={onSpend} title="What you spent today">
           {todayUsd === null ? '—' : usd(todayUsd)}
         </button>
+        <ThemeToggle />
       </div>
     </header>
   )

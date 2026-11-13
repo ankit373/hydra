@@ -21,6 +21,18 @@
 }
 
 :root {
+  color-scheme: light dark;
+  /* Effects that run the other way on each theme, switched by --hy-theme-dark (0 light,
+     1 dark). Light separates layers with a little ink; dark with the page's own black.
+     A wash is ink either way, so it darkens light surfaces and lightens dark ones. */
+  --hy-wash:        color-mix(in srgb, var(--hy-color-text-default) 4%, transparent);
+  --hy-wash-strong: color-mix(in srgb, var(--hy-color-text-default) 9%, transparent);
+  --hy-scrim:       color-mix(in srgb, color-mix(in srgb, var(--hy-color-surface-base) 66%, transparent) calc(var(--hy-theme-dark) * 100%), color-mix(in srgb, var(--hy-color-text-default) 30%, transparent));
+  --hy-shadow:      color-mix(in srgb, color-mix(in srgb, var(--hy-color-surface-base) 80%, transparent) calc(var(--hy-theme-dark) * 100%), color-mix(in srgb, var(--hy-color-text-default) 18%, transparent));
+  /* The HUD vignette and coloured glows read as light on dark and as a smudge on light. */
+  --hy-vignette:    color-mix(in srgb, var(--hy-color-surface-base) calc(var(--hy-theme-dark) * 65%), transparent);
+  --hy-glow:        var(--hy-theme-dark);
+
   /* The logo gradient; nothing else uses it. */
   --hy-brand: linear-gradient(90deg, var(--hy-color-brand-start) 0%, var(--hy-color-brand-mid) 50%, var(--hy-color-brand-end) 100%);
 
@@ -39,3 +51,6 @@
   --hy-radius:    14px;
   --hy-radius-lg: 22px;
 }
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }

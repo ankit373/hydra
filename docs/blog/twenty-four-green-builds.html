@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -53,6 +53,7 @@
 }
   </script>
 
+<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="../assets/tokens.css">
 <link rel="stylesheet" href="../assets/site.css">
 <script src="../assets/site.js"></script>
@@ -65,29 +66,29 @@
   font-size:var(--hy-font-size-sm);color:var(--hy-color-text-subtle);line-height:1.65;}
 .fig figcaption b{color:var(--hy-color-text-muted);}
 .strip{display:flex;gap:var(--hy-space-1);align-items:flex-end;}
-.strip i{flex:1 1 0;min-width:0;height:42px;border-radius:3px;background:var(--hy-color-cost-high);opacity:.8;}
-.strip i.ok{height:60px;background:var(--hy-color-cost-low);opacity:1;box-shadow:0 0 16px color-mix(in srgb,var(--hy-color-status-success) 45%,transparent);}
+.strip i{flex:1 1 0;min-width:0;height:42px;border-radius:3px;background:var(--hy-color-status-danger);opacity:.8;}
+.strip i.ok{height:60px;background:var(--hy-color-status-success);opacity:1;box-shadow:0 0 16px color-mix(in srgb,var(--hy-color-status-success) 45%,transparent);}
 .strip-ax{display:flex;justify-content:space-between;gap:var(--hy-space-3);margin-top:var(--hy-space-2);
   font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.04em;color:var(--hy-color-text-subtle);}
 .strip-ax span:last-child{text-align:right;}
 .lanes{display:grid;gap:var(--hy-space-3);}
 .lane{border:1px solid var(--hy-color-border-subtle);border-left-width:3px;border-radius:10px;padding:var(--hy-space-3) var(--hy-space-4);
   background:color-mix(in srgb,var(--hy-color-surface-raised) 50%,transparent);}
-.lane.seen{border-left-color:var(--hy-color-cost-low);}
-.lane.unseen{border-left-color:var(--hy-color-cost-high);}
+.lane.seen{border-left-color:var(--hy-color-status-success);}
+.lane.unseen{border-left-color:var(--hy-color-status-danger);}
 .lane-h{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.08em;text-transform:uppercase;color:var(--hy-color-text-default);}
 .lane-b{font-size:var(--hy-font-size-md);color:var(--hy-color-text-muted);line-height:1.6;margin-top:var(--hy-space-2);}
 .lane-f{margin-top:var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);}
-.lane.seen .lane-f{color:var(--hy-color-cost-low);}
-.lane.unseen .lane-f{color:var(--hy-color-cost-high);}
+.lane.seen .lane-f{color:var(--hy-color-status-success);}
+.lane.unseen .lane-f{color:var(--hy-color-status-danger);}
 .envt{width:100%;border-collapse:collapse;font-size:var(--hy-font-size-md);}
 .envt th,.envt td{padding:var(--hy-space-2) var(--hy-space-2);border-bottom:1px solid var(--hy-color-border-subtle);text-align:left;}
 .envt thead th{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.1em;text-transform:uppercase;color:var(--hy-color-text-subtle);font-weight:600;}
 .envt tbody th{font-family:var(--hy-font-family-mono);font-weight:500;color:var(--hy-color-text-muted);}
 .envt td{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);}
 .envt tbody tr:last-child th,.envt tbody tr:last-child td{border-bottom:none;}
-.envt .has{color:var(--hy-color-cost-low);}
-.envt .lacks{color:var(--hy-color-cost-high);}
+.envt .has{color:var(--hy-color-status-success);}
+.envt .lacks{color:var(--hy-color-status-danger);}
 @media(max-width:520px){.envt th,.envt td{padding:var(--hy-space-2) var(--hy-space-1);font-size:var(--hy-font-size-xs);}}
 .enditem{padding:var(--hy-space-4) 0;border-top:1px solid var(--hy-color-border-subtle);font-size:var(--hy-font-size-base);color:var(--hy-color-text-muted);line-height:1.7;}
 .enditem b{display:block;margin-bottom:var(--hy-space-1);color:var(--hy-color-text-default);font-size:var(--hy-font-size-base);font-weight:700;}
@@ -101,7 +102,7 @@
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">blog</span>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span><span class="nav-toggle-label">Menu</span></button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
