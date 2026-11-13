@@ -6,6 +6,25 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.8.0](https://github.com/ankit373/hydra/compare/v1.7.0...v1.8.0) (2026-11-13)
+
+
+### Features
+
+* **blog:** PDF export + Jev/TypeSafe AI research post ([#1127](https://github.com/ankit373/hydra/issues/1127)) ([a8585f5](https://github.com/ankit373/hydra/commit/a8585f5b981c481deb0ebaa574c6dce1e9ba8902))
+* **brand:** use the real mark in the app, TUI and CLI ([#1438](https://github.com/ankit373/hydra/issues/1438)) ([a802eec](https://github.com/ankit373/hydra/commit/a802eec2a30a4e81a630b16738ae58b12a3d3eaa))
+* **design:** light theme for the website and desktop app, charts on the token palette ([#1356](https://github.com/ankit373/hydra/issues/1356)) ([bc2037a](https://github.com/ankit373/hydra/commit/bc2037ac656ecc544675ad2f8c1837df15a5250b))
+* **design:** one token source for the website, desktop app and TUI ([#1343](https://github.com/ankit373/hydra/issues/1343)) ([9263ac5](https://github.com/ankit373/hydra/commit/9263ac5f5fad71fe52a82e4b6a0f94841344a9e9))
+* **design:** size, spacing, radius and motion tokens in every surface ([#1437](https://github.com/ankit373/hydra/issues/1437)) ([0a690b6](https://github.com/ankit373/hydra/commit/0a690b61baa60fdce7a6daa74a5d3f613595efbd))
+* **dispatch,serve:** verifier-gated escalation to a model measured better in class ([#1341](https://github.com/ankit373/hydra/issues/1341)) ([9b9e168](https://github.com/ankit373/hydra/commit/9b9e16843a2f8593e5200164fea5670905447d65))
+* **site:** one shared stylesheet on the design tokens, and an accessibility floor ([#1346](https://github.com/ankit373/hydra/issues/1346)) ([c5d6767](https://github.com/ankit373/hydra/commit/c5d67672243ea33a673fca66920a32cdd8e31fc4))
+
+
+### Bug Fixes
+
+* **desktop:** keep chat usable at the minimum window width ([#1436](https://github.com/ankit373/hydra/issues/1436)) ([064fbde](https://github.com/ankit373/hydra/commit/064fbde0b5f05de580159a9abe35559c0a628bc5))
+* **gateway:** never send a refused hostname to DNS ([#1429](https://github.com/ankit373/hydra/issues/1429)) ([9f809b8](https://github.com/ankit373/hydra/commit/9f809b88e7c9573f4876b6f3412b166bd5ceeec1))
+
 ## [1.7.0](https://github.com/ankit373/hydra/compare/v1.6.1...v1.7.0) (2026-11-12)
 
 
