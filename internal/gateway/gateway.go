@@ -12,6 +12,10 @@
 // mainstream CLI/SDK does; a process that opens raw sockets and ignores the
 // proxy environment is outside what this can see, same boundary
 // internal/security already states for an opaque head in general.
+//
+// The gate never resolves a name. A DNS query carries the name to a server
+// outside the machine whether or not the request is then refused, so
+// resolving first would let a head leak data in the names it asks for.
 package gateway
 
 import (
@@ -20,13 +24,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
+	"strings"
 	"sync"
 	"time"
 )
 
-// errDenied marks a destination that resolved fine but classified as not
-// loopback/private, as opposed to one Hydra could not classify at all. Both
-// deny, but only the second is a real error worth surfacing to a caller.
+// errDenied is the one reason the gate refuses a destination.
 var errDenied = errors.New("destination is not loopback or private")
 
 // Gateway is a loopback-bound forward proxy: everything through it is
@@ -34,10 +38,6 @@ var errDenied = errors.New("destination is not loopback or private")
 type Gateway struct {
 	l   net.Listener
 	srv *http.Server
-
-	// Resolve looks up a hostname's addresses. nil uses net.DefaultResolver;
-	// tests inject a fake so classification never depends on real DNS.
-	Resolve func(ctx context.Context, host string) ([]net.IP, error)
 
 	mu      sync.Mutex
 	tunnels map[net.Conn]struct{}
@@ -98,33 +98,29 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 		hostport = r.URL.Host
 	}
 
-	dialAddr, err := resolveSafe(r.Context(), hostport, g.Resolve)
+	targets, err := dialTargets(hostport)
 	if err != nil {
 		http.Error(w, "forbidden: destination is not loopback or private", http.StatusForbidden)
 		return
 	}
 
 	if r.Method == http.MethodConnect {
-		g.tunnel(w, r, dialAddr)
+		g.tunnel(w, r, targets)
 		return
 	}
-	g.forward(w, r, dialAddr)
+	g.forward(w, r)
 }
 
-// tunnel serves a CONNECT: dial the address resolveSafe already classified,
-// hijack the client connection, then relay bytes in both directions until
-// either side closes.
-func (g *Gateway) tunnel(w http.ResponseWriter, r *http.Request, dialAddr string) {
+// tunnel serves a CONNECT: dial one of the literal addresses dialTargets
+// returned, hijack the client connection, then relay bytes in both
+// directions until either side closes.
+func (g *Gateway) tunnel(w http.ResponseWriter, r *http.Request, targets []string) {
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
 		return
 	}
-	// dialAddr, not r.Host: resolveSafe already resolved the hostname once.
-	// Resolving it again here would let a DNS answer that changes between
-	// the two lookups pass the check on one address and connect to another,
-	// a name it never actually classified.
-	target, err := (&net.Dialer{}).DialContext(r.Context(), "tcp", dialAddr)
+	target, err := dialFirst(r.Context(), targets)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -174,18 +170,24 @@ func halfClose(c net.Conn) {
 // directTransport never consults the process's own HTTP_PROXY/HTTPS_PROXY:
 // http.DefaultTransport does, and Hydra itself may be running behind a
 // corporate proxy, which would otherwise re-route a request this gateway
-// already classified as safe to dial directly.
-var directTransport = &http.Transport{Proxy: nil}
+// already classified as safe to dial directly. Its dialer goes through
+// dialTargets too, so the transport never resolves a name either.
+var directTransport = &http.Transport{
+	Proxy: nil,
+	DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+		targets, err := dialTargets(addr)
+		if err != nil {
+			return nil, err
+		}
+		return dialFirst(ctx, targets)
+	},
+}
 
-// forward serves a plain (non-CONNECT) proxied request, dialing the address
-// resolveSafe already classified rather than letting the transport resolve
-// the hostname again, the same rebinding gap tunnel avoids. The original
-// Host header is preserved so a name-based virtual host still resolves
-// correctly at the target even though the connection dials its IP directly.
-func (g *Gateway) forward(w http.ResponseWriter, r *http.Request, dialAddr string) {
+// forward serves a plain (non-CONNECT) proxied request through
+// directTransport, which dials only the literal addresses dialTargets allows.
+func (g *Gateway) forward(w http.ResponseWriter, r *http.Request) {
 	outReq := r.Clone(r.Context())
 	outReq.RequestURI = "" // set on every server Request; RoundTrip rejects it on a client one
-	outReq.URL.Host = dialAddr
 	removeHopByHop(outReq.Header)
 
 	resp, err := directTransport.RoundTrip(outReq)
@@ -216,62 +218,57 @@ func removeHopByHop(h http.Header) {
 	}
 }
 
-// Allowed classifies hostport (host, or host:port), true only if every
-// address it names is loopback, private (RFC1918/RFC4193), or link-local.
-// resolve is used for a name that isn't already a literal IP; nil uses
-// net.DefaultResolver.
-//
-// A resolution failure or an empty answer denies rather than passing through:
-// an address Hydra could not classify is not evidence it is safe. A name that
-// resolves to a mix of private and public addresses denies too, on the same
-// reasoning a single public one would.
-func Allowed(ctx context.Context, hostport string, resolve func(context.Context, string) ([]net.IP, error)) (bool, error) {
-	_, err := resolveSafe(ctx, hostport, resolve)
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, errDenied):
-		return false, nil
-	default:
-		return false, err
-	}
+// Allowed reports whether hostport (host, or host:port) is a destination
+// the gate lets through: a loopback, private (RFC1918/RFC4193) or link-local
+// IP literal, or a localhost name. It never consults DNS.
+func Allowed(hostport string) bool {
+	_, err := dialTargets(hostport)
+	return err == nil
 }
 
-// resolveSafe classifies hostport and, when every candidate address is
-// loopback/private/link-local, returns the specific address to dial. A
-// caller must dial exactly this address rather than resolving hostport a
-// second time: a hostname that resolves differently between the check and
-// the dial (a hostile or merely low-TTL DNS answer) would otherwise pass the
-// gate on one address and connect to another it never classified.
-func resolveSafe(ctx context.Context, hostport string, resolve func(context.Context, string) ([]net.IP, error)) (string, error) {
+// dialTargets classifies hostport from its literal text and returns the
+// addresses to dial, in order. Any name other than localhost is refused
+// without a lookup, so the answer can never differ between check and dial.
+func dialTargets(hostport string) ([]string, error) {
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
-		host, port = hostport, ""
+		host, port = strings.TrimSuffix(strings.TrimPrefix(hostport, "["), "]"), ""
 	}
 
-	if ip := net.ParseIP(host); ip != nil {
-		if !isLocalIP(ip) {
-			return "", errDenied
+	if ip, err := netip.ParseAddr(host); err == nil {
+		ip = ip.Unmap()
+		if !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() {
+			return nil, errDenied
 		}
-		return joinHostPort(ip.String(), port), nil
+		return []string{joinHostPort(ip.String(), port)}, nil
 	}
 
-	if resolve == nil {
-		resolve = defaultResolve
+	if isLocalhost(host) {
+		// RFC 6761 6.3: localhost names are loopback by definition. Both
+		// families, since a local server may listen on only one of them.
+		return []string{joinHostPort("127.0.0.1", port), joinHostPort("::1", port)}, nil
 	}
-	ips, err := resolve(ctx, host)
-	if err != nil {
-		return "", err
-	}
-	if len(ips) == 0 {
-		return "", errors.New("gateway: no addresses resolved for " + host)
-	}
-	for _, ip := range ips {
-		if !isLocalIP(ip) {
-			return "", errDenied
+	return nil, errDenied
+}
+
+// isLocalhost matches "localhost" and "*.localhost", with or without a
+// trailing dot.
+func isLocalhost(host string) bool {
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	return h == "localhost" || strings.HasSuffix(h, ".localhost")
+}
+
+// dialFirst returns a connection to the first address that accepts one.
+func dialFirst(ctx context.Context, addrs []string) (net.Conn, error) {
+	var d net.Dialer
+	err := errDenied
+	for _, a := range addrs {
+		var c net.Conn
+		if c, err = d.DialContext(ctx, "tcp", a); err == nil {
+			return c, nil
 		}
 	}
-	return joinHostPort(ips[0].String(), port), nil
+	return nil, err
 }
 
 func joinHostPort(host, port string) string {
@@ -279,20 +276,4 @@ func joinHostPort(host, port string) string {
 		return host
 	}
 	return net.JoinHostPort(host, port)
-}
-
-func isLocalIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
-}
-
-func defaultResolve(ctx context.Context, host string) ([]net.IP, error) {
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	ips := make([]net.IP, len(addrs))
-	for i, a := range addrs {
-		ips[i] = a.IP
-	}
-	return ips, nil
 }
