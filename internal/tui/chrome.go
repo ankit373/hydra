@@ -7,7 +7,6 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
@@ -164,52 +163,8 @@ func (m Cockpit) usageGroupName() string {
 	}
 }
 
-// ckWordmark paints the brand with the cyan→violet→magenta ramp.
+// ckWordmark is the brand name in plain bold: the colour belongs to the mark,
+// never spread across the letters.
 func ckWordmark(s string) string {
-	rs := []rune(s)
-	n := len(rs)
-	var b strings.Builder
-	for i, r := range rs {
-		t := 0.0
-		if n > 1 {
-			t = float64(i) / float64(n-1)
-		}
-		b.WriteString(lipgloss.NewStyle().Foreground(ckLerpHex(t)).Bold(true).Render(string(r)))
-	}
-	return b.String()
-}
-
-// ckLerpHex blends the brand stops (start → mid → end) across t∈[0,1], with
-// the tokens' deeper light-theme stops on light backgrounds.
-func ckLerpHex(t float64) color.Color {
-	return ckDepth(lipgloss.LightDark(ckDark)(
-		lipgloss.Color(ckLerp3(t, ckBrandLight[0], ckBrandLight[1], ckBrandLight[2])),
-		lipgloss.Color(ckLerp3(t, ckBrandDark[0], ckBrandDark[1], ckBrandDark[2]))))
-}
-
-// The wordmark's stops, parsed once: ckWordmark asks for them per rune per frame.
-var (
-	ckBrandDark  = [3][3]int{ckHexRGB(tokBrandStart.Dark), ckHexRGB(tokBrandMid.Dark), ckHexRGB(tokBrandEnd.Dark)}
-	ckBrandLight = [3][3]int{ckHexRGB(tokBrandStart.Light), ckHexRGB(tokBrandMid.Light), ckHexRGB(tokBrandEnd.Light)}
-)
-
-// ckHexRGB reads a generated "#rrggbb" truecolor value. A malformed one is a
-// broken token build, so it stops the program rather than painting black.
-func ckHexRGB(c tokDepths) [3]int {
-	var v [3]int
-	if _, err := fmt.Sscanf(c.TrueColor, "#%02x%02x%02x", &v[0], &v[1], &v[2]); err != nil {
-		panic(fmt.Sprintf("tui: generated brand colour %q: %v", c.TrueColor, err))
-	}
-	return v
-}
-
-func ckLerp3(t float64, from, mid, to [3]int) string {
-	a, b := from, mid
-	if t < 0.5 {
-		t = t / 0.5
-	} else {
-		a, b, t = mid, to, (t-0.5)/0.5
-	}
-	l := func(x, y int) int { return int(float64(x) + float64(y-x)*t) }
-	return fmt.Sprintf("#%02X%02X%02X", l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2]))
+	return lipgloss.NewStyle().Bold(true).Render(s)
 }
