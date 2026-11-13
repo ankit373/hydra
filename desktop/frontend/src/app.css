@@ -561,6 +561,8 @@ body {
 .sec-hero__note { margin-top: 10px; font-size: 13px; color: var(--hy-color-text-muted); }
 .sec-trend { margin-top: 4px; font-size: 12px; }
 .sec-hero__history { margin-top: 14px; }
+/* A card narrower than the chart scales it down rather than cutting it off. */
+.sec-hero__history svg { max-width: 100%; height: auto; }
 
 .sec-ring__track { stroke: var(--hy-color-border-subtle); }
 .sec-ring__fill { transition: stroke-dasharray .3s ease; }
@@ -2123,17 +2125,6 @@ body {
   min-height: 0;
   height: 100%;
 }
-/* Two folds, not one: the run rail goes before the cockpit, because at that
-   width the thread is still readable without either. */
-@media (max-width: 1180px) {
-  .chatv-shell { grid-template-columns: minmax(0, 1fr) 292px; }
-  .chatside { display: none; }
-}
-@media (max-width: 880px) {
-  .chatv-shell { grid-template-columns: minmax(0, 1fr); }
-  .cockpit { display: none; }
-}
-
 /* ── Chat run rail ─────────────────────────────────────────────────────── */
 
 .chatside {
@@ -2248,6 +2239,19 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* Two folds, not one: the run rail goes before the cockpit, because at that
+   width the thread is still readable without either. They sit after the base
+   .chatside and .cockpit rules on purpose: same specificity, so the later
+   display wins (#1431). */
+@media (max-width: 1180px) {
+  .chatv-shell { grid-template-columns: minmax(0, 1fr) 292px; }
+  .chatside { display: none; }
+}
+@media (max-width: 880px) {
+  .chatv-shell { grid-template-columns: minmax(0, 1fr); }
+  .cockpit { display: none; }
 }
 
 .ck { display: flex; flex-direction: column; }
