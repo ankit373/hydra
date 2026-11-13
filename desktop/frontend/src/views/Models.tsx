@@ -173,7 +173,7 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
         subtitle="The models this machine can use, and how well each one has actually done."
         provenance={
           heads
-            ? `${heads.routable} of ${heads.heads.length} discovered models ready · declared by models.yaml, reachability by probe`
+            ? `${heads.routable} of ${heads.heads.length} discovered models ready, declared by models.yaml, reachability by probe`
             : 'looking for reachable models on this machine…'
         }
         toolbar={

@@ -125,9 +125,9 @@ function summary(steps: Step[]): string {
   const last = steps[steps.length - 1].tier
   const hops = steps.length - 1
   const word = hops === 1 ? 'once' : `${hops} times`
-  if (last < first) return `escalated ${word} · T${first} → T${last}`
-  if (last > first) return `eased off ${word} · T${first} → T${last}`
-  return `moved ${word} and ended where it started · T${first}`
+  if (last < first) return `escalated ${word}, T${first} → T${last}`
+  if (last > first) return `eased off ${word}, T${first} → T${last}`
+  return `moved ${word} and ended where it started, T${first}`
 }
 
 function ariaLabel(steps: Step[]): string {

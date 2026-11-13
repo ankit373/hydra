@@ -83,14 +83,8 @@ function run(over: Partial<Run> = {}): Run {
   }
 }
 
-function renderDock(
-  onOpenRun: (runID: string) => void = noop,
-  runs: Run[] | null = [],
-  runsError: string | null = null,
-) {
-  return render(
-    <ChatView onOpenRun={onOpenRun} focusSignal={0} runs={runs} runsError={runsError} />,
-  )
+function renderDock(onOpenRun: (runID: string) => void = noop, runs: Run[] | null = []) {
+  return render(<ChatView onOpenRun={onOpenRun} focusSignal={0} runs={runs} />)
 }
 
 beforeEach(() => {
@@ -165,13 +159,13 @@ describe('generic dispatch failures (#533)', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' })
 
     expect(await screen.findByText('dispatch: no route')).toBeInTheDocument()
-    const link = screen.getByRole('button', { name: /session →/ })
+    const link = screen.getByRole('button', { name: 'Open run' })
 
     fireEvent.click(link)
     expect(onOpenRun).toHaveBeenCalledWith('run-1')
   })
 
-  it('leaves a needsProbe failure to its own retry button, with no session link', async () => {
+  it('leaves a needsProbe failure to its own retry button, with no run link', async () => {
     mockChat.mockResolvedValue({
       output: '',
       head: '',
@@ -190,7 +184,7 @@ describe('generic dispatch failures (#533)', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' })
 
     await screen.findByRole('button', { name: 'Check again' })
-    expect(screen.queryByRole('button', { name: /session →/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open run' })).not.toBeInTheDocument()
   })
 })
 
@@ -272,7 +266,7 @@ describe('recovery after the view closes (#533)', () => {
     renderDock()
 
     expect(await screen.findByText(/finished while this view was closed/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /session →/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open run' })).toBeInTheDocument()
     expect(screen.queryByText('the answer')).not.toBeInTheDocument()
 
     // Input unblocks once the recovered turn has settled.
@@ -420,7 +414,7 @@ describe('a task parked waiting on a human (#583)', () => {
     fireEvent.change(textarea, { target: { value: 'hello' } })
     fireEvent.keyDown(textarea, { key: 'Enter' })
 
-    await screen.findByRole('button', { name: /session →/ })
+    await screen.findByRole('button', { name: 'Open run' })
     expect(screen.queryByText(/could not answer/i)).not.toBeInTheDocument()
   })
 })
@@ -581,26 +575,37 @@ describe('a streaming dispatch', () => {
   })
 })
 
-describe('the run sidebar when the run log cannot be read', () => {
-  // Null meant both "the first read has not answered" and "the read failed",
-  // so a dead backend left the sidebar saying "Reading run logs…" for ever
-  // (#1100).
-  it('says it is reading while the first read is still out', () => {
-    renderDock(noop, null)
-    expect(screen.getByText('Reading run logs…')).toBeInTheDocument()
+// The column beside every answer: which model, what it cost, how sure, and
+// whether it fell back, without opening the run.
+describe('the facts beside an answer', () => {
+  async function ask(runs: Run[] | null) {
+    mockChat.mockResolvedValue({
+      output: 'done', head: 'claude', model: 'claude-sonnet-4.5', tier: 4,
+      costUsd: 0.062, durationMs: 42000, runId: 'run-7',
+    })
+    renderDock(noop, runs)
+    const textarea = screen.getByPlaceholderText(/ask anything/i)
+    fireEvent.change(textarea, { target: { value: 'rotate the key' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await screen.findByText('done')
+  }
+
+  it('names the model and the cost', async () => {
+    await ask([])
+    expect(screen.getByText('claude-sonnet-4.5')).toHaveClass('facts__model')
+    expect(screen.getByText('$0.062')).toBeInTheDocument()
+    expect(screen.getByText('first choice')).toBeInTheDocument()
   })
 
-  it('says it could not read once the read has failed', () => {
-    renderDock(noop, null, 'read /logs/runs: input/output error')
-    expect(screen.getByText(/Couldn't read the run log/)).toBeInTheDocument()
-    expect(screen.queryByText('Reading run logs…')).not.toBeInTheDocument()
+  it('shows the confidence the run log recorded', async () => {
+    await ask([run({ id: 'run-7', confidence: 0.94 })])
+    expect(screen.getByText(/94% likely correct/)).toBeInTheDocument()
   })
 
-  // The polls keep the last good list on purpose; a failed tick must not empty
-  // a sidebar that was right.
-  it('keeps the runs it already has rather than reporting the failure over them', () => {
-    renderDock(noop, [run({ id: 'run-7', goal: 'rotate the signing key' })], 'input/output error')
-    expect(screen.getByText(/rotate the signing key/)).toBeInTheDocument()
-    expect(screen.queryByText(/Couldn't read the run log/)).not.toBeInTheDocument()
+  // Zero means the run was not checked, not that it was checked and failed.
+  it('says not checked rather than 0%', async () => {
+    await ask([run({ id: 'run-7', confidence: 0 })])
+    expect(screen.getByText('not checked')).toBeInTheDocument()
+    expect(screen.queryByText(/0% likely correct/)).not.toBeInTheDocument()
   })
 })

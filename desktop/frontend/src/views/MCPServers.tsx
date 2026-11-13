@@ -93,7 +93,7 @@ export function MCPServers() {
                     )}
                   </td>
                   <td>
-                    {s.client} · {s.scope}
+                    {s.client}, {s.scope}
                   </td>
                   <td>{s.remote ? 'remote url' : s.command || '—'}</td>
                   <td>
@@ -140,5 +140,5 @@ export function stateText(s: MCPServer): string {
 export function scoreText(s: MCPServer): string {
   if (!s.scored) return 'not scored'
   if (s.confidence === 'insufficient_evidence') return 'insufficient evidence'
-  return `${Math.round(s.score)}/100 · ${(s.confidence || '').replace(/_/g, ' ')}`
+  return `${Math.round(s.score)}/100, ${(s.confidence || '').replace(/_/g, ' ')}`
 }

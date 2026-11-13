@@ -16,147 +16,139 @@ body {
 
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 
-/* Header / body / footer. The app had none of the first or last: main.go runs
-   mac.TitleBarHiddenInset(), so nothing drew a top bar at all (#1060). */
+/* A rail on the left and one main column. The rail replaced a header and a
+   status bar: tabs across the top took width the views needed, and Chat lost
+   its thread to the panels beside it at the 980px minimum (#1431, #1433). */
 .shell {
+  --rail-w: 208px;
   display: grid;
-  grid-template-rows: var(--hy-head-h) 1fr var(--hy-foot-h);
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
   height: 100%;
 }
 
-/* ── App header ────────────────────────────────────────────────────────── */
+/* ── Rail ──────────────────────────────────────────────────────────────── */
 
-.apphead {
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hy-space-1);
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--hy-space-3) var(--hy-space-3);
+  background: var(--hy-color-surface-raised);
+  border-right: 1px solid var(--hy-color-border-subtle);
+}
+/* main.go hides the title bar, so this strip is the drag region and sits
+   below the traffic lights. */
+.rail__top {
   --wails-draggable: drag;
   display: flex;
-  align-items: center;
-  gap: var(--hy-space-4);
-  /* Left inset clears the macOS traffic lights, which float over the content. */
-  padding: 0 var(--hy-space-4) 0 var(--hy-traffic-w);
-  background: var(--hy-color-surface-raised);
-  border-bottom: 1px solid var(--hy-color-border-subtle);
-  min-width: 0;
+  align-items: flex-end;
+  height: var(--hy-head-h);
+  padding: 0 var(--hy-space-2) var(--hy-space-2);
+  margin: 0 calc(-1 * var(--hy-space-3)) var(--hy-space-2);
+  padding-left: var(--hy-space-5);
 }
+.rail__word { font-size: var(--hy-font-size-base); font-weight: 700; color: var(--hy-color-text-default); }
 
-.apphead__brand { display: flex; align-items: center; gap: var(--hy-space-2); flex: 0 0 auto; }
-/* Plain: the brand colours belong to the mark, never spread across letters. */
-.apphead__word {
-  font-weight: 700;
-  font-size: var(--hy-font-size-sm);
-  letter-spacing: .14em;
-  color: var(--hy-color-text-default);
-}
-
-.apphead__search {
-  --wails-draggable: no-drag;
+.rail__search,
+.rail__item,
+.rail__fact {
   appearance: none;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--hy-space-2);
-  flex: 0 1 300px;
-  min-width: 120px;
-  height: 30px;
-  padding: 0 var(--hy-space-2) 0 var(--hy-space-2-5);
-  border: 1px solid var(--hy-color-border-strong);
-  border-radius: var(--hy-radius-control);
-  background: var(--hy-color-surface-overlay);
-  color: var(--hy-color-text-subtle);
-  font: inherit;
-  font-size: var(--hy-font-size-xs);
-  cursor: pointer;
-  text-align: left;
-}
-.apphead__search:hover { border-color: var(--hy-color-accent-default); color: var(--hy-color-text-muted); }
-.apphead__search:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
-.apphead__searchicon { font-size: var(--hy-font-size-sm); }
-.apphead__searchtext { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.apphead__kbd {
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xs);
-  padding: var(--hy-space-0-5) var(--hy-space-1);
-  border: 1px solid var(--hy-color-border-subtle);
-  border-radius: var(--hy-radius-control);
-  color: var(--hy-color-text-subtle);
-}
-
-.apphead__nav { display: flex; align-items: center; gap: var(--hy-space-0-5); margin-left: auto; }
-
-.apphead__tab {
-  --wails-draggable: no-drag;
-  appearance: none;
+  width: 100%;
+  padding: var(--hy-space-1-5) var(--hy-space-2);
   border: 0;
+  border-radius: var(--hy-radius-control);
   background: transparent;
   color: var(--hy-color-text-muted);
   font: inherit;
   font-size: var(--hy-font-size-sm);
-  font-weight: 500;
-  padding: var(--hy-space-2) var(--hy-space-2-5);
-  border-radius: var(--hy-radius-control);
+  text-align: left;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--hy-space-1-5);
-  white-space: nowrap;
 }
-.apphead__tab:hover { background: var(--hy-color-surface-overlay); color: var(--hy-color-text-default); }
-.apphead__tab[aria-current="page"] { background: var(--hy-color-surface-overlay); color: var(--hy-color-text-default); box-shadow: inset 0 0 0 1px var(--hy-color-border-default); }
-.apphead__tab:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
-
-.apphead__badge {
+.rail__search { border: 1px solid var(--hy-color-border-subtle); margin-bottom: var(--hy-space-3); }
+.rail__search > span { flex: 1; }
+.rail__kbd {
   font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  line-height: 1;
-  padding: var(--hy-space-0-5) var(--hy-space-1);
-  border-radius: var(--hy-radius-pill);
-  background: var(--hy-color-status-warning);
-  color: var(--hy-color-text-inverse);
-  font-weight: 700;
+  color: var(--hy-color-text-subtle);
 }
-/* Live work glows; work waiting on a human does not. The difference is the
-   whole point of having two counters. */
-.apphead__badge--live {
-  background: var(--hy-color-accent-default);
-  color: var(--hy-color-text-inverse);
-  box-shadow: 0 0 10px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent);
-}
+.rail__nav { display: flex; flex-direction: column; gap: var(--hy-space-0-5); }
+.rail__item { color: var(--hy-color-text-default); }
+.rail__label { flex: 1; }
+.rail__item[aria-current="page"] { background: var(--hy-color-surface-overlay); font-weight: 600; }
+.rail__search:hover,
+.rail__item:hover,
+.rail__fact:hover { background: var(--hy-color-surface-overlay); color: var(--hy-color-text-default); }
+.rail__search:focus-visible,
+.rail__item:focus-visible,
+.rail__fact:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
+.rail__note { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); font-weight: 400; }
+.rail__note--urgent { color: var(--hy-color-status-warning); font-weight: 600; }
 
-.apphead__status { display: flex; align-items: center; gap: var(--hy-space-1); flex: 0 0 auto; }
-.apphead__stat {
-  --wails-draggable: no-drag;
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--hy-color-text-muted);
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xs);
-  padding: var(--hy-space-1-5) var(--hy-space-2);
-  border-radius: var(--hy-radius-control);
-  cursor: pointer;
+.rail__grow { flex: 1; }
+.rail__facts {
   display: flex;
-  align-items: center;
-  gap: var(--hy-space-1-5);
-  white-space: nowrap;
+  flex-direction: column;
+  padding-top: var(--hy-space-2);
+  border-top: 1px solid var(--hy-color-border-subtle);
 }
-.apphead__stat:hover { background: var(--hy-color-surface-overlay); color: var(--hy-color-text-default); }
-.apphead__stat:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
-.apphead__theme {
-  --wails-draggable: no-drag;
+.rail__fact { flex-wrap: wrap; column-gap: var(--hy-space-1); }
+.rail__num { font-family: var(--hy-font-family-mono); color: var(--hy-color-text-default); font-weight: 600; }
+.rail__sub { flex-basis: 100%; font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); }
+.rail__mode { margin: 0; padding: var(--hy-space-1) var(--hy-space-2); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
+.rail__mode--warning,
+.rail__mode--caution { color: var(--hy-color-status-warning); }
+.rail__mode--critical,
+.rail__mode--emergency { color: var(--hy-color-status-danger); }
+.rail__foot { display: flex; align-items: center; justify-content: space-between; padding: var(--hy-space-1) var(--hy-space-2) 0; }
+.rail__ver { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); }
+.rail__theme {
   appearance: none;
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
-  padding: 0;
-  color: var(--hy-color-text-muted);
-  background: transparent;
-  border: 1px solid var(--hy-color-border-strong);
+  border: 1px solid var(--hy-color-border-subtle);
   border-radius: var(--hy-radius-control);
+  background: transparent;
+  color: var(--hy-color-text-muted);
   cursor: pointer;
 }
-.apphead__theme:hover { color: var(--hy-color-accent-default); border-color: var(--hy-color-accent-default); }
-.apphead__theme:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
-.apphead__theme svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.apphead__theme .apphead__themefill { fill: currentColor; stroke: none; }
+.rail__theme:hover { color: var(--hy-color-accent-default); border-color: var(--hy-color-accent-default); }
+.rail__theme:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
+.rail__theme svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rail__theme .rail__themefill { fill: currentColor; stroke: none; }
+
+/* Below the 980px minimum, reachable only by zooming in, the rail folds into
+   a strip across the top so the Session diff and timeline keep their width. */
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail {
+    flex-direction: row; flex-wrap: wrap; align-items: center;
+    gap: var(--hy-space-1) var(--hy-space-2);
+    padding: var(--hy-space-1) var(--hy-space-3);
+    border-right: 0; border-bottom: 1px solid var(--hy-color-border-subtle);
+    overflow: visible;
+  }
+  .rail__top { height: auto; margin: 0; padding: 0 0 0 var(--hy-traffic-w); align-items: center; }
+  .rail__search { width: auto; margin: 0; }
+  .rail__nav { flex-direction: row; flex-wrap: wrap; }
+  .rail__item, .rail__fact { width: auto; }
+  .rail__grow, .rail__sub, .rail__mode, .rail__ver { display: none; }
+  .rail__facts { flex-direction: row; padding: 0; border: 0; }
+  .rail__foot { padding: 0; }
+}
+
+/* Status words take their colour from what they mean. */
+.status--success { color: var(--hy-color-status-success); }
+.status--warning { color: var(--hy-color-status-warning); }
+.status--danger  { color: var(--hy-color-status-danger); }
+.status--info    { color: var(--hy-color-status-info); }
+
 .visually-hidden {
   position: absolute !important;
   width: 1px;
@@ -168,44 +160,6 @@ body {
   white-space: nowrap;
   border: 0;
 }
-
-.apphead__dot { width: 7px; height: 7px; border-radius: var(--hy-radius-pill); flex: 0 0 auto; }
-.apphead__dot--ok { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
-.apphead__dot--none { background: var(--hy-color-status-danger); }
-.apphead__dot--unknown { background: var(--hy-color-text-subtle); }
-
-/* ── App footer ────────────────────────────────────────────────────────── */
-
-.appfoot {
-  display: flex;
-  align-items: center;
-  gap: var(--hy-space-2-5);
-  padding: 0 var(--hy-space-4);
-  background: var(--hy-color-surface-raised);
-  border-top: 1px solid var(--hy-color-border-subtle);
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xs);
-  color: var(--hy-color-text-muted);
-  min-width: 0;
-}
-.appfoot__item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.appfoot__item strong { color: var(--hy-color-text-default); font-weight: 600; }
-.appfoot__sub { color: var(--hy-color-text-subtle); }
-.appfoot__sep { width: 1px; height: 12px; background: var(--hy-color-border-subtle); flex: 0 0 auto; }
-.appfoot__grow { flex: 1; }
-.appfoot__mode {
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  font-size: var(--hy-font-size-xs);
-  padding: var(--hy-space-0-5) var(--hy-space-2);
-  border-radius: var(--hy-radius-pill);
-  border: 1px solid var(--hy-color-border-default);
-  color: var(--hy-color-text-muted);
-}
-.appfoot__mode--warning { color: var(--hy-color-status-warning); border-color: var(--hy-color-status-warning); }
-.appfoot__mode--caution { color: var(--hy-color-status-warning); border-color: var(--hy-color-status-warning); }
-.appfoot__mode--critical,
-.appfoot__mode--emergency { color: var(--hy-color-status-danger); border-color: var(--hy-color-status-danger); }
 
 /* ── Command palette ───────────────────────────────────────────────────── */
 
@@ -244,10 +198,7 @@ body {
 }
 .palette__list { overflow-y: auto; padding: var(--hy-space-1-5); }
 .palette__group {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .11em;
   color: var(--hy-color-text-subtle);
   padding: var(--hy-space-2-5) var(--hy-space-2-5) var(--hy-space-1);
 }
@@ -269,7 +220,7 @@ body {
 }
 .palette__row[data-sel="true"] { background: var(--hy-color-surface-overlay); color: var(--hy-color-text-default); box-shadow: inset 0 0 0 1px var(--hy-color-border-default); }
 .palette__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.palette__hint { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); flex: 0 0 auto; }
+.palette__hint { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); flex: 0 0 auto; }
 .palette__empty { color: var(--hy-color-text-muted); font-size: var(--hy-font-size-sm); padding: var(--hy-space-4) var(--hy-space-2-5); margin: 0; }
 .palette__foot {
   border-top: 1px solid var(--hy-color-border-subtle);
@@ -316,13 +267,12 @@ body {
 .pagehead { margin-bottom: var(--hy-space-5); }
 .pagehead__row { display: flex; align-items: flex-start; gap: var(--hy-space-4); }
 .pagehead__titles { flex: 1; min-width: 0; }
-.pagehead__title { margin: 0; font-size: var(--hy-font-size-xl); letter-spacing: -0.03em; }
+.pagehead__title { margin: 0; font-size: var(--hy-font-size-xl); }
 .pagehead__sub { margin: var(--hy-space-1) 0 0; color: var(--hy-color-text-muted); font-size: var(--hy-font-size-sm); }
 /* Provenance sits apart from the subtitle: "what this is" and "what evidence
    it rests on" are different claims. */
 .pagehead__prov {
   margin: var(--hy-space-2) 0 0;
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   color: var(--hy-color-text-subtle);
 }
@@ -341,7 +291,7 @@ body {
 /* Only the views with a back button need a row, plain title+subtitle
    (Fleet, Dashboard) stack correctly as block siblings with no flex at all. */
 .view__headrow { display: flex; align-items: baseline; gap: var(--hy-space-3); }
-.view__title { margin: 0; font-size: var(--hy-font-size-xl); letter-spacing: -0.03em; }
+.view__title { margin: 0; font-size: var(--hy-font-size-xl); }
 .view__title--brand {
   background: var(--hy-brand);
   -webkit-background-clip: text;
@@ -353,10 +303,7 @@ body {
 
 .section__title {
   margin: var(--hy-space-8) 0 var(--hy-space-2-5);
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .11em;
   color: var(--hy-color-text-muted);
 }
 
@@ -376,10 +323,7 @@ body {
 }
 
 .card__label {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .09em;
   color: var(--hy-color-text-muted);
 }
 
@@ -387,7 +331,6 @@ body {
   margin-top: var(--hy-space-2);
   font-size: var(--hy-font-size-2xl);
   font-weight: 600;
-  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -396,53 +339,37 @@ body {
 .card__value--unknown { color: var(--hy-color-text-muted); font-size: var(--hy-font-size-lg); font-weight: 500; }
 .card__value--sm { margin-top: var(--hy-space-2); font-size: var(--hy-font-size-md); font-weight: 600; }
 
-/* ── Governor bands ────────────────────────────────────────────────────── */
+/* ── Facts: a number with one line under it ────────────────────────────── */
+/* Used by Usage and Audit instead of gauges. The figure is the content, so it
+   is the largest thing in the row and is drawn as-is from the first frame. */
 
-.gov--normal   { color: var(--hy-color-status-success); }
-.gov--warning  { color: var(--hy-color-status-warning); }
-.gov--critical { color: var(--hy-color-status-danger); }
-
-/* ── Arc gauges (Governor / Trust) ─────────────────────────────────────── */
-/* Replaces the old flat .gov__track/.trust-cmp__track progress bars: an SVG
-   ring whose stroke-dashoffset encodes the fraction, transitioned in CSS so
-   the sweep-in is one property change, not a JS animation loop. */
-
-.arc-wrap { display: flex; flex-direction: column; align-items: center; gap: var(--hy-space-2); margin-top: var(--hy-space-2); }
-.arc-gauge { overflow: visible; }
-.arc-track { stroke: var(--hy-color-border-subtle); fill: none; }
-.arc-fill {
-  fill: none;
-  stroke-linecap: round;
-  transition: stroke-dashoffset var(--hy-motion-duration-slow) var(--hy-motion-easing-standard);
+.factrow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--hy-space-5);
+  margin: 0 0 var(--hy-space-6);
+  padding: var(--hy-space-4) 0;
+  border-top: 1px solid var(--hy-color-border-subtle);
+  border-bottom: 1px solid var(--hy-color-border-subtle);
 }
-.arc-fill--baseline { stroke: var(--hy-color-text-muted); }
-.arc-fill--actual   { stroke: var(--hy-color-chart-series-1); }
-.arc-num {
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-lg);
+.fact { min-width: 0; }
+.fact dd { margin: 0; }
+.fact__label { font-size: var(--hy-font-size-sm); color: var(--hy-color-text-muted); }
+.fact__value {
+  margin-top: var(--hy-space-1);
+  font-size: var(--hy-font-size-2xl);
   font-weight: 600;
-  fill: var(--hy-color-text-default);
+  font-variant-numeric: tabular-nums;
 }
-.arc-lbl {
-  font-size: var(--hy-font-size-xs);
-  fill: var(--hy-color-text-muted);
-}
-.arc-legend {
-  display: flex;
-  gap: var(--hy-space-4);
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xs);
-  color: var(--hy-color-text-muted);
-}
-.arc-legend__dot {
-  display: inline-block;
-  width: 7px; height: 7px;
-  border-radius: var(--hy-radius-pill);
-  margin-right: var(--hy-space-1);
-  vertical-align: middle;
-}
-.arc-legend__dot--actual   { background: var(--hy-color-chart-series-1); }
-.arc-legend__dot--baseline { background: var(--hy-color-text-muted); }
+.fact__sub { margin-top: var(--hy-space-1); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
+.coverage--good { color: var(--hy-color-status-success); }
+.coverage--warn { color: var(--hy-color-status-warning); }
+.coverage--bad  { color: var(--hy-color-status-danger); }
+
+/* Small labelled counts, for a handful of numbers that belong together. */
+.sec-counts { display: flex; flex-wrap: wrap; gap: var(--hy-space-2) var(--hy-space-5); margin: var(--hy-space-2) 0 0; }
+.sec-counts dt { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
+.sec-counts dd { margin: 0; font-size: var(--hy-font-size-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ── Security ──────────────────────────────────────────────────────────── */
 
@@ -476,35 +403,22 @@ body {
    before the text does. */
 .sec-verdict {
   border: 1px solid var(--hy-color-border-subtle);
-  border-left: 4px solid var(--hy-color-border-subtle);
   border-radius: var(--hy-radius-card);
   background: var(--hy-color-surface-card);
   padding: var(--hy-space-4) var(--hy-space-4);
   margin-bottom: var(--hy-space-4);
 }
-.sec-verdict--act       { border-left-color: var(--hy-color-status-danger); }
-.sec-verdict--attention { border-left-color: var(--hy-color-status-warning); }
-.sec-verdict--ok        { border-left-color: var(--hy-color-status-success); }
 
 /* The verdict is the largest thing on the screen. It was 11px while the page
    title, which carries no information, was the biggest text in the view. */
 .sec-verdict__label {
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-3xl);
+  font-size: var(--hy-font-size-2xl);
   line-height: 1.05;
-  text-transform: uppercase;
-  letter-spacing: .04em;
   font-weight: 700;
 }
 .sec-verdict--act       .sec-verdict__label { color: var(--hy-color-status-danger); }
 .sec-verdict--attention .sec-verdict__label { color: var(--hy-color-status-warning); }
 .sec-verdict--ok        .sec-verdict__label { color: var(--hy-color-status-success); }
-
-/* Neon, per BRAND.md: the state should carry across the room, and the glow is
-   what makes this read as Hydra rather than as a generic admin panel. */
-.sec-verdict--act       .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-danger) calc(55% * var(--hy-glow)), transparent); }
-.sec-verdict--attention .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-warning) calc(45% * var(--hy-glow)), transparent); }
-.sec-verdict--ok        .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-status-success) calc(45% * var(--hy-glow)), transparent); }
 
 .sec-verdict__trigger { margin-top: var(--hy-space-2-5); font-size: var(--hy-font-size-md); line-height: 1.5; }
 .sec-verdict__scope   { margin-top: var(--hy-space-1-5); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
@@ -541,7 +455,7 @@ body {
    weight and wrapped onto two lines. */
 .sec-risk__id { display: block; margin-top: var(--hy-space-1); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); }
 .sec-curated {
-  margin-left: var(--hy-space-1-5); font-size: var(--hy-font-size-xs); letter-spacing: .08em; text-transform: uppercase;
+  margin-left: var(--hy-space-1-5); font-size: var(--hy-font-size-xs);
   color: var(--hy-color-text-subtle); border: 1px solid var(--hy-color-border-subtle); border-radius: var(--hy-radius-mark); padding: 1px var(--hy-space-1);
 }
 
@@ -554,43 +468,10 @@ body {
 /* A card narrower than the chart scales it down rather than cutting it off. */
 .sec-hero__history svg { max-width: 100%; height: auto; }
 
-.sec-ring__track { stroke: var(--hy-color-border-subtle); }
-.sec-ring__fill { transition: stroke-dasharray var(--hy-motion-duration-slow) var(--hy-motion-easing-standard); }
-.sec-ring__fill--good { stroke: var(--hy-color-status-success); }
-.sec-ring__fill--warn { stroke: var(--hy-color-status-warning); }
-.sec-ring__fill--bad  { stroke: var(--hy-color-status-danger); }
-.sec-ring__label {
-  fill: var(--hy-color-text-default);
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xl);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
 .sec-history__grid { stroke: var(--hy-color-border-subtle); stroke-width: 1; stroke-dasharray: 2 3; }
 .sec-history__area { fill: color-mix(in srgb, var(--hy-color-chart-series-1) 14%, transparent); }
 .sec-history__line { stroke: var(--hy-color-chart-series-1); stroke-width: 2; }
 .sec-history__dot  { fill: var(--hy-color-chart-series-1); }
-
-/* Part-to-whole donut + legend, the "N by status" pattern security
-   dashboards (Wiz, Snyk, GitHub) use for a handful of categories summing to
-   a total. See SecurityCharts.tsx's StatusDonut doc comment. */
-.sec-donut { display: flex; align-items: center; gap: var(--hy-space-4); margin-top: var(--hy-space-2); }
-.sec-donut__track { stroke: var(--hy-color-border-subtle); }
-.sec-donut__total {
-  fill: var(--hy-color-text-default);
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-base);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.sec-donut__legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--hy-space-1); }
-.sec-donut__legend li {
-  display: flex; align-items: center; gap: var(--hy-space-1-5);
-  font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); white-space: nowrap;
-}
-.sec-donut__legend b { color: var(--hy-color-text-default); font-variant-numeric: tabular-nums; margin-left: var(--hy-space-0-5); }
-.sec-donut__swatch { width: 8px; height: 8px; border-radius: var(--hy-radius-mark); flex: 0 0 auto; }
 
 /* Small multiples: one compact tile per category, replacing an earlier radar
    chart, see SecurityCharts.tsx's CategoryGrid doc comment for why. */
@@ -611,7 +492,7 @@ body {
 .sec-tile__id { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
 .sec-tile__bar { margin-top: var(--hy-space-1-5); height: 4px; border-radius: var(--hy-radius-mark); background: var(--hy-color-border-subtle); overflow: hidden; }
 .sec-tile__fill { display: block; height: 100%; border-radius: var(--hy-radius-mark); background: currentColor; }
-.sec-tile__status { margin-top: var(--hy-space-1); font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); text-transform: uppercase; letter-spacing: .04em; }
+.sec-tile__status { margin-top: var(--hy-space-1); font-size: var(--hy-font-size-xs); }
 .sec-tile--enforced   { color: var(--hy-color-status-success); }
 /* Configured takes info, not the accent: beside success's green, the teal accent read as the same state. */
 .sec-tile--configured { color: var(--hy-color-status-info); }
@@ -621,7 +502,7 @@ body {
 .sec-risktrend__denied  { stroke: var(--hy-color-status-danger); stroke-width: 2; }
 /* Dashed as well as amber: red and amber are close under deuteranopia. */
 .sec-risktrend__flagged { stroke: var(--hy-color-status-warning); stroke-width: 2; stroke-dasharray: 4 3; }
-.sec-risktrend-legend { display: flex; gap: var(--hy-space-4); margin-top: var(--hy-space-1-5); font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
+.sec-risktrend-legend { display: flex; gap: var(--hy-space-4); margin-top: var(--hy-space-1-5); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
 .sec-risktrend-legend svg { margin-right: var(--hy-space-1); vertical-align: middle; }
 
 /* Inline proportional bar inside the policy-audit hit column, so the rule
@@ -648,20 +529,13 @@ body {
 .sec-action {
   background: var(--hy-color-surface-card);
   border: 1px solid var(--hy-color-border-subtle);
-  border-left: 3px solid var(--hy-color-border-subtle);
   border-radius: var(--hy-radius-control);
   padding: var(--hy-space-2-5) var(--hy-space-3);
 }
-.sec-action--now   { border-left-color: var(--hy-color-status-danger); }
-.sec-action--soon  { border-left-color: var(--hy-color-status-warning); }
-.sec-action--watch { border-left-color: var(--hy-color-text-muted); }
 
 .sec-action__head { display: flex; align-items: baseline; gap: var(--hy-space-2); }
 .sec-action__priority {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .08em;
   font-weight: 700;
 }
 .sec-action--now   .sec-action__priority { color: var(--hy-color-status-danger); }
@@ -692,10 +566,7 @@ body {
 .sec-cat__detail { color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); flex: 1; }
 
 .sec-cat__status {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .06em;
   padding: var(--hy-space-0-5) var(--hy-space-2);
   border-radius: var(--hy-radius-pill);
   border: 1px solid var(--hy-color-border-subtle);
@@ -713,7 +584,6 @@ body {
 .sec-sev--critical {
   color: var(--hy-color-text-inverse); font-weight: 700;
   background: var(--hy-color-status-danger); border-color: var(--hy-color-status-danger);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-color-status-danger) calc(45% * var(--hy-glow)), transparent);
 }
 .sec-sev--high   { color: var(--hy-color-status-danger); font-weight: 700; border-color: var(--hy-color-status-danger); }
 .sec-sev--medium { color: var(--hy-color-status-warning);       border-color: color-mix(in srgb, var(--hy-color-status-warning) 45%, transparent); }
@@ -725,10 +595,7 @@ body {
 
 .table th {
   text-align: left;
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .09em;
   color: var(--hy-color-text-muted);
   font-weight: 500;
   padding: 0 var(--hy-space-3) var(--hy-space-2) 0;
@@ -778,21 +645,7 @@ body {
 .spend-bar { cursor: default; }
 .spend-bar:focus-visible { outline: none; }
 
-/* Bars grow in from a zero baseline the first time real data lands
-   (Dashboard.tsx's `useReveal`), transform, not height, so it's a single
-   composited property and never triggers layout. transform-box: fill-box
-   makes "bottom" mean the rect's own bottom edge, not the SVG viewport's. */
-.spend-bar__rect,
-.spend-bar__halo {
-  transform-box: fill-box;
-  transform-origin: bottom;
-  transform: scaleY(0);
-  transition: transform var(--hy-motion-duration-slow) var(--hy-motion-easing-standard), opacity var(--hy-motion-duration-fast);
-}
-.spend-bar__rect.grown,
-.spend-bar__halo.grown { transform: scaleY(1); }
-
-.spend-bar__rect { opacity: .82; }
+.spend-bar__rect { opacity: .82; transition: opacity var(--hy-motion-duration-fast); }
 .spend-bar:hover .spend-bar__rect,
 .spend-bar:focus-visible .spend-bar__rect { opacity: 1; }
 
@@ -804,14 +657,6 @@ body {
 /* A larger, lower-opacity rect behind the crisp bar, a layered solid fill,
    never `filter: blur`/`backdrop-filter`, so the glow rasterizes like any
    other shape instead of costing a compositor blur pass. */
-.spend-bar__halo { opacity: calc(.22 * var(--hy-glow)); }
-.spend-bar:hover .spend-bar__halo,
-.spend-bar:focus-visible .spend-bar__halo { opacity: calc(.4 * var(--hy-glow)); }
-
-.spend-bar__halo--free      { fill: var(--hy-color-text-muted); }
-.spend-bar__halo--cheap     { fill: var(--hy-color-cost-low); }
-.spend-bar__halo--mid       { fill: var(--hy-color-cost-mid); }
-.spend-bar__halo--expensive { fill: var(--hy-color-cost-high); }
 
 .spend-tip { pointer-events: none; }
 .spend-tip__bg { fill: var(--hy-color-surface-raised); stroke: var(--hy-color-border-subtle); }
@@ -827,16 +672,11 @@ body {
   margin-top: var(--hy-space-2);
   display: flex;
   justify-content: space-between;
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   color: var(--hy-color-text-muted);
 }
 
-/* ── Dashboard: inline sparkline (spend stat card) ────────────────────── */
-
-.spend-spark { display: block; margin-top: var(--hy-space-2); }
-.spend-spark__line { stroke: var(--hy-color-text-muted); stroke-width: 1.5; }
-.spend-spark__dot  { fill: var(--hy-color-chart-series-1); }
+.spend-chart__today { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); fill: var(--hy-color-text-default); }
 
 /* ── Dashboard: ranked bar lists (by model / by tier) ─────────────────── */
 
@@ -906,20 +746,9 @@ body {
 .rank__row--detail:hover::after,
 .rank__row--detail:focus-visible::after { opacity: 1; transform: translateY(-50%) translateX(2px); }
 
-/* ── Dashboard: trust comparison bars ──────────────────────────────────── */
-
-.trust-cmp { margin-top: var(--hy-space-0-5); display: flex; flex-direction: column; align-items: center; gap: var(--hy-space-1-5); }
-
-.trust-cmp__delta { margin-top: var(--hy-space-0-5); font-size: var(--hy-font-size-xs); text-align: center; }
-.trust-cmp__delta--good { color: var(--hy-color-status-success); }
-.trust-cmp__delta--bad  { color: var(--hy-color-status-danger); }
-
 /* ── Dashboard: calibration leaderboard (#409) ─────────────────────────── */
 /* Same row shape as .rank (name / track / value), plus a domain sub-label and
-   an oracle-vs-model color split. Bars use the spend-bar halo treatment
-   (#414) rotated 90°, a fainter halo layered behind a crisp fill, both
-   growing via `transform: scaleX` from a zero baseline the first time real
-   data lands, never `filter: blur`. */
+   an oracle-vs-model color split. */
 
 .cal__row {
   display: grid;
@@ -937,40 +766,30 @@ body {
 }
 .cal__domain { margin-left: var(--hy-space-1-5); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); }
 
-/* Not `overflow: hidden`, the halo bleeds vertically past the track, the same
-   way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. Horizontally
-   it cannot: calBarWidths lays the pair out inside the track less the bleed. */
 .cal__track {
   position: relative;
+  overflow: hidden;
   height: 8px;
   border-radius: var(--hy-radius-control);
   background: var(--hy-color-border-subtle);
 }
 
-.cal__halo,
 .cal__fill {
   position: absolute;
   top: 0; left: 0;
   height: 100%;
   border-radius: var(--hy-radius-control);
-  transform-origin: left;
-  transform: scaleX(0);
-  transition: transform var(--hy-motion-duration-slow) var(--hy-motion-easing-standard);
 }
-.cal__halo.grown, .cal__fill.grown { transform: scaleX(1); }
 
-/* Width/height/inset (the halo's HALO_PAD bleed) are set inline per row from
-   the absolute nat scale; only the reveal grow-in is CSS. */
+/* Width is set inline per row from the absolute nat scale. */
 .cal__fill { opacity: .95; }
-.cal__halo { opacity: calc(.3 * var(--hy-glow)); }
 
 /* Under ten observations D is a guess, so the bar is drawn as provisional
    rather than left to look like a measurement (#593). */
 .cal__fill--thin { opacity: .38; }
-.cal__halo--thin { opacity: calc(.12 * var(--hy-glow)); }
 
-.cal__fill--oracle, .cal__halo--oracle { background: var(--hy-color-chart-series-1); }
-.cal__fill--model,  .cal__halo--model  { background: var(--hy-color-chart-series-2); }
+.cal__fill--oracle { background: var(--hy-color-chart-series-1); }
+.cal__fill--model { background: var(--hy-color-chart-series-2); }
 
 .cal__value {
   display: inline-flex;
@@ -990,7 +809,6 @@ body {
   min-width: 98px;
   text-align: right;
   font-size: var(--hy-font-size-xs);
-  letter-spacing: .02em;
 }
 .cal__strength--strong   { color: var(--hy-color-status-success); }
 .cal__strength--moderate { color: var(--hy-color-accent-strong); }
@@ -1001,7 +819,6 @@ body {
   display: flex;
   gap: var(--hy-space-4);
   margin-top: var(--hy-space-3);
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   color: var(--hy-color-text-muted);
 }
@@ -1015,37 +832,6 @@ body {
 .cal-legend__dot--oracle { background: var(--hy-color-chart-series-1); }
 .cal-legend__dot--model  { background: var(--hy-color-chart-series-2); }
 .cal-legend__scale { margin-left: auto; color: var(--hy-color-text-subtle); }
-
-/* ── Dashboard: HUD chrome ─────────────────────────────────────────────── */
-/* Corner brackets + scanline + vignette, the same frame language as
-   brand/living/hydra-hud.src.html. Fixed to the viewport but mounted only
-   while the Dashboard component is (#408), a view-scoped instance of the
-   app-wide chrome rather than a shared-shell change. Pure CSS: a scanline is
-   a repeating gradient and the vignette a radial one, never
-   backdrop-filter/blur, matching this app's no-GPU-blur discipline. */
-
-.hud-corner {
-  position: fixed;
-  width: 22px; height: 22px;
-  border: 1px solid color-mix(in srgb, var(--hy-color-accent-secondary) 30%, transparent);
-  z-index: 1;
-  pointer-events: none;
-}
-.hud-corner--tl { top: 16px; left: 16px; border-right: 0; border-bottom: 0; }
-.hud-corner--tr { top: 16px; right: 16px; border-left: 0; border-bottom: 0; }
-.hud-corner--bl { bottom: 16px; left: 16px; border-right: 0; border-top: 0; }
-.hud-corner--br { bottom: 16px; right: 16px; border-left: 0; border-top: 0; }
-
-.hud-scanline {
-  position: fixed; inset: 0; z-index: 1; pointer-events: none;
-  opacity: .3;
-  mix-blend-mode: overlay;
-  background: repeating-linear-gradient(0deg, var(--hy-wash) 0 1px, transparent 1px 3px);
-}
-.hud-vignette {
-  position: fixed; inset: 0; z-index: 1; pointer-events: none;
-  background: radial-gradient(ellipse at 50% 30%, transparent 55%, var(--hy-vignette));
-}
 
 /* ── Dashboard: skeleton loader ────────────────────────────────────────── */
 /* Shown while GetDashboard()'s first call is in flight (dashboard === null
@@ -1065,11 +851,6 @@ body {
 .skeleton-block--chart { width: 100%; height: 160px; }
 
 /* Cross-fades in once the skeleton is replaced by the real content subtree. */
-.dashboard-content { animation: dashboardFadeIn var(--hy-motion-duration-slow) var(--hy-motion-easing-standard); }
-@keyframes dashboardFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
 
 /* ── Dashboard: drill-down drawer (By model → Breakdown detail) ──────────── */
 
@@ -1110,21 +891,15 @@ body {
 .drawer__close:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
 
 .drawer__title {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   color: var(--hy-color-accent-default);
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
   margin: var(--hy-space-1) var(--hy-space-6) var(--hy-space-1-5) 0;
 }
-.drawer__heading { font-size: var(--hy-font-size-lg); font-weight: 600; margin: 0 0 var(--hy-space-4); letter-spacing: -.01em; }
+.drawer__heading { font-size: var(--hy-font-size-lg); font-weight: 600; margin: 0 0 var(--hy-space-4); }
 .drawer__stat { font-size: var(--hy-font-size-2xl); font-weight: 700; font-variant-numeric: tabular-nums; }
 .drawer__lbl {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   color: var(--hy-color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: .8px;
   margin-top: var(--hy-space-0-5);
 }
 .drawer__list { margin-top: var(--hy-space-4); display: flex; flex-direction: column; gap: var(--hy-space-2); }
@@ -1182,7 +957,6 @@ body {
   border-radius: var(--hy-radius-card);
   padding: var(--hy-space-4) var(--hy-space-4);
   color: var(--hy-color-status-danger);
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
 }
 
@@ -1190,7 +964,6 @@ body {
    what to fix, but it is no longer the whole of what renders (#1100). */
 .failure {
   border: 1px solid var(--hy-color-border-subtle);
-  border-left: 3px solid var(--hy-color-status-danger);
   border-radius: var(--hy-radius-card);
   background: var(--hy-color-surface-card);
   padding: var(--hy-space-6) var(--hy-space-6);
@@ -1233,7 +1006,6 @@ body {
   gap: var(--hy-space-3);
   background: var(--hy-color-surface-card);
   border: 1px solid var(--hy-color-border-subtle);
-  border-left: 3px solid var(--hy-color-status-success);
   border-radius: var(--hy-radius-card);
   padding: var(--hy-space-3) var(--hy-space-4);
   margin-bottom: var(--hy-space-6);
@@ -1241,14 +1013,10 @@ body {
   line-height: 1.55;
   color: var(--hy-color-text-muted);
 }
-.scope--partial { border-left-color: var(--hy-color-accent-default); }
 
 .scope__label {
   flex: none;
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  letter-spacing: .08em;
-  text-transform: uppercase;
   color: var(--hy-color-text-default);
 }
 
@@ -1257,7 +1025,6 @@ body {
 .setup {
   background: var(--hy-color-surface-card);
   border: 1px solid var(--hy-color-border-subtle);
-  border-left: 3px solid var(--hy-color-accent-default);
   border-radius: var(--hy-radius-card);
   padding: var(--hy-space-4) var(--hy-space-4);
   margin-bottom: var(--hy-space-6);
@@ -1309,7 +1076,6 @@ body {
 .setup__error {
   margin: var(--hy-space-2-5) 0 0;
   color: var(--hy-color-status-danger);
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
 }
 
@@ -1330,7 +1096,6 @@ body {
 
 /* ── Fleet ─────────────────────────────────────────────────────────────── */
 
-
 .runs { display: flex; flex-direction: column; gap: var(--hy-space-2-5); }
 
 /* ── Activity groups (by who has to act) ───────────────────────────────── */
@@ -1343,8 +1108,7 @@ body {
   border-bottom: 1px solid var(--hy-color-border-subtle);
 }
 .rgroup__lbl {
-  font-size: var(--hy-font-size-xs); font-weight: 700;
-  letter-spacing: .09em; text-transform: uppercase;
+  font-size: var(--hy-font-size-sm); font-weight: 700;
   color: var(--hy-color-text-muted);
 }
 .rgroup__n {
@@ -1355,28 +1119,24 @@ body {
   border-radius: var(--hy-radius-pill);
   padding: 0 var(--hy-space-1-5);
 }
-.rgroup__note { color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); opacity: .8; }
+.rgroup__note { color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); }
 
 /* Each group takes the colour its state already uses elsewhere, so the same
    thing never means two colours across views. */
 .rgroup__head--waiting .rgroup__lbl {
   color: var(--hy-color-status-warning);
-  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-color-status-warning) calc(45% * var(--hy-glow)), transparent);
 }
 .rgroup__head--waiting { border-bottom-color: color-mix(in srgb, var(--hy-color-status-warning) 40%, transparent); }
 .rgroup__head--waiting .rgroup__n { color: var(--hy-color-status-warning); border-color: color-mix(in srgb, var(--hy-color-status-warning) 45%, transparent); }
 
-.rgroup__head--running .rgroup__lbl { color: var(--hy-color-accent-default); }
-.rgroup__head--running { border-bottom-color: color-mix(in srgb, var(--hy-color-accent-default) 34%, transparent); }
-.rgroup__head--running .rgroup__n { color: var(--hy-color-accent-default); border-color: color-mix(in srgb, var(--hy-color-accent-default) 40%, transparent); }
+.rgroup__head--running .rgroup__lbl { color: var(--hy-color-status-info); }
+.rgroup__head--running { border-bottom-color: color-mix(in srgb, var(--hy-color-status-info) 34%, transparent); }
+.rgroup__head--running .rgroup__n { color: var(--hy-color-status-info); border-color: color-mix(in srgb, var(--hy-color-status-info) 40%, transparent); }
 
 .rgroup__head--attention .rgroup__lbl { color: var(--hy-color-status-danger); }
 .rgroup__head--attention { border-bottom-color: color-mix(in srgb, var(--hy-color-status-danger) 34%, transparent); }
 .rgroup__head--attention .rgroup__n { color: var(--hy-color-status-danger); border-color: color-mix(in srgb, var(--hy-color-status-danger) 40%, transparent); }
 
-@media (prefers-reduced-motion: reduce) {
-  .rgroup__head--waiting .rgroup__lbl { text-shadow: none; }
-}
 
 .run {
   background: var(--hy-color-surface-card);
@@ -1384,35 +1144,21 @@ body {
   border-radius: var(--hy-radius-card);
   padding: var(--hy-space-4) var(--hy-space-4);
 }
-.run--live { border-color: var(--hy-color-accent-default); }
+/* The one row that needs a person gets a full border in its status colour. */
+.run--waiting { border-color: var(--hy-color-status-warning); }
 
 .run__head { display: flex; align-items: baseline; gap: var(--hy-space-2); flex-wrap: wrap; }
 
-.run__dot {
-  width: 7px; height: 7px; border-radius: var(--hy-radius-pill);
-  background: var(--hy-color-text-muted);
-  flex: 0 0 auto;
-  align-self: center;
-}
-.run__dot--live {
-  background: var(--hy-color-accent-default);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hy-color-accent-default) 22%, transparent);
-  animation: pulse var(--hy-motion-duration-loop) var(--hy-motion-easing-standard) infinite;
-}
-@keyframes pulse { 50% { opacity: .45; } }
-/* A pulsing dot is decoration; for anyone who does not want motion the colour
-   and the live badge already carry the state. */
-@media (prefers-reduced-motion: reduce) {
-  .run__dot--live { animation: none; }
-}
+.run__state { flex: 0 0 auto; font-size: var(--hy-font-size-sm); font-weight: 600; }
 
 .run__id {
   font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   color: var(--hy-color-text-default);
 }
-.run__meta { margin-left: auto; font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); font-variant-numeric: tabular-nums; }
+.run__meta { display: flex; gap: var(--hy-space-3); margin-left: auto; font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); font-variant-numeric: tabular-nums; }
 
+.run__num { font-family: var(--hy-font-family-mono); color: var(--hy-color-text-default); }
 .run__error { margin: var(--hy-space-2) 0 0; font-size: var(--hy-font-size-xs); color: var(--hy-color-status-danger); font-family: var(--hy-font-family-mono); }
 .run__warn  { margin: var(--hy-space-2) 0 0; font-size: var(--hy-font-size-xs); color: var(--hy-color-status-warning); }
 
@@ -1434,10 +1180,7 @@ body {
 .states { display: flex; gap: var(--hy-space-2); flex-wrap: wrap; margin-top: var(--hy-space-2-5); }
 
 .state {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .06em;
   border: 1px solid var(--hy-color-border-subtle);
   border-radius: var(--hy-radius-pill);
   padding: var(--hy-space-0-5) var(--hy-space-2);
@@ -1477,7 +1220,7 @@ body {
   border-radius: var(--hy-radius-control);
   padding: 0 var(--hy-space-1);
 }
-.agent__meta { margin-left: auto; color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); font-variant-numeric: tabular-nums; }
+.agent__meta { display: flex; gap: var(--hy-space-2-5); margin-left: auto; color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); font-variant-numeric: tabular-nums; }
 .agent__detail { color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); }
 
 /* Fleet's inline run graph (RunGraph) reuses .graph/.edge/.gnode from the
@@ -1519,13 +1262,10 @@ body {
 .back:hover { color: var(--hy-color-accent-default); }
 .back:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 2px; }
 
-.session__id { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-base); letter-spacing: -0.01em; }
+.session__id { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-base); }
 .session__live {
   margin-left: var(--hy-space-2-5);
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .08em;
   background: var(--hy-color-accent-default);
   color: var(--hy-color-text-inverse);
   border-radius: var(--hy-radius-pill);
@@ -1563,21 +1303,14 @@ body {
   padding: var(--hy-space-2) var(--hy-space-4);
   font-size: var(--hy-font-size-sm);
   border-bottom: 1px solid var(--hy-color-border-subtle);
-  border-left: 2px solid transparent;
 }
 .tl:last-child { border-bottom: 0; }
-.tl--ok      { border-left-color: var(--hy-color-status-success); }
-.tl--failed  { border-left-color: var(--hy-color-status-danger); }
-.tl--running { border-left-color: var(--hy-color-accent-default); }
 
 .tl__time { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); flex: 0 0 66px; }
 .tl__kind {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   color: var(--hy-color-text-muted);
   flex: 0 0 132px;
-  text-transform: uppercase;
-  letter-spacing: .05em;
 }
 .tl__who { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); display: flex; align-items: baseline; gap: var(--hy-space-1-5); }
 .tl__detail { color: var(--hy-color-text-default); font-size: var(--hy-font-size-xs); }
@@ -1636,7 +1369,6 @@ body {
 }
 .code__totN {
   font-size: var(--hy-font-size-xs); font-weight: 700;
-  letter-spacing: .08em; text-transform: uppercase;
   color: var(--hy-color-text-muted);
 }
 
@@ -1754,7 +1486,6 @@ body {
 }
 .rev__go {
   background: var(--hy-color-accent-default); border: 1px solid var(--hy-color-accent-default); color: var(--hy-color-text-inverse);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--hy-color-accent-default) calc(28% * var(--hy-glow)), transparent);
 }
 /* Undo overwrites the file, so it carries the same colour the diff already
    uses for removed lines rather than reading as a neutral secondary action. */
@@ -1815,11 +1546,11 @@ body {
    column, 100% overflows and pushes the composer below the fold. */
 .chatv { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 
-.chatv__log { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: var(--hy-space-5); padding: var(--hy-space-5) var(--hy-space-6) var(--hy-space-4); }
-.chatv__log > * { max-width: 720px; width: 100%; margin: 0 auto; }
+.chatv__log { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; padding: 0 var(--hy-space-6) var(--hy-space-4); }
+.chatv__log > * { max-width: 980px; width: 100%; margin: 0 auto; }
 
 .chatv__empty { text-align: center; padding: var(--hy-space-12) var(--hy-space-5) 0; }
-.chatv__emptyT { margin: 0 0 var(--hy-space-1-5); font-size: var(--hy-font-size-base); font-weight: 600; letter-spacing: -.01em; }
+.chatv__emptyT { margin: 0 0 var(--hy-space-1-5); font-size: var(--hy-font-size-base); font-weight: 600; }
 .chatv__emptyS { margin: 0 auto; max-width: 46ch; color: var(--hy-color-text-muted); font-size: var(--hy-font-size-sm); line-height: 1.55; }
 
 /* Timeline's row anatomy assumes a full-width column; inside a 720px chat
@@ -1829,16 +1560,41 @@ body {
 .chatv__log .tl__kind { flex-basis: auto; }
 .chatv__log .tl__meta { margin-left: 0; }
 
-.turn { display: flex; flex-direction: column; gap: var(--hy-space-1); }
-.turn__you {
-  align-self: flex-end;
-  max-width: 78%;
-  background: var(--hy-color-surface-overlay);
-  border: 1px solid var(--hy-color-border-subtle);
-  border-radius: var(--hy-radius-card) var(--hy-radius-card) var(--hy-radius-mark) var(--hy-radius-card);
-  padding: var(--hy-space-2) var(--hy-space-4);
-  font-size: var(--hy-font-size-sm);
+/* A ledger: each turn is two rows, the words on the left and the facts in a
+   fixed column on the right, in the same place every time, so a long thread
+   scans down one edge. */
+.turn { display: flex; flex-direction: column; }
+.turn__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 188px;
+  border-bottom: 1px solid var(--hy-color-border-subtle);
 }
+.turn__row > :first-child { padding: var(--hy-space-4) var(--hy-space-5) var(--hy-space-4) 0; min-width: 0; }
+.turn__body { display: flex; flex-direction: column; gap: var(--hy-space-2); }
+.turn__you { margin: 0; font-size: var(--hy-font-size-md); font-weight: 600; line-height: 1.5; white-space: pre-wrap; }
+.turn__gut {
+  padding: var(--hy-space-4) 0 var(--hy-space-4) var(--hy-space-4);
+  border-left: 1px solid var(--hy-color-border-subtle);
+  font-size: var(--hy-font-size-xs);
+  color: var(--hy-color-text-muted);
+  min-width: 0;
+}
+.facts { display: flex; flex-direction: column; gap: var(--hy-space-1); }
+.facts p { margin: 0; }
+.facts__model { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-sm); color: var(--hy-color-text-default); overflow-wrap: anywhere; }
+.facts__line { display: flex; flex-wrap: wrap; gap: 0 var(--hy-space-2); line-height: 1.45; }
+.facts__line--live { color: var(--hy-color-status-info); }
+.facts__num { font-family: var(--hy-font-family-mono); color: var(--hy-color-text-default); }
+.facts__ok { color: var(--hy-color-status-success); }
+.facts__fell { display: block; }
+.facts__open {
+  appearance: none; align-self: flex-start;
+  margin-top: var(--hy-space-1); padding: 0;
+  border: 0; background: none; font: inherit;
+  color: var(--hy-color-accent-default); cursor: pointer;
+}
+.facts__open:hover { text-decoration: underline; }
+.facts__open:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 2px; }
 .turn__out { margin: 0; font-size: var(--hy-font-size-md); line-height: 1.6; white-space: pre-wrap; }
 .turn__wait { margin: 0; color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); }
 
@@ -1848,14 +1604,12 @@ body {
 .turn__caret {
   display: inline-block; width: 7px; height: 1em; margin-left: var(--hy-space-0-5);
   vertical-align: text-bottom; background: var(--hy-color-accent-default);
-  animation: hy-caret var(--hy-motion-duration-loop) steps(2, start) infinite;
 }
-@keyframes hy-caret { to { visibility: hidden; } }
 
 /* An attempt the chain moved on from. Faded and collapsed rather than
    deleted: it is evidence, and it must not read as the answer. */
 .abandoned {
-  margin: 0; padding: var(--hy-space-1-5) var(--hy-space-2); border-left: 2px solid var(--hy-color-status-warning);
+  margin: 0; padding: var(--hy-space-1-5) var(--hy-space-2);
   color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); opacity: 0.55;
   animation: hy-fade-back var(--hy-motion-duration-slow) var(--hy-motion-easing-standard);
 }
@@ -1876,39 +1630,12 @@ body {
   .turn__caret { animation: none; }
   .abandoned { animation: none; }
 }
-.turn__err { margin: 0; color: var(--hy-color-status-danger); font-size: var(--hy-font-size-xs); font-family: var(--hy-font-family-mono); }
+.turn__err { margin: 0; color: var(--hy-color-status-danger); font-size: var(--hy-font-size-xs); }
 /* A fallback is not an error: the answer arrived. It is amber because the
    model you picked is not the one that replied. */
-.turn__fellback {
-  align-self: flex-start;
-  margin: var(--hy-space-0-5) 0 0;
-  padding: var(--hy-space-1-5) var(--hy-space-2-5);
-  border-left: 2px solid var(--hy-color-status-warning);
-  background: color-mix(in srgb, var(--hy-color-status-warning) 8%, transparent);
-  border-radius: 0 var(--hy-radius-mark) var(--hy-radius-mark) 0;
-}
-.turn__fellbackRow {
-  margin: 0;
-  color: var(--hy-color-text-muted);
-  font-size: var(--hy-font-size-xs);
-  line-height: 1.55;
-  font-family: var(--hy-font-family-mono);
-}
-.turn__meta {
-  align-self: flex-start;
-  background: none;
-  border: 0;
-  padding: 0;
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xs);
-  color: var(--hy-color-text-muted);
-  cursor: pointer;
-}
-.turn__meta:hover { color: var(--hy-color-accent-default); }
-.turn__meta:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 2px; }
+
 .turn__probe { display: flex; flex-direction: column; align-items: flex-start; gap: var(--hy-space-2); }
 .turn__retry {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   padding: var(--hy-space-1) var(--hy-space-2-5);
   border-radius: var(--hy-radius-control);
@@ -1924,7 +1651,7 @@ body {
 
 .chatv__composer { flex: 0 0 auto; padding: var(--hy-space-3) var(--hy-space-6) var(--hy-space-4); }
 .chatv__box {
-  max-width: 720px;
+  max-width: 980px;
   margin: 0 auto;
   background: var(--hy-color-surface-raised);
   border: 1px solid var(--hy-color-border-strong);
@@ -1939,12 +1666,10 @@ body {
 }
 .chatv__text::placeholder { color: var(--hy-color-text-muted); }
 .chatv__bar { display: flex; align-items: center; gap: var(--hy-space-2); margin-top: var(--hy-space-1-5); }
-.chatv__hint { margin-left: auto; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
+.chatv__hint { margin-left: auto; font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
 .chatv__send {
   border: 0; border-radius: var(--hy-radius-control);
-  background: var(--hy-color-accent-default); color: var(--hy-color-text-inverse);
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase;
+  background: var(--hy-color-accent-default); color: var(--hy-color-text-inverse); font-size: var(--hy-font-size-xs); font-weight: 700;
   padding: var(--hy-space-2) var(--hy-space-3);
 }
 .chatv__send:disabled { opacity: .45; cursor: default; }
@@ -1978,7 +1703,7 @@ body {
 }
 .picker__head { display: flex; align-items: center; padding: var(--hy-space-2) var(--hy-space-3); border-bottom: 1px solid var(--hy-color-border-subtle); }
 .picker__title { font-size: var(--hy-font-size-xs); font-weight: 600; }
-.picker__esc { margin-left: auto; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); text-transform: uppercase; letter-spacing: .08em; }
+.picker__esc { margin-left: auto; font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
 .picker__body { max-height: 400px; overflow-y: auto; }
 
 .picker__auto {
@@ -1987,7 +1712,6 @@ body {
   padding: var(--hy-space-2-5) var(--hy-space-3);
   background: color-mix(in srgb, var(--hy-color-accent-default) 7%, transparent);
   border: 0; border-bottom: 1px solid var(--hy-color-border-subtle);
-  border-left: 2px solid var(--hy-color-accent-default);
   color: var(--hy-color-text-default);
 }
 .picker__auto:hover { background: color-mix(in srgb, var(--hy-color-accent-default) 12%, transparent); }
@@ -1998,9 +1722,8 @@ body {
 .picker__pool { border-bottom: 1px solid var(--hy-color-border-subtle); }
 .picker__pool:last-child { border-bottom: 0; }
 .picker__poolHead { display: flex; align-items: center; gap: var(--hy-space-2); padding: var(--hy-space-2) var(--hy-space-3) var(--hy-space-1); background: var(--hy-color-surface-base); }
-.picker__poolName { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); letter-spacing: .09em; text-transform: uppercase; color: var(--hy-color-text-muted); }
-.picker__shared {
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); letter-spacing: .05em; text-transform: uppercase;
+.picker__poolName { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
+.picker__shared { font-size: var(--hy-font-size-xs);
   color: var(--hy-color-status-warning); border: 1px solid color-mix(in srgb, var(--hy-color-status-warning) 40%, transparent); border-radius: var(--hy-radius-mark); padding: 0 var(--hy-space-1);
 }
 .picker__poolSpend { margin-left: auto; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); font-variant-numeric: tabular-nums; }
@@ -2009,24 +1732,23 @@ body {
   display: grid; grid-template-columns: 1fr auto; gap: var(--hy-space-0-5) var(--hy-space-2-5);
   width: 100%; text-align: left;
   padding: var(--hy-space-2) var(--hy-space-3);
-  background: none; border: 0; border-left: 2px solid transparent;
+  background: none; border: 0;
   color: var(--hy-color-text-default);
 }
-.picker__m:hover:not(:disabled) { background: var(--hy-color-surface-overlay); border-left-color: var(--hy-color-border-subtle); }
-.picker__m[aria-checked="true"] { background: var(--hy-color-surface-overlay); border-left-color: var(--hy-color-accent-default); }
+.picker__m:hover:not(:disabled) { background: var(--hy-color-surface-overlay); }
+.picker__m[aria-checked="true"] { background: var(--hy-color-surface-overlay); }
 .picker__m:disabled { opacity: .45; cursor: default; }
 .picker__mTop { display: flex; align-items: baseline; gap: var(--hy-space-2); }
 .picker__mName { font-size: var(--hy-font-size-xs); font-weight: 600; }
 .picker__mTier { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
-.picker__off { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-status-danger); }
+.picker__off { font-size: var(--hy-font-size-xs); color: var(--hy-color-status-danger); }
 .picker__mSpec { grid-column: 1 / -1; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
 
-
 /* ── Update notice ─────────────────────────────────────────────────────── */
-/* Sits in .apphead__status. Renders nothing at all when up to date, so it
-   adds no weight to the common case. */
+/* Sits at the foot of the rail. Renders nothing at all when up to date, so
+   it adds no weight to the common case. */
 
-.update-notice { display: flex; align-items: center; --wails-draggable: no-drag; }
+.update-notice { display: flex; flex-direction: column; align-items: flex-start; padding: 0 var(--hy-space-2); }
 
 .update-notice__badge {
   appearance: none;
@@ -2035,7 +1757,6 @@ body {
   border-radius: var(--hy-radius-pill);
   color: var(--hy-color-accent-default);
   font: inherit;
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
   padding: var(--hy-space-0-5) var(--hy-space-2);
   cursor: pointer;
@@ -2088,97 +1809,26 @@ body {
 }
 
 /* ── Reduced motion ────────────────────────────────────────────────────── */
-/* The Dashboard's reveal state (useReveal in reveal.ts) still flips
-   instantly under reduced motion, these rules just stop it from being
-   animated on the way there. */
 @media (prefers-reduced-motion: reduce) {
   .spend-bar__rect,
-  .spend-bar__halo,
-  .arc-fill,
   .drawer,
   .drawer-backdrop,
   .rank__row--detail::after {
     transition: none;
   }
   .skeleton-block { animation: none; }
-  .dashboard-content { animation: none; }
 }
 
-/* ── Chat split: thread + companion pane ───────────────────────────────── */
-/* The pane is glanceable, never readable, that is what makes a permanently
-   visible companion affordable, where the old dock had to collapse (#520). */
+/* ── Chat ──────────────────────────────────────────────────────────────── */
+/* One column. Runs live in the app rail and each answer carries its own
+   facts, so nothing sits beside the thread to take its width (#1431). */
 
 .chatv-shell {
-  display: grid;
-  grid-template-columns: 218px minmax(0, 1fr) 292px;
+  display: flex;
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
 }
-/* ── Chat run rail ─────────────────────────────────────────────────────── */
-
-.chatside {
-  border-right: 1px solid var(--hy-color-border-subtle);
-  background: var(--hy-color-surface-raised);
-  overflow-y: auto;
-  min-height: 0;
-  padding: var(--hy-space-4) var(--hy-space-2-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--hy-space-0-5);
-}
-.chatside__new {
-  appearance: none;
-  border: 1px solid var(--hy-color-border-default);
-  border-radius: var(--hy-radius-control);
-  background: var(--hy-color-surface-overlay);
-  color: var(--hy-color-text-default);
-  font: inherit;
-  font-size: var(--hy-font-size-sm);
-  font-weight: 500;
-  padding: var(--hy-space-2) var(--hy-space-2-5);
-  margin-bottom: var(--hy-space-2-5);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--hy-space-2);
-}
-.chatside__new:hover { border-color: var(--hy-color-accent-default); color: var(--hy-color-accent-default); }
-.chatside__new:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
-
-.chatside__grp {
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .11em;
-  color: var(--hy-color-text-subtle);
-  padding: var(--hy-space-3) var(--hy-space-2) var(--hy-space-1-5);
-}
-.chatside__note { margin: 0; padding: var(--hy-space-0-5) var(--hy-space-2) var(--hy-space-2); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); line-height: 1.5; }
-
-.chatside__run {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--hy-color-text-muted);
-  font: inherit;
-  font-size: var(--hy-font-size-xs);
-  text-align: left;
-  padding: var(--hy-space-2) var(--hy-space-2);
-  border-radius: var(--hy-radius-control);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--hy-space-2);
-  min-width: 0;
-}
-.chatside__run:hover { background: var(--hy-color-surface-overlay); color: var(--hy-color-text-default); }
-.chatside__run:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: -2px; }
-.chatside__runName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chatside__runCost { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); }
-.chatside__dot { width: 6px; height: 6px; border-radius: var(--hy-radius-pill); background: var(--hy-color-text-subtle); flex: 0 0 auto; }
-.chatside__dot--live { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
-.chatside__dot--wait { background: var(--hy-color-status-warning); }
 
 /* ── Chat pane header ──────────────────────────────────────────────────── */
 
@@ -2218,120 +1868,13 @@ body {
 .chatv__headBtn:hover:not(:disabled) { border-color: var(--hy-color-border-default); color: var(--hy-color-text-default); }
 .chatv__headBtn:disabled { opacity: .45; cursor: default; }
 
-.cockpit {
-  border-left: 1px solid var(--hy-color-border-subtle);
-  padding: var(--hy-space-4) var(--hy-space-4) var(--hy-space-4) var(--hy-space-4);
-  overflow-y: auto;
-  /* Without this a grid item is sized by its content, not its track, and the
-     pane's figures ran off the right edge of the window. */
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--hy-space-4);
-}
-
-/* Two folds, not one: the run rail goes before the cockpit, because at that
-   width the thread is still readable without either. They sit after the base
-   .chatside and .cockpit rules on purpose: same specificity, so the later
-   display wins (#1431). */
-@media (max-width: 1180px) {
-  .chatv-shell { grid-template-columns: minmax(0, 1fr) 292px; }
-  .chatside { display: none; }
-}
-@media (max-width: 880px) {
-  .chatv-shell { grid-template-columns: minmax(0, 1fr); }
-  .cockpit { display: none; }
-}
-
-.ck { display: flex; flex-direction: column; }
-.ck__head { display: flex; align-items: center; gap: var(--hy-space-2-5); margin-bottom: var(--hy-space-2); }
-.ck__lbl {
-  font-family: var(--hy-font-family-mono);
-  font-size: var(--hy-font-size-xs);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--hy-color-text-muted);
-}
-.ck__rule { flex: 1; height: 1px; background: var(--hy-color-border-subtle); }
-.ck__empty { margin: 0; font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); line-height: 1.5; }
-.ck__empty code { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-accent-strong); }
-
-/* Active head, the one place the brand gradient appears in the app body. */
-.ck__card { background: var(--hy-color-surface-overlay); border: 1px solid var(--hy-color-border-subtle); border-radius: var(--hy-radius-control); overflow: hidden; }
-.ck__cardGrad { height: 2px; background: var(--hy-brand); }
-.ck__cardIn { padding: var(--hy-space-2-5) var(--hy-space-3) var(--hy-space-2-5); }
-.ck__top { display: flex; align-items: center; gap: var(--hy-space-2); }
-.ck__name { font-size: var(--hy-font-size-sm); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ck__tier {
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); font-weight: 700;
-  background: var(--hy-color-surface-base); border: 1px solid var(--hy-color-border-default);
-  border-radius: var(--hy-radius-pill); padding: 1px var(--hy-space-1-5); flex: 0 0 auto;
-}
-.ck__pulse {
-  margin-left: auto; flex: 0 0 auto;
-  width: 6px; height: 6px; border-radius: var(--hy-radius-pill);
-  background: var(--hy-color-accent-default);
-  animation: ck-pulse var(--hy-motion-duration-loop) var(--hy-motion-easing-standard) infinite;
-}
-@keyframes ck-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--hy-color-accent-default) 50%, transparent); }
-  50%      { box-shadow: 0 0 0 5px transparent; }
-}
-@media (prefers-reduced-motion: reduce) { .ck__pulse { animation: none; } }
-.ck__sub { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); margin-top: var(--hy-space-0-5); }
-
-.pm { margin-top: var(--hy-space-2); padding-top: var(--hy-space-2); border-top: 1px solid var(--hy-color-border-subtle); }
-.pm__top { display: flex; align-items: center; gap: var(--hy-space-1-5); }
-.pm__label { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); letter-spacing: .07em; text-transform: uppercase; color: var(--hy-color-text-muted); }
-.pm__shared {
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); letter-spacing: .05em; text-transform: uppercase;
-  color: var(--hy-color-status-warning); border: 1px solid color-mix(in srgb, var(--hy-color-status-warning) 40%, transparent); border-radius: var(--hy-radius-mark); padding: 0 var(--hy-space-0-5);
-}
-.pm__val { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); margin-top: var(--hy-space-1); font-variant-numeric: tabular-nums; }
-.pm__with { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); margin-top: var(--hy-space-0-5); line-height: 1.45; }
-
-.ck__gauge { display: flex; align-items: center; gap: var(--hy-space-3); }
-.gz { flex: 0 0 auto; }
-.gz__track { fill: none; stroke: var(--hy-color-surface-overlay); stroke-width: 5; }
-.gz__fill { fill: none; stroke: var(--hy-color-accent-default); stroke-width: 5; stroke-linecap: round; }
-.ck__gaugeNum { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-lg); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.ck__gaugeCap { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); margin-top: var(--hy-space-1); }
-
-/* Model rows: what it did, and how good it is measured to be at that. */
-.mr { display: flex; flex-direction: column; }
-.mr__row { display: flex; flex-direction: column; gap: var(--hy-space-0-5); padding: var(--hy-space-2) 0 var(--hy-space-2); border-bottom: 1px solid var(--hy-color-border-subtle); }
-.mr__row:last-child { border-bottom: 0; }
-.mr__top { display: flex; align-items: baseline; gap: var(--hy-space-2); }
-.mr__name { font-size: var(--hy-font-size-xs); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mr__d { margin-left: auto; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); font-weight: 700; font-variant-numeric: tabular-nums; }
-.mr__d--strong { color: var(--hy-color-status-success); }
-.mr__d--moderate { color: var(--hy-color-accent-strong); }
-.mr__d--weak   { color: var(--hy-color-status-warning); }
-/* Thin evidence is amber regardless of the value: trust.Stat.N excludes the
-   prior, so a high D on few observations is not a strong measurement. */
-.mr__d--thin   { color: var(--hy-color-status-warning); }
-.mr__d--none   { color: var(--hy-color-text-muted); }
-.mr__bot { display: flex; align-items: baseline; gap: var(--hy-space-2); }
-.mr__did { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
-.mr__n { margin-left: auto; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); white-space: nowrap; }
-.mr__n--thin { color: var(--hy-color-status-warning); }
-
-.fr { display: flex; align-items: baseline; gap: var(--hy-space-2); padding: var(--hy-space-1) 0; border-bottom: 1px solid var(--hy-color-border-subtle); }
-.fr:last-of-type { border-bottom: 0; }
-.fr__name { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fr__pm { margin-left: auto; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); white-space: nowrap; }
-.fr__more { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); margin-top: var(--hy-space-1); }
-
 /* ── Tier shift, inline in the transcript ──────────────────────────────── */
 
 .shift {
   display: flex; align-items: flex-start; gap: var(--hy-space-2);
   padding: var(--hy-space-2) var(--hy-space-3);
   margin-bottom: var(--hy-space-1);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--hy-color-status-warning) 10%, transparent), transparent);
-  border-left: 2px solid var(--hy-color-status-warning);
-  border-radius: 0 var(--hy-radius-control) var(--hy-radius-control) 0;
+  border-radius: var(--hy-radius-control);
   font-size: var(--hy-font-size-xs);
 }
 .shift__ico { color: var(--hy-color-status-warning); }
@@ -2345,21 +1888,15 @@ body {
 .waiting {
   margin: var(--hy-space-1-5) 0 var(--hy-space-2);
   padding: var(--hy-space-3) var(--hy-space-4) var(--hy-space-3);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--hy-color-status-warning) 11%, transparent), transparent),
-    var(--hy-color-surface-raised);
-  border: 1px solid color-mix(in srgb, var(--hy-color-status-warning) 38%, transparent);
-  border-left: 2px solid var(--hy-color-status-warning);
-  border-radius: 0 var(--hy-radius-control) var(--hy-radius-control) 0;
-  box-shadow: 0 0 22px color-mix(in srgb, var(--hy-color-status-warning) calc(13% * var(--hy-glow)), transparent);
+  background: var(--hy-color-surface-raised);
+  border: 1px solid var(--hy-color-status-warning);
+  border-radius: var(--hy-radius-control);
 }
 .waiting__head { display: flex; align-items: center; gap: var(--hy-space-2); margin-bottom: var(--hy-space-2); }
 .waiting__ico { color: var(--hy-color-status-warning); font-size: var(--hy-font-size-xs); }
 .waiting__lbl {
   color: var(--hy-color-status-warning);
   font-size: var(--hy-font-size-xs); font-weight: 700;
-  letter-spacing: .09em; text-transform: uppercase;
-  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-color-status-warning) calc(45% * var(--hy-glow)), transparent);
 }
 .waiting__who { color: var(--hy-color-text-muted); font-size: var(--hy-font-size-xs); font-family: var(--hy-font-family-mono); }
 .waiting__q { color: var(--hy-color-text-default); font-size: var(--hy-font-size-sm); line-height: 1.5; margin: 0 0 var(--hy-space-2-5); }
@@ -2383,7 +1920,6 @@ body {
 }
 .waiting__go {
   background: var(--hy-color-accent-default); border: 1px solid var(--hy-color-accent-default); color: var(--hy-color-text-inverse);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--hy-color-accent-default) calc(30% * var(--hy-glow)), transparent);
 }
 .waiting__no { background: transparent; border: 1px solid var(--hy-color-border-default); color: var(--hy-color-text-muted); }
 .waiting__no:hover:not(:disabled) { color: var(--hy-color-status-danger); border-color: color-mix(in srgb, var(--hy-color-status-danger) 50%, transparent); }
@@ -2413,14 +1949,12 @@ body {
 .gn__stripe { height: 3px; background: linear-gradient(90deg, var(--hy-color-status-warning), var(--hy-color-status-danger)); }
 .gn__in { padding: var(--hy-space-4) var(--hy-space-5) var(--hy-space-5); }
 .gn__band {
-  display: inline-flex; align-items: center;
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs);
-  letter-spacing: .1em; text-transform: uppercase;
+  display: inline-flex; align-items: center; font-size: var(--hy-font-size-xs);
   border-radius: var(--hy-radius-pill); padding: var(--hy-space-0-5) var(--hy-space-2);
   color: var(--hy-color-status-warning); border: 1px solid color-mix(in srgb, var(--hy-color-status-warning) 40%, transparent);
 }
 .gn__band--emergency { color: var(--hy-color-status-danger); border-color: color-mix(in srgb, var(--hy-color-status-danger) 45%, transparent); }
-.gn__h { font-size: var(--hy-font-size-base); font-weight: 600; margin: var(--hy-space-2-5) 0 var(--hy-space-2); letter-spacing: -.01em; }
+.gn__h { font-size: var(--hy-font-size-base); font-weight: 600; margin: var(--hy-space-2-5) 0 var(--hy-space-2); }
 .gn__p { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); margin: 0; line-height: 1.55; }
 .gn__p b { color: var(--hy-color-text-default); font-weight: 600; }
 
@@ -2454,13 +1988,10 @@ body {
 }
 .tt__head { display: flex; align-items: baseline; gap: var(--hy-space-2-5); margin-bottom: var(--hy-space-2); }
 .tt__lbl {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  letter-spacing: .1em;
-  text-transform: uppercase;
   color: var(--hy-color-text-subtle);
 }
-.tt__sum { margin-left: auto; font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
+.tt__sum { margin-left: auto; font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
 /* The plot is the positioning context: the line is a stretched SVG, the dots are
    HTML on top so they stay round (see TierTrack for why they cannot be circles
    inside a non-uniformly scaled viewBox). */
@@ -2497,11 +2028,9 @@ body {
 .pool-g { display: flex; flex-direction: column; }
 .pool-g__head { display: flex; align-items: baseline; gap: var(--hy-space-2); padding: 0 0 var(--hy-space-1-5); }
 .pool-g__name {
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); letter-spacing: .09em;
-  text-transform: uppercase; color: var(--hy-color-text-muted);
+  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted);
 }
-.pool-g__shared {
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); letter-spacing: .05em; text-transform: uppercase;
+.pool-g__shared { font-size: var(--hy-font-size-xs);
   color: var(--hy-color-status-warning); border: 1px solid color-mix(in srgb, var(--hy-color-status-warning) 40%, transparent); border-radius: var(--hy-radius-mark); padding: 0 var(--hy-space-1);
 }
 .pool-g__spend {
@@ -2543,14 +2072,12 @@ body {
   border-radius: var(--hy-radius-card); padding: var(--hy-space-4) var(--hy-space-4);
   display: flex; flex-direction: column; gap: var(--hy-space-2);
 }
-.scard__name { font-size: var(--hy-font-size-md); font-weight: 600; letter-spacing: -.01em; }
+.scard__name { font-size: var(--hy-font-size-md); font-weight: 600; }
 .scard__sub { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
-.scard__hl { color: var(--hy-color-accent-default); font-family: var(--hy-font-family-mono); }
+.scard__hl { color: var(--hy-color-accent-default); }
 .scard__off { color: var(--hy-color-status-danger); }
 .scard__rule { height: 1px; background: var(--hy-color-border-subtle); margin: var(--hy-space-1) 0 var(--hy-space-0-5); }
-.scard__lbl {
-  font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); letter-spacing: .09em;
-  text-transform: uppercase; color: var(--hy-color-text-subtle);
+.scard__lbl { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle);
 }
 /* Six of these rows hold a short measurement ("200K", "medium") and one holds
    a sentence, the reachability reason. Measured: that one wrapped mid-row and
@@ -2579,7 +2106,7 @@ body {
 .scard__calD--weak     { color: var(--hy-color-status-danger); }
 /* Muted, not coloured: a score on too few outcomes must not read as a finding. */
 .scard__calD--thin     { color: var(--hy-color-text-subtle); }
-.scard__calSub { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); }
+.scard__calSub { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); }
 .scard__thin { color: var(--hy-color-status-warning); }
 
 /* ── Run identity ──────────────────────────────────────────────────────── */
@@ -2594,7 +2121,7 @@ body {
 .run__open:hover .run__goal { color: var(--hy-color-accent-default); }
 .run__open:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 2px; border-radius: var(--hy-radius-mark); }
 .run__goal {
-  font-size: var(--hy-font-size-sm); font-weight: 600; letter-spacing: -.01em;
+  font-size: var(--hy-font-size-sm); font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* No prompt was recorded, so the id IS the title, set in mono, because that
@@ -2602,7 +2129,7 @@ body {
 .run__goal--id { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); font-weight: 500; color: var(--hy-color-text-muted); }
 .run__id { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); flex: 0 0 auto; }
 
-.session__goal { font-size: var(--hy-font-size-lg); font-weight: 600; letter-spacing: -.02em; }
+.session__goal { font-size: var(--hy-font-size-lg); font-weight: 600; }
 
 /* ── Section heads and openable rows ──────────────────────────────────── */
 
@@ -2636,7 +2163,7 @@ body {
 .tb__search:focus-visible,
 .tb__select:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; border-color: transparent; }
 .tb__select { cursor: pointer; padding-right: var(--hy-space-6); }
-.tb__count { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); margin-left: auto; }
+.tb__count { font-size: var(--hy-font-size-xs); color: var(--hy-color-text-subtle); margin-left: auto; }
 
 /* ── Tab strip ─────────────────────────────────────────────────────────── */
 
@@ -2691,10 +2218,7 @@ body {
 .filters { position: sticky; top: 0; }
 .filters__group { display: flex; flex-direction: column; gap: var(--hy-space-0-5); }
 .filters__title {
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .11em;
   color: var(--hy-color-text-subtle);
   padding: 0 0 var(--hy-space-2);
 }
@@ -2743,16 +2267,16 @@ body {
   cursor: pointer;
 }
 .mcard:hover { border-color: var(--hy-color-border-default); background: var(--hy-color-surface-overlay); }
-.mcard[aria-current="true"] { border-color: var(--hy-color-accent-default); box-shadow: 0 0 0 1px var(--hy-color-accent-default), 0 0 22px -12px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
+.mcard[aria-current="true"] { border-color: var(--hy-color-accent-default); }
 .mcard:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 2px; }
 
 .mcard__top { display: flex; align-items: center; gap: var(--hy-space-2); min-width: 0; }
 .mcard__spacer { flex: 1; }
 .mcard__dot { width: 7px; height: 7px; border-radius: var(--hy-radius-pill); flex: 0 0 auto; }
-.mcard__dot--on { background: var(--hy-color-accent-default); box-shadow: 0 0 8px -1px color-mix(in srgb, var(--hy-color-accent-default) calc(100% * var(--hy-glow)), transparent); }
+.mcard__dot--on { background: var(--hy-color-accent-default); }
 .mcard__dot--off { background: var(--hy-color-text-subtle); }
 .mcard__dot--unknown { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hy-color-text-subtle); }
-.mcard__name { font-size: var(--hy-font-size-md); font-weight: 600; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mcard__name { font-size: var(--hy-font-size-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .mcard__tier { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); color: var(--hy-color-text-muted); }
 .mcard__price { font-family: var(--hy-font-family-mono); font-size: var(--hy-font-size-xs); font-weight: 700; }
 .mcard__price--free { color: var(--hy-color-cost-low); }
@@ -2768,10 +2292,7 @@ body {
 .tag {
   white-space: nowrap;
   line-height: 1.5;
-  font-family: var(--hy-font-family-mono);
   font-size: var(--hy-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: .07em;
   padding: var(--hy-space-0-5) var(--hy-space-1-5);
   border-radius: var(--hy-radius-pill);
   border: 1px solid currentColor;
@@ -2829,22 +2350,6 @@ body {
 }
 .pagehead__btn:hover { border-color: var(--hy-color-border-default); color: var(--hy-color-text-default); }
 .pagehead__btn:focus-visible { outline: var(--hy-focus-width) solid var(--hy-color-focus-ring); outline-offset: 1px; }
-
-/* main.go sets MinWidth: 980 and every view is clean there, but zooming in
-   narrows the CSS viewport below it, and the header pushed rather than
-   degraded. The search keeps its icon and gives up its label first. */
-@media (max-width: 900px) {
-  .apphead__searchtext,
-  .apphead__kbd { display: none; }
-  /* min-width floored it at 120px even with the label hidden, which is most
-     of what it was still costing. */
-  .apphead__search { flex: 0 0 auto; min-width: 0; padding: 0 var(--hy-space-2); }
-  /* The nav is the header's largest item and does not shrink: six labels at
-     11px of side padding measure 435px. Adding Settings to the nav took the
-     header 4px past an 820px viewport, which is below MinWidth but reachable
-     by zooming. 6px back per side is 60px across the strip. */
-  .apphead__tab { padding-left: var(--hy-space-1-5); padding-right: var(--hy-space-1-5); gap: var(--hy-space-1); }
-}
 
 /* ── Settings ──────────────────────────────────────────────────────────── */
 

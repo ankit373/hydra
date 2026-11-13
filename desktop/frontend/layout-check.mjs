@@ -96,8 +96,8 @@ async function measure(page, where) {
   if (r.clipped.length) fail(where, `content cut off with no way to scroll it: ${r.clipped.join(', ')}`)
 }
 
-// The thread is the job on Chat. Overflow checks cannot see a side panel that
-// takes its width or is drawn over it, which is how #1431 shipped.
+// The thread is the job on Chat. Overflow checks cannot see a panel that takes
+// its width or is drawn over it, which is how #1431 shipped.
 const CHAT_MIN = 560
 
 async function chatFits(page, where) {
@@ -109,26 +109,61 @@ async function chatFits(page, where) {
     }
     const thread = box('.chatv')
     if (!thread) return { missing: true }
-    const hits = []
-    for (const sel of ['.chatside', '.cockpit']) {
-      const b = box(sel)
-      if (!b || b.width === 0) continue
-      const x = Math.min(b.right, thread.right) - Math.max(b.left, thread.left)
-      const y = Math.min(b.bottom, thread.bottom) - Math.max(b.top, thread.top)
-      if (x > 1 && y > 1) hits.push(sel)
-    }
-    return { width: Math.round(thread.width), hits }
+    const rail = box('.rail')
+    const over = rail &&
+      Math.min(rail.right, thread.right) - Math.max(rail.left, thread.left) > 1 &&
+      Math.min(rail.bottom, thread.bottom) - Math.max(rail.top, thread.top) > 1
+    return { width: Math.round(thread.width), over }
   })
   if (r.missing) return fail(where, 'chat thread not rendered')
   if (r.width < CHAT_MIN) fail(where, `chat thread is ${r.width}px wide, under ${CHAT_MIN}px`)
-  if (r.hits.length) fail(where, `drawn over the chat thread: ${r.hits.join(', ')}`)
+  if (r.over) fail(where, 'the rail is drawn over the chat thread')
+}
+
+/** Opens a view from the rail. */
+const go = (page, view) => page.locator(`.rail__item:has-text("${view}")`).first().click()
+
+// Every view is one click away in the rail, the click lands on that view, and
+// the rail says which one is open. A rail that looked right but routed to the
+// wrong view would pass every check above.
+async function railNavigates(page, where) {
+  for (const [view, heading] of [
+    ['Chat', 'Chat'], ['Models', 'Models'], ['Activity', 'Activity'],
+    ['Usage', 'Usage'], ['Audit', 'Audit'], ['Settings', 'Settings'],
+  ]) {
+    await go(page, view)
+    await page.waitForTimeout(400)
+    const r = await page.evaluate(() => ({
+      current: [...document.querySelectorAll('.rail__item[aria-current="page"]')].map((e) => e.querySelector('.rail__label')?.textContent),
+      h1: document.querySelector('main h1')?.textContent?.trim(),
+    }))
+    if (r.current.length !== 1 || r.current[0] !== view) fail(where, `rail marks ${JSON.stringify(r.current)} open after clicking ${view}`)
+    if (r.h1 !== heading) fail(where, `clicking ${view} in the rail opened "${r.h1}"`)
+  }
+}
+
+// Runs that need a person come first, whatever order the log lists them in.
+// The mock lists the waiting run third on purpose.
+const RANK = { waiting: 0, running: 1, failed: 2, done: 3 }
+async function waitingFirst(page, where) {
+  await go(page, 'Activity')
+  await page.waitForTimeout(500)
+  const states = await page.evaluate(() =>
+    [...document.querySelectorAll('.run')].map((e) => [...e.classList].find((c) => c.startsWith('run--'))?.slice(5)),
+  )
+  if (states[0] !== 'waiting') fail(where, `Activity opens on a ${states[0]} run, not the one waiting on you`)
+  for (let i = 1; i < states.length; i++) {
+    if (RANK[states[i]] < RANK[states[i - 1]]) fail(where, `Activity lists ${states[i]} after ${states[i - 1]}: ${states.join(', ')}`)
+  }
+  const note = await page.locator('.rail__item:has-text("Activity") .rail__note').textContent()
+  if (!/waiting/.test(note ?? '')) fail(where, `the rail says "${note}" for Activity while a run is waiting`)
 }
 
 // Every surface the app can show, with the check run on each: the six nav views,
 // Audit's detailed strip, and the Session tabs, which only opening a run reaches.
 async function sweep(page, where, check) {
   for (const view of ['Chat', 'Models', 'Activity', 'Usage', 'Audit', 'Settings']) {
-    await page.locator(`.apphead__tab:has-text("${view}")`).first().click()
+    await go(page, view)
     await page.waitForTimeout(600)
     await check(page, `${where}/${view}`)
     if (view === 'Chat' && check === measure) await chatFits(page, `${where}/Chat`)
@@ -140,7 +175,7 @@ async function sweep(page, where, check) {
       await check(page, `${where}/Audit:Detailed`)
     }
   }
-  await page.locator('.apphead__tab:has-text("Activity")').first().click()
+  await go(page, 'Activity')
   await page.waitForTimeout(500)
   await page.locator('.run__open').first().click()
   await page.waitForTimeout(700)
@@ -166,6 +201,8 @@ async function run() {
     await page.goto(URL, { waitUntil: 'networkidle' })
     await page.waitForTimeout(700)
     await sweep(page, `${width}`, measure)
+    await railNavigates(page, `${width}`)
+    await waitingFirst(page, `${width}`)
     await page.close()
   }
   for (const colorScheme of THEMES) {
@@ -203,4 +240,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  ${f}`)
   process.exit(1)
 }
-console.log(`Layout check clean: ${WIDTHS.length} widths x 10 surfaces, and axe clean on all 10 in light and dark.`)
+console.log(`Layout check clean: ${WIDTHS.length} widths x 10 surfaces, rail navigation and waiting-first order at each width, and axe clean on all 10 in light and dark.`)

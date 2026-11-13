@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type {
   Breakdown,
   CalibrationRow,
@@ -23,75 +23,56 @@ import {
   usd,
   usdExact,
 } from '../format'
-import { ArcGauge, Sparkline, SpendTrend, TrustArc } from './DashboardCharts'
-import { useCountUp, useReveal } from '../reveal'
+import { SpendTrend } from './DashboardCharts'
 import { PageHeader } from './PageHeader'
 import { HydraMark } from '../brand'
 
+// Context-budget bands are states, so they take the status roles.
+const GOV_STATUS = { normal: 'success', warning: 'warning', critical: 'danger' } as const
+
 /**
- * `data` is null until App.tsx's first `GetDashboard()` resolves, the
- * skeleton below covers exactly that window, driven by real state rather
- * than a fake timeout. Once data lands the HUD chrome (corner brackets,
- * scanline, vignette) stays mounted for the lifetime of the view; only the
- * body swaps from skeleton to `DashboardContent`.
+ * `data` is null until App.tsx's first `GetDashboard()` resolves; the skeleton
+ * covers exactly that window, driven by real state rather than a timeout.
  *
- * The drawer used to coordinate with a floating ChatDock (#460): both were
- * `position: fixed` overlays that could sandwich each other. Chat is a view of
- * its own now (#520), so there is no second overlay to collide with and the
- * mutual-exclusion dance is gone.
+ * Every figure is drawn as the number it is, from the first frame. The view
+ * used to count up from zero once a reveal fired, and when the reveal did not
+ * fire it said "$0" for today's spend while the header said $1.83.
  */
 export function Dashboard({
   data,
   onOpenRun,
+  routable = null,
+  total = null,
 }: {
   data: DashboardData | null
   /** Opens one recent request's run. Absent means the rows stay inert. */
   onOpenRun?: (runID: string) => void
+  /** Models ready, from the same probe the rail reads. Null until it answers. */
+  routable?: number | null
+  total?: number | null
 }) {
-  return (
-    <>
-      <HudChrome />
-      {data ? (
-        <DashboardContent data={data} onOpenRun={onOpenRun} />
-      ) : (
-        <DashboardSkeleton />
-      )}
-    </>
-  )
-}
-
-/** Corner brackets, scanline, vignette, brand/living/hydra-hud.src.html's
- * frame language, scoped to this view rather than the shared app shell. */
-function HudChrome() {
-  return (
-    <>
-      <div className="hud-corner hud-corner--tl" aria-hidden="true" />
-      <div className="hud-corner hud-corner--tr" aria-hidden="true" />
-      <div className="hud-corner hud-corner--bl" aria-hidden="true" />
-      <div className="hud-corner hud-corner--br" aria-hidden="true" />
-      <div className="hud-scanline" aria-hidden="true" />
-      <div className="hud-vignette" aria-hidden="true" />
-    </>
+  return data ? (
+    <DashboardContent data={data} onOpenRun={onOpenRun} routable={routable} total={total} />
+  ) : (
+    <DashboardSkeleton />
   )
 }
 
 function DashboardHeader() {
-  return (
-    <PageHeader
-      title="Usage"
-      subtitle="What you spent, how much context the agent session that drives Hydra has left, and which models earned their answers."
-    />
-  )
+  return <PageHeader title="Usage" subtitle="Today, on this machine." />
 }
 
 function DashboardSkeleton() {
   return (
     <>
       <DashboardHeader />
-      <div className="cards">
-        <SkeletonCard />
-        <SkeletonCard />
-        <SkeletonCard />
+      <div className="factrow">
+        {[0, 1, 2, 3].map((i) => (
+          <div className="fact" key={i}>
+            <div className="skeleton-block" style={{ width: '50%', height: 12 }} />
+            <div className="skeleton-block" style={{ width: '60%', height: 28, marginTop: 8 }} />
+          </div>
+        ))}
       </div>
       <section>
         <h2 className="section__title">Spend by day</h2>
@@ -103,22 +84,16 @@ function DashboardSkeleton() {
   )
 }
 
-function SkeletonCard() {
-  return (
-    <div className="card">
-      <div className="skeleton-block" style={{ width: '50%', height: 10 }} />
-      <div className="skeleton-block" style={{ width: '72%', height: 27, marginTop: 11 }} />
-      <div className="skeleton-block" style={{ width: '85%', height: 12, marginTop: 9 }} />
-    </div>
-  )
-}
-
 function DashboardContent({
   data,
   onOpenRun,
+  routable,
+  total,
 }: {
   data: DashboardData
   onOpenRun?: (runID: string) => void
+  routable: number | null
+  total: number | null
 }) {
   const [drawerRow, setDrawerRow] = useState<Breakdown | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -142,11 +117,7 @@ function DashboardContent({
     <div className="dashboard-content">
       <DashboardHeader />
 
-      <div className="cards">
-        <SpendCard data={data} />
-        <GovernorCard data={data} />
-        <TrustCard data={data} />
-      </div>
+      <UsageFacts data={data} routable={routable} total={total} />
 
       {data.hasData ? <Breakdowns data={data} onSelectModel={openDrawer} onOpenRun={onOpenRun} /> : <EmptyState />}
 
@@ -157,147 +128,77 @@ function DashboardContent({
   )
 }
 
-function SpendCard({ data }: { data: DashboardData }) {
-  const { spend, hasData, byDay } = data
-  const revealed = useReveal(hasData)
-  const displaySpend = useCountUp(spend.todayUsd, revealed)
-
-  if (!hasData) {
-    return (
-      <div className="card">
-        <div className="card__label">Spend today</div>
-        <div className="card__value card__value--unknown">no data yet</div>
-        <div className="card__note">No requests on this machine yet.</div>
-      </div>
-    )
-  }
+/**
+ * One row of facts, each a plain number with one line under it. These were
+ * three cards with two ring gauges and a sparkline, which gave today's spend,
+ * the figure people open this view for, the same weight as a chart legend.
+ */
+export function UsageFacts({
+  data,
+  routable,
+  total,
+}: {
+  data: DashboardData
+  routable: number | null
+  total: number | null
+}) {
+  const { spend, governor, trust, hasData } = data
+  const mode = governor.effectiveMode || governor.mode
+  const headroom = governor.known ? contextHeadroom(governor) : null
   return (
-    <div className="card">
-      <div className="card__label">Spend today</div>
-      <div className="card__value">{usd(displaySpend)}</div>
-      <div className="card__note">
-        {spend.todayCalls} call{spend.todayCalls === 1 ? '' : 's'} · {usd(spend.allTimeUsd)} all time
-        {' · '}
-        {/* Provenance belongs next to the figure: it says how much of this
-            number is measured rather than estimated from char/4. */}
-        {pct(spend.tokensActualPct)} of tokens provider-reported
+    <dl className="factrow">
+      <div className="fact">
+        <dt className="fact__label">Spent today</dt>
+        <dd className="fact__value">{hasData ? usd(spend.todayUsd) : 'none yet'}</dd>
+        {hasData && <dd className="fact__sub">{usd(spend.allTimeUsd)} all time</dd>}
       </div>
-      {byDay && <Sparkline days={byDay} />}
-    </div>
-  )
-}
-
-// Context-budget bands are states, so they take the status roles.
-const GOV_STATUS = { normal: 'success', warning: 'warning', critical: 'danger' } as const
-
-function GovernorCard({ data }: { data: DashboardData }) {
-  const { governor } = data
-  const revealed = useReveal(governor.known)
-  const displayPct = useCountUp(governor.pct, revealed)
-
-  if (!governor.known) {
-    return (
-      <div className="card">
-        <div className="card__label">Context budget</div>
-        <div className="card__value card__value--unknown">unknown</div>
-        {/* Not 0%. Nothing has reported usage, and 0% would read as headroom. */}
-        <div className="card__note">Nothing has reported how much context it is using.</div>
-      </div>
-    )
-  }
-  const band = govBand(governor.pct)
-  const headroom = contextHeadroom(governor)
-  return (
-    <div className={`card gov--${band}`}>
-      <div className="card__label">Context budget</div>
-      <div className="arc-wrap">
-        <ArcGauge
-          fraction={Math.min(governor.pct, 100) / 100}
-          color={`var(--hy-color-status-${GOV_STATUS[band]})`}
-          centerValue={`${Math.round(displayPct)}%`}
-          centerLabel={governor.effectiveMode || governor.mode}
-          revealed={revealed}
-        />
-      </div>
-      {/* "mode: warning" names a band from a table the reader has never seen.
-          Say what it means, and add the headroom the rate model has computed
-          since #557 and nothing surfaced. */}
-      <div className="card__note">
-        {contextModeText(governor.effectiveMode || governor.mode)}
-        {headroom !== null && (
-          <>
-            {' \u00B7 about '}
-            {headroom} update{headroom === 1 ? '' : 's'} of room
-          </>
+      <div className="fact">
+        <dt className="fact__label">Requests today</dt>
+        <dd className="fact__value">{spend.todayCalls}</dd>
+        {/* Provenance next to the figure: how much of the cost is measured
+            rather than estimated from the length of the text. */}
+        {hasData && (
+          <dd className="fact__sub">
+            {pct(spend.tokensActualPct)} of tokens counted by the provider
+          </dd>
         )}
       </div>
-    </div>
+      <div className="fact">
+        <dt className="fact__label">Models ready</dt>
+        <dd className="fact__value">
+          {routable !== null && total !== null ? `${routable} of ${total}` : 'not read yet'}
+        </dd>
+      </div>
+      <div className="fact">
+        <dt className="fact__label">Context used</dt>
+        {/* Not 0%. Nothing has reported usage, and 0% would read as headroom. */}
+        <dd className="fact__value">{governor.known ? `${Math.round(governor.pct)}%` : 'unknown'}</dd>
+        <dd className={governor.known ? `fact__sub status--${GOV_STATUS[govBand(governor.pct)]}` : 'fact__sub'}>
+          {governor.known
+            ? `${contextModeText(mode)}${headroom !== null ? `, about ${headroom} update${headroom === 1 ? '' : 's'} of room` : ''}`
+            : 'nothing has reported it'}
+        </dd>
+      </div>
+      <div className="fact">
+        <dt className="fact__label">Checked answers</dt>
+        <dd className="fact__value">{trust.runs}</dd>
+        <dd className="fact__sub">{checkNote(trust)}</dd>
+      </div>
+    </dl>
   )
 }
 
-/**
- * What the consensus machinery actually bought, in a sentence. The ring beside
- * it shows the same comparison; this says which direction is good.
- */
-function consensusNote(t: TrustPanel): string {
-  const runs = `${t.runs} check${t.runs === 1 ? '' : 's'}`
-  if (t.meanSamples <= 0 || t.fixedSwarmN <= 0) return runs
-  const asked = t.meanSamples.toFixed(1)
-  return `${runs} \u00B7 asked ${asked} models on average instead of a fixed ${t.fixedSwarmN}`
-}
-
-function TrustCard({ data }: { data: DashboardData }) {
-  const { trust } = data
-  const revealed = useReveal(trust.runs > 0)
-
-  if (trust.runs === 0) {
+/** What the consensus checks bought, in a sentence. */
+function checkNote(t: TrustPanel): ReactNode {
+  if (t.runs === 0) {
     return (
-      <div className="card">
-        <div className="card__label">Checked answers</div>
-        <div className="card__value card__value--unknown">none yet</div>
-        <div className="card__note">
-          Hydra can check an answer by asking more models until it is sure enough, then stop.
-          Try{' '}
-          <code>hyctl dispatch --confidence 0.95</code>
-        </div>
-      </div>
+      <>
+        try <code>hyctl dispatch --confidence 0.95</code>
+      </>
     )
   }
-  return (
-    <div className="card">
-      <div className="card__label">Checked answers</div>
-      <TrustCompare trust={trust} revealed={revealed} />
-      <div className="card__note">{consensusNote(trust)}</div>
-    </div>
-  )
-}
-
-/** SPRT mean samples vs. a fixed-N swarm, same ring, so the saving reads at a
- * glance instead of as a sentence to parse. */
-function TrustCompare({ trust, revealed }: { trust: TrustPanel; revealed: boolean }) {
-  const saved = trust.samplesSavedPct >= 0
-  return (
-    <div className="trust-cmp">
-      <div className="arc-wrap">
-        <TrustArc meanSamples={trust.meanSamples} fixedSwarmN={trust.fixedSwarmN} revealed={revealed} />
-        <div className="arc-legend">
-          <span>
-            <span className="arc-legend__dot arc-legend__dot--actual" />
-            what it actually took
-          </span>
-          <span>
-            <span className="arc-legend__dot arc-legend__dot--baseline" />
-            fixed panel of {trust.fixedSwarmN}
-          </span>
-        </div>
-      </div>
-      <div className={`trust-cmp__delta ${saved ? 'trust-cmp__delta--good' : 'trust-cmp__delta--bad'}`}>
-        {saved
-          ? `${pct(trust.samplesSavedPct)} fewer models asked than a fixed panel`
-          : `${pct(Math.abs(trust.samplesSavedPct))} more models asked than a fixed panel`}
-      </div>
-    </div>
-  )
+  if (t.meanSamples <= 0 || t.fixedSwarmN <= 0) return null
+  return `asked ${t.meanSamples.toFixed(1)} models on average, not a fixed ${t.fixedSwarmN}`
 }
 
 function Breakdowns({
@@ -318,7 +219,7 @@ function Breakdowns({
         </section>
       )}
       <div className="grid-2">
-        <RankedBars title="By model · click a row for detail" rows={data.byModel} onSelect={onSelectModel} />
+        <RankedBars title="By model" hint="Select a row for its detail." rows={data.byModel} onSelect={onSelectModel} />
         <RankedBars title="By routing level (1 = most capable)" rows={data.byTier} />
       </div>
       <RecentTable rows={data.recent} onOpenRun={onOpenRun} />
@@ -332,10 +233,12 @@ function Breakdowns({
  * (used for "By model" only, one list is enough to prove the pattern out). */
 function RankedBars({
   title,
+  hint,
   rows,
   onSelect,
 }: {
   title: string
+  hint?: string
   rows: Breakdown[] | null
   onSelect?: (row: Breakdown) => void
 }) {
@@ -343,7 +246,10 @@ function RankedBars({
   const max = Math.max(...rows.map((r) => r.costUsd))
   return (
     <section>
-      <h2 className="section__title">{title}</h2>
+      <div className="section__head">
+        <h2 className="section__title">{title}</h2>
+        {hint && <span className="section__hint">{hint}</span>}
+      </div>
       <div className="table__wrap">
         <div className="rank">
           {rows.map((r) => {
@@ -392,15 +298,10 @@ function RankedBars({
  * Calibrator.Report already returns, same as `hyctl trust calibration`).
  * Bars are on an absolute nat scale, never share-of-max (#593): "who to
  * trust" has to draw a weak field as weak, and the strongest of three coin
- * flips is still a coin flip. They use the SpendTrend halo treatment (#414)
- * turned sideways: a fainter halo behind a crisp fill, both growing in via
- * `transform: scaleX` once `useReveal` fires. Independent of `hasData`,
- * calibration history comes from `hyctl trust record`, not the cost log, so
- * it can be populated (or empty) regardless of whether anything dispatched.
+ * flips is still a coin flip. Independent of `hasData`: calibration history
+ * comes from `hyctl trust record`, not the cost log.
  */
 export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
-  const revealed = useReveal(rows.length > 0)
-
   if (rows.length === 0) {
     return (
       <section>
@@ -422,7 +323,7 @@ export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
       <div className="table__wrap">
         <div className="rank">
           {rows.map((r) => (
-            <CalibrationBar key={`${r.source}\u0000${r.domain}`} row={r} revealed={revealed} />
+            <CalibrationBar key={`${r.source}\u0000${r.domain}`} row={r} />
           ))}
         </div>
         <div className="cal-legend">
@@ -441,27 +342,15 @@ export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
   )
 }
 
-// How far the halo bleeds past the crisp bar it sits behind, on each edge,
-// matches SpendTrend's HALO_PAD.
-const CAL_HALO_PAD = 3
-
-/** Both bars sit inside the track minus the halo's bleed, so a full-width
- * bar's halo lands on the track edge. The old `calc(100% + 6px)` could not be
- * contained at any pad; this cannot exceed the track at any width. */
-export function calBarWidths(widthPct: number): { fill: string; halo: string } {
-  const bleed = CAL_HALO_PAD * 2
-  const s = Math.min(1, Math.max(0, widthPct / 100))
-  return {
-    fill: `calc(${s} * (100% - ${bleed}px))`,
-    halo: s > 0 ? `calc(${s} * (100% - ${bleed}px) + ${bleed}px)` : '0px',
-  }
+/** A bar's width as a share of its track, clamped: a D past the scale's top
+ *  draws a full bar, never one wider than the track. */
+export function calBarWidth(widthPct: number): string {
+  return `${Math.min(100, Math.max(0, widthPct))}%`
 }
 
-function CalibrationBar({ row, revealed }: { row: CalibrationRow; revealed: boolean }) {
+function CalibrationBar({ row }: { row: CalibrationRow }) {
   const kind = sourceKind(row.source)
   const strength = calibrationStrength(row.d, row.n)
-  const { fill, halo } = calBarWidths(calibrationWidthPct(row.d, row.n))
-  const grown = revealed ? ' grown' : ''
   return (
     <div className="cal__row">
       <span className="cal__name" title={row.source}>
@@ -470,20 +359,11 @@ function CalibrationBar({ row, revealed }: { row: CalibrationRow; revealed: bool
       </span>
       <span className="cal__track">
         <span
-          className={`cal__halo cal__halo--${kind} cal__halo--${strength}${grown}`}
-          style={{
-            width: halo,
-            height: `calc(100% + ${CAL_HALO_PAD * 2}px)`,
-            left: 0,
-            top: -CAL_HALO_PAD,
-          }}
-        />
-        <span
-          className={`cal__fill cal__fill--${kind} cal__fill--${strength}${grown}`}
-          style={{ width: fill, left: CAL_HALO_PAD }}
+          className={`cal__fill cal__fill--${kind} cal__fill--${strength}`}
+          style={{ width: calBarWidth(calibrationWidthPct(row.d, row.n)) }}
         />
       </span>
-      <span className="cal__value" title={`Se ${row.se.toFixed(2)} · Sp ${row.sp.toFixed(2)} · n=${row.n}`}>
+      <span className="cal__value" title={`Se ${row.se.toFixed(2)}, Sp ${row.sp.toFixed(2)}, n=${row.n}`}>
         <span className={`cal__strength cal__strength--${strength}`}>{calibrationLabel(strength)}</span>
         {row.d.toFixed(2)}
       </span>
@@ -534,7 +414,7 @@ function ModelDetailDrawer({
         </button>
         {row && (
           <>
-            <div className="drawer__title">Breakdown · by model</div>
+            <div className="drawer__title">By model</div>
             <h2 className="drawer__heading">{row.key}</h2>
             <div className="drawer__stat">{usdExact(row.costUsd)}</div>
             <div className="drawer__lbl">total cost</div>

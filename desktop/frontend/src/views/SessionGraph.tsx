@@ -123,7 +123,7 @@ function layout(session: Session) {
       // Verifiable facts first, tier, state, duration, rather than narration.
       sub: [a.tier > 0 ? `T${a.tier}` : null, a.state, a.durationMs > 0 ? `${a.durationMs}ms` : null]
         .filter(Boolean)
-        .join(' · '),
+        .join(', '),
       state,
       // An artifact node's own id IS the file path. graphLabel needs no
       // branch for that: it keeps the tail either way, and the `/` sniff that

@@ -5,7 +5,7 @@ const ICON: Record<ThemeMode, ReactNode> = {
   system: (
     <>
       <circle cx="12" cy="12" r="8" />
-      <path d="M12 4a8 8 0 0 1 0 16z" className="apphead__themefill" />
+      <path d="M12 4a8 8 0 0 1 0 16z" className="rail__themefill" />
     </>
   ),
   light: (
@@ -24,7 +24,7 @@ export function ThemeToggle() {
   return (
     <>
       <button
-        className="apphead__theme"
+        className="rail__theme"
         aria-label={THEME_LABEL[mode]}
         title={`${THEME_LABEL[mode]}. Click to change.`}
         onClick={() => {

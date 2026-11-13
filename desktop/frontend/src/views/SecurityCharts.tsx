@@ -1,50 +1,11 @@
 import type { Category, CoverageStatus, DayRisk, HistoryPoint } from '../types'
 
 /**
- * The Security hero's three bespoke SVG charts, following DashboardCharts'
+ * The Security hero's small SVG charts, following DashboardCharts'
  * house style: a useMemo-free layout pass (these are cheap enough to compute
  * inline) followed by plain SVG primitives, styled through app.css/tokens.css
  *, no charting library.
  */
-
-const RING_R = 54
-const RING_STROKE = 10
-const RING_SIZE = (RING_R + RING_STROKE) * 2
-const RING_C = 2 * Math.PI * RING_R
-
-/** The coverage percentage as a progress ring, the hero's single glanceable
- * number, big enough to read in five seconds. */
-export function CoverageRing({ percent, band }: { percent: number; band: 'good' | 'warn' | 'bad' }) {
-  const clamped = Math.max(0, Math.min(100, percent))
-  const dash = (clamped / 100) * RING_C
-  const c = RING_SIZE / 2
-  return (
-    <svg
-      className="sec-ring"
-      width={RING_SIZE}
-      height={RING_SIZE}
-      viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
-      role="img"
-      aria-label={`${Math.round(clamped)} percent OWASP LLM Top-10 coverage`}
-    >
-      <circle className="sec-ring__track" cx={c} cy={c} r={RING_R} strokeWidth={RING_STROKE} fill="none" />
-      <circle
-        className={`sec-ring__fill sec-ring__fill--${band}`}
-        cx={c}
-        cy={c}
-        r={RING_R}
-        strokeWidth={RING_STROKE}
-        fill="none"
-        strokeDasharray={`${dash} ${RING_C}`}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${c} ${c})`}
-      />
-      <text x={c} y={c} textAnchor="middle" dominantBaseline="central" className="sec-ring__label">
-        {Math.round(clamped)}%
-      </text>
-    </svg>
-  )
-}
 
 const HIST_W = 260
 const HIST_H = 64
@@ -83,82 +44,6 @@ export function CoverageHistory({ history }: { history: HistoryPoint[] }) {
   )
 }
 
-export interface DonutSegment {
-  label: string
-  value: number
-  colorVar: string
-}
-
-const DONUT_R = 40
-const DONUT_STROKE = 15
-const DONUT_SIZE = (DONUT_R + DONUT_STROKE) * 2
-const DONUT_C = 2 * Math.PI * DONUT_R
-
-/**
- * A part-to-whole donut with a legend, the "issues by severity/status"
- * pattern Wiz, Snyk, and GitHub's security-overview dashboards all use for
- * exactly this shape of data (a handful of categories summing to a total).
- * Kept to 3 segments everywhere it's used, well under the 4-6 where donuts
- * stop being legible.
- */
-export function StatusDonut({ segments }: { segments: DonutSegment[] }) {
-  const total = segments.reduce((sum, s) => sum + s.value, 0)
-  const c = DONUT_SIZE / 2
-  let offset = 0
-
-  return (
-    <div className="sec-donut">
-      <svg
-        width={DONUT_SIZE}
-        height={DONUT_SIZE}
-        viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
-        role="img"
-        aria-label={segments.map((s) => `${s.label}: ${s.value}`).join(', ')}
-      >
-        <circle cx={c} cy={c} r={DONUT_R} className="sec-donut__track" strokeWidth={DONUT_STROKE} fill="none" />
-        {total > 0 &&
-          segments
-            .filter((s) => s.value > 0)
-            .map((s) => {
-              const dash = (s.value / total) * DONUT_C
-              const el = (
-                <circle
-                  key={s.label}
-                  cx={c}
-                  cy={c}
-                  r={DONUT_R}
-                  stroke={s.colorVar}
-                  strokeWidth={DONUT_STROKE}
-                  fill="none"
-                  strokeDasharray={`${dash} ${DONUT_C - dash}`}
-                  strokeDashoffset={-offset}
-                  transform={`rotate(-90 ${c} ${c})`}
-                />
-              )
-              offset += dash
-              return el
-            })}
-        <text x={c} y={c} textAnchor="middle" dominantBaseline="central" className="sec-donut__total">
-          {total}
-        </text>
-      </svg>
-      <ul className="sec-donut__legend">
-        {segments.map((s) => (
-          <li key={s.label}>
-            <span className="sec-donut__swatch" style={{ background: s.colorVar }} />
-            {s.label} <b>{s.value}</b>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-// How full each status draws its bar. A Record rather than a switch, so a
-// status added to the union fails to compile until it is given a fill: the
-// switch this replaces had a `default`, and 'partial' fell into it and drew
-// identically to n/a, reading as "does not apply" rather than "applies and is
-// only half met" (#753).
 const STATUS_FILL: Record<CoverageStatus, number> = {
   enforced: 1,
   configured: 2 / 3,
