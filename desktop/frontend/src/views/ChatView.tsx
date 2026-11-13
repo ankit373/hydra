@@ -22,6 +22,7 @@ import { Timeline } from './Session'
 import { ModelPicker } from './ModelPicker'
 import { Cockpit } from './Cockpit'
 import { GovernorNotice } from './GovernorNotice'
+import { HydraMark } from '../brand'
 
 // Matches App.tsx's LIVE_MS, same reasoning: this is "what is happening now",
 // not a retrospective read.
@@ -376,6 +377,7 @@ export function ChatView({
       <div className="chatv__log" ref={logRef}>
         {turns.length === 0 && (
           <div className="chatv__empty">
+            <HydraMark className="empty__mark" decorative />
             <p className="chatv__emptyT">Ask Hydra anything</p>
             <p className="chatv__emptyS">
               Hydra picks a model with a good measured record on this kind of task, and

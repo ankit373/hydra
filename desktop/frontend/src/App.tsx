@@ -31,7 +31,7 @@ import { AppHeader } from "./views/AppHeader";
 import { AppFooter } from "./views/AppFooter";
 import { ErrorState } from "./views/ErrorState";
 import { CommandPalette, type Command } from "./views/CommandPalette";
-import { HydraSpinner } from "./brand";
+import { HydraMark } from "./brand";
 
 /** Dashboard is retrospective, a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000;
@@ -411,7 +411,7 @@ export default function App() {
         )}
         {!error && loading && (
           <div className="loading">
-            <HydraSpinner className="loading__mark" />
+            <HydraMark className="loading__mark" decorative />
             <p>Reading logs…</p>
           </div>
         )}
