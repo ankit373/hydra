@@ -69,6 +69,7 @@ export function CoverageHistory({ history }: { history: HistoryPoint[] }) {
       className="sec-history"
       width={HIST_W}
       height={HIST_H}
+      viewBox={`0 0 ${HIST_W} ${HIST_H}`}
       role="img"
       aria-label={`Coverage over ${history.length} recorded runs, most recent ${latestPct} percent`}
     >
@@ -225,6 +226,7 @@ export function RiskTrend({ history }: { history: DayRisk[] }) {
         className="sec-risktrend"
         width={RISK_W}
         height={RISK_H}
+        viewBox={`0 0 ${RISK_W} ${RISK_H}`}
         role="img"
         aria-label={`Denied and flagged accesses over ${history.length} days`}
       >
