@@ -401,9 +401,24 @@ func (m Cockpit) chatMain(t *ckThread, w, h int) string {
 		logH = 1
 	}
 	rows = append(rows, lipgloss.NewStyle().Width(w).Height(logH).
-		Render(ckVisibleLog(t.displayLog(), w, logH, t.scroll-1)))
+		Render(ckVisibleLog(ckWithMark(t, w, logH), w, logH, t.scroll-1)))
 	rows = append(rows, input)
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+// ckWithMark puts the mark above a thread that has run nothing yet, when the
+// pane has room for it and the whole greeting. Gone with the first task.
+func ckWithMark(t *ckThread, w, logH int) []string {
+	log := t.displayLog()
+	mark := strings.Split(Mark(), "\n")
+	if t.name != "" || w < markWidth+1 || len(ckLogLines(log, w, ckLogEntryCap))+len(mark)+1 > logH {
+		return log
+	}
+	out := make([]string, 0, len(mark)+1+len(log))
+	for _, l := range mark {
+		out = append(out, " "+l)
+	}
+	return append(append(out, ""), log...)
 }
 
 // ckInputWrapCap bounds how many wrapped lines of a long input stay visible,

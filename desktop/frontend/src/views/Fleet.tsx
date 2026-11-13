@@ -3,6 +3,7 @@ import type { Agent, Fleet as FleetData, Run } from '../types'
 import { ms, pct, usdExact } from '../format'
 import { RunGraph } from './RunGraph'
 import { PageHeader } from './PageHeader'
+import { HydraMark } from '../brand'
 
 export function Fleet({
   data,
@@ -21,6 +22,7 @@ export function Fleet({
 
       {!data.hasRuns ? (
         <div className="empty">
+          <HydraMark className="empty__mark" decorative />
           <p className="empty__title">No requests yet</p>
           <p>Ask something in Chat and it will appear here.</p>
           <button className="empty__cta" onClick={onStartTask}>

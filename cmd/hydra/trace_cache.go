@@ -117,7 +117,7 @@ func printCacheHit(r *dispatch.Result) {
 		return
 	}
 	fmt.Fprintln(stdout)
-	fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("⚡ from cache"), dimStyle.Render(cacheLabel(r.Cache)))
+	fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("from cache"), dimStyle.Render(cacheLabel(r.Cache)))
 	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 56)))
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, r.Output)

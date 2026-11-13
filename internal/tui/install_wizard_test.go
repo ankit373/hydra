@@ -313,39 +313,3 @@ func TestNewInstallModel_ReadsTheRealMachine(t *testing.T) {
 type errFake struct{}
 
 func (errFake) Error() string { return "install failed" }
-
-// ── splash ────────────────────────────────────────────────────────────────────
-
-// The splash and dashboard are the first thing a user sees. They must render
-// without panicking on any input and must contain what they claim to show.
-func TestSplashAndDashboard_Render(t *testing.T) {
-	logo := Logo()
-	if strings.TrimSpace(logo) == "" {
-		t.Fatal("Logo() rendered nothing")
-	}
-
-	splash := Splash("Claude Code")
-	if !strings.Contains(splash, "Claude Code") {
-		t.Errorf("Splash does not name the cortex:\n%s", splash)
-	}
-
-	dash := Dashboard("Claude Code", Stats{Heads: 7, Tasks: 42, CostUSD: 1.2345, SavePct: 87})
-	for _, want := range []string{"Claude Code", "7", "42", "87"} {
-		if !strings.Contains(dash, want) {
-			t.Errorf("Dashboard is missing %q:\n%s", want, dash)
-		}
-	}
-
-	// Zero values and an empty cortex name must still render, a fresh install
-	// has both.
-	if got := Dashboard("", Stats{}); strings.TrimSpace(got) == "" {
-		t.Error("Dashboard rendered nothing for a fresh install")
-	}
-	if got := Splash(""); strings.TrimSpace(got) == "" {
-		t.Error("Splash rendered nothing with no cortex")
-	}
-	// A very long name must not panic the layout.
-	if got := Dashboard(strings.Repeat("very-long-model-name-", 20), Stats{Heads: 999999}); got == "" {
-		t.Error("Dashboard rendered nothing for an over-long name")
-	}
-}

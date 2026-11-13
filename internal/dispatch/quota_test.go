@@ -157,11 +157,11 @@ func TestSyncStateJSON_InProcessSyncsNeverRollTheLevelBack(t *testing.T) {
 func TestGovernorLog_KeepsDevelopsWording(t *testing.T) {
 	q := budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.77}
 	for mode, want := range map[budget.Mode]string{
-		budget.ModeEmergency: "🚨 EMERGENCY: Claude at 77%, routing to local tier only. Start a new session.",
-		budget.ModeCritical:  "🔴 CRITICAL: Claude at 77%, downgrading tier by 2. Run /compact NOW.",
-		budget.ModeWarning:   "🟠 WARNING: Claude at 77%, downgrading tier by 1. Run /compact now.",
-		budget.ModeCaution:   "🟡 CAUTION: Claude at 77%, Run /compact immediately.",
-		budget.ModeCompact:   "ℹ️  Claude at 77%, Consider running /compact.",
+		budget.ModeEmergency: "EMERGENCY: Claude at 77%, routing to local tier only. Start a new session.",
+		budget.ModeCritical:  "CRITICAL: Claude at 77%, downgrading tier by 2. Run /compact NOW.",
+		budget.ModeWarning:   "WARNING: Claude at 77%, downgrading tier by 1. Run /compact now.",
+		budget.ModeCaution:   "CAUTION: Claude at 77%, Run /compact immediately.",
+		budget.ModeCompact:   "Claude at 77%, Consider running /compact.",
 		budget.ModeNormal:    "",
 	} {
 		if got := governorLog(q, mode, "3", "5"); got != want {
