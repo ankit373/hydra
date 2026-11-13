@@ -1,54 +1,29 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { CalibrationLeaderboard, RecentTable, calBarWidths } from './Dashboard'
+import { CalibrationLeaderboard, RecentTable, calBarWidth } from './Dashboard'
 import type { CalibrationRow, RecentCall } from '../types'
 
 afterEach(cleanup)
-
-const BLEED = 6
 
 function row(d: number, n = 40, source = 'model:claude-sonnet'): CalibrationRow {
   return { source, domain: 'go', d, se: 0.6, sp: 0.6, n }
 }
 
-/** Resolves a bar's calc() against a concrete track width, the way the browser
- * does, the "cannot overflow" claim is arithmetic, not CSS to be trusted. */
+/** A bar's width in px on a track of the given width. */
 function resolve(expr: string, trackPx: number): number {
-  if (expr === '0px') return 0
-  const m = /^calc\((?:(\d+)px \+ )?([\d.]+) \* \(100% - (\d+)px\)(?: \+ (\d+)px)?\)$/.exec(expr)
-  if (m) {
-    const [, leadPx, scale, sub, tailPx] = m
-    return Number(scale) * (trackPx - Number(sub)) + Number(leadPx ?? tailPx ?? 0)
-  }
-  // jsdom 31 serialises style.width simplified, as browsers do: calc(P% ± Qpx), P% or Qpx.
-  const s = /^(?:calc\()?(?:([\d.]+)%)?(?: ?([+-]) ?)?(?:([\d.]+)px)?\)?$/.exec(expr)
-  if (!s || (s[1] === undefined && s[3] === undefined)) throw new Error(`unparsed width: ${expr}`)
-  const [, pct, sign, px] = s
-  return (Number(pct ?? 0) / 100) * trackPx + (sign === '-' ? -1 : 1) * Number(px ?? 0)
+  const m = /^([\d.]+)%$/.exec(expr)
+  if (!m) throw new Error(`unparsed width: ${expr}`)
+  return (Number(m[1]) / 100) * trackPx
 }
 
 describe('a calibration bar cannot exceed its track', () => {
-  // The released geometry was `calc(${widthPct}% + 6px)` with `left: -3px`,
-  // which at 100% is 6px wider than the track it sits in.
-  it('lands the full-width halo exactly on the track edge', () => {
-    const { fill, halo } = calBarWidths(100)
-    for (const trackPx of [40, 200, 900]) {
-      expect(resolve(halo, trackPx)).toBe(trackPx)
-      expect(resolve(fill, trackPx) + BLEED).toBe(trackPx)
-    }
-  })
-
-  it('stays inside the track at every width', () => {
-    for (let pct = 0; pct <= 100; pct += 2.5) {
-      const { fill, halo } = calBarWidths(pct)
-      expect(resolve(halo, 200)).toBeLessThanOrEqual(200)
-      expect(resolve(fill, 200) + BLEED).toBeLessThanOrEqual(200)
-    }
+  it('fills the track exactly at the top of the scale', () => {
+    expect(resolve(calBarWidth(100), 200)).toBe(200)
   })
 
   it('clamps a width that overshoots rather than trusting its caller', () => {
-    expect(resolve(calBarWidths(140).halo, 200)).toBe(200)
-    expect(calBarWidths(0).halo).toBe('0px')
+    expect(resolve(calBarWidth(140), 200)).toBe(200)
+    expect(resolve(calBarWidth(-5), 200)).toBe(0)
   })
 })
 
@@ -74,7 +49,7 @@ describe('the leaderboard reads correctly on weak real data', () => {
 
   it('overflows nothing it renders', () => {
     const { container } = render(<CalibrationLeaderboard rows={[...weak, row(9, 400)]} />)
-    for (const el of container.querySelectorAll<HTMLElement>('.cal__fill, .cal__halo')) {
+    for (const el of container.querySelectorAll<HTMLElement>('.cal__fill')) {
       expect(resolve(el.style.width, 200)).toBeLessThanOrEqual(200)
     }
   })

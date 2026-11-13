@@ -27,11 +27,10 @@ import { Settings } from "./views/Settings";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ChatView } from "./views/ChatView";
 import { FirstRun } from "./views/FirstRun";
-import { AppHeader } from "./views/AppHeader";
-import { AppFooter } from "./views/AppFooter";
+import { Rail } from "./views/Rail";
 import { ErrorState } from "./views/ErrorState";
 import { CommandPalette, type Command } from "./views/CommandPalette";
-import { HydraSpinner } from "./brand";
+import { HydraMark } from "./brand";
 
 /** Dashboard is retrospective, a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000;
@@ -43,7 +42,7 @@ const DASHBOARD_MS = 5000;
  */
 const LIVE_MS = 2000;
 
-/** The footer's spend, when Usage is not the open view and not already polling it. */
+/** The rail's spend, when Usage is not the open view and not already polling it. */
 const CHROME_MS = 15000;
 
 /** Heads come from probe.Run, which scans the machine, so the chrome asks rarely. */
@@ -57,10 +56,8 @@ const HEADS_MS = 60000;
  * Labels, not glyphs. The rail shipped five unlabelled characters
  * (✎ ⌘ ≡ ▫ ⛨) whose meaning was carried entirely by a tooltip (#1060).
  */
-// Six items measure 435px of header at the default padding, and the header
-// stops fitting an 820px viewport at seven. 980 is main.go's MinWidth, but
-// zooming narrows the CSS viewport below it, so app.css gives the tabs back
-// their side padding under 900. A seventh item needs that re-measured (#1122).
+// A column on the left, not tabs across the top: a seventh item costs a row of
+// height instead of the header's width, which ran out at 820px (#1122).
 const NAV = [
   { id: "chat", label: "Chat" },
   { id: "models", label: "Models" },
@@ -105,7 +102,6 @@ export default function App() {
   // A failed read and a read still in flight are different states, and both
   // used to render as null. "probing…" was what a dead backend looked like.
   const [headsError, setHeadsError] = useState<string | null>(null);
-  const [fleetError, setFleetError] = useState<string | null>(null);
   // Open from the first probe that finds nothing able to answer until the
   // person has seen a first answer, so adding a key does not cut it short.
   const [setupOpen, setSetupOpen] = useState(false);
@@ -163,7 +159,7 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  // The footer's spend, and the run list Chat's sidebar and the palette read.
+  // The rail's spend, and the run list the rail, Chat and the palette read.
   // Each is skipped while the view that owns it is open and already polling it
   // faster, so neither file is read twice on one tick. Polling fleet here is
   // also what finally makes the Activity badge count live runs from anywhere:
@@ -179,13 +175,10 @@ export default function App() {
       }
       if (view !== "activity") {
         void GetFleet()
-          .then((f) => {
-            setFleet(f);
-            setFleetError(null);
-          })
-          // Same again: a failed read must not empty a list that was correct,
-          // but Chat's sidebar has to stop saying it is still reading.
-          .catch((e) => setFleetError(msg(e)));
+          .then(setFleet)
+          .catch(() => {
+            /* Same again: a failed read must not empty a list that was correct. */
+          });
       }
     };
     tick();
@@ -193,7 +186,7 @@ export default function App() {
     return () => clearInterval(t);
   }, [view]);
 
-  // Heads drive the header's routable count and the footer. probe.Run scans
+  // Heads drive the rail's model count. probe.Run scans
   // the machine, so this ticks an order of magnitude slower than the rest.
   const refreshHeads = useCallback(
     () =>
@@ -302,14 +295,16 @@ export default function App() {
     return out;
   }, [fleet, heads, openSession]);
 
+  // Activity lists waiting runs first, so its note leads with them too: a run
+  // that needs you outranks one that is only busy.
   const nav = useMemo(
     () =>
-      NAV.map((n) => ({
-        ...n,
-        badge:
-          n.id === "chat" ? waiting : n.id === "activity" ? (fleet?.liveCount ?? 0) : 0,
-        live: n.id === "activity",
-      })),
+      NAV.map((n) => {
+        if (n.id !== "activity") return { ...n };
+        const live = fleet?.liveCount ?? 0;
+        if (waiting > 0) return { ...n, note: `${waiting} waiting`, urgent: true };
+        return { ...n, note: live > 0 ? `${live} running` : "" };
+      }),
     [waiting, fleet],
   );
 
@@ -327,14 +322,18 @@ export default function App() {
 
   return (
     <div className="shell">
-      <AppHeader
+      <Rail
         nav={nav}
         current={navCurrent}
         onSelect={selectNav}
         onSearch={() => setPaletteOpen(true)}
         routable={heads ? heads.routable : null}
+        total={heads ? heads.heads.length : null}
         headsError={headsError}
         todayUsd={dashboard ? dashboard.spend.todayUsd : null}
+        calls={dashboard ? dashboard.spend.todayCalls : null}
+        mode={dashboard?.governor.known ? dashboard.governor.effectiveMode : ""}
+        version={version}
         onHeads={() => setView("models")}
         onSpend={() => setView("usage")}
       />
@@ -362,7 +361,6 @@ export default function App() {
               onOpenRun={openSession}
               focusSignal={chatFocusSignal}
               runs={fleet?.runs ?? null}
-              runsError={fleetError}
             />
           </ErrorBoundary>
         )}
@@ -378,7 +376,12 @@ export default function App() {
         )}
         {!error && view === "usage" && (
           <ErrorBoundary label="Usage">
-            <Dashboard data={dashboard} onOpenRun={openSession} />
+            <Dashboard
+              data={dashboard}
+              onOpenRun={openSession}
+              routable={heads ? heads.routable : null}
+              total={heads ? heads.heads.length : null}
+            />
           </ErrorBoundary>
         )}
         {!error && view === "activity" && fleet && (
@@ -411,22 +414,12 @@ export default function App() {
         )}
         {!error && loading && (
           <div className="loading">
-            <HydraSpinner className="loading__mark" />
+            <HydraMark className="loading__mark" decorative />
             <p>Reading logs…</p>
           </div>
         )}
       </main>
 
-      <AppFooter
-        version={version}
-        routable={heads ? heads.routable : null}
-        total={heads ? heads.heads.length : null}
-        local={heads ? heads.heads.filter((h) => h.localOnly).length : null}
-        headsError={headsError}
-        todayUsd={dashboard ? dashboard.spend.todayUsd : null}
-        calls={dashboard ? dashboard.spend.todayCalls : null}
-        mode={dashboard?.governor.known ? dashboard.governor.effectiveMode : ""}
-      />
 
       <CommandPalette
         open={paletteOpen}

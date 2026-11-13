@@ -139,7 +139,7 @@ function meta(e: TimelineEntry): string {
   if (e.confidence > 0) parts.push(`${pct(e.confidence * 100, 1)} likely correct`)
   if (e.durationMs > 0) parts.push(ms(e.durationMs))
   if (e.costUsd > 0) parts.push(usdExact(e.costUsd))
-  return parts.join(' · ')
+  return parts.join(', ')
 }
 
 function kindClass(kind: string): string {

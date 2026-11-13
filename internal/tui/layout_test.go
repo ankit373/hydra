@@ -438,22 +438,15 @@ func TestCkCommonPrefix(t *testing.T) {
 	}
 }
 
-// ckWordmark/ckLerpHex paint the brand; the text must survive styling.
-func TestCkWordmark_PreservesText(t *testing.T) {
-	if got := stripANSI(ckWordmark("HYDRA")); got != "HYDRA" {
-		t.Errorf("wordmark text = %q", got)
+// The wordmark is the name in one style: no colour, so no per-letter ramp.
+func TestCkWordmark_IsPlain(t *testing.T) {
+	withTheme(t, colorprofile.TrueColor, true)
+	got := ckWordmark("HYDRA")
+	if stripANSI(got) != "HYDRA" {
+		t.Errorf("wordmark text = %q", stripANSI(got))
 	}
-	for _, tt := range []struct {
-		dark      bool
-		from, end string
-	}{{true, "#2AF0E0", "#E852C8"}, {false, "#00707A", "#A21CAF"}} {
-		withTheme(t, colorprofile.TrueColor, tt.dark)
-		if c := ckLerpHex(0.0); c != lipgloss.Color(tt.from) {
-			t.Errorf("dark=%v lerp(0) = %v, want %s", tt.dark, c, tt.from)
-		}
-		if c := ckLerpHex(1.0); c != lipgloss.Color(tt.end) {
-			t.Errorf("dark=%v lerp(1) = %v, want %s", tt.dark, c, tt.end)
-		}
+	if strings.Contains(got, "38;") {
+		t.Errorf("wordmark carries a colour: %q", got)
 	}
 }
 

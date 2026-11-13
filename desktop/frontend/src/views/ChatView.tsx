@@ -17,11 +17,11 @@ import {
   type LiveStream,
 } from '../chatStream'
 import type { ChatReply, GovernorPanel, Run, Session as SessionData } from '../types'
-import { ms, usdExact } from '../format'
+import { ms, pct, usdExact } from '../format'
 import { Timeline } from './Session'
 import { ModelPicker } from './ModelPicker'
-import { Cockpit } from './Cockpit'
 import { GovernorNotice } from './GovernorNotice'
+import { HydraMark } from '../brand'
 
 // Matches App.tsx's LIVE_MS, same reasoning: this is "what is happening now",
 // not a retrospective read.
@@ -32,14 +32,12 @@ const POLL_MS = 2000
 // a future view's persistence cannot collide with it.
 const TURNS_KEY = 'hydra.chat.turns'
 
-/** Openers for an empty thread. They span task types (a document, an
- *  extraction, a reply, a code review) so the first screen shows Hydra is not
- *  only for code. */
+/** Openers for an empty thread: the work developers bring to it, each one a
+ *  task where the route, the check and the cost are worth seeing. */
 const STARTERS = [
-  'Summarise the arguments for and against a four-day work week',
-  'Extract the supplier, date and total: "Invoice 4471, Acme Ltd, 3 March, $1,240"',
-  'Draft a polite reply declining a meeting invitation',
   'Review the staged diff',
+  'Fix the failing test and run go test to check',
+  'Summarise what changed since the last tag',
 ]
 
 interface Turn {
@@ -76,17 +74,14 @@ export function ChatView({
   onSetup,
   focusSignal,
   runs,
-  runsError,
 }: {
   onOpenRun: (runID: string) => void
   /** Opens the connect-a-model steps, from a reply that found nothing to answer it. */
   onSetup?: () => void
   focusSignal: number
-  /** Recent runs for the sidebar. Null until the first fleet read answers. */
+  /** The run log's view of each run, read for the confidence an answer was
+   *  checked to. Null until the first fleet read answers. */
   runs: Run[] | null
-  /** Why that read did not answer, so the sidebar stops claiming it is still
-   *  reading something it has already given up on. */
-  runsError?: string | null
 }) {
   const [prompt, setPrompt] = useState('')
   // Empty means auto-route. The model's own id, not its tier: a tier cannot
@@ -356,8 +351,6 @@ export function ChatView({
     <div className="chatv-shell">
       {/* Every other view opens with a PageHeader h1; Chat's crumb is not a heading. */}
       <h1 className="visually-hidden">Chat</h1>
-      <ChatSidebar runs={runs} runsError={runsError} onOpen={onOpenRun} onNew={newThread} />
-
       <section className={turns.length === 0 ? 'chatv chatv--empty' : 'chatv'}>
       <header className="chatv__head">
         <span className="chatv__crumb">
@@ -376,11 +369,12 @@ export function ChatView({
       <div className="chatv__log" ref={logRef}>
         {turns.length === 0 && (
           <div className="chatv__empty">
-            <p className="chatv__emptyT">Ask Hydra anything</p>
+            <HydraMark className="empty__mark" decorative />
+            <p className="chatv__emptyT">What should Hydra work on?</p>
             <p className="chatv__emptyS">
-              Hydra picks a model with a good measured record on this kind of task, and
-              tries another if it fails. Every reply says which model answered and what it
-              cost.
+              Hydra sends it to the model with the best record on that kind of task, checks
+              the answer when it can, and tries another model if the first one fails. Next
+              to every answer you see which model answered, what it cost and how sure it is.
             </p>
             {/* Real prompts, not decoration: each one fills the composer so it
                 can be edited before it is sent, rather than dispatching blind. */}
@@ -415,7 +409,12 @@ export function ChatView({
                 </span>
               </div>
             )}
-            <p className="turn__you">{t.prompt}</p>
+            <div className="turn__row">
+              <p className="turn__you">{t.prompt}</p>
+              <span className="turn__gut turn__gut--you">you</span>
+            </div>
+            <div className="turn__row">
+            <div className="turn__body">
             {!t.reply && (
               <>
                 {i === turns.length - 1 &&
@@ -462,12 +461,9 @@ export function ChatView({
               />
             )}
             {t.reply?.error && !t.reply.needsProbe && (
-              <>
-                <p className="turn__err">{t.reply.error}</p>
-                {/* The run's full record outlives the error, a generic
-                    dispatch failure must not be a dead end (#533). */}
-                {t.reply.runId && <SessionLink reply={t.reply} onOpenRun={onOpenRun} />}
-              </>
+              // The run's record outlives the error: the column beside it
+              // still opens the run, so a failure is not a dead end (#533).
+              <p className="turn__err">{t.reply.error}</p>
             )}
             {t.reply?.needsProbe && (
               <div className="turn__probe">
@@ -491,12 +487,27 @@ export function ChatView({
                 ) : (
                   <p className="turn__out">{t.reply.output}</p>
                 )}
-                {/* Which head, which tier, what it cost, this is a router, so
-                    that is the part worth showing, not just the answer. */}
-                <FellBack reply={t.reply} />
-                <SessionLink reply={t.reply} onOpenRun={onOpenRun} />
               </>
             )}
+            </div>
+            {/* Which model, what it cost, how sure, and whether it fell back:
+                this is a router, so that is the part worth showing. Always in
+                the same column, so a long thread scans down one edge. */}
+            <div className="turn__gut">
+              {t.reply && !t.reply.question && !t.reply.needsProbe && (
+                <AnswerFacts
+                  reply={t.reply}
+                  run={runs?.find((r) => r.id === t.reply!.runId)}
+                  onOpenRun={onOpenRun}
+                />
+              )}
+              {!t.reply && (
+                <p className="facts__line facts__line--live">
+                  {liveSession?.found ? 'working' : 'routing'}
+                </p>
+              )}
+            </div>
+            </div>
           </div>
         ))}
       </div>
@@ -534,117 +545,61 @@ export function ChatView({
         </div>
       </div>
       </section>
-
-      <Cockpit
-        live={liveSession}
-        lastReply={lastSettled(turns)}
-        runId={turns[turns.length - 1]?.runId}
-      />
     </div>
   )
 }
 
 /**
- * The run rail. Recents were reachable only from Activity, which meant the
- * default view had no memory at all: the app opened on an empty box every
- * time. Grouped Running / Recent because "still going" and "finished" are the
- * two questions people actually open this to answer.
+ * The facts beside an answer. Fallbacks are named, with the reason: without
+ * them a reply from a weak local model looks the same whether the router chose
+ * it or fell back to it after the picked model failed (#676).
  */
-function ChatSidebar({
-  runs,
-  runsError,
-  onOpen,
-  onNew,
+function AnswerFacts({
+  reply,
+  run,
+  onOpenRun,
 }: {
-  runs: Run[] | null
-  runsError?: string | null
-  onOpen: (id: string) => void
-  onNew: () => void
+  reply: ChatReply
+  run?: Run
+  onOpenRun: (runID: string) => void
 }) {
-  const live = (runs ?? []).filter((r) => r.live)
-  const done = (runs ?? []).filter((r) => !r.live).slice(0, 12)
-  return (
-    <aside className="chatside" aria-label="Runs">
-      <button className="chatside__new" onClick={onNew}>
-        <span aria-hidden="true">+</span> New task
-      </button>
-
-      {live.length > 0 && (
-        <>
-          <div className="chatside__grp">Running</div>
-          {live.map((r) => (
-            <RunRow key={r.id} run={r} onOpen={onOpen} />
-          ))}
-        </>
-      )}
-
-      <div className="chatside__grp">Recent</div>
-      {/* A read that failed is not one still in flight, and both were null. */}
-      {runs === null && (
-        <p className="chatside__note" title={runsError ?? ''}>
-          {runsError ? "Couldn't read the run log." : 'Reading run logs…'}
-        </p>
-      )}
-      {runs !== null && done.length === 0 && (
-        <p className="chatside__note">Nothing yet. Ask something and it shows up here.</p>
-      )}
-      {done.map((r) => (
-        <RunRow key={r.id} run={r} onOpen={onOpen} />
-      ))}
-    </aside>
-  )
-}
-
-function RunRow({ run, onOpen }: { run: Run; onOpen: (id: string) => void }) {
-  return (
-    <button className="chatside__run" onClick={() => onOpen(run.id)} title={run.goal || run.id}>
-      <span
-        className={
-          run.waiting
-            ? 'chatside__dot chatside__dot--wait'
-            : run.live
-              ? 'chatside__dot chatside__dot--live'
-              : 'chatside__dot'
-        }
-        aria-hidden="true"
-      />
-      <span className="chatside__runName">{run.goal || run.id}</span>
-      {run.costUsd > 0 && <span className="chatside__runCost">{usdExact(run.costUsd)}</span>}
-    </button>
-  )
-}
-
-/**
- * Names the models that were asked and could not answer. Without it a reply
- * from a weak local model looks identical whether the router chose it or fell
- * back to it after the picked model failed, which is what #676 reported: a
- * T1 pick answered by a T10 head with nothing said.
- */
-function FellBack({ reply }: { reply: ChatReply }) {
-  const tried = reply.attempts ?? []
-  if (tried.length === 0) return null
-  return (
-    <div className="turn__fellback">
-      {tried.map((a) => (
-        <p key={a.head} className="turn__fellbackRow">
-          <b>{a.model || a.head}</b>
-          {' '}could not answer: {a.reason}
-        </p>
-      ))}
-      <p className="turn__fellbackRow">Answered by {reply.model || reply.head} instead.</p>
-    </div>
-  )
-}
-
-function SessionLink({ reply, onOpenRun }: { reply: ChatReply; onOpenRun: (runID: string) => void }) {
   const who = reply.model || reply.head
+  const tried = reply.attempts ?? []
   return (
-    <button className="turn__meta" onClick={() => onOpenRun(reply.runId)}>
-      {who}
-      {reply.durationMs > 0 && ` · ${ms(reply.durationMs)}`}
-      {reply.costUsd > 0 && ` · ${usdExact(reply.costUsd)}`}
-      {who ? ' · session →' : 'session →'}
-    </button>
+    <div className="facts">
+      {who && <p className="facts__model">{who}</p>}
+      {(reply.durationMs > 0 || reply.costUsd > 0) && (
+        <p className="facts__line">
+          {reply.durationMs > 0 && <span>{ms(reply.durationMs)}</span>}
+          {reply.costUsd > 0 && <span className="facts__num">{usdExact(reply.costUsd)}</span>}
+        </p>
+      )}
+      {!reply.error && (
+        <p className="facts__line">
+          {run && run.confidence > 0 ? (
+            <span className="facts__ok">✓ {pct(run.confidence * 100, 0)} likely correct</span>
+          ) : (
+            'not checked'
+          )}
+        </p>
+      )}
+      {tried.length === 0 ? (
+        !reply.error && <p className="facts__line">first choice</p>
+      ) : (
+        tried.map((a) => (
+          <p key={a.head} className="facts__line facts__fell">
+            <span aria-hidden="true">✗ </span>
+            {a.model || a.head} could not answer: {a.reason}
+          </p>
+        ))
+      )}
+      {tried.length > 0 && who && <p className="facts__line">Answered by {who} instead.</p>}
+      {reply.runId && (
+        <button className="facts__open" onClick={() => onOpenRun(reply.runId)}>
+          Open run
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -666,14 +621,6 @@ function recoveredReply(runId: string, s: SessionData): ChatReply {
 
 function emptyReply(): ChatReply {
   return { output: '', head: '', model: '', tier: 0, costUsd: 0, durationMs: 0, runId: '' }
-}
-
-/** The most recent turn that actually settled, for the idle sidebar state. */
-function lastSettled(turns: Turn[]): ChatReply | undefined {
-  for (let i = turns.length - 1; i >= 0; i--) {
-    if (turns[i].reply && !turns[i].reply!.error) return turns[i].reply
-  }
-  return undefined
 }
 
 /** True when this turn was answered at a different tier than the one before. */

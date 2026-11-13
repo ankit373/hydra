@@ -90,7 +90,7 @@ export function Settings({ onProvidersChanged }: { onProvidersChanged?: () => vo
       <PageHeader
         title="Settings"
         subtitle="What this machine is set to do."
-        provenance={`${data.path}${data.exists ? '' : ' · not written yet, these are the defaults'}`}
+        provenance={`${data.path}${data.exists ? '' : ', not written yet, these are the defaults'}`}
         actions={
           <>
             {saved && !dirty && <span className="set__ok">Saved</span>}

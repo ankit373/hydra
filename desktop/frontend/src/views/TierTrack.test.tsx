@@ -72,12 +72,12 @@ describe('what it says out loud', () => {
   // Lower tier number is stronger, so 6 → 2 is an escalation, not a decrease.
   it('calls a move to a stronger tier an escalation', () => {
     render(<TierTrack entries={[e('head_selected', 6), e('head_selected', 2)]} />)
-    expect(screen.getByText(/escalated once · T6 → T2/)).toBeInTheDocument()
+    expect(screen.getByText(/escalated once, T6 → T2/)).toBeInTheDocument()
   })
 
   it('calls a move to a cheaper tier easing off', () => {
     render(<TierTrack entries={[e('head_selected', 2), e('head_selected', 8)]} />)
-    expect(screen.getByText(/eased off once · T2 → T8/)).toBeInTheDocument()
+    expect(screen.getByText(/eased off once, T2 → T8/)).toBeInTheDocument()
   })
 
   it('does not claim a direction when it ended where it started', () => {

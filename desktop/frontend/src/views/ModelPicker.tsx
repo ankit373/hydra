@@ -92,7 +92,7 @@ export function ModelPicker({
                   {p.shared && <span className="picker__shared">shared</span>}
                   {p.observedCalls > 0 && (
                     <span className="picker__poolSpend" title="What Hydra logged against this pool, not a provider quota reading">
-                      {p.observedCalls} calls · {usd(p.observedCostUsd)}
+                      {p.observedCalls} calls, {usd(p.observedCostUsd)}
                     </span>
                   )}
                 </div>
@@ -150,7 +150,7 @@ function spec(m: Model, shared: boolean, siblings: number): string {
   if (m.contextWindow > 0) parts.push(`${ctx(m.contextWindow)} ctx`)
   // Only worth saying when there is actually another member to starve.
   if (shared && siblings > 1) parts.push('shares this quota')
-  return parts.join(' · ')
+  return parts.join(', ')
 }
 
 /** 1000000 → "1M", not "1000k". */

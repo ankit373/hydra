@@ -50,7 +50,7 @@ export function GovernorNotice({
         <div className="gn__stripe" />
         <div className="gn__in">
           <span className={`gn__band gn__band--${band}`}>
-            {band} · {g.pct}%
+            {band}, {g.pct}%
           </span>
           <h3 className="gn__h" id="gnTitle">
             {band === 'emergency'

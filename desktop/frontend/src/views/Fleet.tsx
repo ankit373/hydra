@@ -3,6 +3,7 @@ import type { Agent, Fleet as FleetData, Run } from '../types'
 import { ms, pct, usdExact } from '../format'
 import { RunGraph } from './RunGraph'
 import { PageHeader } from './PageHeader'
+import { HydraMark } from '../brand'
 
 export function Fleet({
   data,
@@ -21,6 +22,7 @@ export function Fleet({
 
       {!data.hasRuns ? (
         <div className="empty">
+          <HydraMark className="empty__mark" decorative />
           <p className="empty__title">No requests yet</p>
           <p>Ask something in Chat and it will appear here.</p>
           <button className="empty__cta" onClick={onStartTask}>
@@ -79,10 +81,16 @@ function RunCard({
   const large = run.allCount > groupThreshold
   const [expanded, setExpanded] = useState(!large)
 
+  const st = runState(run)
   return (
-    <section className={`run ${run.live ? 'run--live' : ''}`}>
+    <section className={`run run--${st.id}`}>
       <header className="run__head">
-        <span className={`run__dot ${run.live ? 'run__dot--live' : ''}`} />
+        {/* A word and a glyph, not a coloured dot: the state has to read
+            without colour, and "waiting" is the one that needs a person. */}
+        <span className={`run__state status--${st.tone}`}>
+          <span aria-hidden="true">{st.glyph} </span>
+          {st.label}
+        </span>
         <button className="run__open" onClick={() => onOpen(run.id)}>
           {/* A run with no recorded prompt falls back to its id, which is all
               it has. Saying "untitled" would hide the one handle that works. */}
@@ -92,8 +100,9 @@ function RunCard({
           {run.goal && <span className="run__id">{run.id}</span>}
         </button>
         <span className="run__meta">
-          {ms(run.elapsedMs)} · {usdExact(run.costUsd)}
-          {run.confidence > 0 && ` · ${pct(run.confidence * 100, 1)} likely correct`}
+          <span>{ms(run.elapsedMs)}</span>
+          <span className="run__num">{usdExact(run.costUsd)}</span>
+          <span>{run.confidence > 0 ? `${pct(run.confidence * 100, 0)} likely correct` : 'not checked'}</span>
         </span>
       </header>
 
@@ -179,9 +188,9 @@ function AgentRow({ agent }: { agent: Agent }) {
       <span className="agent__id">{agent.model || agent.head || agent.id}</span>
       {agent.tier > 0 && <span className="agent__tier">T{agent.tier}</span>}
       <span className="agent__meta">
-        {agent.durationMs > 0 && ms(agent.durationMs)}
-        {agent.costUsd > 0 && ` · ${usdExact(agent.costUsd)}`}
-        {agent.confidence > 0 && ` · ${pct(agent.confidence * 100, 1)} likely correct`}
+        {agent.durationMs > 0 && <span>{ms(agent.durationMs)}</span>}
+        {agent.costUsd > 0 && <span>{usdExact(agent.costUsd)}</span>}
+        {agent.confidence > 0 && <span>{pct(agent.confidence * 100, 0)} likely correct</span>}
       </span>
       {agent.detail && <span className="agent__detail">{agent.detail}</span>}
     </li>
@@ -232,7 +241,15 @@ function chipTitle(a: Agent): string {
     a.costUsd > 0 ? usdExact(a.costUsd) : null,
   ]
     .filter(Boolean)
-    .join(' · ')
+    .join(', ')
+}
+
+/** What a run is doing, in the order groupRuns ranks them. */
+function runState(r: Run): { id: string; label: string; glyph: string; tone: string } {
+  if (r.waiting) return { id: 'waiting', label: 'waiting on you', glyph: '!', tone: 'warning' }
+  if (r.live) return { id: 'running', label: 'running', glyph: '●', tone: 'info' }
+  if (r.failed > 0) return { id: 'failed', label: 'failed', glyph: '✗', tone: 'danger' }
+  return { id: 'done', label: 'done', glyph: '✓', tone: 'success' }
 }
 
 /**
@@ -287,7 +304,7 @@ export function activitySummary(data: FleetData): string {
   const w = data.waitingCount
   const l = data.liveCount
   if (w > 0 && l > 0) {
-    return `${w} waiting on you · ${l} still running`
+    return `${w} waiting on you, ${l} still running`
   }
   if (w > 0) {
     return `${w} ${w === 1 ? 'request needs' : 'requests need'} an answer from you`

@@ -23,17 +23,15 @@ describe('the verdict and the measurement', () => {
   })
 })
 
-// The Record in Security.tsx makes tsc demand a slice for every status. This
-// pins what that is for: the donut is a part-to-whole, so its slices have to
-// sum to the applicable categories. 'partial' was missing from the hand-listed
-// four and the whole quietly stopped being whole (#753).
+// Every status gets a tile. 'partial' was once missing from a hand-listed four
+// and the categories quietly stopped adding up (#753).
 describe('coverage by category', () => {
-  it('draws every applicable category into exactly one slice', () => {
+  it('draws every applicable category exactly once, and n/a not at all', () => {
     const categories: Category[] = (
       ['enforced', 'configured', 'partial', 'gap', 'n/a'] as CoverageStatus[]
     ).map((status, i) => ({ id: `C${i}`, name: status, status, detail: '' }))
 
-    render(
+    const { container } = render(
       <Security
         data={securityReport({
           coverage: { categories, applicable: 4, covered: 2, partial: 1, percentCovered: 50, edition: '2025' },
@@ -41,10 +39,10 @@ describe('coverage by category', () => {
       />,
     )
 
-    // n/a is excluded from scoring, so it is excluded from the whole too.
-    expect(screen.getByRole('img', { name: /^Enforced: / })).toHaveAccessibleName(
-      'Enforced: 1, Configured: 1, Partial: 1, Gap: 1',
-    )
+    // n/a is excluded from scoring, so it is excluded from the grid too.
+    const tiles = [...container.querySelectorAll('.sec-tile__status')].map((e) => e.textContent)
+    expect(tiles).toEqual(['enforced', 'configured', 'partial', 'gap'])
+    expect(screen.getByText('2 of 4')).toBeInTheDocument()
   })
 })
 

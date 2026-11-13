@@ -64,7 +64,7 @@ describe('never stating a score it cannot support', () => {
 
   it('prints a supported score with its confidence', () => {
     expect(scoreText(server({ scored: true, score: 71.4, confidence: 'moderate' })))
-      .toBe('71/100 · moderate')
+      .toBe('71/100, moderate')
   })
 })
 

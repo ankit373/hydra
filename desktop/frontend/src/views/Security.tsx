@@ -8,7 +8,6 @@ import type {
   Check,
   ConfigDrift,
   Control,
-  CoverageStatus,
   EvidenceQuality,
   SupplyChain,
   BlastReport,
@@ -20,7 +19,6 @@ import type {
   Exposure,
   HeadRisk,
   LedgerEvent,
-  LedgerPanel,
   PolicyAudit,
   SecurityBoundary,
   SecurityCount,
@@ -32,63 +30,23 @@ import { clockTime, coverageBand, toSecurityCSV, usdWhole } from '../format'
 import { MCPServers } from './MCPServers'
 import { PageHeader } from './PageHeader'
 import { Tabs } from './Tabs'
-import {
-  CategoryGrid,
-  CoverageHistory,
-  CoverageRing,
-  type DonutSegment,
-  RiskTrend,
-  StatusDonut,
-} from './SecurityCharts'
+import { CategoryGrid, CoverageHistory, RiskTrend } from './SecurityCharts'
 
 function findCheckStatus(checks: Check[], name: string): string | undefined {
   return checks.find((c) => c.name === name)?.status
 }
 
-// One slice per status, in draw order; null is excluded from the part-to-whole
-// exactly as it is from scoring. A Record rather than a hand-listed four, so a
-// status added to the union fails to compile until it is given a slice:
-// 'partial' was dropped here and the donut's slices quietly stopped summing to
-// the category count (#753).
-const COVERAGE_SLICES: Record<CoverageStatus, Omit<DonutSegment, 'value'> | null> = {
-  enforced: { label: 'Enforced', colorVar: 'var(--hy-color-status-success)' },
-  configured: { label: 'Configured', colorVar: 'var(--hy-color-status-info)' },
-  partial: { label: 'Partial', colorVar: 'var(--hy-color-status-warning)' },
-  gap: { label: 'Gap', colorVar: 'var(--hy-color-status-danger)' },
-  'n/a': null,
-}
-
-function coverageSegments(categories: Category[]): DonutSegment[] {
-  const counts = new Map<CoverageStatus, number>()
-  for (const c of categories) counts.set(c.status, (counts.get(c.status) ?? 0) + 1)
-  const order = Object.keys(COVERAGE_SLICES) as CoverageStatus[]
-  return order.flatMap((s) => {
-    const slice = COVERAGE_SLICES[s]
-    return slice ? [{ ...slice, value: counts.get(s) ?? 0 }] : []
-  })
-}
-
-// Allowed/Denied/Ask are mutually exclusive (a Decision is exactly one) and
-// sum to Total, a real part-to-whole pie. Flagged is a different,
-// independent dimension (a flagged event can be either allowed or denied),
-// so it can't be a further slice without double-counting; it's called out
-// separately instead of drawn into the same pie.
-function ledgerSegments(ledger: LedgerPanel): DonutSegment[] {
-  return [
-    { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-color-status-success)' },
-    { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-color-status-danger)' },
-    { label: 'Ask', value: ledger.asked, colorVar: 'var(--hy-color-status-warning)' },
-  ]
-}
-
-function actionSegments(actions: Action[]): DonutSegment[] {
+/** How many actions sit at each priority, as counts. */
+function ActionCounts({ actions }: { actions: Action[] }) {
   const counts = { now: 0, soon: 0, watch: 0 }
   for (const a of actions) counts[a.priority]++
-  return [
-    { label: 'Now', value: counts.now, colorVar: 'var(--hy-color-status-danger)' },
-    { label: 'Soon', value: counts.soon, colorVar: 'var(--hy-color-status-warning)' },
-    { label: 'Watch', value: counts.watch, colorVar: 'var(--hy-color-text-muted)' },
-  ]
+  return (
+    <dl className="sec-counts">
+      <div><dt>Now</dt><dd>{counts.now}</dd></div>
+      <div><dt>Soon</dt><dd>{counts.soon}</dd></div>
+      <div><dt>Watch</dt><dd>{counts.watch}</dd></div>
+    </dl>
+  )
 }
 
 export function Security({ data }: { data: SecurityReport }) {
@@ -195,6 +153,13 @@ function headList(ids: string[]): string {
 
 // ── hero: the catchy first view ────────────────────────────────────────────
 
+// The verdict as a sentence a person would say, not a status code.
+const VERDICT_TEXT: Record<string, string> = {
+  'act now': 'Act now',
+  attention: 'Needs attention',
+  ok: 'Nothing to act on',
+}
+
 // Bottom line up front. A coverage ring is a measurement; the verdict is the
 // answer, and the answer goes first.
 function VerdictBanner({ posture, incidents }: { posture: Posture; incidents: Incident[] }) {
@@ -207,7 +172,7 @@ function VerdictBanner({ posture, incidents }: { posture: Posture; incidents: In
   const cited = incidents.find((in_) => posture.trigger?.includes(in_.narrative))
   return (
     <div className={`sec-verdict ${cls}`}>
-      <div className="sec-verdict__label">{posture.verdict}</div>
+      <div className="sec-verdict__label">{VERDICT_TEXT[posture.verdict] ?? posture.verdict}</div>
       <div className="sec-verdict__trigger">{posture.trigger}</div>
       {cited && (
         <div className="sec-verdict__stages">
@@ -215,7 +180,7 @@ function VerdictBanner({ posture, incidents }: { posture: Posture; incidents: In
             <span className="sec-cat__status sec-cat__status--gap" key={st}>{st}</span>
           ))}
           <span className="sec-action__age">
-            likelihood {cited.likelihood} × impact {cited.impact} · {cited.events?.length ?? 0} event(s)
+            likelihood {cited.likelihood} × impact {cited.impact}, {cited.events?.length ?? 0} event(s)
           </span>
         </div>
       )}
@@ -279,7 +244,7 @@ function RegisterTable({ register }: { register: RiskRegister }) {
       <h2 className="section__title">Risk register</h2>
       <p className="card__note">
         Σ modelled defect cost {usdWhole(register.sumDefectCostUsd)}, per-occurrence, not
-        annualised{register.breached > 0 ? ` · ${register.breached} past remediation SLA` : ''}.
+        annualised{register.breached > 0 ? `, ${register.breached} past remediation SLA` : ''}.
         Framework mappings are curated assertions, not measurements.
       </p>
       <div className="table__wrap">
@@ -301,7 +266,7 @@ function RegisterTable({ register }: { register: RiskRegister }) {
                 <td className={`num ${k.breached ? 'tone--bad' : ''}`}>{k.dueInDays}d</td>
                 <td className="num">{usdWhole(k.defectCostUsd)}</td>
                 <td className="card__note">
-                  {(k.frameworks ?? []).map((f) => `${f.framework} ${f.control}`).join(' · ')}
+                  {(k.frameworks ?? []).map((f) => `${f.framework} ${f.control}`).join(', ')}
                 </td>
               </tr>
             ))}
@@ -333,9 +298,13 @@ function Hero({ data }: { data: SecurityReport }) {
       <div className="sec-top">
         <VerdictBanner posture={data.posture} incidents={data.incidents ?? []} />
         <div className="card sec-top__score">
-          <CoverageRing percent={data.coverage.percentCovered} band={band} />
+          <div className="fact__label">OWASP LLM Top 10 covered</div>
+          {/* The number, not a ring around it. */}
+          <div className={`fact__value coverage--${band}`}>
+            {data.coverage.covered} of {data.coverage.applicable}
+          </div>
           <div className="sec-hero__note">
-            {data.coverage.covered}/{data.coverage.applicable} covered
+            {Math.round(data.coverage.percentCovered)}% of the categories that apply
             <TrendLine trend={data.trend} />
           </div>
           {data.history && data.history.length >= 2 && (
@@ -345,10 +314,11 @@ function Hero({ data }: { data: SecurityReport }) {
           )}
         </div>
         <div className="card sec-top__risk">
-          <div className="card__label">Blocked · awaiting · flagged</div>
-          <div className="card__value--sm">
-            {data.ledger.denied} blocked · {data.ledger.asked} awaiting · {data.ledger.flagged} flagged
-          </div>
+          <dl className="sec-counts">
+            <div><dt>Blocked</dt><dd>{data.ledger.denied}</dd></div>
+            <div><dt>Waiting for you</dt><dd>{data.ledger.asked}</dd></div>
+            <div><dt>Flagged</dt><dd>{data.ledger.flagged}</dd></div>
+          </dl>
           {data.riskHistory && data.riskHistory.length >= 2 ? (
             <div className="sec-hero__history">
               <RiskTrend history={data.riskHistory} />
@@ -367,7 +337,6 @@ function Hero({ data }: { data: SecurityReport }) {
       <div className="sec-hero">
         <div className="card sec-hero__grid">
           <div className="card__label">Coverage by category</div>
-          <StatusDonut segments={coverageSegments(data.coverage.categories)} />
           <CategoryGrid categories={data.coverage.categories} />
         </div>
         {/* Rendering the column unconditionally left half the row empty on
@@ -463,7 +432,7 @@ function auditProvenance(data: SecurityReport): string {
   if (data.truncated) parts.push('partial log, not the whole one')
   if (!data.integrityIntact) parts.push('chain broken')
   if (data.attestation?.generatedAt) parts.push(`as of ${data.attestation.generatedAt.slice(0, 10)}`)
-  return parts.join(' · ')
+  return parts.join(', ')
 }
 
 function Detailed({ data }: { data: SecurityReport }) {
@@ -491,12 +460,7 @@ function Detailed({ data }: { data: SecurityReport }) {
           <Checks checks={data.checks} />
           <section>
             <h2 className="section__title">Full action queue</h2>
-            {(data.actions ?? []).length > 0 && (
-              <div className="card">
-                <div className="card__label">By priority</div>
-                <StatusDonut segments={actionSegments(data.actions ?? [])} />
-              </div>
-            )}
+            {(data.actions ?? []).length > 0 && <ActionCounts actions={data.actions ?? []} />}
             <ActionCards actions={data.actions ?? []} />
           </section>
         </>
@@ -564,7 +528,7 @@ function PrivilegeView({ rows }: { rows: AgentPrivilege[] }) {
                 </td>
                 <td className="card__note">
                   {(p.actions ?? []).join(', ') || '—'}
-                  {(p.resources ?? []).length > 0 && ` · ${p.resources!.length} resource(s)`}
+                  {(p.resources ?? []).length > 0 && `, ${p.resources!.length} resource(s)`}
                 </td>
               </tr>
             ))}
@@ -587,8 +551,8 @@ function BOMView({ entries }: { entries: BOMEntry[] }) {
     <section>
       <h2 className="section__title">Model estate (AI-BOM)</h2>
       <p className="card__note">
-        {entries.length} model(s) · {remote} off this machine
-        {runtime > 0 ? ` · ${runtime} added at runtime rather than from the curated catalog` : ''}
+        {entries.length} model(s), {remote} off this machine
+        {runtime > 0 ? `, ${runtime} added at runtime rather than from the curated catalog` : ''}
       </p>
       <div className="table__wrap">
         <table className="table">
@@ -651,7 +615,7 @@ function AttestationView({ a }: { a: Attestation }) {
           <div className="card__label">Open risks</div>
           <div className="card__value--sm">
             {a.openRisks}
-            {a.slaBreached > 0 ? ` · ${a.slaBreached} past SLA` : ''}
+            {a.slaBreached > 0 ? `, ${a.slaBreached} past SLA` : ''}
           </div>
         </div>
         <div className="card">
@@ -672,7 +636,7 @@ function AttestationView({ a }: { a: Attestation }) {
       </div>
       <p className="card__note" style={{ marginTop: 12 }}>
         Generated {clockTime(a.generatedAt)} by {a.tool} {a.version}
-        {a.configFingerprint ? ` · rules in force ${a.configFingerprint.slice(0, 12)}` : ''}
+        {a.configFingerprint ? `, rules in force ${a.configFingerprint.slice(0, 12)}` : ''}
       </p>
       <p className="card__note">
         Digest <span className="mono">{a.digest.slice(0, 16)}</span> covers every claim above, so two
@@ -791,7 +755,7 @@ function BlastView({ blast }: { blast: BlastReport }) {
                 />
               </span>
               <span className="rank__value">
-                {f.known ? `${f.dependents} dep · ${f.radius?.toFixed(2)}×` : 'unknown'}
+                {f.known ? `${f.dependents} dep, ${f.radius?.toFixed(2)}×` : 'unknown'}
               </span>
             </div>
           ))}
@@ -996,7 +960,7 @@ function PolicyAuditView({ audit }: { audit: PolicyAudit }) {
                   </td>
                   <td>
                     {r.shadowedBy !== undefined ? (
-                      <span className="sec-cat__status sec-cat__status--gap">unreachable · #{r.shadowedBy} wins</span>
+                      <span className="sec-cat__status sec-cat__status--gap">unreachable, #{r.shadowedBy} wins</span>
                     ) : r.dead ? (
                       <span className="sec-cat__status">never matched</span>
                     ) : (
@@ -1160,7 +1124,7 @@ function EvidenceView({ events, truncated }: { events: LedgerEvent[]; truncated:
                 <td className="mono">{e.resource || '—'}</td>
                 <td className="card__note">
                   {e.flag_reason ? `“${e.flag_reason}”` : e.reason || '—'}
-                  {e.pii_types?.length ? ` · ${e.pii_types.join(', ')}` : ''}
+                  {e.pii_types?.length ? `, ${e.pii_types.join(', ')}` : ''}
                 </td>
               </tr>
             ))}
@@ -1186,11 +1150,15 @@ function LedgerCard({ data }: { data: SecurityReport }) {
     <div className="card">
       <div className="card__label">Recorded activity</div>
       <div className="card__value">{ledger.total}</div>
-      <StatusDonut segments={ledgerSegments(ledger)} />
+      <dl className="sec-counts">
+        <div><dt>Allowed</dt><dd>{ledger.allowed}</dd></div>
+        <div><dt>Denied</dt><dd>{ledger.denied}</dd></div>
+        <div><dt>Asked you</dt><dd>{ledger.asked}</dd></div>
+      </dl>
       {ledger.flagged > 0 && (
         <div className="card__note">
-          {ledger.flagged} of these were also flagged for a suspected injection marker
-          (flagged is independent of allow/deny, not a third slice above)
+          {ledger.flagged} of these were also flagged for a suspected injection marker,
+          whether they were allowed or denied.
         </div>
       )}
     </div>
@@ -1252,7 +1220,7 @@ function ByHead({ rows }: { rows: HeadRisk[] }) {
                   <span className="rank__fill rank__fill--risk" style={{ width: `${(total / max) * 100}%` }} />
                 </span>
                 <span className="rank__value">
-                  {r.denied} denied · {r.flagged} flagged
+                  {r.denied} denied, {r.flagged} flagged
                 </span>
               </div>
             )

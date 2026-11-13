@@ -27,10 +27,10 @@ const agents = (n: number, head: string) =>
     detail: i === 0 ? 'accepted' : 'agreed · LLR +1.2 → Λ 1.2',
   }))
 
-const run = (id: string, live: boolean, goal: string, cost: number) => ({
+const run = (id: string, live: boolean, goal: string, cost: number, over: object = {}) => ({
   id, live, waiting: false, startedAt: new Date(Date.now() - 6e5).toISOString(),
   elapsedMs: 42_000, costUsd: cost, confidence: 0.94, agents: agents(4, 'anthropic/claude-sonnet-4.5'),
-  running: live ? 1 : 0, ok: 3, failed: 0, pending: 0, allCount: 4, skipped: 0, goal,
+  running: live ? 1 : 0, ok: 3, failed: 0, pending: 0, allCount: 4, skipped: 0, goal, ...over,
 })
 
 // Provider keys, shared by every state so the first-run flow can be walked:
@@ -74,11 +74,11 @@ const API = {
       { source: 'google/gemini-2.5-pro', domain: 'go', d: 1.12, se: 0.8, sp: 0.66, n: 54 },
     ],
   }),
-  GetFleet: () => delay({ hasRuns: true, liveCount: 2, waitingCount: 1, groupThreshold: 8, runs: [run('run-108', true, 'rotate the signing key in internal/auth/token.go', 0.062), run('run-107', true, 'add pagination to the heads endpoint', 0.019), run('run-106', false, 'fix the flaky workflow resume test', 0.204), run('run-105', false, 'review the diff on feature/905', 0.088)] }),
+  GetFleet: () => delay({ hasRuns: true, liveCount: 2, waitingCount: 1, groupThreshold: 8, runs: [run('run-108', true, 'rotate the signing key in internal/auth/token.go', 0.062), run('run-107', true, 'add pagination to the heads endpoint', 0.019), run('run-106', false, 'apply the plan for the retry refresher', 0.204, { waiting: true, confidence: 0 }), run('run-105', false, 'review the diff on feature/905', 0.088), run('run-104', false, 'fix the flaky workflow resume test', 0.131, { failed: 1, ok: 2 })] }),
   GetSession: (id: string) => delay({ runId: id || 'run-108', live: true, found: true, goal: 'rotate the signing key in internal/auth/token.go', nonLinear: true, skipped: 0, agents: agents(5, 'anthropic/claude-sonnet-4.5'), edges: [{ from: 'a0', to: 'a1', ts: new Date().toISOString(), detail: 'handoff' }], timeline: Array.from({ length: 7 }, (_, i) => ({ kind: ['task_started', 'head_selected', 'sprt_sample', 'sprt_sample', 'edit_applied', 'verified', 'task_done'][i], ts: new Date(Date.now() - (7 - i) * 9e3).toISOString(), nodeId: `a${i % 4}`, head: 'anthropic/claude-sonnet-4.5', model: 'claude-sonnet-4.5', tier: 4, status: 'ok', costUsd: 0.008 * i, durationMs: 900 * i, confidence: 0.6 + i * 0.05, detail: 'agreed · LLR +1.2 → Λ 2.4' })) }),
   GetEdits: () => delay([{ file: 'internal/auth/token.go', ts: new Date().toISOString(), detail: 'rotate signing key', ref: 'abc123', added: 24, removed: 9 }, { file: 'internal/auth/token_test.go', ts: new Date().toISOString(), detail: 'cover the rotation', ref: 'abc124', added: 41, removed: 0 }]),
   GetDiff: () => delay({ file: 'internal/auth/token.go', found: true, added: 3, removed: 1, lines: [{ op: ' ', text: 'func Rotate(k Key) error {', oldLine: 10, newLine: 10 }, { op: '-', text: '\treturn nil', oldLine: 11, newLine: 0 }, { op: '+', text: '\tif err := k.Validate(); err != nil {', oldLine: 0, newLine: 11 }, { op: '+', text: '\t\treturn err', oldLine: 0, newLine: 12 }, { op: '+', text: '\t}', oldLine: 0, newLine: 13 }, { op: ' ', text: '}', oldLine: 12, newLine: 14 }] }),
-  Chat: () => delay({ output: 'Routed to anthropic/claude-sonnet-4.5 (tier 4).\n\nThe signing key rotation needs the validator to run before the swap, otherwise a malformed key replaces a working one.', head: 'anthropic/claude-sonnet-4.5', model: 'claude-sonnet-4.5', tier: 4, costUsd: 0.0182, durationMs: 2400, runId: 'run-109' }),
+  Chat: () => delay({ output: 'Added a second key slot. New tokens are signed with the new key, and the old key still verifies for 24 hours, so sessions signed before the rotation keep working for a day.', head: 'anthropic/claude-sonnet-4.5', model: 'claude-sonnet-4.5', tier: 4, costUsd: 0.062, durationMs: 42000, runId: 'run-105', attempts: [{ head: 'ollama/qwen3:8b', model: 'qwen3:8b', tier: 10, reason: 'go vet failed' }] }),
   ApproveEdit: (f: string) => delay({ file: f, status: 'approved' }),
   RejectEdit: (f: string) => delay({ file: f, status: 'reverted', method: 'git_checkout' }),
   GetMCPServers: () => delay({ scanned: true, synced: new Date().toISOString(), servers: [{ name: 'filesystem', client: 'claude-code', scope: 'user', package: '@modelcontextprotocol/server-filesystem', remote: false, status: 'verified', state: 'trusted', scored: true, score: 82, confidence: 'high' }, { name: 'postmark-mcp', client: 'claude-code', scope: 'project', package: 'postmark-mcp', remote: false, status: 'verified', state: 'quarantined', scored: true, score: -80, confidence: 'high', nearestMatch: 'postmark', nearestDist: 4 }, { name: 'grafana', client: 'claude-code', scope: 'user', remote: true, status: 'unresolved', state: 'provisional', scored: false, score: 0 }] }),
