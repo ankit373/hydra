@@ -32,7 +32,7 @@ func (m Cockpit) viewAgents(w, h int) string {
 		b.WriteString(ckFaintS.Render(" no agents running") + "\n\n" +
 			ckDimS.Render(" This view lists live runs and today's finished ones.") + "\n" +
 			ckDimS.Render(" Start one from chat, or `hyctl dispatch \"…\"`, enter opens its trace."))
-		return lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1).Render(b.String())
+		return lipgloss.NewStyle().Width(w).Height(h).Padding(0, tokSpace2).Render(b.String())
 	}
 
 	avail := h - 5
@@ -71,7 +71,7 @@ func (m Cockpit) viewAgents(w, h int) string {
 	}
 	b.WriteString(strings.Join(ckSelScroll(lines, sel, avail), "\n"))
 	b.WriteString("\n\n" + ckFaintS.Render(" enter opens the run's trace · a backgrounded thread's run returns to chat"))
-	return lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1).Render(b.String())
+	return lipgloss.NewStyle().Width(w).Height(h).Padding(0, tokSpace2).Render(b.String())
 }
 
 // ckAgo renders how long ago t was, coarsely.

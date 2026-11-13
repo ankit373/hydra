@@ -104,15 +104,38 @@
     }
   },
   "space": {
+    "0-5": {
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      }
+    },
     "1": {
       "$value": {
         "value": 4,
         "unit": "px"
       }
     },
+    "1-5": {
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      }
+    },
     "2": {
       "$value": {
         "value": 8,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.hydra.terminal": {
+          "cells": 1
+        }
+      }
+    },
+    "2-5": {
+      "$value": {
+        "value": 10,
         "unit": "px"
       }
     },
@@ -125,6 +148,17 @@
     "4": {
       "$value": {
         "value": 16,
+        "unit": "px"
+      },
+      "$extensions": {
+        "dev.hydra.terminal": {
+          "cells": 2
+        }
+      }
+    },
+    "5": {
+      "$value": {
+        "value": 20,
         "unit": "px"
       }
     },
@@ -165,10 +199,17 @@
       }
     },
     "$type": "dimension",
-    "$description": "4px base. TUI padding is 0, 1 or 2 cells."
+    "$description": "4px base, with 2px half steps up to 10px for dense rows. A terminal cell is about 8px wide, so the TUI pads 1 cell (space.2) or 2 (space.4)."
   },
   "radius": {
     "$type": "dimension",
+    "mark": {
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "Bars, swatches and track ends too small for a control's corner."
+    },
     "control": {
       "$value": {
         "value": 6,
@@ -185,7 +226,8 @@
       "$value": {
         "value": 999,
         "unit": "px"
-      }
+      },
+      "$description": "Fully round: pills, dots and switches."
     }
   },
   "motion": {
@@ -209,6 +251,13 @@
           "value": 320,
           "unit": "ms"
         }
+      },
+      "loop": {
+        "$value": {
+          "value": 1600,
+          "unit": "ms"
+        },
+        "$description": "One cycle of a repeating indicator, such as a spinner or a loading shimmer."
       }
     },
     "easing": {

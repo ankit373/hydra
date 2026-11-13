@@ -55,11 +55,11 @@ func ckSetTheme(p colorprofile.Profile, dark bool) {
 	ckExpS = lipgloss.NewStyle().Foreground(ckExp)
 	ckLabelS = lipgloss.NewStyle().Foreground(ckFaint).Bold(true)
 	ckYouS = lipgloss.NewStyle().Bold(true)
-	ckBoxS = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ckLineC).Padding(0, 1)
+	ckBoxS = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ckLineC).Padding(0, tokSpace2)
 	// Reverse video over the accent, so the chip is legible on either theme
 	// without painting a background colour of our own.
-	ckChipS = lipgloss.NewStyle().Foreground(ckAqua).Reverse(true).Bold(true).Padding(0, 1)
-	ckTabS = lipgloss.NewStyle().Foreground(ckDimc).Padding(0, 1)
+	ckChipS = lipgloss.NewStyle().Foreground(ckAqua).Reverse(true).Bold(true).Padding(0, tokSpace2)
+	ckTabS = lipgloss.NewStyle().Foreground(ckDimc).Padding(0, tokSpace2)
 	setWizardTheme(dark)
 }
 

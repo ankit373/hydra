@@ -425,7 +425,7 @@ func (m Cockpit) inputBar(w int) string {
 	case t.exec != nil:
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		elapsed := time.Since(t.exec.started)
-		f := frames[int(elapsed/(200*time.Millisecond))%len(frames)]
+		f := frames[int(elapsed/tokMotionDurationBase)%len(frames)]
 		body = ckAquaS.Render(string(f)+" ") + ckInkS.Render(t.exec.Stage()) +
 			ckDimS.Render(fmt.Sprintf(" · %.1fs · ", elapsed.Seconds())) + ckFaintS.Render("esc cancels")
 	case t.confirm != nil:
@@ -460,7 +460,7 @@ func (m Cockpit) inputBar(w int) string {
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).BorderForeground(ckAqua).
-		Padding(0, 1).Width(w). // border included, as Lip Gloss v2 counts it
+		Padding(0, tokSpace2).Width(w). // border included, as Lip Gloss v2 counts it
 		Render(strings.Join(wrapped, "\n"))
 }
 
@@ -532,7 +532,7 @@ func (m Cockpit) codePanel(t *ckThread, w, h int) string {
 	// Lip Gloss v2 counts the border inside Width: inner plus the rule.
 	return lipgloss.NewStyle().Width(inner + 1).Height(h).
 		BorderStyle(lipgloss.NormalBorder()).BorderLeft(true).BorderForeground(ckLineC).
-		PaddingLeft(1).Render(strings.Join(rows, "\n"))
+		PaddingLeft(tokSpace2).Render(strings.Join(rows, "\n"))
 }
 
 // ckCodeLine paints one panel line: diff mode colours by +/-/@@ prefix, code

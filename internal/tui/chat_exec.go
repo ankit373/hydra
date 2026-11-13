@@ -159,7 +159,7 @@ type ckGateMsg struct {
 type ckSpinTickMsg struct{ exec *ckExecState }
 
 func ckSpinTick(ex *ckExecState) tea.Cmd {
-	return tea.Tick(time.Second/5, func(time.Time) tea.Msg { return ckSpinTickMsg{ex} })
+	return tea.Tick(tokMotionDurationBase, func(time.Time) tea.Msg { return ckSpinTickMsg{ex} })
 }
 
 // ── stage seams ───────────────────────────────────────────────────────────────
