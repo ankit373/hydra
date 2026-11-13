@@ -1281,7 +1281,7 @@ func cmdDispatch() *cobra.Command {
 			if dryRun {
 				why := func(h provider.Head) string { return routingEvidence(result, h) }
 				if result.Cache != nil {
-					fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("⚡ would come from cache:"),
+					fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("would come from cache:"),
 						dimStyle.Render(cacheLabel(result.Cache)))
 				}
 				if req := routingRequirement(result); req != "" {

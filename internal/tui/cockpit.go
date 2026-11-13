@@ -218,13 +218,12 @@ func NewCockpit() Cockpit {
 	switch len(heads) {
 	case 0:
 		t.log = []string{
-			ckDimS.Render("🐉 Hydra initialised · no models found by the scan."),
+			ckDimS.Render("No models found by the scan."),
 			ckDimS.Render("Run `hyctl probe` to see what was scanned, or `hyctl init` to configure."),
 		}
 	default:
 		t.log = []string{
-			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d model%s scanned · routing engine ready.",
-				len(heads), plural(len(heads)))),
+			ckDimS.Render(fmt.Sprintf("%d model%s found by the scan.", len(heads), plural(len(heads)))),
 			ckDimS.Render("Type a task and press enter. shift+tab mode · ctrl+t thread · ? shortcuts · :q quits."),
 		}
 	}

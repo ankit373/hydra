@@ -37,7 +37,7 @@ func (d *Dispatcher) loadLatency() {
 	}
 	rows, err := cost.LoadRows(cost.DefaultLogPath())
 	if err != nil && !errors.Is(err, cost.ErrNoLog) {
-		log.Printf("⚠️  cost log unreadable (%v), latency.p95_ms will read absent", err)
+		log.Printf("warning: cost log unreadable (%v), latency.p95_ms will read absent", err)
 		return
 	}
 	d.latency = latencyIndex(rows)
