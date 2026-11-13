@@ -39,16 +39,12 @@ body {
 }
 
 .apphead__brand { display: flex; align-items: center; gap: var(--hy-space-2); flex: 0 0 auto; }
-.apphead__mark { width: 22px; height: 22px; }
+/* Plain: the brand colours belong to the mark, never spread across letters. */
 .apphead__word {
   font-weight: 700;
   font-size: var(--hy-font-size-sm);
   letter-spacing: .14em;
-  background: var(--hy-brand);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  color: var(--hy-color-text-default);
 }
 
 .apphead__search {
@@ -291,18 +287,6 @@ body {
   padding: 1px var(--hy-space-1);
 }
 
-/* Rotation only, no filter/blur, so it costs nothing on a GPU-less machine.
-   The mark's own SVG has no glow filter baked in (unlike brand/svg/mark.svg)
-   for exactly that reason: fine once as a static icon, wasted looping. */
-.hy-spinner { animation: hy-spin var(--hy-motion-duration-loop) linear infinite; transform-origin: 50% 50%; }
-@media (prefers-reduced-motion: reduce) {
-  .hy-spinner { animation: none; }
-}
-@keyframes hy-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 .loading {
   display: flex;
   flex-direction: column;
@@ -311,7 +295,16 @@ body {
   padding: var(--hy-space-16) 0;
   color: var(--hy-color-text-muted);
 }
-.loading__mark { width: 28px; height: 28px; }
+/* The full mark, with the neon glow brand/svg/mark.svg has. Static, and only
+   on loading and empty screens, so the filter is drawn once, not per frame. */
+.loading__mark,
+.empty__mark {
+  display: block;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto var(--hy-space-2-5);
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--hy-color-brand-mid) calc(60% * var(--hy-glow)), transparent));
+}
 
 .main { overflow-y: auto; padding: var(--hy-space-6) var(--hy-space-8) var(--hy-space-8); min-width: 0; }
 /* Chat manages its own scrolling (log scrolls, composer pinned), so its wrapper

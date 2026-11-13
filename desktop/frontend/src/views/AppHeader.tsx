@@ -1,4 +1,3 @@
-import { HydraMark } from '../brand'
 import { UpdateNotice } from './UpdateNotice'
 import { ThemeToggle } from './ThemeToggle'
 import { usd } from '../format'
@@ -47,7 +46,6 @@ export function AppHeader({
   return (
     <header className="apphead">
       <div className="apphead__brand">
-        <HydraMark className="apphead__mark" />
         <span className="apphead__word">HYDRA</span>
       </div>
 
