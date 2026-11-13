@@ -74,6 +74,8 @@ func testCockpit() Cockpit {
 		usageGroup:   'm',
 		scannedAt:    time.Now(),
 		w:            100, h: 30, ready: true,
+		// Most tests drive chat; the real cockpit opens on watch.
+		view: ckViewChat,
 	}
 	m.groups = ckGroupHeads(testProbedHeads())
 	m.runsToday = []ckRun{
@@ -101,7 +103,7 @@ func testProbedHeads() []provider.Head {
 // ── view table ──────────────────────────────────────────────────────────────────
 
 func TestViewTable_SixViews(t *testing.T) {
-	want := []string{"chat", "agents", "models", "activity", "usage", "audit"}
+	want := []string{"watch", "chat", "models", "activity", "usage", "audit"}
 	if len(ckViewNames) != len(want) {
 		t.Fatalf("ckViewNames = %v, want %v", ckViewNames, want)
 	}
@@ -110,10 +112,10 @@ func TestViewTable_SixViews(t *testing.T) {
 			t.Errorf("view %d = %q, want %q", i, ckViewNames[i], name)
 		}
 	}
-	if got := ckViewName(-1); got != "chat" {
+	if got := ckViewName(-1); got != "watch" {
 		t.Errorf("ckViewName(-1) = %q, want the default", got)
 	}
-	if got := ckViewName(len(ckViewNames)); got != "chat" {
+	if got := ckViewName(len(ckViewNames)); got != "watch" {
 		t.Errorf("ckViewName(out of range) = %q, want the default", got)
 	}
 }
@@ -181,7 +183,7 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 					}
 				}
 				last := stripANSI(lines[len(lines)-1])
-				if !strings.Contains(last, "shortcuts") {
+				if !strings.Contains(last, "? keys") {
 					t.Errorf("view %d at %dx%d: the status bar is not the final line: %q",
 						view, sz.w, sz.h, last)
 				}
@@ -209,7 +211,7 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 					t.Errorf("%s at %dx%d: line %d is %d cells", name, sz.w, sz.h, i, got)
 				}
 			}
-			if last := stripANSI(lines[len(lines)-1]); !strings.Contains(last, "shortcuts") {
+			if last := stripANSI(lines[len(lines)-1]); !strings.Contains(last, "? keys") {
 				t.Errorf("%s at %dx%d: the status bar is not the final line: %q", name, sz.w, sz.h, last)
 			}
 		}

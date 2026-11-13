@@ -417,41 +417,34 @@ func TestActivity_JumpToAuditLog(t *testing.T) {
 	}
 }
 
-// ── agents view ─────────────────────────────────────────────────────────────────
+// ── watching screen ─────────────────────────────────────────────────────────────
 
-func TestViewAgents_ListsLiveThenFinished(t *testing.T) {
+func TestViewWatch_GroupsByWhoHasToAct(t *testing.T) {
 	m := testCockpit()
-	out := stripANSI(m.viewAgents(120, 24))
+	out := stripANSI(m.viewWatch(120, 24))
 	for _, want := range []string{
-		"AGENTS", "1 live · 2 finished today",
-		"⠸", "✓", "✗",
-		"write tests", "started",
-		"$0.0000 est",
-		"enter opens the run's trace",
+		"Needs you", "Running", "Done today",
+		"✗", "●", "✓",
+		"rotate signing key", "write tests", "add pagination",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("agents view missing %q:\n%s", want, out)
+			t.Errorf("watching screen missing %q:\n%s", want, out)
 		}
 	}
-	// Live rows come first.
-	liveIdx := strings.Index(out, "write tests")
-	doneIdx := strings.Index(out, "add pagination")
-	if liveIdx < 0 || doneIdx < 0 || liveIdx > doneIdx {
-		t.Errorf("live run is not listed first:\n%s", out)
+	// Who has to act comes first: failed, then running, then done.
+	failed := strings.Index(out, "rotate signing key")
+	live := strings.Index(out, "write tests")
+	done := strings.Index(out, "add pagination")
+	if failed < 0 || live < 0 || done < 0 || failed > live || live > done {
+		t.Errorf("rows are not grouped needs you, running, done:\n%s", out)
 	}
 
 	empty := testCockpit()
 	empty.runsToday = nil
-	out = stripANSI(empty.viewAgents(120, 24))
-	for _, want := range []string{"no agents running", "Start one from chat"} {
+	out = stripANSI(empty.viewWatch(120, 24))
+	for _, want := range []string{"nothing is waiting on you", "Nothing has run today", "c to open chat"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("agents empty state missing %q:\n%s", want, out)
-		}
-	}
-	// The empty state promises nothing that does not exist.
-	for _, ghost := range []string{"approval", "gradient", "fleet"} {
-		if strings.Contains(strings.ToLower(out), ghost) {
-			t.Errorf("the empty state fabricates %q:\n%s", ghost, out)
+			t.Errorf("empty watching screen missing %q:\n%s", want, out)
 		}
 	}
 }

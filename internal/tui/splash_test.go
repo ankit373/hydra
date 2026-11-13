@@ -81,16 +81,22 @@ func TestMarkFor_PicksGlyphsTheTerminalCanDraw(t *testing.T) {
 
 // A chat thread that has run nothing shows the mark above the greeting, and
 // loses it with the first task. Pinned at the chat pane's width in an 80- and
-// a 160-column terminal.
+// a 160-column terminal, which is the whole width now.
 func TestChat_EmptyThreadShowsTheMark(t *testing.T) {
 	withTheme(t, colorprofile.NoTTY, true)
 	m := testCockpit()
 	m.th().log = []string{
 		"14 models found by the scan.",
-		"Type a task and press enter. shift+tab mode · ctrl+t thread · ? shortcuts · :q quits.",
+		"Type a task and press enter. esc goes back to watching, ? lists the keys.",
 	}
-	testutil.Golden(t, "chat_empty_80", stripANSI(m.chatMain(m.th(), 29, 20)))
-	testutil.Golden(t, "chat_empty_160", stripANSI(m.chatMain(m.th(), 70, 40)))
+	for _, w := range []int{80, 160} {
+		m.w = w
+		if chatW, _ := m.chatCols(); chatW != w {
+			t.Errorf("an empty thread's chat is %d of %d columns, want all of them", chatW, w)
+		}
+	}
+	testutil.Golden(t, "chat_empty_80", stripANSI(m.chatMain(m.th(), 80, 20)))
+	testutil.Golden(t, "chat_empty_160", stripANSI(m.chatMain(m.th(), 160, 40)))
 
 	// No room for the mark and the greeting: the greeting wins.
 	if got := stripANSI(m.chatMain(m.th(), 29, 8)); strings.Contains(got, "●") {

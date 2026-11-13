@@ -2,8 +2,9 @@
 
 package tui
 
-// view_chat.go, view 0: the chat console (keys, the bordered input bar with
-// its mode chip), its sidebar, and the code panel. Kept thin: execution lives
+// view_chat.go, view 1: the chat console (keys, the bordered input bar with
+// its mode chip) at the full width, and the code panel beside it once an edit
+// has something to show on a wide terminal. Kept thin: execution lives
 // in chat_exec.go/chat_task.go, the strip and split panes in threads.go, modes
 // in modes.go, the override in override.go.
 
@@ -167,7 +168,7 @@ func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 		}
 		if ckIsMode(lt[1:]) {
 			m.mode = lt[1:]
-			th.log = append(th.log, ckDimS.Render("mode → ")+ckCyanS.Render(m.mode))
+			th.log = append(th.log, ckDimS.Render("mode → ")+ckAccentStrongS.Render(m.mode))
 		} else {
 			th.log = append(th.log, ckDimS.Render("unknown command "+t))
 		}
@@ -209,82 +210,73 @@ func (m Cockpit) pickHead(wantTier int, localOnly bool) int {
 
 // ── layout ────────────────────────────────────────────────────────────────────
 
+// ckCodePanelMinCols is the width at which an edit's code panel sits beside
+// the conversation. Below it the conversation keeps the whole width.
+const ckCodePanelMinCols = 120
+
+// chatCols is the chat body's columns: the conversation and, when the thread
+// has code to show and the terminal is wide, the code panel. One function for
+// the renderer and the scroll handler, so both clamp against the same window.
+func (m Cockpit) chatCols() (chatW, codeW int) {
+	w := max(20, m.w)
+	if m.split && m.threadByID(m.splitID) != nil {
+		return w, 0
+	}
+	if len(m.th().codeLines) == 0 || w < ckCodePanelMinCols {
+		return w, 0
+	}
+	chatW = w * 3 / 5
+	return chatW, w - chatW
+}
+
+// chatBodyH is the chat body's height under the thread strip.
+func (m Cockpit) chatBodyH() int {
+	bodyH := max(6, m.h-3)
+	if m.showStrip() {
+		bodyH = max(4, bodyH-1)
+	}
+	return bodyH
+}
+
 // chatCode lays out the chat view: the thread strip (once threads exist),
-// then either the active thread beside the code panel, or the ctrl+\ split.
-// It falls back to chat-only when the terminal is too narrow to split.
-func (m Cockpit) chatCode(bodyH int) string {
+// then either the active thread at the full width, beside its code panel on
+// a wide terminal, or the ctrl+\ split.
+func (m Cockpit) chatCode(_ int) string {
 	var rows []string
 	if m.showStrip() {
 		rows = append(rows, m.threadStrip(max(1, m.w)))
-		bodyH--
-		if bodyH < 4 {
-			bodyH = 4
-		}
 	}
-	mainW := m.w - 23 // sidebar (21) + right border + gap
-	if mainW < 20 {
-		mainW = 20
-	}
-	sidebar := m.sidebar(bodyH)
-	var main string
+	bodyH := m.chatBodyH()
+	chatW, codeW := m.chatCols()
 	switch {
 	case m.split && m.threadByID(m.splitID) != nil:
-		main = m.splitPanes(mainW, bodyH)
+		rows = append(rows, m.splitPanes(chatW, bodyH))
+	case codeW > 0:
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top,
+			m.chatMain(m.th(), chatW, bodyH), m.codePanel(m.th(), codeW, bodyH)))
 	default:
-		chatW, split := ckChatSplit(mainW)
-		if !split {
-			// too tight for the code panel, the whole main pane is chat.
-			main = m.chatMain(m.th(), mainW, bodyH)
-		} else {
-			main = lipgloss.JoinHorizontal(lipgloss.Top,
-				m.chatMain(m.th(), chatW, bodyH), m.codePanel(m.th(), mainW-chatW, bodyH))
-		}
+		rows = append(rows, m.chatMain(m.th(), chatW, bodyH))
 	}
-	rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, sidebar, " ", main))
 	return strings.Join(rows, "\n")
 }
 
 // chatLogGeom mirrors chatCode/chatMain's layout for the ACTIVE thread so the
 // scrollback handler clamps against the same window the renderer draws.
 func (m Cockpit) chatLogGeom() (w, logH int) {
-	bodyH := m.h - 3
-	if bodyH < 6 {
-		bodyH = 6
-	}
-	if m.showStrip() {
-		bodyH--
-		if bodyH < 4 {
-			bodyH = 4
-		}
-	}
-	mainW := m.w - 23
-	if mainW < 20 {
-		mainW = 20
-	}
+	bodyH := m.chatBodyH()
+	mainW, _ := m.chatCols()
 	t := m.th()
 	if m.split && m.threadByID(m.splitID) != nil {
-		w = (mainW - 1) / 2
-		if w < 10 {
-			w = 10
-		}
+		w = max(10, (mainW-1)/2)
 		logH = bodyH - lipgloss.Height(m.inputBar(mainW)) - 1 // pane title
-		if t.threadHeaderLine(w) != "" {
-			logH--
-		}
 	} else {
 		w = mainW
-		if chatW, split := ckChatSplit(mainW); split {
-			w = chatW
-		}
 		logH = bodyH - lipgloss.Height(m.inputBar(w))
-		if t.threadHeaderLine(w) != "" {
-			logH--
-		}
 	}
-	if logH < 1 {
-		logH = 1
+	if t.threadHeaderLine(w) != "" {
+		logH--
 	}
-	return w, logH
+	return w, max(1, logH)
 }
 
 // chatScrollBy moves the active thread's scrollback: 0 in scroll means live
@@ -316,73 +308,6 @@ func (m Cockpit) chatScrollBy(delta int) Cockpit {
 	}
 	t.scroll = cur + 1
 	return m
-}
-
-func (m Cockpit) sidebar(h int) string {
-	gauge := ckDimS.Render(fmt.Sprintf("claude %d%%", m.claudePct))
-	if !m.pctKnown {
-		gauge = ckFaintS.Render("no data yet")
-	}
-	head := []string{
-		ckLabelS.Render("CONTEXT BUDGET"),
-		ckBar(m.claudePct, 15),
-		gauge,
-		"",
-		ckLabelS.Render("MODELS"),
-	}
-	foot := []string{"", ckLabelS.Render("MODE"), " " + ckCyanS.Render(m.mode)}
-
-	// lipgloss.Height only pads shorter content, it never truncates taller
-	// content, so an uncapped list would dictate the whole view's height once
-	// JoinHorizontal pads every other column to match it (#446). Cap it and
-	// say how many were left out.
-	avail := h - len(head) - len(foot)
-	var shown []ckHead
-	var more int
-	var compact string
-	switch {
-	case avail <= 0:
-		// No room for even one row, the count must not silently contradict
-		// the rest of the UI (#506).
-		if len(m.heads) > 0 {
-			compact = fmt.Sprintf(" %d model%s (not enough room to list)", len(m.heads), plural(len(m.heads)))
-		}
-	case len(m.heads) <= avail:
-		shown = m.heads
-	default:
-		keep := avail - 1
-		shown = m.heads[:keep]
-		more = len(m.heads) - keep
-	}
-
-	lines := append([]string{}, head...)
-	raw := make([]string, len(shown))
-	for i, hd := range shown {
-		raw[i] = hd.name
-	}
-	// Family-aware, so a column of Gemini variants does not read as three
-	// identical "Gemini 3.5 Fla…" rows (#630).
-	labels := ckDistinctTruncate(raw, 15)
-	for i, hd := range shown {
-		st := ckCheapS.Render("✓")
-		if !hd.up {
-			st = ckExpS.Render("✗")
-		}
-		name := lipgloss.NewStyle().Foreground(ckTierColor(hd.tier)).Render(labels[i])
-		lines = append(lines, " "+st+" "+name)
-	}
-	if more > 0 {
-		lines = append(lines, ckDimS.Render(fmt.Sprintf(" +%d more", more)))
-	}
-	if compact != "" {
-		lines = append(lines, ckDimS.Render(compact))
-	}
-	lines = append(lines, foot...)
-
-	// Lip Gloss v2 counts the border inside Width: 21 cells plus the rule.
-	return lipgloss.NewStyle().Width(21 + 1).Height(h).
-		BorderStyle(lipgloss.NormalBorder()).BorderRight(true).BorderForeground(ckLineC).
-		Render(strings.Join(lines, "\n"))
 }
 
 // chatMain renders one thread's log above the input bar.
@@ -425,7 +350,7 @@ func ckWithMark(t *ckThread, w, logH int) []string {
 // the newest ones, where the cursor is. The rest is typed, just not shown.
 const ckInputWrapCap = 3
 
-// inputBar renders the bordered input with the mode chip and, once threads
+// inputBar renders the input under a rule, with the mode chip and, once threads
 // exist to tell apart, its target thread: idle placeholder, wrapped typing,
 // the running spinner, or the pending question. Heights too small for a border
 // degrade to one bare line, the input never disappears.
@@ -441,20 +366,20 @@ func (m Cockpit) inputBar(w int) string {
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		elapsed := time.Since(t.exec.started)
 		f := frames[int(elapsed/tokMotionDurationBase)%len(frames)]
-		body = ckAquaS.Render(string(f)+" ") + ckInkS.Render(t.exec.Stage()) +
+		body = ckAccentS.Render(string(f)+" ") + ckInkS.Render(t.exec.Stage()) +
 			ckDimS.Render(fmt.Sprintf(" · %.1fs · ", elapsed.Seconds())) + ckFaintS.Render("esc cancels")
 	case t.confirm != nil:
-		body = ckMidS.Render(ckSafe(t.confirm.question))
+		body = ckWarnS.Render(ckSafe(t.confirm.question))
 	case t.undoAsk != nil:
-		body = ckMidS.Render(ckSafe(t.undoAsk.question))
+		body = ckWarnS.Render(ckSafe(t.undoAsk.question))
 	case t.planWait != nil:
-		body = ckCyanS.Render("plan ready, enter/y runs it · esc discards")
+		body = ckAccentStrongS.Render("plan ready, enter/y runs it · esc discards")
 	case t.queued != nil:
 		body = ckDimS.Render("◱ " + t.queued.reason + " · esc discards")
 	case t.input == "":
-		body = ckFaintS.Render("what do you need done?, enter runs it")
+		body = ckFaintS.Render("ask for a change, a review or a summary")
 	default:
-		body = ckInkS.Render(ckSafe(t.input)) + ckAquaS.Render("▏")
+		body = ckInkS.Render(ckSafe(t.input)) + ckAccentS.Render("▏")
 	}
 	line := chip + " " + body
 
@@ -462,9 +387,9 @@ func (m Cockpit) inputBar(w int) string {
 	if bodyH < 6 {
 		bodyH = 6
 	}
-	inner := w - 4 // border (2) + padding (2)
+	inner := w - 2 // the "› " prompt
 	if bodyH < 8 || inner < 10 {
-		// Too short for a border: one bare line, tail-truncated so the cursor
+		// Too short for the rule: one bare line, tail-truncated so the cursor
 		// region stays visible.
 		return ckTailTruncate(line, max(1, w))
 	}
@@ -473,16 +398,16 @@ func (m Cockpit) inputBar(w int) string {
 		wrapped = wrapped[len(wrapped)-ckInputWrapCap:]
 		wrapped[0] = ckFaintS.Render("… ") + wrapped[0]
 	}
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).BorderForeground(ckAqua).
-		Padding(0, tokSpace2).Width(w). // border included, as Lip Gloss v2 counts it
-		Render(strings.Join(wrapped, "\n"))
-}
-
-// ckChatSplit decides the chat/code split for the main column budget.
-func ckChatSplit(mainW int) (chatW int, split bool) {
-	chatW = mainW / 2
-	return chatW, mainW-chatW >= 22
+	// One rule separates the conversation from what you are typing; no box.
+	out := []string{ckFaintS.Render(strings.Repeat("─", w))}
+	for i, l := range wrapped {
+		lead := "  "
+		if i == 0 {
+			lead = ckAccentS.Render("›") + " "
+		}
+		out = append(out, lead+l)
+	}
+	return strings.Join(out, "\n")
 }
 
 // ckTailTruncate keeps the END of a styled line within n cells, the input's
@@ -537,7 +462,7 @@ func (m Cockpit) codePanel(t *ckThread, w, h int) string {
 				ckCodeLine(truncate(ckSafe(t.codeLines[i]), textW), t.codeDiff))
 		}
 		if shown < len(t.codeLines) && len(rows) <= avail { // cursor while streaming
-			rows = append(rows, ckFaintS.Render(fmt.Sprintf("%3d ", shown+1))+ckAquaS.Render("▏"))
+			rows = append(rows, ckFaintS.Render(fmt.Sprintf("%3d ", shown+1))+ckAccentS.Render("▏"))
 		}
 	}
 	if len(rows) > h {
@@ -558,11 +483,11 @@ func ckCodeLine(line string, isDiff bool) string {
 	}
 	switch {
 	case strings.HasPrefix(line, "+"):
-		return ckCheapS.Render(line)
+		return ckOkS.Render(line)
 	case strings.HasPrefix(line, "-"):
-		return ckExpS.Render(line)
+		return ckBadS.Render(line)
 	case strings.HasPrefix(line, "@@"):
-		return ckCyanS.Render(line)
+		return ckAccentStrongS.Render(line)
 	default:
 		return ckDimS.Render(line)
 	}
@@ -620,7 +545,7 @@ func ckHighlight(line string) string {
 			return
 		}
 		if ckKeywords[w] {
-			out.WriteString(ckVioletS.Render(w))
+			out.WriteString(ckSecondaryS.Render(w))
 		} else {
 			out.WriteString(ckInkS.Render(w))
 		}
@@ -644,7 +569,7 @@ func ckHighlight(line string) string {
 			if j < len(rs) {
 				j++ // include closing quote
 			}
-			out.WriteString(ckCheapS.Render(string(rs[i:j])))
+			out.WriteString(ckOkS.Render(string(rs[i:j])))
 			i = j
 		case isWordChar(r):
 			word.WriteRune(r)

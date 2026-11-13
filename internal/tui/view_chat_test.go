@@ -233,49 +233,8 @@ func TestInputBar_WrapsAndKeepsTheTail(t *testing.T) {
 	}
 	// Placeholder when idle and empty.
 	m.th().input = ""
-	if got := stripANSI(m.inputBar(60)); !strings.Contains(got, "what do you need done?") {
+	if got := stripANSI(m.inputBar(60)); !strings.Contains(got, "ask for a change") {
 		t.Errorf("no placeholder on an empty idle input:\n%s", got)
-	}
-}
-
-// The sidebar must never exceed its height however many models were scanned
-// (#446), and must disclose what it cannot list (#506).
-func TestSidebar_HeightBoundAndDisclosure(t *testing.T) {
-	heads := make([]ckHead, 30)
-	for i := range heads {
-		heads[i] = ckHead{id: "x", name: "head", tier: 1}
-	}
-	m := testCockpit()
-	m.heads = heads
-	for _, h := range []int{10, 15, 20} {
-		out := m.sidebar(h)
-		if got := strings.Count(out, "\n") + 1; got > h {
-			t.Errorf("sidebar(%d) with 30 models produced %d lines", h, got)
-		}
-	}
-	if out := m.sidebar(10); !strings.Contains(out, "more") {
-		t.Errorf("sidebar(10) does not disclose the hidden models:\n%s", out)
-	}
-	if got := stripANSI(m.sidebar(6)); !strings.Contains(got, "30") {
-		t.Errorf("sidebar(6) does not disclose the real count:\n%s", got)
-	}
-	empty := testCockpit()
-	empty.heads = nil
-	if got := empty.sidebar(6); strings.Contains(got, "not enough room") {
-		t.Errorf("sidebar with zero models printed a count line:\n%s", got)
-	}
-}
-
-// The sidebar's context gauge must render the unknown state honestly.
-func TestSidebar_UnknownContextSaysNoData(t *testing.T) {
-	m := testCockpit()
-	m.pctKnown = false
-	if got := stripANSI(m.sidebar(20)); !strings.Contains(got, "no data yet") {
-		t.Errorf("unknown claude_pct did not render as no data:\n%s", got)
-	}
-	m.pctKnown, m.claudePct = true, 52
-	if got := stripANSI(m.sidebar(20)); !strings.Contains(got, "claude 52%") {
-		t.Errorf("known claude_pct not rendered:\n%s", got)
 	}
 }
 

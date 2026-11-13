@@ -17,7 +17,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/policy"
@@ -131,9 +130,9 @@ func (m Cockpit) beginTask(th *ckThread, task, modeName string) (Cockpit, tea.Cm
 	th.log = append(th.log, m.routeLines(t, h, enum, ov, pinned)...)
 	if f := ckFileRe.FindString(task); f != "" {
 		if radius, deps, kappa, ok := m.metrics.ckBlastFor(f); ok {
-			risk := ckCheapS
+			risk := ckOkS
 			if kappa >= 2 {
-				risk = ckExpS
+				risk = ckBadS
 			}
 			th.log = append(th.log, ckDimS.Render("  impact ")+
 				risk.Render(fmt.Sprintf("κ=%.1f", kappa))+
@@ -156,7 +155,7 @@ func (m Cockpit) beginTask(th *ckThread, task, modeName string) (Cockpit, tea.Cm
 				ckDimS.Render(truncate(m.repoRoot, 40)))
 			return m, tea.Batch(ckWtCreate(ex, t, m.repoRoot), ckSpinTick(ex))
 		}
-		th.log = append(th.log, ckDimS.Render("  ⎇ worktree ")+ckVioletS.Render(th.wt.tag)+
+		th.log = append(th.log, ckDimS.Render("  ⎇ worktree ")+ckSecondaryS.Render(th.wt.tag)+
 			ckDimS.Render(" · merges on apply"))
 		return m.launchTask(th, t, ex)
 	}
@@ -164,7 +163,7 @@ func (m Cockpit) beginTask(th *ckThread, task, modeName string) (Cockpit, tea.Cm
 		// No repo (or the file lives outside it): edits land in place, one at a
 		// time, said out loud, never pretended isolation (#598).
 		th.inEdit = true
-		th.log = append(th.log, ckMidS.Render("  ⚠ no isolation ")+
+		th.log = append(th.log, ckWarnS.Render("  ⚠ no isolation ")+
 			ckDimS.Render("· editing your files directly (no git repo here); edits run one at a time"))
 	}
 	return m.launchTask(th, t, ex)
@@ -213,7 +212,7 @@ func (m Cockpit) worktreeReady(msg ckWtReadyMsg) (tea.Model, tea.Cmd) {
 		return m.failBeforeRun(th, t)
 	}
 	th.wt = msg.wt
-	th.log = append(th.log, ckDimS.Render("  ⎇ worktree ")+ckVioletS.Render(th.wt.tag)+
+	th.log = append(th.log, ckDimS.Render("  ⎇ worktree ")+ckSecondaryS.Render(th.wt.tag)+
 		ckDimS.Render(" · branch "+th.wt.branch+" · merges on apply"))
 	return m.launchTask(th, t, msg.exec)
 }
@@ -316,13 +315,13 @@ func (m Cockpit) routeLines(t ckTask, h ckHead, enum string, ov ckOverride, pinn
 	if (ov.kind == 'B' || ov.kind == 'C') && t.strategy == 0 {
 		strategy = "single (edits can't fan out)"
 	}
-	name := lipgloss.NewStyle().Foreground(ckTierColor(h.tier))
+	name := ckInkS
 	first := ckDimS.Render("  "+lead+" · ") + ckInkS.Render(ckClassWords(enum)) +
-		ckAquaS.Render(" → ") + ckDimS.Render(fmt.Sprintf("T%d ", h.tier)) + name.Render(h.name) +
+		ckAccentS.Render(" → ") + ckDimS.Render(fmt.Sprintf("T%d ", h.tier)) + name.Render(h.name) +
 		ckDimS.Render(" · "+strategy)
 	second := ckFaintS.Render("  why ") + ckDimS.Render(ckWhyWords(t, enum))
 	if t.pii && t.localOnly {
-		second += ckMidS.Render(" · local-only (pii)")
+		second += ckWarnS.Render(" · local-only (pii)")
 	}
 	return []string{first, second}
 }
@@ -385,7 +384,7 @@ func (m Cockpit) gateTask(msg ckGateMsg) (Cockpit, tea.Cmd) {
 		th.confirm = &ckWait{task: t, phase: ckPhaseTail,
 			question: "write " + filepath.Base(t.file) + "? y writes · n stops"}
 	case 'f':
-		th.log = append(th.log, ckExpS.Render("  ✗ verify failed ")+
+		th.log = append(th.log, ckBadS.Render("  ✗ verify failed ")+
 			ckDimS.Render(truncate(ckSafe(t.fixDetail), 70)))
 		th.confirm = &ckWait{task: t, phase: ckPhaseFix,
 			question: fmt.Sprintf("write fix %d/%d to %s? y/n", t.fixRound, ckMaxFixes, filepath.Base(t.file))}
@@ -413,7 +412,7 @@ func (m *Cockpit) pingIfElsewhere(th *ckThread, what string) {
 		return
 	}
 	th.attn = th.planWait != nil || th.confirm != nil || th.attn
-	active.log = append(active.log, ckAquaS.Render("hydra ▸ ")+
+	active.log = append(active.log, ckAccentS.Render("hydra ▸ ")+
 		ckDimS.Render(fmt.Sprintf("thread %d %s · alt+%d opens it · ctrl+g next", th.id, what, th.id)))
 	m.flash = fmt.Sprintf("thread %d %s", th.id, what)
 }
@@ -495,7 +494,7 @@ func (m Cockpit) settleTask(th *ckThread, t ckTask) (Cockpit, tea.Cmd) {
 			th.wt = nil
 			th.files = nil
 		} else {
-			th.log = append(th.log, ckMidS.Render("  ⚠ empty worktree cleanup failed: "+ckSafe(err.Error())))
+			th.log = append(th.log, ckWarnS.Render("  ⚠ empty worktree cleanup failed: "+ckSafe(err.Error())))
 		}
 	}
 	if th.wt == nil {
@@ -558,7 +557,7 @@ func (m Cockpit) showCode(th *ckThread, file, content string) Cockpit {
 
 // ── background (ctrl+b) ───────────────────────────────────────────────────────
 
-// backgroundThread re-parents the active thread to the agents view. Its
+// backgroundThread re-parents the active thread to the watching screen. Its
 // pipeline keeps running on its own context; completion pings chat.
 func (m Cockpit) backgroundThread() Cockpit {
 	th := m.th()
@@ -577,11 +576,11 @@ func (m Cockpit) backgroundThread() Cockpit {
 	} else {
 		m = m.addThread()
 	}
-	m.flash = fmt.Sprintf("thread %d backgrounded, it lives in agents (2) · alt+%d brings it back", th.id, th.id)
+	m.flash = fmt.Sprintf("thread %d backgrounded, it is on the watching screen (1) · alt+%d brings it back", th.id, th.id)
 	return m
 }
 
-// threadForRun maps a run id back to its thread (the agents-view join).
+// threadForRun maps a run id back to its thread (the watching screen's join).
 func (m Cockpit) threadForRun(runID string) *ckThread {
 	for _, t := range m.threads {
 		if t.lastRunID == runID {
@@ -601,10 +600,10 @@ func ckResultLines(t ckTask) []string {
 	secs := fmt.Sprintf("%.1fs", t.elapsed.Seconds())
 	switch {
 	case t.canceled:
-		return append(out, ckMidS.Render("  ✗ cancelled ")+ckDimS.Render(secs)+trace)
+		return append(out, ckWarnS.Render("  ✗ cancelled ")+ckDimS.Render(secs)+trace)
 	case t.errText != "":
-		out = append(out, ckExpS.Render("  ✗ failed ")+ckDimS.Render(secs+" · ")+
-			ckExpS.Render(truncate(ckSafe(ckFirstLine(t.errText)), 90)))
+		out = append(out, ckBadS.Render("  ✗ failed ")+ckDimS.Render(secs+" · ")+
+			ckBadS.Render(truncate(ckSafe(ckFirstLine(t.errText)), 90)))
 		return append(out, ckFaintS.Render("  trace "+ckShortID(t.runID)+", enter opens the trace"))
 	}
 	if t.answer != "" {
@@ -615,7 +614,7 @@ func ckResultLines(t ckTask) []string {
 			lines = lines[:ckAnswerCapLines]
 		}
 		for _, l := range lines {
-			out = append(out, ckAquaS.Render("  ▎ ")+ckInkS.Render(l))
+			out = append(out, ckAccentS.Render("  ▎ ")+ckInkS.Render(l))
 		}
 		if over > 0 {
 			out = append(out, ckFaintS.Render(fmt.Sprintf("  ▎ … %d more line%s truncated", over, plural(over))))
@@ -628,13 +627,13 @@ func ckResultLines(t ckTask) []string {
 		out = append(out, ckProofStrip(t))
 		out = append(out, ckFaintS.Render("  /diff · /undo · /open"))
 	}
-	glyph, tone := "✓ done ", ckCheapS
+	glyph, tone := "✓ done ", ckOkS
 	if t.stopped {
-		glyph, tone = "◼ stopped ", ckMidS
+		glyph, tone = "◼ stopped ", ckWarnS
 	}
 	foot := tone.Render("  "+glyph) + ckDimS.Render(fmt.Sprintf("%s · $%.4f est", secs, t.costUSD))
 	if t.conf > 0 {
-		foot += ckVioletS.Render(" · confidence " + ckPct(t.conf))
+		foot += ckSecondaryS.Render(" · confidence " + ckPct(t.conf))
 	}
 	return append(out, foot+trace)
 }
@@ -644,14 +643,14 @@ func ckResultLines(t ckTask) []string {
 func ckProofStrip(t ckTask) string {
 	var parts []string
 	if t.mode.plan {
-		parts = append(parts, ckCheapS.Render("plan ✓ ")+
+		parts = append(parts, ckOkS.Render("plan ✓ ")+
 			ckDimS.Render(fmt.Sprintf("%d step%s", t.planSteps, plural(t.planSteps))))
 	}
 	name := t.rel
 	if name == "" {
 		name = filepath.Base(t.file)
 	}
-	parts = append(parts, ckCheapS.Render("edit ✓ ")+
+	parts = append(parts, ckOkS.Render("edit ✓ ")+
 		ckDimS.Render(fmt.Sprintf("%s +%d/−%d", truncate(ckSafe(name), 30), t.added, t.removed)))
 	parts = append(parts, ckTestsCell(t))
 	return "  " + strings.Join(parts, ckFaintS.Render(" · "))
@@ -667,7 +666,7 @@ func ckTestsCell(t ckTask) string {
 	case t.verifySkipped:
 		return ckFaintS.Render("tests, no verifier configured")
 	case t.verifyErr != "":
-		return ckMidS.Render("tests ? ") + ckDimS.Render(
+		return ckWarnS.Render("tests ? ") + ckDimS.Render(
 			t.verifyLabel+", verifier failed: "+truncate(ckSafe(t.verifyErr), 40))
 	case len(t.rounds) == 0:
 		return ckFaintS.Render("tests, not run")
@@ -675,7 +674,7 @@ func ckTestsCell(t ckTask) string {
 	last := t.rounds[len(t.rounds)-1]
 	fixes := len(t.rounds) - 1
 	if last.passed {
-		s := ckCheapS.Render("tests ✓ ") + ckDimS.Render(t.verifyLabel)
+		s := ckOkS.Render("tests ✓ ") + ckDimS.Render(t.verifyLabel)
 		if fixes > 0 {
 			s += ckDimS.Render(fmt.Sprintf(" (after %d %s)", fixes, ckFixWord(fixes)))
 		}
@@ -685,7 +684,7 @@ func ckTestsCell(t ckTask) string {
 	if fixes > 0 {
 		summary += fmt.Sprintf(" after %d %s", fixes, ckFixWord(fixes))
 	}
-	return ckExpS.Render("tests ✗ ") + ckDimS.Render(summary+": "+truncate(ckSafe(last.detail), 40))
+	return ckBadS.Render("tests ✗ ") + ckDimS.Render(summary+": "+truncate(ckSafe(last.detail), 40))
 }
 
 func ckFixWord(n int) string {

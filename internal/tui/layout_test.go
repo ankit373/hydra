@@ -4,7 +4,6 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 	"testing"
 
@@ -65,7 +64,7 @@ func TestTruncate_CountsDisplayCells(t *testing.T) {
 		t.Errorf("truncate(…, 4) = %q, want an ellipsis marking the cut", got)
 	}
 	// Styled input must survive without a torn escape sequence.
-	styled := ckCyanS.Render("a styled label that is long")
+	styled := ckAccentStrongS.Render("a styled label that is long")
 	if got := truncate(styled, 10); lipgloss.Width(got) > 10 {
 		t.Errorf("styled truncate is %d cells wide", lipgloss.Width(got))
 	}
@@ -74,7 +73,7 @@ func TestTruncate_CountsDisplayCells(t *testing.T) {
 // ckCell/ckRCell are the table cells every column is built from: exactly w
 // cells, whatever the content, a long value must never shift its neighbours.
 func TestCkCell_ExactWidthAndAlignment(t *testing.T) {
-	for _, s := range []string{"", "x", "abcdef", "日本語モデル", ckCheapS.Render("styled"), strings.Repeat("y", 99)} {
+	for _, s := range []string{"", "x", "abcdef", "日本語モデル", ckOkS.Render("styled"), strings.Repeat("y", 99)} {
 		for _, w := range []int{1, 4, 8, 20} {
 			if got := lipgloss.Width(ckCell(s, w)); got != w {
 				t.Errorf("ckCell(%q, %d) is %d cells", s, w, got)
@@ -240,7 +239,7 @@ func TestBars_StayWithinTheirWidth(t *testing.T) {
 		t.Error("ckBar renders 10% and 90% identically")
 	}
 
-	styles := []lipgloss.Style{ckCheapS, ckExpS, ckMidS}
+	styles := []lipgloss.Style{ckOkS, ckBadS, ckWarnS}
 	for _, vals := range [][]int{{0, 0, 0}, {1, 0, 0}, {0, 0, 1}, {1, 1, 1}, {7, 3, 2}, {100, 1, 1}, {1, 1, 100}} {
 		for _, w := range []int{1, 10, 20} {
 			bar := stripANSI(ckSegmentedBar(w, vals, styles))
@@ -453,25 +452,6 @@ func TestCkWordmark_IsPlain(t *testing.T) {
 func TestPlural(t *testing.T) {
 	if plural(1) != "" || plural(0) != "s" || plural(2) != "s" {
 		t.Error("plural is wrong")
-	}
-}
-
-// The tier colour ramp must be defined for every tier, including ones outside
-// the documented 1-10 range.
-func TestCkTierColor_CoversEveryTier(t *testing.T) {
-	for _, dark := range []bool{true, false} {
-		withTheme(t, colorprofile.TrueColor, dark)
-		seen := map[color.Color]bool{}
-		for tier := -1; tier <= 12; tier++ {
-			c := ckTierColor(tier)
-			if c == nil || c == (lipgloss.NoColor{}) {
-				t.Errorf("dark=%v tier %d has no colour", dark, tier)
-			}
-			seen[c] = true
-		}
-		if len(seen) < 3 {
-			t.Errorf("dark=%v: the ramp collapsed to %d colours", dark, len(seen))
-		}
 	}
 }
 

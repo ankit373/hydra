@@ -250,7 +250,7 @@ func (m Cockpit) modelTree(h int) string {
 	for i, f := range flat {
 		marker := "  "
 		if i == sel {
-			marker = ckAquaS.Render("▸ ")
+			marker = ckAccentS.Render("▸ ")
 		}
 		g := m.groups[f.g]
 		if f.r < 0 {
@@ -258,11 +258,11 @@ func (m Cockpit) modelTree(h int) string {
 			if m.collapsed[g.name] {
 				fold = "▸"
 			}
-			glyph, meta := ckCheapS.Render("●"), fmt.Sprintf("%d model%s", len(g.rows), plural(len(g.rows)))
+			glyph, meta := ckOkS.Render("●"), fmt.Sprintf("%d model%s", len(g.rows), plural(len(g.rows)))
 			if g.down {
-				glyph, meta = ckExpS.Render("○"), "server down · "+truncate(ckSafe(g.note), 34)
+				glyph, meta = ckBadS.Render("○"), "server down · "+truncate(ckSafe(g.note), 34)
 			} else if g.upCount() == 0 {
-				glyph = ckExpS.Render("○")
+				glyph = ckBadS.Render("○")
 			}
 			rows[i] = marker + ckFaintS.Render(fold) + " " + glyph + " " +
 				ckInkS.Bold(i == sel).Render(ckCell(ckSafe(g.name), ckModelNameW)) +
@@ -270,7 +270,7 @@ func (m Cockpit) modelTree(h int) string {
 			continue
 		}
 		row := g.rows[f.r]
-		glyph, style, meta := ckCheapS.Render("●"), ckVioletS, ""
+		glyph, style, meta := ckOkS.Render("●"), ckInkS, ""
 		switch {
 		case row.embed:
 			glyph, style, meta = ckFaintS.Render("◌"), ckFaintS, "embeddings only, never routed"
@@ -345,7 +345,7 @@ func (m Cockpit) modelDetail(w int) string {
 	}
 	lines := []string{
 		ckLabelS.Render("MODEL"), "",
-		" " + lipgloss.NewStyle().Foreground(ckTierColor(mr.tier)).Bold(true).Render(truncate(ckSafe(mr.name), 38)), "",
+		" " + ckInkS.Bold(true).Render(truncate(ckSafe(mr.name), 38)), "",
 		kv("provider", mr.provider),
 		kv("tier", fmt.Sprintf("T%d", mr.tier)),
 		kv("capability", fmt.Sprintf("%d", mr.capScore)),
@@ -358,7 +358,7 @@ func (m Cockpit) modelDetail(w int) string {
 	case mr.embed:
 		lines = append(lines, "", " "+ckFaintS.Render("embeddings only, never routed"))
 	case !mr.up:
-		lines = append(lines, "", " "+ckExpS.Render("not routable"), " "+ckFaintS.Render(truncate(ckSafe(mr.reason), 38)))
+		lines = append(lines, "", " "+ckBadS.Render("not routable"), " "+ckFaintS.Render(truncate(ckSafe(mr.reason), 38)))
 	}
 	if m.modelFocus {
 		lines = append(lines, kv("id", mr.id), " "+ckFaintS.Render("esc back to the list"))
@@ -375,7 +375,7 @@ func (m Cockpit) modelDetail(w int) string {
 			break
 		}
 		lines = append(lines, " "+ckDimS.Render(ckCell(s.Domain, 9))+
-			ckCyanS.Render(fmt.Sprintf("n %.0f · sens %.2f · spec %.2f · D %.2f", s.N, s.Se, s.Sp, s.D)))
+			ckAccentStrongS.Render(fmt.Sprintf("n %.0f · sens %.2f · spec %.2f · D %.2f", s.N, s.Se, s.Sp, s.D)))
 	}
 	return box.Render(strings.Join(lines, "\n"))
 }

@@ -288,7 +288,7 @@ func ckSplitLines(s string) []string {
 func (m Cockpit) discardWorktree(th *ckThread) (Cockpit, tea.Cmd) {
 	tag := th.wt.tag
 	if err := ckDiscardWorktree(th.wt); err != nil {
-		th.log = append(th.log, ckExpS.Render("  ✗ discard failed ")+ckDimS.Render(ckSafe(err.Error())))
+		th.log = append(th.log, ckBadS.Render("  ✗ discard failed ")+ckDimS.Render(ckSafe(err.Error())))
 		return m, nil
 	}
 	th.wt = nil
@@ -306,13 +306,13 @@ func (m Cockpit) applyThread(th *ckThread) (Cockpit, tea.Cmd, bool) {
 	out := ckApplyWorktree(wt)
 	switch {
 	case out.err != nil && !out.applied && !out.empty:
-		th.log = append(th.log, ckExpS.Render("  ✗ apply failed ")+ckDimS.Render(ckSafe(out.err.Error())))
+		th.log = append(th.log, ckBadS.Render("  ✗ apply failed ")+ckDimS.Render(ckSafe(out.err.Error())))
 		return m, nil, true
 	case out.refused:
 		// Either this code refused up front (unsaved overlap) or git's atomic
 		// apply declined; both mean nothing in the user's tree changed.
 		th.log = append(th.log,
-			ckExpS.Render("  ✗ apply blocked ")+ckDimS.Render("· nothing in your tree was changed"),
+			ckBadS.Render("  ✗ apply blocked ")+ckDimS.Render("· nothing in your tree was changed"),
 			ckDimS.Render("    "+truncate(ckSafe(out.detail), 80)),
 			ckFaintS.Render("    save or stash the overlapping change, then /apply again · /undo discards"))
 		return m, nil, true
@@ -320,16 +320,16 @@ func (m Cockpit) applyThread(th *ckThread) (Cockpit, tea.Cmd, bool) {
 		th.log = append(th.log, ckDimS.Render("  ⎇ nothing to apply, worktree removed"))
 	case out.conflict:
 		th.log = append(th.log,
-			ckMidS.Render("  ⚠ applied with conflicts ")+ckDimS.Render("· markers left in "+truncate(strings.Join(out.files, ", "), 60)),
+			ckWarnS.Render("  ⚠ applied with conflicts ")+ckDimS.Render("· markers left in "+truncate(strings.Join(out.files, ", "), 60)),
 			ckDimS.Render("    resolve the <<<<<<< markers, then `git add` · `git diff` shows the conflict"),
 			ckDimS.Render("    branch "+wt.branch+" kept, `git branch -D` it once resolved"))
 	default:
-		th.log = append(th.log, ckCheapS.Render("  ✓ applied ")+
+		th.log = append(th.log, ckOkS.Render("  ✓ applied ")+
 			ckDimS.Render(fmt.Sprintf("%d file%s staged onto %s · worktree and branch removed",
 				len(out.files), plural(len(out.files)), truncate(wt.repo, 40))))
 	}
 	if out.err != nil { // cleanup hiccup after a landed apply, disclose it
-		th.log = append(th.log, ckMidS.Render("  ⚠ cleanup: ")+ckDimS.Render(ckSafe(out.err.Error())))
+		th.log = append(th.log, ckWarnS.Render("  ⚠ cleanup: ")+ckDimS.Render(ckSafe(out.err.Error())))
 	}
 	th.wt = nil
 	th.files = nil

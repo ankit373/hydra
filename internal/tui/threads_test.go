@@ -404,11 +404,11 @@ func TestBackground_ReparentsToAgentsAndPingsOnCompletion(t *testing.T) {
 	}
 	reseed()
 
-	// The agents view names it and enter pulls it back.
-	m = m.jump(ckViewAgents)
-	out := stripANSI(m.viewAgents(100, 24))
+	// The watching screen names it and enter pulls it back.
+	m = m.jump(ckViewWatch)
+	out := stripANSI(m.viewWatch(100, 24))
 	if !strings.Contains(out, "thread 1") {
-		t.Errorf("agents view does not name the backgrounded thread:\n%s", out)
+		t.Errorf("watching screen does not name the backgrounded thread:\n%s", out)
 	}
 	// Its completion pings the active thread's chat.
 	next, _ := m.Update(ckExecDoneMsg{exec: ex, task: ckTask{threadID: 1, runID: "r1", answer: "done in bg", elapsed: time.Second}})
@@ -419,12 +419,11 @@ func TestBackground_ReparentsToAgentsAndPingsOnCompletion(t *testing.T) {
 	}
 	reseed() // settling reloads the run list too
 
-	// Enter on its agents row re-foregrounds it.
-	m = m.jump(ckViewAgents)
-	rows := m.agentRows()
-	for i, r := range rows {
-		if r.id == "20260904T100200Z-cccc" {
-			m.agentSel = i
+	// Enter on its row re-foregrounds it.
+	m = m.jump(ckViewWatch)
+	for i, r := range m.watchList() {
+		if r.thread == 1 {
+			m.watchSel = i
 		}
 	}
 	next2, _ := m.enterRow()
@@ -497,7 +496,7 @@ func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 					}
 				}
 				last := stripANSI(lines[len(lines)-1])
-				if !strings.Contains(last, "shortcuts") {
+				if !strings.Contains(last, "? keys") {
 					t.Errorf("%s at %dx%d: the status bar is not the final line: %q", name, sz.w, sz.h, last)
 				}
 			})
@@ -541,7 +540,7 @@ func TestCodePanel_RealFileLinesDoNotWrap(t *testing.T) {
 // The glossary documents the THREADS group and every new key.
 func TestGlossary_DocumentsThreadKeys(t *testing.T) {
 	lines := stripANSI(strings.Join(ckGlossaryLines(), "\n"))
-	for _, want := range []string{"THREADS", "ctrl+t", "alt+1-9", "ctrl+←/→", "ctrl+\\", "ctrl+b", "ctrl+g"} {
+	for _, want := range []string{"Threads", "ctrl+t", "alt+1-9", "ctrl+←/→", "ctrl+\\", "ctrl+b", "ctrl+g"} {
 		if !strings.Contains(lines, want) {
 			t.Errorf("glossary lacks %q", want)
 		}

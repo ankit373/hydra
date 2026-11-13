@@ -29,14 +29,37 @@ const markWidth = 9
 // the Linux text console have no diagonal box drawing; Windows Terminal sets
 // WT_SESSION and has it.
 func markFor(goos string, getenv func(string) string) markGlyphs {
-	if goos == "windows" && getenv("WT_SESSION") == "" {
-		return markASCII
-	}
-	if getenv("TERM") == "linux" {
+	if asciiTerminal(goos, getenv) {
 		return markASCII
 	}
 	return markUnicode
 }
+
+// asciiTerminal reports a console that cannot draw box drawing or symbols.
+func asciiTerminal(goos string, getenv func(string) string) bool {
+	return (goos == "windows" && getenv("WT_SESSION") == "") || getenv("TERM") == "linux"
+}
+
+// statusGlyphs are the four states, queued and idle. Every state also has a
+// word beside it, so the glyph is a second cue, never the only one.
+type statusGlyphs struct{ ok, bad, wait, run, queued, idle string }
+
+var (
+	glyphsUnicode = statusGlyphs{ok: "✓", bad: "✗", wait: "!", run: "●", queued: "◱", idle: "·"}
+	glyphsASCII   = statusGlyphs{ok: "+", bad: "x", wait: "!", run: "*", queued: "-", idle: "."}
+)
+
+func glyphsFor(goos string, getenv func(string) string) statusGlyphs {
+	if asciiTerminal(goos, getenv) {
+		return glyphsASCII
+	}
+	return glyphsUnicode
+}
+
+// ckGlyphSet is the glyph set for this terminal, read once at start.
+var ckGlyphSet = glyphsFor(runtime.GOOS, os.Getenv)
+
+func ckGlyphs() statusGlyphs { return ckGlyphSet }
 
 // Mark returns the mark, five rows by nine cells, in the brand colours: the
 // centre head cyan, the side heads magenta, the meeting point in the accent.

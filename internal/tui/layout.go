@@ -232,12 +232,12 @@ func ckBar(pct, width int) string {
 	if fill < 0 {
 		fill = 0
 	}
-	col := ckCheap
+	col := ckOk
 	switch {
 	case pct >= 75:
-		col = ckExp
+		col = ckBad
 	case pct >= 50:
-		col = ckMid
+		col = ckWarn
 	}
 	return lipgloss.NewStyle().Foreground(col).Render(strings.Repeat("█", fill)) +
 		ckFaintS.Render(strings.Repeat("░", width-fill))

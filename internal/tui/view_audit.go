@@ -269,17 +269,17 @@ func (m Cockpit) auditScorecard() string {
 				ckRCell(fmt.Sprintf("%.0f", s.N), 4) + " " +
 				ckRCell(fmt.Sprintf("%.2f", s.Se), 5) + " " +
 				ckRCell(fmt.Sprintf("%.2f", s.Sp), 5) + " " +
-				ckCyanS.Render(ckRCell(fmt.Sprintf("%.2f", s.D), 7))
+				ckAccentStrongS.Render(ckRCell(fmt.Sprintf("%.2f", s.D), 7))
 		}
 		b.WriteString(strings.Join(lines, "\n") + "\n")
 	}
 	b.WriteString("\n")
 	if st := m.metrics.trustStats; st != nil {
 		b.WriteString(" " + ckDimS.Render("consensus checks       ") +
-			ckCyanS.Render(fmt.Sprintf("%.2f", st.MeanFinalConf)) +
+			ckAccentStrongS.Render(fmt.Sprintf("%.2f", st.MeanFinalConf)) +
 			ckDimS.Render(fmt.Sprintf(" mean confidence over %d", st.Runs)) + "\n")
 		b.WriteString(" " + ckDimS.Render("cleared without review ") +
-			ckCyanS.Render(fmt.Sprintf("%.0f%%", st.AutoClearedPct)) + "\n")
+			ckAccentStrongS.Render(fmt.Sprintf("%.0f%%", st.AutoClearedPct)) + "\n")
 	} else {
 		b.WriteString(" " + ckFaintS.Render("no consensus checks recorded yet") + "\n")
 	}
@@ -309,9 +309,9 @@ func (m Cockpit) auditFamilyFact() string {
 	f := m.audit.families[names[0]]
 	s := fmt.Sprintf("%s ×%.2f (J=%.2f)", names[0], 1-f.J, f.J)
 	if f.Warn {
-		return ckMidS.Render(s + ", echo, not evidence")
+		return ckWarnS.Render(s + ", echo, not evidence")
 	}
-	return ckCyanS.Render(s)
+	return ckAccentStrongS.Render(s)
 }
 
 // ckChainWord maps the attested evidence state onto one word, the same
@@ -341,25 +341,25 @@ func (m Cockpit) auditLogTile() string {
 	}
 	ev := a.report.Attestation.Evidence
 	word := ckChainWord(ev)
-	ws := ckCheapS
+	ws := ckOkS
 	switch word {
 	case "TRUNCATED", "BROKEN", "unverifiable":
-		ws = ckExpS
+		ws = ckBadS
 	case "unanchored":
-		ws = ckMidS
+		ws = ckWarnS
 	}
 	b.WriteString(" " + ckDimS.Render(ckCell("chain", 9)) + ws.Render(word) +
 		ckDimS.Render(fmt.Sprintf(" · %d event%s, %d chained", ev.Events, plural(ev.Events), ev.ChainedEvents)) + "\n")
 	b.WriteString(" " + ckDimS.Render(ckCell("today", 9)) +
-		ckCheapS.Render(fmt.Sprintf("%d allowed", a.allowedToday)) + ckDimS.Render(" · ") +
-		ckExpS.Render(fmt.Sprintf("%d denied", a.deniedToday)) + ckDimS.Render(" · ") +
-		ckMidS.Render(fmt.Sprintf("%d ask", a.askedToday)) + "\n")
+		ckOkS.Render(fmt.Sprintf("%d allowed", a.allowedToday)) + ckDimS.Render(" · ") +
+		ckBadS.Render(fmt.Sprintf("%d denied", a.deniedToday)) + ckDimS.Render(" · ") +
+		ckWarnS.Render(fmt.Sprintf("%d ask", a.askedToday)) + "\n")
 	if a.deniedToday > 0 && a.denyReason != "" {
 		b.WriteString("          " + ckFaintS.Render(truncate(ckSafe(a.denyReason), 36)) + "\n")
 	}
 	if l := a.report.Ledger; l.Total > 0 {
 		b.WriteString(" " + ckDimS.Render(ckCell("all-time", 9)) +
-			ckSegmentedBar(20, []int{l.Allowed, l.Denied, l.Asked}, []lipgloss.Style{ckCheapS, ckExpS, ckMidS}) +
+			ckSegmentedBar(20, []int{l.Allowed, l.Denied, l.Asked}, []lipgloss.Style{ckOkS, ckBadS, ckWarnS}) +
 			ckDimS.Render(fmt.Sprintf(" %d", l.Total)))
 	}
 	return b.String()
@@ -381,19 +381,19 @@ func (m Cockpit) auditGuardrails() string {
 			unknown := security.RemoteCount(r.Exposures) - confirmed
 			switch {
 			case confirmed > 0:
-				tail = ckExpS.Render(fmt.Sprintf(" · %d REACHED REMOTE", confirmed))
+				tail = ckBadS.Render(fmt.Sprintf(" · %d REACHED REMOTE", confirmed))
 			case unknown > 0:
-				tail = ckMidS.Render(fmt.Sprintf(" · %d unidentified", unknown))
+				tail = ckWarnS.Render(fmt.Sprintf(" · %d unidentified", unknown))
 			default:
 				tail = ckDimS.Render(" · all stayed local")
 			}
 		}
 		b.WriteString(" " + ckDimS.Render(ckCell("pii → local-only", 19)) +
-			ckCheapS.Render("enforced") + ckDimS.Render(note) + tail + "\n")
+			ckOkS.Render("enforced") + ckDimS.Render(note) + tail + "\n")
 		b.WriteString(" " + ckDimS.Render(ckCell("injection markers", 19)) +
 			ckInkS.Render(fmt.Sprintf("%d seen today", a.flaggedToday)) + "\n")
 		b.WriteString(" " + ckDimS.Render(ckCell("rules", 19)) +
-			ckCyanS.Render(truncate(ckPolicyPosture(r.PolicyAudit), 28)) + "\n")
+			ckAccentStrongS.Render(truncate(ckPolicyPosture(r.PolicyAudit), 28)) + "\n")
 	}
 	t, p, q := a.mcpCounts[mcpregistry.StateTrusted], a.mcpCounts[mcpregistry.StateProvisional], a.mcpCounts[mcpregistry.StateQuarantined]
 	if len(a.mcpCounts) == 0 {
@@ -403,14 +403,14 @@ func (m Cockpit) auditGuardrails() string {
 	}
 	ps := ckDimS
 	if p > 0 {
-		ps = ckMidS
+		ps = ckWarnS
 	}
 	qs := ckDimS
 	if q > 0 {
-		qs = ckExpS
+		qs = ckBadS
 	}
 	b.WriteString(" " + ckDimS.Render(ckCell("mcp servers", 19)) +
-		ckCheapS.Render(fmt.Sprintf("%d trusted", t)) + ckDimS.Render(" · ") +
+		ckOkS.Render(fmt.Sprintf("%d trusted", t)) + ckDimS.Render(" · ") +
 		ps.Render(fmt.Sprintf("%d provisional", p)) + ckDimS.Render(" · ") +
 		qs.Render(fmt.Sprintf("%d quarantined", q)))
 	return b.String()
@@ -440,7 +440,7 @@ func (m Cockpit) auditQueue() string {
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("NEEDS A HUMAN") + "\n\n")
 	if len(items) == 0 {
-		b.WriteString(ckCheapS.Render(" nothing needs review") +
+		b.WriteString(ckOkS.Render(" nothing needs review") +
 			ckDimS.Render(", no repeated failures, no provisional MCP servers"))
 		return b.String()
 	}
@@ -451,9 +451,9 @@ func (m Cockpit) auditQueue() string {
 	for i, it := range items {
 		marker := "  "
 		if i == sel {
-			marker = ckAquaS.Render("▸ ")
+			marker = ckAccentS.Render("▸ ")
 		}
-		b.WriteString(marker + ckMidS.Bold(i == sel).Render(truncate(ckSafe(it.text), 70)) + "\n")
+		b.WriteString(marker + ckWarnS.Bold(i == sel).Render(truncate(ckSafe(it.text), 70)) + "\n")
 	}
 	b.WriteString(ckFaintS.Render(" enter resolve/jump · i ignore for this session"))
 	return b.String()

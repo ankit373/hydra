@@ -170,13 +170,13 @@ func ckModePickerLines(sel int) []string {
 	lastBasic := true
 	for i, d := range ckModes {
 		if lastBasic && !d.basic {
-			lines = append(lines, "", ckCyanS.Render("ADVANCED"))
+			lines = append(lines, "", ckAccentStrongS.Render("ADVANCED"))
 			lastBasic = false
 		}
 		marker := "  "
 		name := ckDimS.Render(ckCell(d.chip, 11))
 		if i == sel {
-			marker = ckAquaS.Render("▸ ")
+			marker = ckAccentS.Render("▸ ")
 			name = ckInkS.Bold(true).Render(ckCell(d.chip, 11))
 		}
 		lines = append(lines, marker+name+ckDimS.Render(d.desc))
@@ -189,7 +189,7 @@ func ckModePickerLines(sel int) []string {
 // glossary).
 func (m Cockpit) viewModePicker(w, h int) string {
 	lines := ckModePickerLines(m.modeSel)
-	box := ckBoxS.BorderForeground(ckAqua).Render(strings.Join(lines, "\n"))
+	box := ckBoxS.BorderForeground(ckAccent).Render(strings.Join(lines, "\n"))
 	if lipgloss.Width(box) <= w && lipgloss.Height(box) <= h {
 		return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 	}

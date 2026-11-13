@@ -18,7 +18,7 @@ import (
 )
 
 // focusRun jumps to the activity view with one run's trace drilled in, how
-// the agents view and the audit queue hand a run over without touching this
+// the watching screen and the audit queue hand a run over without touching this
 // view's internals themselves.
 func (m Cockpit) focusRun(id string) Cockpit {
 	m = m.jump(ckViewActivity)
@@ -84,13 +84,13 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 					txt += " · " + strategy
 				}
 			}
-			add(label, txt, "why: "+ckPlainWording.Replace(e.Detail), ckCyanS)
+			add(label, txt, "why: "+ckPlainWording.Replace(e.Detail), ckAccentStrongS)
 			if dec, reason := ckPolicyOutcome(run.events[i+1:], e.Head); dec != "" {
 				sub := "recorded in the audit log (l)"
 				if dec == "denied" {
-					add("policy", "denied, "+ckPlainWording.Replace(reason), sub, ckExpS)
+					add("policy", "denied, "+ckPlainWording.Replace(reason), sub, ckBadS)
 				} else {
-					add("policy", "allowed", sub, ckCheapS)
+					add("policy", "allowed", sub, ckOkS)
 				}
 			}
 		case runlog.KindDispatchFinished:
@@ -106,21 +106,21 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 			if e.Status == "denied" && selected[e.Head] {
 				continue
 			}
-			add("error", e.Model+", "+ckPlainWording.Replace(e.Detail), "", ckExpS)
+			add("error", e.Model+", "+ckPlainWording.Replace(e.Detail), "", ckBadS)
 		case runlog.KindEdit:
-			add("edit", e.File+"  "+e.Detail, "", ckMidS)
+			add("edit", e.File+"  "+e.Detail, "", ckWarnS)
 		case runlog.KindAttempt:
 			txt := fmt.Sprintf("%s · %s", e.Model, e.Status)
 			if e.Detail != "" {
 				txt += " · " + e.Detail
 			}
-			add("attempt", txt, "", ckCyanS)
+			add("attempt", txt, "", ckAccentStrongS)
 		case runlog.KindSample:
 			txt := ckPlainWording.Replace(e.Detail)
 			if e.Confidence > 0 {
 				txt += fmt.Sprintf(" · confidence %.2f", e.Confidence)
 			}
-			add("consensus", txt, "", ckVioletS)
+			add("consensus", txt, "", ckSecondaryS)
 		case runlog.KindTaskStarted:
 			// The routing key this task was dispatched under, named as one:
 			// rendered as "plan" it read as a step called GRUNT (#910).
@@ -128,7 +128,7 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 				add("routing key", ckPlainWording.Replace(e.Detail), "", ckDimS)
 			}
 		case runlog.KindHandoff:
-			add("handoff", ckPlainWording.Replace(e.Detail), "", ckMagentaS)
+			add("handoff", ckPlainWording.Replace(e.Detail), "", ckBrandS)
 		}
 	}
 
@@ -137,11 +137,11 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 	}
 	switch run.status {
 	case "running":
-		add("live", "still running…", "", ckAquaS)
+		add("live", "still running…", "", ckAccentS)
 	case "ok":
-		add("done", fmt.Sprintf("$%.4f est · %s", costUSD, ckFmtMS(run.durMS)), "", ckCheapS)
+		add("done", fmt.Sprintf("$%.4f est · %s", costUSD, ckFmtMS(run.durMS)), "", ckOkS)
 	default:
-		add("failed", fmt.Sprintf("no successful answer · %s", ckFmtMS(run.durMS)), "", ckExpS)
+		add("failed", fmt.Sprintf("no successful answer · %s", ckFmtMS(run.durMS)), "", ckBadS)
 	}
 	return rows
 }
@@ -218,7 +218,7 @@ func (m Cockpit) viewActivity(w, h int) string {
 	for i, r := range runs {
 		marker := "  "
 		if i == sel {
-			marker = ckAquaS.Render("▸ ")
+			marker = ckAccentS.Render("▸ ")
 		}
 		task := r.task
 		if task == "" {
@@ -250,10 +250,10 @@ func (m Cockpit) traceBox(r ckRun, h int) string {
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("TRACE") + ckDimS.Render(" · "+truncate(r.id, 28)))
 	if r.live {
-		b.WriteString(ckCheapS.Render("  ● live"))
+		b.WriteString(ckOkS.Render("  ● live"))
 	}
 	if m.actDrill {
-		b.WriteString(ckAquaS.Render("  drilled · esc back"))
+		b.WriteString(ckAccentS.Render("  drilled · esc back"))
 	}
 	b.WriteString("\n")
 	if r.task != "" {

@@ -2,8 +2,8 @@
 
 package tui
 
-// chrome.go, the shell every view sits in: the header (brand · tabs ·
-// session/context), and the one-line status bar (view keys left, facts right).
+// chrome.go, the shell every view sits in: the header (name · tabs · what
+// needs watching · spend today), and the one-line status bar (view keys left, facts right).
 
 import (
 	"fmt"
@@ -15,11 +15,14 @@ import (
 	"github.com/ankit373/hydra/internal/budget"
 )
 
-// header is the shared top line: brand · tabs · session cost + context gauge.
-// Tabs degrade to just the active chip when the terminal is too narrow.
+// header is the shared top line: the name, the views, then what needs
+// watching on every screen: how many runs are running, waiting and failed,
+// and what today has cost. Narrow terminals give up the tab names first, then
+// the counts; the spend stays.
 func (m Cockpit) header() string {
-	left := " " + ckWordmark("HYDRA") + " "
-	right := ckDimS.Render(fmt.Sprintf("session $%.4f · context ", m.sessionUSD)) + m.contextGauge() + " "
+	left := " " + ckWordmark("hydra") + "  "
+	spend := ckDimS.Render("today ") + ckMoneyS.Render(ckUSD(m.spend)) + " "
+	counts := m.headerCounts()
 
 	tabs := make([]string, len(ckViewNames))
 	for i, name := range ckViewNames {
@@ -29,42 +32,44 @@ func (m Cockpit) header() string {
 			tabs[i] = ckTabS.Render(name)
 		}
 	}
-	full := strings.Join(tabs, "")
-	gap := m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
-	if gap < 1 {
-		// Narrow: the chip alone would say nothing about the other views, so
-		// keep the position and the key that moves between them (#630).
-		full = ckActiveTab(ckViewName(m.view)) +
-			ckFaintS.Render(fmt.Sprintf(" %d/%d tab", m.view+1, ckViewCount()))
-		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
+	chip := ckActiveTab(ckViewName(m.view))
+	// The chip alone would say nothing about the other views, so the compact
+	// form keeps the position and the key that moves between them (#630).
+	compact := chip + ckFaintS.Render(fmt.Sprintf(" %d/%d tab", m.view+1, ckViewCount()))
+	tries := []struct{ tabs, counts string }{
+		{strings.Join(tabs, ""), counts},
+		{compact, counts},
+		{chip, counts},
+		{chip, ""},
 	}
-	if gap < 1 {
-		full = ckActiveTab(ckViewName(m.view))
-		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
+	var line string
+	for _, try := range tries {
+		right := spend
+		if try.counts != "" {
+			right = try.counts + "   " + spend
+		}
+		gap := m.w - lipgloss.Width(left) - lipgloss.Width(try.tabs) - lipgloss.Width(right)
+		line = left + try.tabs + strings.Repeat(" ", max(1, gap)) + right
+		if gap >= 1 {
+			break
+		}
 	}
-	if gap < 1 {
-		gap = 1
-	}
-	return ckFrame(left+full+strings.Repeat(" ", gap)+right, max(1, m.w), 1)
+	return ckFrame(line, max(1, m.w), 1)
 }
 
-// contextGauge renders claude_pct as an eight-cell gauge. Unknown state (no
-// state.json yet) renders "—", never a fabricated 0%.
-func (m Cockpit) contextGauge() string {
-	if !m.pctKnown {
-		return ckFaintS.Render("—")
+// headerCounts is "● 2 running  ! 1 waiting  ✗ 1 failed", zero counts left out.
+func (m Cockpit) headerCounts() string {
+	running, waiting, failed := m.watchCounts()
+	var parts []string
+	add := func(n int, s ckWatchState, word string) {
+		if n > 0 {
+			parts = append(parts, ckWatchGlyph(s)+ckDimS.Render(fmt.Sprintf(" %d %s", n, word)))
+		}
 	}
-	const cells = 8
-	fill := m.claudePct * cells / 100
-	if fill > cells {
-		fill = cells
-	}
-	if fill < 0 {
-		fill = 0
-	}
-	return ckBandStyle(m.claudePct).Render(strings.Repeat("▰", fill)) +
-		ckFaintS.Render(strings.Repeat("▱", cells-fill)) +
-		ckDimS.Render(fmt.Sprintf(" %d%%", m.claudePct))
+	add(running, ckStRunning, "running")
+	add(waiting, ckStWaiting, "waiting")
+	add(failed, ckStFailed, "failed")
+	return strings.Join(parts, "  ")
 }
 
 // ckBandStyle colours a claude_pct by its budget band, the band itself comes
@@ -72,29 +77,33 @@ func (m Cockpit) contextGauge() string {
 func ckBandStyle(pct int) lipgloss.Style {
 	switch budget.ModeFor(pct).String() {
 	case "critical", "emergency":
-		return ckExpS
+		return ckBadS
 	case "warning", "caution", "compact":
-		return ckMidS
+		return ckWarnS
 	default:
-		return ckCheapS
+		return ckOkS
 	}
 }
 
-// statusBar is one line: the active view's keys (from ckKeymap) plus
-// "? shortcuts" on the left, view-specific facts (or a transient flash) right.
-// At narrow widths trailing keys are dropped, "? shortcuts" survives, and the
-// glossary still documents everything that was dropped.
+// statusBar is one line: the active view's keys (from ckKeymap), then
+// "? keys" and, outside chat, "q quit"; view-specific facts (or a transient
+// flash) on the right. At narrow widths trailing keys are dropped first, and
+// the key list still documents everything that was dropped.
 func (m Cockpit) statusBar() string {
 	right := m.statusFact()
 	if m.flash != "" {
-		right = ckMidS.Render(ckSafe(m.flash))
+		right = ckWarnS.Render(ckSafe(m.flash))
 	} else {
 		right = ckDimS.Render(right)
 	}
 	if m.mouseOff {
-		right = ckMidS.Render("select mode, ctrl+s ends") + ckDimS.Render(" · ") + right
+		right = ckWarnS.Render("select mode, ctrl+s ends") + ckDimS.Render(" · ") + right
 	}
-	shortcuts := ckAquaS.Render("?") + ckFaintS.Render(" shortcuts")
+	hint := func(k, does string) string { return ckAccentS.Render(k) + ckFaintS.Render(" "+does+"  ") }
+	tail := hint("?", "keys")
+	if m.view != ckViewChat {
+		tail += hint("q", "quit")
+	}
 
 	segs := ckBarBindings(m.view)
 	var left string
@@ -102,10 +111,10 @@ func (m Cockpit) statusBar() string {
 		var b strings.Builder
 		b.WriteString(" ")
 		for _, s := range segs[:keep] {
-			b.WriteString(ckAquaS.Render(s.keys) + ckFaintS.Render(" "+s.does+"  "))
+			b.WriteString(hint(s.keys, s.does))
 		}
-		b.WriteString(shortcuts)
-		left = b.String()
+		b.WriteString(tail)
+		left = strings.TrimRight(b.String(), " ")
 		if lipgloss.Width(left)+lipgloss.Width(right)+2 <= m.w || keep == 0 {
 			break
 		}
@@ -129,9 +138,11 @@ func (m Cockpit) statusFact() string {
 			s = att + " · " + s
 		}
 		return s
-	case ckViewAgents:
-		live, done := m.agentCounts()
-		return fmt.Sprintf("%d live · %d finished today", live, done)
+	case ckViewWatch:
+		if !m.pctKnown {
+			return ""
+		}
+		return fmt.Sprintf("context %d%% used", m.claudePct)
 	case ckViewModels:
 		if m.scanning {
 			return "scanning…"

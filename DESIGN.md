@@ -200,5 +200,4 @@ Each of these is scheduled in the design revamp and listed so nobody mistakes it
 
 - **Website radii, widths and display sizes (Phase 7).** Colour, type size, spacing and motion on the site come from tokens and a check fails on a colour literal; corner radii, container widths, 1–2px hairline nudges and the hero display sizes above the 48px top of the scale (fluid, inside `clamp()`) are still literal.
 - **The desktop logo SVG.** `brand.tsx` keeps its gradient stops, whose pale highlights were drawn for a dark ground.
-- **TUI cost colours (Phase 8).** The TUI's cost bands still use the status hues: `cost.*` has no terminal mapping, and a sequential scale needs more than the ANSI-16 slots give.
 - **TUI wizards and CLI colours (Phase 8).** `init.go`, `install.go` and `cmd/hydra` still use their own ANSI-256 values.

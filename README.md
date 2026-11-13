@@ -835,7 +835,7 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
 hyctl status                            # live state: models that can run, budget bars, burn-rate risk
-hyctl tui                               # interactive cockpit, six views (see below), `?` for shortcuts
+hyctl tui                               # interactive cockpit, opens on watch (see below), `?` for keys
 hyctl version                           # version, commit, build info
 hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
 
@@ -952,12 +952,12 @@ pinned by name, so a new dependency is a decision rather than a side effect.
 
 ### The Cockpit (`hyctl tui`)
 
-Six views, cycled with `tab` (or jump with `1-6`); `?` opens the shortcut glossary from anywhere:
+It opens on **watch**, the screen for keeping an eye on things; chat is one key away (`c`) and `esc` brings you back. Six views, cycled with `tab` (or jump with `1-6`); `?` lists the keys from anywhere, and `q` quits from any view but chat:
 
 | View | What it shows |
 |---|---|
-| **chat** | Type a task and it **executes**: a route line first (class → routing level → model · strategy · plain-words why, with a `local-only (pii)` badge and change impact when they apply), then the real answer or edit. `esc` cancels mid-run; failures link to their trace; session cost accrues in the header |
-| **agents** | Live runs and today's finished ones, `enter` opens a run's trace |
+| **watch** | One line per run, grouped by who has to act: needs you (waiting on an answer, or failed), running, done today, then the models when there is room. The header on every view counts what is running, waiting and failed, and what today has cost. `enter` opens a thread in chat or a run's trace, `c` opens chat |
+| **chat** | Full width; an edit's code panel sits beside it on terminals 120 columns or wider. Type a task and it **executes**: a route line first (class → routing level → model · strategy · plain-words why, with a `local-only (pii)` badge and change impact when they apply), then the real answer or edit. `esc` cancels mid-run; failures link to their trace |
 | **models** | Every scanned model nested under its provider/server, with per-model detail: routing level, capability, p50 latency, requests/cost today, calibration scorecard. A down server grays its models; embedding-only models say `embeddings only, never routed` |
 | **activity** | Today's runs with a full trace per run: routed → policy → request → stream → edits → done, fallbacks included |
 | **usage** | Spend today / this month / estimated saving vs always using the most capable model, by model/routing level/day breakdowns, and the orchestrator's context budget |
@@ -981,17 +981,17 @@ Chat runs **parallel threads**: several tasks at once, safely:
 
 | Key | What it does |
 |---|---|
-| `ctrl+t` | New thread (a chip strip appears under the header: `⠸` running · `●` needs you · `✓` done · `◱` queued) |
+| `ctrl+t` | New thread (a chip strip appears under the header: `●` running · `!` needs you · `✓` done · `◱` queued) |
 | `alt+1-9` | Jump to that thread; `ctrl+←/→` cycles them; the input bar labels its target (`→ thread 2`) |
 | `ctrl+\` | Split: pin a second thread beside the active one (needs ≥100 cols); `ctrl+←/→` moves focus, each side scrolls on its own |
-| `ctrl+b` | Background the thread into the **agents** view, it keeps running and pings chat (`hydra ▸`) when it finishes or needs you |
-| `ctrl+g` | Jump to the next thread needing input (plan gates, confirms, failures); the status bar counts `⠸ running · ● needs you · ◱ queued` |
+| `ctrl+b` | Background the thread onto the **watch** screen, it keeps running and pings chat (`hydra ▸`) when it finishes or needs you |
+| `ctrl+g` | Jump to the next thread needing input (plan gates, confirms, failures); the status bar counts `running · needs you · queued` |
 | `/apply` / `/undo` | Apply an isolated thread's worktree back to your tree / discard it (asks y/n, it deletes the thread's edits) |
 | `ctrl+s` | Select mode: hand the mouse back to the terminal so you can select and copy text; again restores wheel scrolling |
 
 **Isolation**: read-only work shares your checkout; each edit-capable thread gets its own git worktree (`~/.hydra/worktrees/tN-…`, branch `hydra/task-tN-…`) cut from your repo, the header shows `worktree tN-… · merges on apply`. `/apply` merges it back with standard git: clean applies stage the diff; a divergence leaves ordinary `<<<<<<<` conflict markers (the branch is kept until you resolve); and **unsaved** edits of your own to a file the thread touched block the merge before it starts, nothing half-lands, and work that exists only in your editor is never merged over. Two threads editing the same (or graph-coupled) files never race: the second queues visibly (`◱ queued behind 1 · both touch <path>`) and auto-starts when the first applies or discards. Outside a git repo the TUI says so and runs edits one at a time, in place. Worktrees left behind by a crash are listed at startup, never auto-deleted. Terminal note: `alt+1-9` needs the option/alt key sending ESC (iTerm2: "Esc+"; Terminal.app: "Use Option as Meta key"), and `ctrl+b` is tmux's default prefix, rebind tmux or press `ctrl+b ctrl+b`.
 
-Everything shown is measured from the machine's real logs, a figure that cannot be computed renders `—`, never an invented number. Lists, overlays and the audit view all scroll (`j/k`, `↑/↓`, `pgup/pgdn`, mouse wheel), so nothing is reachable only by resizing the terminal; `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports. Colours adapt to light and dark terminals (override the detection with `HYDRA_THEME=light|dark`), body text uses your terminal's own foreground, and under `NO_COLOR` the active tab still reads `[chat]`. Log output from background work goes to `~/.hydra/logs/tui.log` while the TUI owns the screen.
+Everything shown is measured from the machine's real logs, a figure that cannot be computed renders `—`, never an invented number. Lists, overlays and the audit view all scroll (`j/k`, `↑/↓`, `pgup/pgdn`, mouse wheel), so nothing is reachable only by resizing the terminal; `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports. Colours adapt to light and dark terminals (override the detection with `HYDRA_THEME=light|dark`), body text uses your terminal's own foreground, and under `NO_COLOR` the active tab still reads `[watch]` and every state keeps its glyph and its word. On the Windows console host and the Linux text console the glyphs fall back to ASCII (`+ x ! *`). Log output from background work goes to `~/.hydra/logs/tui.log` while the TUI owns the screen.
 
 ---
 
