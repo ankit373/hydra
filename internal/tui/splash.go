@@ -42,8 +42,11 @@ func markFor(goos string, getenv func(string) string) markGlyphs {
 // centre head cyan, the side heads magenta, the meeting point in the accent.
 // Without colour the shape alone carries it.
 func Mark() string {
-	return renderMark(markFor(runtime.GOOS, os.Getenv))
+	return renderMark(termMark())
 }
+
+// termMark is this terminal's glyph set; a variable so tests can pin one.
+var termMark = func() markGlyphs { return markFor(runtime.GOOS, os.Getenv) }
 
 func renderMark(g markGlyphs) string {
 	at := func(c tokColor) lipgloss.Style {
