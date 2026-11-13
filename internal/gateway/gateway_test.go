@@ -295,29 +295,39 @@ func TestGateway_LocalhostDialsLiteralWithoutDNS(t *testing.T) {
 }
 
 // A local server bound only to ::1 is still reachable as localhost.
-func TestGateway_LocalhostFallsBackToIPv6(t *testing.T) {
-	l, err := net.Listen("tcp", "[::1]:0")
-	if err != nil {
-		t.Skipf("no IPv6 loopback: %v", err)
-	}
-	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	ts.Listener = l
-	ts.Start()
-	t.Cleanup(ts.Close)
-	_, port, _ := net.SplitHostPort(l.Addr().String())
-
-	g, err := Start(context.Background())
+func TestDialTargets_LocalhostTriesIPv4ThenIPv6(t *testing.T) {
+	got, err := dialTargets("localhost:8080")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { g.Close() })
+	want := []string{"127.0.0.1:8080", "[::1]:8080"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
 
-	resp, err := proxyClient(t, g.Addr()).Get("http://localhost:" + port + "/")
+// The first target refuses, so dialFirst must move on to the second.
+// Both are IPv4 so the test runs on hosts with no IPv6 loopback.
+func TestDialFirst_FallsBackToNextTarget(t *testing.T) {
+	dead, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("got status %d, want 200", resp.StatusCode)
+	deadAddr := dead.Addr().String()
+	dead.Close()
+
+	live, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { live.Close() })
+
+	c, err := dialFirst(context.Background(), []string{deadAddr, live.Addr().String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if got := c.RemoteAddr().String(); got != live.Addr().String() {
+		t.Errorf("dialed %s, want %s", got, live.Addr())
 	}
 }
