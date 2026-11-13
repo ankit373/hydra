@@ -56,7 +56,7 @@ func setWizardTheme(dark bool) {
 	sHint = lipgloss.NewStyle().Italic(true).Foreground(c(wizDim))
 	warnStyle = lipgloss.NewStyle().Bold(true).Foreground(c(wizWarn))
 	successStyle = lipgloss.NewStyle().Bold(true).Foreground(c(wizSuccess))
-	codeStyle = lipgloss.NewStyle().Foreground(c(wizCode)).Background(c(wizCodeBg)).Padding(0, 1)
+	codeStyle = lipgloss.NewStyle().Foreground(c(wizCode)).Background(c(wizCodeBg)).Padding(0, tokSpace2)
 	fitsStyle = lipgloss.NewStyle().Foreground(c(wizSuccess))
 	noFitStyle = sDim
 }

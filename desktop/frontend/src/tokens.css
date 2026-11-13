@@ -1,6 +1,6 @@
-/* Colour, type, spacing and motion come from design/tokens via the generated
+/* Colour, type, spacing, radius and motion come from design/tokens via the generated
    file; edit the token source, never these values. What stays here is
-   app-only: fonts, chrome metrics and the radii not yet on the token scale. */
+   app-only: fonts, effects and chrome metrics. */
 @import "./tokens.generated.css";
 
 /* The app shipped no fonts at all: tokens.css named these two and nothing
@@ -45,11 +45,6 @@
   /* The macOS traffic lights float over the content under
      mac.TitleBarHiddenInset(), so the header reserves their width. */
   --hy-traffic-w: 78px;
-
-  /* ── Radii (moving to radius.control/card in the component pass) ── */
-  --hy-radius-sm: 8px;
-  --hy-radius:    14px;
-  --hy-radius-lg: 22px;
 }
 
 :root[data-theme="light"] { color-scheme: light; }

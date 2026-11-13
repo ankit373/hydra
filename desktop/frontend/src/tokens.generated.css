@@ -57,6 +57,7 @@
   --hy-font-weight-semibold: 600;
   --hy-motion-duration-base: 200ms;
   --hy-motion-duration-fast: 120ms;
+  --hy-motion-duration-loop: 1600ms;
   --hy-motion-duration-slow: 320ms;
   --hy-motion-easing-emphasized: cubic-bezier(0.3, 0, 0, 1);
   --hy-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -68,11 +69,16 @@
   --hy-palette-brand-violet-deep: #6d28d9;
   --hy-radius-card: 10px;
   --hy-radius-control: 6px;
+  --hy-radius-mark: 2px;
   --hy-radius-pill: 999px;
+  --hy-space-0-5: 2px;
   --hy-space-1: 4px;
+  --hy-space-1-5: 6px;
   --hy-space-2: 8px;
+  --hy-space-2-5: 10px;
   --hy-space-3: 12px;
   --hy-space-4: 16px;
+  --hy-space-5: 20px;
   --hy-space-6: 24px;
   --hy-space-8: 32px;
   --hy-space-12: 48px;

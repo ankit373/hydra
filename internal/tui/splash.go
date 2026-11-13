@@ -76,7 +76,7 @@ func renderCortex(name string) string {
 	label := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(cCortex).
-		Padding(0, 1).
+		Padding(0, tokSpace2).
 		Render("⚡ CORTEX")
 
 	arrow := lipgloss.NewStyle().Foreground(cArrow).Render(" ──▶ ")
@@ -102,7 +102,7 @@ func renderStats(s Stats) string {
 	statStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(cBody).
-		Padding(0, 2)
+		Padding(0, tokSpace4)
 
 	labelStyle := lipgloss.NewStyle().Foreground(cDim)
 	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(cGold)

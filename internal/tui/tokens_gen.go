@@ -6,6 +6,7 @@ package tui
 
 import (
 	"image/color"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -89,6 +90,20 @@ var tokBrandEnd = tokColor{
 	Light: tokDepths{TrueColor: "#a21caf", ANSI256: "127", ANSI: "5"},
 	Dark:  tokDepths{TrueColor: "#e852c8", ANSI256: "170", ANSI: "5"},
 }
+
+// Padding in terminal cells. A cell is about 8px wide, so space.2 is one.
+const (
+	tokSpace2 = 1
+	tokSpace4 = 2
+)
+
+// Motion durations, the same values the desktop app and the website use.
+const (
+	tokMotionDurationFast = 120 * time.Millisecond
+	tokMotionDurationBase = 200 * time.Millisecond
+	tokMotionDurationSlow = 320 * time.Millisecond
+	tokMotionDurationLoop = 1600 * time.Millisecond
+)
 
 // tokRoles is every generated role with its WCAG 2 floor (0 = decorative).
 var tokRoles = []struct {
