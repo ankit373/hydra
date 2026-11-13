@@ -150,7 +150,7 @@ func (m Cockpit) concurrentWarnings(self *ckThread) []string {
 		}
 		o := &a2a.Handoff{From: ckThreadAgent(t.id), Files: t.files, Clock: t.clock}
 		if h.ConflictsWith(o) {
-			out = append(out, ckMidS.Render("  ⚠ concurrent edit ")+ckDimS.Render(fmt.Sprintf(
+			out = append(out, ckWarnS.Render("  ⚠ concurrent edit ")+ckDimS.Render(fmt.Sprintf(
 				"thread %d also touched %s (vector clocks concurrent), expect conflicts",
 				t.id, ckOverlapPath(self.files, t.files))))
 		}

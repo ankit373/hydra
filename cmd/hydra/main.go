@@ -289,7 +289,7 @@ func cmdTui() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&snapshot, "snapshot", false, "Render one static frame and exit (docs/preview)")
-	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat, 1 agents, 2 models, 3 activity, 4 usage, 5 audit)")
+	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 watch, 1 chat, 2 models, 3 activity, 4 usage, 5 audit)")
 	return c
 }
 
@@ -1281,7 +1281,7 @@ func cmdDispatch() *cobra.Command {
 			if dryRun {
 				why := func(h provider.Head) string { return routingEvidence(result, h) }
 				if result.Cache != nil {
-					fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("⚡ would come from cache:"),
+					fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("would come from cache:"),
 						dimStyle.Render(cacheLabel(result.Cache)))
 				}
 				if req := routingRequirement(result); req != "" {

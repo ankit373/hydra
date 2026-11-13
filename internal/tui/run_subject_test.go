@@ -33,12 +33,12 @@ func TestRunRow_ARoutingEnumIsNeverTheTask(t *testing.T) {
 }
 
 // And with nothing recorded, the view says so rather than inventing a label.
-func TestAgentsView_ARunWithNoSubjectSaysSo(t *testing.T) {
+func TestWatchView_ARunWithNoSubjectSaysSo(t *testing.T) {
 	m := Cockpit{runsToday: []ckRun{{
 		id: "20260918T173841Z-7012569f", status: "ok", task: "", durMS: 4774,
 	}}}
 
-	out := m.viewAgents(100, 20)
+	out := m.viewWatch(100, 20)
 	if strings.Contains(out, "GRUNT") {
 		t.Errorf("view rendered a routing key:\n%s", out)
 	}

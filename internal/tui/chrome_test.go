@@ -10,17 +10,17 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// The header: brand, the six tab labels with the active one chipped, and the
-// session/context readout, one line at any width, degrading to the active
-// chip alone when the tab strip cannot fit.
-func TestHeader_TabsSessionAndContext(t *testing.T) {
+// The header: the name, the six tab labels with the active one chipped, what
+// is running and failed, and today's spend, one line at any width, degrading
+// to the active chip alone when the tab strip cannot fit.
+func TestHeader_TabsCountsAndSpend(t *testing.T) {
 	m := testCockpit()
 	m.view = ckViewModels
-	m.pctKnown, m.claudePct = true, 25
+	m.spend = 1.834
 	m.w = 120
 
 	got := stripANSI(m.header())
-	for _, want := range append(append([]string{}, ckViewNames...), "HYDRA", "session $0.0000", "context", "25%") {
+	for _, want := range append(append([]string{}, ckViewNames...), "hydra", "1 running", "1 failed", "today $1.83") {
 		if !strings.Contains(got, want) {
 			t.Errorf("header missing %q: %q", want, got)
 		}
@@ -36,7 +36,7 @@ func TestHeader_TabsSessionAndContext(t *testing.T) {
 	if strings.Contains(got, "activity") {
 		t.Errorf("80-col header still renders the whole strip: %q", got)
 	}
-	for _, want := range []string{"models", "3/6", "tab"} {
+	for _, want := range []string{"models", "3/6", "tab", "today $1.83"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("80-col header missing %q: %q", want, got)
 		}
@@ -63,30 +63,9 @@ func TestHeader_TabsSessionAndContext(t *testing.T) {
 	}
 }
 
-// The context gauge: unknown renders as a dash, never 0%; the fill and colour
-// track claude_pct through the budget bands.
-func TestContextGauge(t *testing.T) {
-	m := testCockpit()
-	m.pctKnown = false
-	if got := stripANSI(m.contextGauge()); got != "—" {
-		t.Errorf("unknown context = %q, want —", got)
-	}
-	m.pctKnown = true
-	for _, tt := range []struct {
-		pct  int
-		fill string
-	}{
-		{0, "▱▱▱▱▱▱▱▱"},
-		{50, "▰▰▰▰▱▱▱▱"},
-		{100, "▰▰▰▰▰▰▰▰"},
-		{200, "▰▰▰▰▰▰▰▰"}, // clamped
-	} {
-		m.claudePct = tt.pct
-		if got := stripANSI(m.contextGauge()); !strings.Contains(got, tt.fill) {
-			t.Errorf("gauge at %d%% = %q, want %q", tt.pct, got, tt.fill)
-		}
-	}
-	// The band colour comes from internal/budget, not an inline table.
+// The context budget's band colour comes from internal/budget, not an inline
+// table: it is a state, so it may use the status colours.
+func TestBandStyle_FollowsBudgetBands(t *testing.T) {
 	withTheme(t, colorprofile.TrueColor, true)
 	if ckBandStyle(10).GetForeground() == ckBandStyle(77).GetForeground() {
 		t.Error("normal and critical bands are coloured identically")
@@ -115,9 +94,13 @@ func TestStatusBar_FactsAndFlash(t *testing.T) {
 		t.Errorf("the pin is not shown: %q", got)
 	}
 
-	m.view = ckViewAgents
-	if got := stripANSI(m.statusBar()); !strings.Contains(got, "1 live · 2 finished today") {
-		t.Errorf("agents facts missing: %q", got)
+	m.view = ckViewWatch
+	if got := stripANSI(m.statusBar()); strings.Contains(got, "context") {
+		t.Errorf("watch claims a context figure it does not have: %q", got)
+	}
+	m.pctKnown, m.claudePct = true, 25
+	if got := stripANSI(m.statusBar()); !strings.Contains(got, "context 25% used") {
+		t.Errorf("watch facts missing: %q", got)
 	}
 
 	m.view = ckViewModels

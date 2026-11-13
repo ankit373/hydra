@@ -1,0 +1,40 @@
+ hydra  [watch] chat  models  activity  usage  audit                 ● 2 running  ! 1 waiting  ✗ 1 failed   today <usd>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ models 3 of 4 ready   agy/claude-opus cannot take work
+Needs you
+▸ ! thread 2   apply the plan for the retry refresher                                    plan ready
+  ✗ a104       fix the flaky workflow resume test                    gpt-5               failed <dur> ago  1m35s   <usd>
+Running
+  ● a108       rotate the signing key in internal/auth/token.go                          running           <dur>
+  ● a107       add pagination to the heads endpoint                                      running         1m12s
+Done today                                                                                              4 runs   <usd>
+  ✓ a106       review the diff on main                               gpt-5               done <dur> ago      <dur>   <usd>
+  ✓ a105       summarise the incident thread                         gemini-2.5-pro      done <dur> ago      <dur>   <usd>
+  ✓ a103       extract the invoice totals                            qwen3:8b            done <dur> ago      <dur>
+  ✓ a102       rename Head.Tier to Head.Level                        claude-sonnet-4.5   done <dur> ago      <dur>   <usd>
+Models
+  ✓ qwen3:8b                      local
+  ✓ claude-sonnet-4.5             api
+  ✓ gpt-5                         api
+  ✗ agy/claude-opus               api   cannot take work
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ enter open  c chat  j/k move  ? keys  q quit                                                          context 48% used

@@ -76,49 +76,55 @@ func (k ckKey) runes() []rune {
 type ckBinding struct {
 	keys  string
 	does  string
-	group string // EVERYWHERE / CHAT / LISTS / "" (bar-only)
+	group string // EVERYWHERE / WATCHING / CHAT / LISTS / "" (bar-only)
 	views []int  // status bars that show it; nil = glossary only
 }
 
 var ckKeymap = []ckBinding{
 	{"tab", "next view", "EVERYWHERE", nil},
 	{"1-6", "jump to a view (in chat, digits type into the input)", "EVERYWHERE", nil},
-	{"?", "this glossary (in chat: when the input is empty)", "EVERYWHERE", nil},
-	{"esc", "close overlay · back · clear chat input", "EVERYWHERE", nil},
+	{"?", "this list of keys (in chat: when the input is empty)", "EVERYWHERE", nil},
+	{"esc", "close overlay · back · clear chat input · chat: back to watching", "EVERYWHERE", nil},
 	{"pgup/pgdn · wheel", "scroll · lists: page the selection", "EVERYWHERE", nil},
 	{"ctrl+u/ctrl+d", "scroll half a page", "EVERYWHERE", nil},
 	{"home/end", "top / bottom · chat: end returns to live", "EVERYWHERE", nil},
 	{"ctrl+c", "quit", "EVERYWHERE", nil},
+	{"q", "quit (in chat q types, so use ctrl+c or :q)", "EVERYWHERE", nil},
 	{"ctrl+s", "select text: hand the mouse to the terminal to copy · again restores wheel scroll", "EVERYWHERE", nil},
 
 	{"ctrl+t", "new thread", "THREADS", nil},
-	{"ctrl+t", "thread", "", []int{ckViewChat}},
 	{"alt+1-9", "jump to that thread (foregrounds a backgrounded one)", "THREADS", nil},
 	{"ctrl+←/→", "cycle threads · in a split: move focus between the sides", "THREADS", nil},
 	{"ctrl+\\", "split: pin a second thread beside this one (≥100 cols) · again closes", "THREADS", nil},
-	{"ctrl+b", "background the thread, it keeps running in agents, pings chat when done", "THREADS", nil},
+	{"ctrl+b", "background the thread, it keeps running on the watching screen, pings chat when done", "THREADS", nil},
 	{"ctrl+g", "jump to the next thread needing you (confirms, plan gates, failures)", "THREADS", nil},
 	{"/apply · /undo", "after an isolated edit: apply the worktree to your tree · discard it (asks y/n)", "THREADS", nil},
 
 	{"enter", "send · approve a plan · empty input: open the last trace", "CHAT", nil},
 	{"enter", "send", "", []int{ckViewChat}},
+	{"esc", "back", "", []int{ckViewChat}},
 	{"shift+tab", "cycle the basic modes: ask · edit · plan · auto", "CHAT", nil},
 	{"shift+tab", "mode", "", []int{ckViewChat}},
 	{"m", "mode picker, advanced modes included (empty input)", "CHAT", nil},
 	{"ctrl+o", "routing override for the next task, where it runs", "CHAT", nil},
 	{"ctrl+o", "route", "", []int{ckViewChat}},
+	{"ctrl+t", "thread", "", []int{ckViewChat}},
 	{"esc", "cancel the running task · discard a plan · clear the input", "CHAT", nil},
 	{"y/n", "approve / refuse a pending plan or file write", "CHAT", nil},
 	{"/diff /undo /open", "after an edit: diff · undo (asks y/n) · open in $EDITOR", "CHAT", nil},
 	{"e", "expand the collapsed output of a head that gave up (empty input)", "CHAT", nil},
 	{"/ask /edit /plan /auto…", "set the mode by name (/architect /careful /unattended too)", "CHAT", nil},
-	{":chat :agents :models :activity :usage :audit", "jump · :q quit", "CHAT", nil},
+	{":watch :models :activity :usage :audit", "jump · :q quit", "CHAT", nil},
+
+	{"c", "watching: open chat, on the selected thread when it is one", "WATCHING", nil},
+	{"enter", "watching: a thread opens in chat, a run opens its trace", "WATCHING", nil},
+	{"enter", "open", "", []int{ckViewWatch}},
+	{"c", "chat", "", []int{ckViewWatch}},
 
 	{"j/k · ↑/↓", "move (the window follows the selection)", "LISTS", nil},
-	{"j/k", "move", "", []int{ckViewAgents, ckViewModels, ckViewActivity, ckViewAudit}},
+	{"j/k", "move", "", []int{ckViewWatch, ckViewModels, ckViewActivity, ckViewAudit}},
 	{"g/G", "first / last row", "LISTS", nil},
 	{"enter", "open / drill in", "LISTS", nil},
-	{"enter", "trace", "", []int{ckViewAgents}},
 	{"enter", "detail", "", []int{ckViewModels}},
 	{"enter", "drill", "", []int{ckViewActivity}},
 	{"enter", "resolve", "", []int{ckViewAudit}},
@@ -326,6 +332,9 @@ func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 		m.traceOff = 0
 	case m.view == ckViewModels && m.modelFocus:
 		m.modelFocus = false
+	case m.view == ckViewChat:
+		// Nothing left to close or cancel: chat goes back to watching.
+		m = m.jump(ckViewWatch)
 	}
 	return m, nil
 }
@@ -358,6 +367,8 @@ func (m Cockpit) viewKey(msg ckKey) (tea.Model, tea.Cmd) {
 		case '?':
 			m.glossary = true
 			return m, nil
+		case 'q':
+			return m, tea.Quit
 		case 'j':
 			return m.move(1), nil
 		case 'k':
@@ -375,6 +386,13 @@ func (m Cockpit) viewKey(msg ckKey) (tea.Model, tea.Cmd) {
 // viewRune dispatches the per-view letter shortcuts.
 func (m Cockpit) viewRune(r rune) (tea.Model, tea.Cmd) {
 	switch m.view {
+	case ckViewWatch:
+		if r == 'c' {
+			if row, ok := m.selectedWatchRow(); ok && row.thread > 0 {
+				return m.focusThread(row.thread), nil
+			}
+			return m.jump(ckViewChat), nil
+		}
 	case ckViewModels:
 		switch r {
 		case 'r':
@@ -426,8 +444,8 @@ func (m Cockpit) move(delta int) Cockpit {
 		return v
 	}
 	switch m.view {
-	case ckViewAgents:
-		m.agentSel = clamp(m.agentSel+delta, len(m.agentRows()))
+	case ckViewWatch:
+		m.watchSel = clamp(m.watchSel+delta, len(m.watchList()))
 	case ckViewModels:
 		m.modelSel = clamp(m.modelSel+delta, len(m.flatRows()))
 	case ckViewActivity:
@@ -465,15 +483,14 @@ func (m Cockpit) move(delta int) Cockpit {
 // detail, or resolve/jump a needs-a-human item.
 func (m Cockpit) enterRow() (tea.Model, tea.Cmd) {
 	switch m.view {
-	case ckViewAgents:
-		rows := m.agentRows()
-		if m.agentSel >= 0 && m.agentSel < len(rows) {
-			// A backgrounded thread's run re-foregrounds the thread (#598);
-			// every other run opens its trace.
-			if t := m.threadForRun(rows[m.agentSel].id); t != nil && t.bg {
-				return m.focusThread(t.id), nil
+	case ckViewWatch:
+		// A thread opens in chat, backgrounded or not (#598); a run opens its
+		// trace.
+		if row, ok := m.selectedWatchRow(); ok {
+			if row.thread > 0 {
+				return m.focusThread(row.thread), nil
 			}
-			m = m.focusRun(rows[m.agentSel].id)
+			m = m.focusRun(row.runID)
 		}
 	case ckViewModels:
 		if _, mr := m.selectedModel(); mr != nil {
@@ -488,4 +505,13 @@ func (m Cockpit) enterRow() (tea.Model, tea.Cmd) {
 		m = m.resolveAuditItem()
 	}
 	return m, nil
+}
+
+// selectedWatchRow is the watching screen's selected row, if there is one.
+func (m Cockpit) selectedWatchRow() (ckWatchRow, bool) {
+	rows := m.watchList()
+	if m.watchSel < 0 || m.watchSel >= len(rows) {
+		return ckWatchRow{}, false
+	}
+	return rows[m.watchSel], true
 }

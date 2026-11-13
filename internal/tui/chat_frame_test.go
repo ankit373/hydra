@@ -24,7 +24,7 @@ func TestChatCode_LiveFrame80x24NeverOverflows(t *testing.T) {
 	m.mode = "ask"
 	m.th().log = []string{
 		"init line one",
-		"Type a task and press enter. shift+tab mode · ctrl+o route · ? shortcuts · :q quits.",
+		"Type a task and press enter. esc goes back to watching, ? lists the keys.",
 		"mode → ask",
 	}
 	done := ckTask{
@@ -46,7 +46,7 @@ func TestChatCode_LiveFrame80x24NeverOverflows(t *testing.T) {
 		t.Errorf("the live frame trips ckFrame's crop disclosure:\n%s", out)
 	}
 	lines := strings.Split(out, "\n")
-	if last := lines[len(lines)-1]; !strings.Contains(last, "shortcuts") {
+	if last := lines[len(lines)-1]; !strings.Contains(last, "? keys") {
 		t.Errorf("the status bar is not the final line: %q", last)
 	}
 	// The wrapped-count/rendered-line agreement, at the exact narrow width.

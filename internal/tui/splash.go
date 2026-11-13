@@ -3,174 +3,117 @@
 package tui
 
 import (
-	"fmt"
-	"image/color"
+	"os"
+	"runtime"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 )
 
-// ── Color palette ─────────────────────────────────────────────────────────────
+// The three-headed mark at terminal size: three heads whose necks meet at one
+// point, drawn after the SVG in desktop/frontend/src/brand.tsx. Each row is
+// left head, neck, centre, neck, right head, and the point they meet at.
+type markGlyphs struct {
+	head, left, centre, right, core string
+}
 
 var (
-	cHead1  = lipgloss.Color("82")  // left head  , bright lime
-	cHead2  = lipgloss.Color("46")  // center head, vivid green
-	cHead3  = lipgloss.Color("77")  // right head , medium green
-	cNeck   = lipgloss.Color("34")  // necks joining body
-	cBody   = lipgloss.Color("22")  // body, dark green
-	cCortex = lipgloss.Color("205") // CORTEX label, magenta/pink
-	cArrow  = lipgloss.Color("213") // arrow accent
-	cDim    = lipgloss.Color("240") // muted text
-	cWhite  = lipgloss.Color("255")
-	cGold   = lipgloss.Color("220") // stat highlights
+	markUnicode = markGlyphs{head: "▲", left: "╲", centre: "│", right: "╱", core: "●"}
+	markASCII   = markGlyphs{head: "^", left: `\`, centre: "|", right: "/", core: "o"}
 )
 
-// ── Head shape ────────────────────────────────────────────────────────────────
-//
-// Each head is identical in shape; only colour differs.
-// Adjust this constant to restyle all three heads at once.
+// markWidth is the mark's width in cells, in both glyph sets.
+const markWidth = 9
 
-const headShape = `  .~~~~~.
- / %s   %s \
-( >> ^ << )
- \  ~~~  /
-  |     |
-  |_____|   `
-
-// eye characters per head, subtle variation
-var headEyes = [3][2]string{
-	{"o", "o"}, // left head
-	{"*", "*"}, // center head (brighter)
-	{"o", "o"}, // right head
-}
-
-var headColors = []color.Color{cHead1, cHead2, cHead3}
-
-func renderHead(idx int) string {
-	eyes := headEyes[idx]
-	shape := fmt.Sprintf(headShape, eyes[0], eyes[1])
-	return lipgloss.NewStyle().Foreground(headColors[idx]).Render(shape)
-}
-
-// ── Neck + body ───────────────────────────────────────────────────────────────
-
-const neckLine = `      \               |               /      `
-const bodyLine = `       \_____________=_____________/       `
-const scaleLine = `                  |||||||                  `
-const tailLine = `              ~~~~~~~~~~~                  `
-
-func renderBody() string {
-	s := lipgloss.NewStyle().Foreground(cNeck)
-	b := lipgloss.NewStyle().Foreground(cBody)
-	return lipgloss.JoinVertical(lipgloss.Left,
-		s.Render(neckLine),
-		b.Render(bodyLine),
-		b.Render(scaleLine),
-		b.Render(tailLine),
-	)
-}
-
-// ── CORTEX banner ─────────────────────────────────────────────────────────────
-
-func renderCortex(name string) string {
-	label := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(cCortex).
-		Padding(0, tokSpace2).
-		Render("⚡ CORTEX")
-
-	arrow := lipgloss.NewStyle().Foreground(cArrow).Render(" ──▶ ")
-
-	value := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(cWhite).
-		Render(name)
-
-	return "  " + label + arrow + value
-}
-
-// ── Stats bar ─────────────────────────────────────────────────────────────────
-
-type Stats struct {
-	Heads   int
-	Tasks   int
-	CostUSD float64
-	SavePct int
-}
-
-func renderStats(s Stats) string {
-	statStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(cBody).
-		Padding(0, tokSpace4)
-
-	labelStyle := lipgloss.NewStyle().Foreground(cDim)
-	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(cGold)
-
-	stat := func(label, value string) string {
-		return statStyle.Render(
-			labelStyle.Render(label+"\n") + valueStyle.Render(value),
-		)
+// markFor picks the glyphs a terminal can draw. The Windows console host and
+// the Linux text console have no diagonal box drawing; Windows Terminal sets
+// WT_SESSION and has it.
+func markFor(goos string, getenv func(string) string) markGlyphs {
+	if asciiTerminal(goos, getenv) {
+		return markASCII
 	}
-
-	heads := stat("Heads", fmt.Sprintf("%d", s.Heads))
-	tasks := stat("Tasks", fmt.Sprintf("%d", s.Tasks))
-	cost := stat("Cost", fmt.Sprintf("$%.2f", s.CostUSD))
-	saved := stat("Saved", fmt.Sprintf("%d%%", s.SavePct))
-
-	return "  " + lipgloss.JoinHorizontal(lipgloss.Top, heads, " ", tasks, " ", cost, " ", saved)
+	return markUnicode
 }
 
-// ── Tagline ───────────────────────────────────────────────────────────────────
-
-func renderTagline() string {
-	return lipgloss.NewStyle().
-		Foreground(cDim).
-		Italic(true).
-		Render("  Multi-model AI orchestration, one Cortex, many Heads")
+// asciiTerminal reports a console that cannot draw box drawing or symbols.
+func asciiTerminal(goos string, getenv func(string) string) bool {
+	return (goos == "windows" && getenv("WT_SESSION") == "") || getenv("TERM") == "linux"
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// statusGlyphs are the four states, queued and idle. Every state also has a
+// word beside it, so the glyph is a second cue, never the only one.
+type statusGlyphs struct{ ok, bad, wait, run, queued, idle string }
 
-// Logo returns the full Hydra ASCII logo with three coloured heads.
-func Logo() string {
-	heads := lipgloss.JoinHorizontal(lipgloss.Top,
-		renderHead(0), "  ", renderHead(1), "  ", renderHead(2),
-	)
-	return lipgloss.JoinVertical(lipgloss.Left,
-		heads,
-		renderBody(),
-	)
+var (
+	glyphsUnicode = statusGlyphs{ok: "✓", bad: "✗", wait: "!", run: "●", queued: "◱", idle: "·"}
+	glyphsASCII   = statusGlyphs{ok: "+", bad: "x", wait: "!", run: "*", queued: "-", idle: "."}
+)
+
+func glyphsFor(goos string, getenv func(string) string) statusGlyphs {
+	if asciiTerminal(goos, getenv) {
+		return glyphsASCII
+	}
+	return glyphsUnicode
 }
 
-// Splash renders the full startup screen: logo + cortex label + tagline.
-func Splash(cortexName string) string {
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(cCortex).
-		Render("H Y D R A")
+// ckGlyphSet is the glyph set for this terminal, read once at start.
+var ckGlyphSet = glyphsFor(runtime.GOOS, os.Getenv)
 
-	divider := lipgloss.NewStyle().Foreground(cBody).
-		Render("  " + strings.Repeat("─", 46))
+func ckGlyphs() statusGlyphs { return ckGlyphSet }
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		"",
-		"  "+title,
-		divider,
-		Logo(),
-		"",
-		renderCortex(cortexName),
-		"",
-		renderTagline(),
-		"",
-	)
+// Mark returns the mark, five rows by nine cells, in the brand colours: the
+// centre head cyan, the side heads magenta, the meeting point in the accent.
+// Without colour the shape alone carries it.
+func Mark() string {
+	return renderMark(ckMarkSet)
 }
 
-// Dashboard renders the logo + live stats panel.
-func Dashboard(cortexName string, s Stats) string {
-	return lipgloss.JoinVertical(lipgloss.Left,
-		Splash(cortexName),
-		renderStats(s),
+// ckMarkSet is the mark's glyph set for this terminal, read once at start.
+var ckMarkSet = markFor(runtime.GOOS, os.Getenv)
+
+func renderMark(g markGlyphs) string {
+	at := func(c tokColor) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(c.at(ckProfile, ckDark))
+	}
+	mid, side := at(tokBrandStart), at(tokBrandEnd)
+	core := at(tokAccentDefault).Bold(true)
+
+	row := func(indent, gap int, l, c, r string) string {
+		pad := strings.Repeat(" ", gap)
+		return strings.Repeat(" ", indent) + side.Render(l) + pad + mid.Render(c) + pad + side.Render(r)
+	}
+	return strings.Join([]string{
+		row(0, 3, g.head, g.head, g.head),
+		row(1, 2, g.left, g.centre, g.right),
+		row(2, 1, g.left, g.centre, g.right),
+		row(3, 0, g.left, g.centre, g.right),
+		strings.Repeat(" ", 4) + core.Render(g.core),
+	}, "\n")
+}
+
+// Splash is what `hyctl probe` prints first: the mark, the plain wordmark,
+// one line on what Hydra does, and the main model when there is one.
+func Splash(mainModel string) string {
+	return splash(Mark(), mainModel)
+}
+
+func splash(mark, mainModel string) string {
+	text := []string{
 		"",
+		lipgloss.NewStyle().Bold(true).Render("HYDRA"),
+		ckDimS.Render("Picks a model for each task, and can check the answer."),
+	}
+	if mainModel != "" {
+		text = append(text, ckDimS.Render("main model ")+mainModel)
+	}
+	block := lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(markWidth).Render(mark),
+		"   ",
+		strings.Join(text, "\n"),
 	)
+	lines := strings.Split(block, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight("  "+l, " ")
+	}
+	return "\n" + strings.Join(lines, "\n") + "\n"
 }

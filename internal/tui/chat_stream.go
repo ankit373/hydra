@@ -151,14 +151,14 @@ func ckStreamEntries(gone []ckAbandoned, head, live string, clipped bool) []stri
 		}
 	}
 	if live != "" {
-		out = append(out, ckAquaS.Render("▍ ")+ckDimS.Render(ckSafe(head)))
+		out = append(out, ckAccentS.Render("▍ ")+ckDimS.Render(ckSafe(head)))
 		body := ckSafeText(live)
 		if clipped {
 			body = ckFaintS.Render("…(clipped)\n") + body
 		}
 		// The caret says the stream is still open, which is the difference
 		// between a short answer and one still arriving.
-		out = append(out, ckInkS.Render(body)+ckAquaS.Render("▏"))
+		out = append(out, ckInkS.Render(body)+ckAccentS.Render("▏"))
 	}
 	return out
 }

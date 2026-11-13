@@ -2,7 +2,7 @@
 
 package tui
 
-// runs.go, the run-list data layer shared by the agents and activity views:
+// runs.go, the run-list data layer shared by the watching screen and the activity view:
 // loading today's runs from the run log and folding each event stream into a
 // status the header counts can trust (running is never counted as ok).
 
@@ -18,6 +18,7 @@ type ckRun struct {
 	live    bool
 	status  string // "ok" | "failed" | "running"
 	task    string
+	model   string // the model that answered last, when the log names one
 	start   time.Time
 	durMS   int64
 	costUSD float64
@@ -89,6 +90,9 @@ func ckRunFromEvents(id string, events []runlog.Event, live bool) ckRun {
 		case runlog.KindRunFinished:
 			finished = true
 		case runlog.KindDispatchFinished:
+			if e.Model != "" {
+				r.model = e.Model
+			}
 			if e.Status == "ok" {
 				hasOK = true
 			}
@@ -154,30 +158,6 @@ func (m Cockpit) activityRuns() []ckRun {
 	return out
 }
 
-// agentRows is the agents view's list: live runs first, then today's finished.
-func (m Cockpit) agentRows() []ckRun {
-	var live, done []ckRun
-	for _, r := range m.runsToday {
-		if r.live {
-			live = append(live, r)
-		} else {
-			done = append(done, r)
-		}
-	}
-	return append(live, done...)
-}
-
-func (m Cockpit) agentCounts() (live, done int) {
-	for _, r := range m.runsToday {
-		if r.live {
-			live++
-		} else {
-			done++
-		}
-	}
-	return live, done
-}
-
 // ckRunCounts tallies a list so headers stay consistent, a running run is
 // counted as running, never as ok.
 func ckRunCounts(runs []ckRun) (ok, failed, running int) {
@@ -195,13 +175,14 @@ func ckRunCounts(runs []ckRun) (ok, failed, running int) {
 }
 
 func ckStatusGlyph(status string) string {
+	g := ckGlyphs()
 	switch status {
 	case "ok":
-		return ckCheapS.Render("✓")
+		return ckOkS.Render(g.ok)
 	case "running":
-		return ckAquaS.Render("⠸")
+		return ckAccentS.Render(g.run)
 	default:
-		return ckExpS.Render("✗")
+		return ckBadS.Render(g.bad)
 	}
 }
 

@@ -24,7 +24,7 @@ func TestGlossary_RendersEveryKeymapEntry(t *testing.T) {
 		}
 	}
 	for _, group := range ckGlossaryGroups {
-		if !strings.Contains(lines, group) {
+		if !strings.Contains(lines, group[:1]+strings.ToLower(group[1:])) {
 			t.Errorf("the glossary is missing the %s group", group)
 		}
 	}
@@ -36,14 +36,14 @@ func TestGlossary_RendersEveryKeymapEntry(t *testing.T) {
 	}
 }
 
-// Every view's status bar shows its table-declared keys plus "? shortcuts".
+// Every view's status bar shows its table-declared keys plus "? keys".
 func TestStatusBar_KeysComeFromTheTable(t *testing.T) {
 	m := testCockpit()
 	for v := 0; v < ckViewCount(); v++ {
 		m.view = v
 		bar := stripANSI(m.statusBar())
-		if !strings.Contains(bar, "shortcuts") {
-			t.Errorf("view %d status bar lacks the ? shortcuts hint: %q", v, bar)
+		if !strings.Contains(bar, "? keys") {
+			t.Errorf("view %d status bar lacks the ? keys hint: %q", v, bar)
 		}
 		for _, b := range ckBarBindings(v) {
 			if !strings.Contains(bar, b.does) {
@@ -368,14 +368,14 @@ func TestCtrlC_Quits(t *testing.T) {
 	}
 }
 
-// Enter on an agents row jumps to that run's trace in activity.
-func TestAgentsEnter_JumpsToTrace(t *testing.T) {
+// Enter on a watching-screen run jumps to that run's trace in activity.
+func TestWatchEnter_JumpsToTrace(t *testing.T) {
 	m := testCockpit()
-	m.view = ckViewAgents
-	m.agentSel = 0 // agentRows puts the live run first
-	live := m.agentRows()[0]
-	if !live.live {
-		t.Fatal("fixture: first agent row is not the live run")
+	m.view = ckViewWatch
+	m.watchSel = 0 // needs you comes first: the failed run
+	live := m.watchList()[0]
+	if live.state != ckStFailed || live.thread != 0 {
+		t.Fatalf("fixture: first watch row is %+v, want the failed run", live)
 	}
 	next, _ := m.Update(key("enter"))
 	m = next.(Cockpit)
@@ -385,8 +385,8 @@ func TestAgentsEnter_JumpsToTrace(t *testing.T) {
 	if !m.actDrill {
 		t.Error("the trace is not drilled in")
 	}
-	if got := m.activityRuns()[m.actSel].id; got != live.id {
-		t.Errorf("selected run = %s, want %s", got, live.id)
+	if got := m.activityRuns()[m.actSel].id; got != live.runID {
+		t.Errorf("selected run = %s, want %s", got, live.runID)
 	}
 }
 

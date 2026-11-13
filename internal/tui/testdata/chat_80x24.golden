@@ -1,0 +1,24 @@
+ hydra  [chat] 2/6 tab       ● 2 running  ! 1 waiting  ✗ 1 failed   today <usd>
+────────────────────────────────────────────────────────────────────────────────
+ [1]· rotate the si… │ 2! apply the pla…
+❯ rotate the signing key in internal/auth/token.go and keep the old one valid
+for 24 hours
+Added a second key slot. New tokens are signed with the new key, and the old key
+still verifies for a day.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+›  Auto ▾  → thread 1 ask for a change, a review or a summary
+ enter send  esc back  ? keys              1 needs you · mode auto · route auto

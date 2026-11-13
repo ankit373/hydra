@@ -41,14 +41,14 @@ type ckThread struct {
 	gone []ckAbandoned
 	attn bool // finished needing eyes (a failure), cleared on visit
 
-	bg        bool        // re-parented to the agents view
+	bg        bool        // re-parented to the watching screen
 	queued    *ckQueued   // waiting on an overlap blocker; nil otherwise
 	wt        *ckWorktree // edit isolation; nil = shared tree
 	files     []string    // repo-relative edit targets this thread holds
 	clock     a2a.Clock   // causal backstop across threads
 	inEdit    bool        // an in-place (no-isolation) edit task is running
 	undoAsk   *ckUndoAsk  // /undo's pending y/n question; nil = none
-	lastRunID string      // latest task's run id, the agents-view join key
+	lastRunID string      // latest task's run id, the watching screen's join key
 
 	// code panel, per thread, each shows its own last edit
 	codeLang  string
@@ -83,17 +83,18 @@ func (t *ckThread) status() string {
 
 // ckThreadGlyph renders a status as its strip glyph.
 func ckThreadGlyph(status string) string {
+	g := ckGlyphs()
 	switch status {
 	case "running":
-		return ckAquaS.Render("⠸")
+		return ckAccentS.Render(g.run)
 	case "needs":
-		return ckMidS.Render("●")
+		return ckWarnS.Render(g.wait)
 	case "queued":
-		return ckDimS.Render("◱")
+		return ckDimS.Render(g.queued)
 	case "done":
-		return ckCheapS.Render("✓")
+		return ckOkS.Render(g.ok)
 	default:
-		return ckFaintS.Render("○")
+		return ckFaintS.Render(g.idle)
 	}
 }
 
@@ -123,7 +124,7 @@ func (m Cockpit) threadByID(id int) *ckThread {
 }
 
 // visibleThreads are the strip's chips, backgrounded threads live in the
-// agents view instead.
+// watching screen instead.
 func (m Cockpit) visibleThreads() []*ckThread {
 	var out []*ckThread
 	for _, t := range m.threads {
@@ -366,7 +367,7 @@ func (m Cockpit) threadChip(t *ckThread) string {
 	label := fmt.Sprintf("%d", t.id)
 	body := " " + truncate(name, 14)
 	if t.wt != nil {
-		body += ckVioletS.Render(" ·wt")
+		body += ckSecondaryS.Render(" ·wt")
 	}
 	if t.id == m.th().id {
 		return ckActiveTab(label) + ckThreadGlyph(t.status()) + ckInkS.Bold(true).Render(body)
@@ -396,7 +397,7 @@ func (m Cockpit) threadPane(t *ckThread, w, h int, active bool) string {
 	title := fmt.Sprintf("thread %d · %s", t.id, name)
 	style, mark := ckDimS, "  "
 	if active {
-		style, mark = ckAquaS, "▸ "
+		style, mark = ckAccentS, "▸ "
 	} else {
 		title += " · watching"
 	}
@@ -419,7 +420,7 @@ func (t *ckThread) threadHeaderLine(w int) string {
 	case t.queued != nil:
 		return ckFrame(ckDimS.Render(" ◱ "+t.queued.reason), w, 1)
 	case t.wt != nil:
-		return ckFrame(ckDimS.Render(" ⎇ worktree ")+ckVioletS.Render(t.wt.tag)+
+		return ckFrame(ckDimS.Render(" ⎇ worktree ")+ckSecondaryS.Render(t.wt.tag)+
 			ckDimS.Render(" · merges on apply"), w, 1)
 	}
 	return ""
@@ -430,18 +431,18 @@ func ckThreadName(prompt string) string {
 	return truncate(ckSafe(strings.TrimSpace(prompt)), 14)
 }
 
-// attentionFact is the status-bar tally: "⠸ 2 running · ● 1 needs you · ◱ 1 queued".
+// attentionFact is the status-bar tally: "2 running · 1 needs you · 1 queued".
 func (m Cockpit) attentionFact() string {
 	running, needs, queued := m.threadCounts()
 	var parts []string
 	if running > 0 {
-		parts = append(parts, fmt.Sprintf("⠸ %d running", running))
+		parts = append(parts, fmt.Sprintf("%d running", running))
 	}
 	if needs > 0 {
-		parts = append(parts, fmt.Sprintf("● %d needs you", needs))
+		parts = append(parts, fmt.Sprintf("%d needs you", needs))
 	}
 	if queued > 0 {
-		parts = append(parts, fmt.Sprintf("◱ %d queued", queued))
+		parts = append(parts, fmt.Sprintf("%d queued", queued))
 	}
 	return strings.Join(parts, " · ")
 }

@@ -31,7 +31,7 @@ design/scripts/emit.mjs       copies the CSS to its consumers and writes the lip
 |---|---|
 | `docs/assets/tokens.css` | every website page links it, then `docs/assets/site.css`, the one shared stylesheet; canvas and SVG drawing read the same roles through `Hydra.color()` in `docs/assets/site.js` |
 | `desktop/frontend/src/tokens.generated.css` | imported by `desktop/frontend/src/tokens.css` |
-| `internal/tui/tokens_gen.go` | `internal/tui/styles.go` and the wordmark gradient; padding in cells and the spinner's frame time |
+| `internal/tui/tokens_gen.go` | `internal/tui/styles.go` and the terminal mark in `splash.go`; padding in cells and the spinner's frame time |
 | `desktop/window_gen.go` | the desktop app's native window background for each theme, painted before the first frame |
 
 Light values sit on `:root`. Dark values apply under `@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme="light"])`, and always under `:root[data-theme="dark"]`.
@@ -92,7 +92,7 @@ Names are purpose, never hue. CSS variables are `--hy-` plus the token path with
 | `cost.low` / `mid` / `high` | price and spend bands, which are data | states |
 | `chart.series-1` … `series-8` | categorical series, in this fixed order, never cycled | text |
 | `focus.ring` | the 2px focus ring at a 2px offset | |
-| `brand.start` / `mid` / `end` | the logo mark and wordmark gradient only | anything else |
+| `brand.start` / `mid` / `end` | the logo mark only | anything else, the wordmark included: it is plain text |
 
 `cost.*` is a sequential scale on one hue (blue), cheap to expensive: each step sits further from the page than the last, by at least 0.06 in OKLCH lightness, so it runs light to dark on the light theme and dark to light on the dark one. Every step is text-safe (4.5:1 on every surface), because prices are printed in it. It is for price and spend only; a pass, a fail or a diff line is a state and takes `status.*`.
 
@@ -134,7 +134,7 @@ The TUI never paints a background, so it cannot know the exact colour behind its
 | `accent.secondary` | 5 (magenta) | n/a |
 | `status.success` / `warning` / `danger` | 2 / 3 / 1 | `✓` / `!` / `✗` |
 | `border.default` | 8 | box-drawing characters |
-| `brand.*` | 6 / 5 / 5 | the wordmark text itself |
+| `brand.*` | 6 / 5 / 5 | the mark's shape |
 
 ## Contrast results
 
@@ -200,5 +200,4 @@ Each of these is scheduled in the design revamp and listed so nobody mistakes it
 
 - **Website radii, widths and display sizes (Phase 7).** Colour, type size, spacing and motion on the site come from tokens and a check fails on a colour literal; corner radii, container widths, 1–2px hairline nudges and the hero display sizes above the 48px top of the scale (fluid, inside `clamp()`) are still literal.
 - **The desktop logo SVG.** `brand.tsx` keeps its gradient stops, whose pale highlights were drawn for a dark ground.
-- **TUI cost colours (Phase 8).** The TUI's cost bands still use the status hues: `cost.*` has no terminal mapping, and a sequential scale needs more than the ANSI-16 slots give.
-- **TUI wizards, splash and CLI colours (Phase 8).** `init.go`, `install.go`, `splash.go` and `cmd/hydra` still use their own ANSI-256 values.
+- **TUI wizards and CLI colours (Phase 8).** `init.go`, `install.go` and `cmd/hydra` still use their own ANSI-256 values.

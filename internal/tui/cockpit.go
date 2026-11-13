@@ -3,7 +3,8 @@
 package tui
 
 // cockpit.go, the interactive terminal cockpit (`hyctl tui`): the model, the
-// six-view table, and the frame loop. Chrome lives in chrome.go, bindings in
+// six-view table, and the frame loop. It opens on the watching screen; chat
+// is one key away. Chrome lives in chrome.go, bindings in
 // keys.go, layout helpers in layout.go, and each view in view_<name>.go.
 
 import (
@@ -31,15 +32,15 @@ import (
 // count and the bounds check from it keeps the Tab cycle, the header tabs, and
 // the --view validation from drifting apart when a view is added.
 const (
-	ckViewChat = iota
-	ckViewAgents
+	ckViewWatch = iota
+	ckViewChat
 	ckViewModels
 	ckViewActivity
 	ckViewUsage
 	ckViewAudit
 )
 
-var ckViewNames = []string{"chat", "agents", "models", "activity", "usage", "audit"}
+var ckViewNames = []string{"watch", "chat", "models", "activity", "usage", "audit"}
 
 // ckViewCount is how many views exist.
 func ckViewCount() int { return len(ckViewNames) }
@@ -48,7 +49,7 @@ func ckViewCount() int { return len(ckViewNames) }
 // than panicking. `--snapshot --view N` reaches the header with unvalidated N.
 func ckViewName(v int) string {
 	if !ckValidView(v) {
-		return ckViewNames[ckViewChat]
+		return ckViewNames[ckViewWatch]
 	}
 	return ckViewNames[v]
 }
@@ -71,6 +72,7 @@ type ckHead struct {
 	price float64
 	up    bool
 	local bool
+	cli   bool // driven through its own executable, not an API
 }
 
 // ckHeadsFrom converts a real scan result into display rows, ranked the way
@@ -93,6 +95,7 @@ func ckHeadsFrom(heads []provider.Head, pr *pricing.DB) []ckHead {
 			price: price,
 			up:    executor.Supports(h),
 			local: h.LocalOnly,
+			cli:   h.Source == "cli",
 		})
 	}
 	return out
@@ -106,10 +109,11 @@ type Cockpit struct {
 	ready    bool
 	view     int // one of the ckView* constants
 	glossary bool
-	flash    string // transient status-bar note, replaced by the next action
-	mouseOff bool   // ctrl+s select mode: the terminal owns the mouse, no wheel
+	flash    string           // transient status-bar note, replaced by the next action
+	mouseOff bool             // ctrl+s select mode: the terminal owns the mouse, no wheel
+	clock    func() time.Time // nil = time.Now; tests pin it
 
-	// chat (view 0), executes for real (#597) across parallel threads (#598).
+	// chat (view 1), executes for real (#597) across parallel threads (#598).
 	// Per-task state (input, log, pipeline, code panel) lives on each thread;
 	// the mode, override, and overlays are session-level.
 	threads    []*ckThread
@@ -150,9 +154,9 @@ type Cockpit struct {
 	scannedAt  time.Time
 	scanning   bool
 
-	// agents (1) + activity (3) share today's runs, loaded once (runs.go).
+	// watch (0) + activity (3) share today's runs, loaded once (runs.go).
 	runsToday   []ckRun
-	agentSel    int
+	watchSel    int
 	actSel      int
 	actDrill    bool
 	actFailOnly bool
@@ -218,14 +222,13 @@ func NewCockpit() Cockpit {
 	switch len(heads) {
 	case 0:
 		t.log = []string{
-			ckDimS.Render("🐉 Hydra initialised · no models found by the scan."),
+			ckDimS.Render("No models found by the scan."),
 			ckDimS.Render("Run `hyctl probe` to see what was scanned, or `hyctl init` to configure."),
 		}
 	default:
 		t.log = []string{
-			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d model%s scanned · routing engine ready.",
-				len(heads), plural(len(heads)))),
-			ckDimS.Render("Type a task and press enter. shift+tab mode · ctrl+t thread · ? shortcuts · :q quits."),
+			ckDimS.Render(fmt.Sprintf("%d model%s found by the scan.", len(heads), plural(len(heads)))),
+			ckDimS.Render("Type a task and press enter. esc goes back to watching, ? lists the keys."),
 		}
 	}
 	// A cockpit that cannot dispatch must say so before a prompt is composed,
@@ -235,7 +238,7 @@ func NewCockpit() Cockpit {
 
 	if stale := ckStaleWorktrees(); len(stale) > 0 {
 		t.log = append(t.log,
-			ckMidS.Render(fmt.Sprintf("⚠ %d stale worktree%s from a previous session under %s:",
+			ckWarnS.Render(fmt.Sprintf("⚠ %d stale worktree%s from a previous session under %s:",
 				len(stale), plural(len(stale)), ckWorktreeBase())),
 			ckDimS.Render("  "+truncate(strings.Join(stale, " · "), 90)),
 			ckDimS.Render("  recover with `git diff` there, or remove with `git worktree remove <dir>`, nothing is auto-deleted."))
@@ -373,8 +376,8 @@ func (m Cockpit) frame() string {
 		body = m.viewModePicker(w, bodyH)
 	case m.ovOpen:
 		body = m.viewOverride(w, bodyH)
-	case m.view == ckViewAgents:
-		body = m.viewAgents(w, bodyH)
+	case m.view == ckViewChat:
+		body = m.chatCode(bodyH)
 	case m.view == ckViewModels:
 		body = m.viewModels(w, bodyH)
 	case m.view == ckViewActivity:
@@ -384,7 +387,7 @@ func (m Cockpit) frame() string {
 	case m.view == ckViewAudit:
 		body = m.viewAudit(w, bodyH)
 	default:
-		body = m.chatCode(bodyH)
+		body = m.viewWatch(w, bodyH)
 	}
 	// ckFrame is the shell's guarantee: no view can push the status bar
 	// off-frame or bleed past the terminal's width, whatever its content.
@@ -404,8 +407,8 @@ func ckCodeTick(thread, gen int) tea.Cmd {
 
 // ── snapshot (static render for docs / non-tty preview) ─────────────────────────
 
-// CockpitSnapshotView renders one static frame of the given view (0 chat,
-// 1 agents, 2 models, 3 activity, 4 usage, 5 audit) after two demo previews,
+// CockpitSnapshotView renders one static frame of the given view (0 watch,
+// 1 chat, 2 models, 3 activity, 4 usage, 5 audit) after two demo previews,
 // with the code stream settled so the frame is fully populated. An
 // out-of-range view falls back to the default instead of panicking; callers
 // that can report an error to the user should reject it up front with
@@ -413,7 +416,7 @@ func ckCodeTick(thread, gen int) tea.Cmd {
 func CockpitSnapshotView(view int) string {
 	m := ckSnapshotModel()
 	if !ckValidView(view) {
-		view = ckViewChat
+		view = ckViewWatch
 	}
 	m = m.jump(view)
 	return m.frame()
@@ -487,12 +490,12 @@ func ckConfigLines(err error) []string {
 		return nil
 	case errors.Is(err, config.ErrNotFound):
 		return []string{
-			ckMidS.Render("⚠ No config yet, so nothing can be dispatched."),
+			ckWarnS.Render("⚠ No config yet, so nothing can be dispatched."),
 			ckDimS.Render("  Run `hyctl init` to choose a Cortex. Everything else below still reads."),
 		}
 	default:
 		return []string{
-			ckMidS.Render("⚠ Hydra cannot read its config, so nothing can be dispatched."),
+			ckWarnS.Render("⚠ Hydra cannot read its config, so nothing can be dispatched."),
 			ckDimS.Render("  " + truncate(parseReason(err), 110)),
 			ckDimS.Render("  Fix " + config.Path() + ". Do not run `hyctl init`, it would overwrite it."),
 		}

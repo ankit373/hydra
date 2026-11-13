@@ -13,15 +13,16 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// Local names for the token roles, kept so the views read unchanged. Lip
-// Gloss v2 colours are values, so ckSetTheme resolves them for one terminal.
+// Local names for the token roles, named for what they mean. Status styles
+// (ok, warn, bad) are for states only, never for cost or tiers. Lip Gloss v2
+// colours are values, so ckSetTheme resolves them for one terminal.
 var (
-	ckAqua, ckCyan, ckViolet, ckMagenta, ckDimc, ckFaint color.Color
-	ckCheap, ckMid, ckExp, ckLineC                       color.Color
+	ckAccent, ckAccentStrong, ckSecondary, ckBrand, ckDimc, ckFaint color.Color
+	ckOk, ckWarn, ckBad, ckLineC                                    color.Color
 
-	ckAquaS, ckCyanS, ckVioletS, ckMagentaS, ckInkS, ckDimS, ckFaintS lipgloss.Style
-	ckCheapS, ckMidS, ckExpS, ckLabelS, ckYouS, ckBoxS, ckChipS       lipgloss.Style
-	ckTabS                                                            lipgloss.Style
+	ckAccentS, ckAccentStrongS, ckSecondaryS, ckBrandS, ckInkS, ckDimS, ckFaintS lipgloss.Style
+	ckOkS, ckWarnS, ckBadS, ckLabelS, ckYouS, ckBoxS, ckChipS                    lipgloss.Style
+	ckTabS, ckMoneyS                                                             lipgloss.Style
 )
 
 // ckProfile and ckDark are the terminal the styles were last drawn for.
@@ -39,27 +40,29 @@ func init() { ckSetTheme(OutputProfile(), true) }
 func ckSetTheme(p colorprofile.Profile, dark bool) {
 	ckProfile, ckDark = p, dark
 	at := func(c tokColor) color.Color { return c.at(p, dark) }
-	ckAqua, ckCyan, ckViolet, ckMagenta = at(tokAccentDefault), at(tokAccentStrong), at(tokAccentSecondary), at(tokBrandEnd)
+	ckAccent, ckAccentStrong, ckSecondary, ckBrand = at(tokAccentDefault), at(tokAccentStrong), at(tokAccentSecondary), at(tokBrandEnd)
 	ckDimc, ckFaint, ckLineC = at(tokTextMuted), at(tokTextSubtle), at(tokBorderDefault)
-	ckCheap, ckMid, ckExp = at(tokStatusSuccess), at(tokStatusWarning), at(tokStatusDanger)
+	ckOk, ckWarn, ckBad = at(tokStatusSuccess), at(tokStatusWarning), at(tokStatusDanger)
 
-	ckAquaS = lipgloss.NewStyle().Foreground(ckAqua)
-	ckCyanS = lipgloss.NewStyle().Foreground(ckCyan)
-	ckVioletS = lipgloss.NewStyle().Foreground(ckViolet)
-	ckMagentaS = lipgloss.NewStyle().Foreground(ckMagenta)
+	ckAccentS = lipgloss.NewStyle().Foreground(ckAccent)
+	ckAccentStrongS = lipgloss.NewStyle().Foreground(ckAccentStrong)
+	ckSecondaryS = lipgloss.NewStyle().Foreground(ckSecondary)
+	ckBrandS = lipgloss.NewStyle().Foreground(ckBrand)
 	ckInkS = lipgloss.NewStyle()
 	ckDimS = lipgloss.NewStyle().Foreground(ckDimc)
 	ckFaintS = lipgloss.NewStyle().Foreground(ckFaint)
-	ckCheapS = lipgloss.NewStyle().Foreground(ckCheap)
-	ckMidS = lipgloss.NewStyle().Foreground(ckMid)
-	ckExpS = lipgloss.NewStyle().Foreground(ckExp)
+	ckOkS = lipgloss.NewStyle().Foreground(ckOk)
+	ckWarnS = lipgloss.NewStyle().Foreground(ckWarn)
+	ckBadS = lipgloss.NewStyle().Foreground(ckBad)
 	ckLabelS = lipgloss.NewStyle().Foreground(ckFaint).Bold(true)
 	ckYouS = lipgloss.NewStyle().Bold(true)
 	ckBoxS = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ckLineC).Padding(0, tokSpace2)
 	// Reverse video over the accent, so the chip is legible on either theme
 	// without painting a background colour of our own.
-	ckChipS = lipgloss.NewStyle().Foreground(ckAqua).Reverse(true).Bold(true).Padding(0, tokSpace2)
+	ckChipS = lipgloss.NewStyle().Foreground(ckAccent).Reverse(true).Bold(true).Padding(0, tokSpace2)
 	ckTabS = lipgloss.NewStyle().Foreground(ckDimc).Padding(0, tokSpace2)
+	// Money is a number, not a state: the terminal's own foreground.
+	ckMoneyS = lipgloss.NewStyle()
 	setWizardTheme(dark)
 }
 
@@ -73,18 +76,5 @@ func ckActiveTab(name string) string {
 // ckFocusBox is a pane with keyboard focus: a heavier border carries the
 // focus where colour cannot (NO_COLOR, monochrome), the accent where it can.
 func ckFocusBox(box lipgloss.Style) lipgloss.Style {
-	return box.Border(lipgloss.ThickBorder()).BorderForeground(ckAqua)
-}
-
-// ckTierColor maps a capability tier onto the cost ramp: cheap local heads
-// green, mid cyan, expensive frontier heads violet.
-func ckTierColor(tier int) color.Color {
-	switch {
-	case tier <= 2:
-		return ckViolet
-	case tier <= 6:
-		return ckCyan
-	default:
-		return ckCheap
-	}
+	return box.Border(lipgloss.ThickBorder()).BorderForeground(ckAccent)
 }

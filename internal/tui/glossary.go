@@ -3,7 +3,7 @@
 package tui
 
 // glossary.go, the `?` shortcut overlay. Rendered FROM ckKeymap (keys.go),
-// grouped EVERYWHERE / CHAT / LISTS, so it can only ever document keys that
+// grouped by where a key works, so it can only ever document keys that
 // are actually declared.
 
 import (
@@ -12,14 +12,14 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-var ckGlossaryGroups = []string{"EVERYWHERE", "THREADS", "CHAT", "LISTS"}
+var ckGlossaryGroups = []string{"EVERYWHERE", "WATCHING", "THREADS", "CHAT", "LISTS"}
 
 // ckGlossaryLines builds the glossary rows from ckKeymap, the single source
 // of every binding, so the overlay cannot document a key that does not exist.
 func ckGlossaryLines() []string {
-	lines := []string{ckLabelS.Render("SHORTCUTS")}
+	lines := []string{ckLabelS.Render("Keys")}
 	for _, group := range ckGlossaryGroups {
-		lines = append(lines, "", ckCyanS.Render(group))
+		lines = append(lines, "", ckLabelS.Render(group[:1]+strings.ToLower(group[1:])))
 		for _, b := range ckKeymap {
 			if b.group != group {
 				continue
@@ -30,7 +30,7 @@ func ckGlossaryLines() []string {
 			if lipgloss.Width(b.keys) > 18 {
 				k = b.keys + "  "
 			}
-			lines = append(lines, " "+ckAquaS.Render(k)+ckDimS.Render(b.does))
+			lines = append(lines, " "+ckAccentS.Render(k)+ckDimS.Render(b.does))
 		}
 	}
 	return lines

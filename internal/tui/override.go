@@ -196,7 +196,7 @@ func (m Cockpit) ckOverrideLines() []string {
 			marker := "  "
 			style := ckDimS
 			if i == m.ovConfSel {
-				marker = ckAquaS.Render("▸ ")
+				marker = ckAccentS.Render("▸ ")
 				style = ckInkS
 			}
 			lines = append(lines, marker+style.Render(fmt.Sprintf("%d. ≥%s", i+1, ckPct(c))))
@@ -208,7 +208,7 @@ func (m Cockpit) ckOverrideLines() []string {
 			marker := "  "
 			name := ckDimS.Render(ckCell(row.name, 20))
 			if i == m.ovSel {
-				marker = ckAquaS.Render("▸ ")
+				marker = ckAccentS.Render("▸ ")
 				name = ckInkS.Bold(true).Render(ckCell(row.name, 20))
 			}
 			lines = append(lines, marker+name+ckFaintS.Render(row.desc))
@@ -221,7 +221,7 @@ func (m Cockpit) ckOverrideLines() []string {
 // terminals, the same degradation rule as every other overlay.
 func (m Cockpit) viewOverride(w, h int) string {
 	lines := m.ckOverrideLines()
-	box := ckBoxS.BorderForeground(ckViolet).Render(strings.Join(lines, "\n"))
+	box := ckBoxS.BorderForeground(ckSecondary).Render(strings.Join(lines, "\n"))
 	if lipgloss.Width(box) <= w && lipgloss.Height(box) <= h {
 		return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 	}

@@ -56,16 +56,16 @@ func (m Cockpit) usageLines() int {
 // facts, no boxes.
 func (m Cockpit) usageTilesCompact(w int) string {
 	runs := len(m.runsToday)
-	today := ckLabelS.Render("TODAY ") + ckCheapS.Bold(true).Render(fmt.Sprintf("$%.4f", m.spend)) +
+	today := ckLabelS.Render("TODAY ") + ckMoneyS.Bold(true).Render(fmt.Sprintf("$%.4f", m.spend)) +
 		ckDimS.Render(fmt.Sprintf(" · %d run%s · %d request%s · est, never billed",
 			runs, plural(runs), m.metrics.todayReqs, plural(m.metrics.todayReqs)))
-	month := ckLabelS.Render("MONTH ") + ckCheapS.Render(fmt.Sprintf("$%.4f", m.metrics.monthUSD)) +
+	month := ckLabelS.Render("MONTH ") + ckMoneyS.Render(fmt.Sprintf("$%.4f", m.metrics.monthUSD)) +
 		ckDimS.Render(fmt.Sprintf(" · %d request%s (UTC month)", m.metrics.monthReqs, plural(m.metrics.monthReqs)))
 	saved, base := m.metrics.savedTodayUSD, m.metrics.baseTodayUSD
 	savedLine := ckLabelS.Render("SAVED ") + ckFaintS.Render("— · no priced requests today")
 	switch {
 	case base > 0 && saved > 0:
-		savedLine = ckLabelS.Render("SAVED ") + ckCheapS.Render(fmt.Sprintf("$%.4f (%.0f%%)", saved, saved/base*100)) +
+		savedLine = ckLabelS.Render("SAVED ") + ckMoneyS.Render(fmt.Sprintf("$%.4f (%.0f%%)", saved, saved/base*100)) +
 			ckDimS.Render(fmt.Sprintf(" vs all-tier-1 $%.4f", base))
 	case base > 0:
 		savedLine = ckLabelS.Render("SAVED ") + ckDimS.Render(fmt.Sprintf("$0.0000 (0%%) · tier-1 rate $%.4f", base))
@@ -90,7 +90,7 @@ func (m Cockpit) usageToday() string {
 		}
 	}
 	return ckLabelS.Render("TODAY") + "\n\n " +
-		ckCheapS.Bold(true).Render(fmt.Sprintf("$%.4f", m.spend)) + "\n " +
+		ckMoneyS.Bold(true).Render(fmt.Sprintf("$%.4f", m.spend)) + "\n " +
 		ckDimS.Render(fmt.Sprintf("%d run%s · %d request%s", runs, plural(runs), m.metrics.todayReqs, plural(m.metrics.todayReqs))) + "\n " +
 		ckFaintS.Render(honesty) + "\n " +
 		ckFaintS.Render("estimated, never billed")
@@ -98,7 +98,7 @@ func (m Cockpit) usageToday() string {
 
 func (m Cockpit) usageMonth() string {
 	return ckLabelS.Render("THIS MONTH") + "\n\n " +
-		ckCheapS.Bold(true).Render(fmt.Sprintf("$%.4f", m.metrics.monthUSD)) + "\n " +
+		ckMoneyS.Bold(true).Render(fmt.Sprintf("$%.4f", m.metrics.monthUSD)) + "\n " +
 		ckDimS.Render(fmt.Sprintf("%d request%s", m.metrics.monthReqs, plural(m.metrics.monthReqs))) + "\n " +
 		ckFaintS.Render("calendar month, UTC") + "\n "
 }
@@ -119,7 +119,7 @@ func (m Cockpit) usageSaved() string {
 			ckDimS.Render(fmt.Sprintf("tier-1 rate: $%.4f", base)) + "\n " +
 			ckFaintS.Render("today's spend is not below it") + "\n "
 	}
-	return title + ckCheapS.Bold(true).Render(fmt.Sprintf("$%.4f (%.0f%%)", saved, saved/base*100)) + "\n " +
+	return title + ckMoneyS.Bold(true).Render(fmt.Sprintf("$%.4f (%.0f%%)", saved, saved/base*100)) + "\n " +
 		ckDimS.Render(fmt.Sprintf("all-tier-1 would be $%.4f", base)) + "\n " +
 		ckFaintS.Render("same tokens, tier-1 rates") + "\n "
 }
@@ -196,7 +196,7 @@ func (m Cockpit) usageBreakdown() string {
 		if fill > ckUsageBarW {
 			fill = ckUsageBarW
 		}
-		bar := ckCyanS.Render(strings.Repeat("▮", fill)) + ckFaintS.Render(strings.Repeat("▯", ckUsageBarW-fill))
+		bar := ckAccentStrongS.Render(strings.Repeat("▮", fill)) + ckFaintS.Render(strings.Repeat("▯", ckUsageBarW-fill))
 		costStr := fmt.Sprintf("$%.4f", r.EstCostUSD)
 		if m.usageGroup == 'm' && m.metrics.localModels[r.Key] {
 			costStr = "local · free"

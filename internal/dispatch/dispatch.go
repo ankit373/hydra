@@ -604,7 +604,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	// nothing saying the domain evidence was skipped.
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
-		log.Printf("⚠️  calibration unreadable (%v), routing on the pooled ranking", err)
+		log.Printf("warning: calibration unreadable (%v), routing on the pooled ranking", err)
 		cal = nil
 	}
 
@@ -759,13 +759,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					"Start one (`ollama serve`), or set egress.strict = false in config.toml to allow it out",
 				ErrNoHeads, strings.Join(secretOrigins, ", "))
 		}
-		log.Printf("⚠️  egress.strict is off: secret content (%s) is going to a head that leaves this machine",
+		log.Printf("warning: egress.strict is off: secret content (%s) is going to a head that leaves this machine",
 			strings.Join(secretOrigins, ", "))
 		localOnly, rerouted = action.LocalOnly || opts.LocalOnly, false
 		candidates = d.selectHeads(tier, localOnly, domain)
 	}
 	if rerouted && len(candidates) > 0 {
-		log.Printf("🔒 secret content (%s), routing to a local head only",
+		log.Printf("secret content (%s), routing to a local head only",
 			strings.Join(secretOrigins, ", "))
 	}
 
@@ -1234,21 +1234,21 @@ func governorLog(q budget.Quota, mode budget.Mode, fromTier, toTier string) stri
 	moved := fromTier != toTier
 	switch mode {
 	case budget.ModeEmergency:
-		return fmt.Sprintf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", q.Pct())
+		return fmt.Sprintf("EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", q.Pct())
 	case budget.ModeCritical:
 		if moved {
-			return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", q.Pct())
+			return fmt.Sprintf("CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", q.Pct())
 		}
-		return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%. Run /compact NOW.", q.Pct())
+		return fmt.Sprintf("CRITICAL: Claude at %d%%. Run /compact NOW.", q.Pct())
 	case budget.ModeWarning:
 		if moved {
-			return fmt.Sprintf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", q.Pct())
+			return fmt.Sprintf("WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", q.Pct())
 		}
-		return fmt.Sprintf("🟠 WARNING: Claude at %d%%. Run /compact now.", q.Pct())
+		return fmt.Sprintf("WARNING: Claude at %d%%. Run /compact now.", q.Pct())
 	case budget.ModeCaution:
-		return fmt.Sprintf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", q.Pct())
+		return fmt.Sprintf("CAUTION: Claude at %d%%, Run /compact immediately.", q.Pct())
 	case budget.ModeCompact:
-		return fmt.Sprintf("ℹ️  Claude at %d%%, Consider running /compact.", q.Pct())
+		return fmt.Sprintf("Claude at %d%%, Consider running /compact.", q.Pct())
 	}
 	return ""
 }
@@ -1642,7 +1642,7 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool, domain string)
 	}
 	if len(candidates) > 0 {
 		slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
-		log.Printf("⚠️  no head at tier %d or cheaper, falling back to the cheapest available (%s)",
+		log.Printf("warning: no head at tier %d or cheaper, falling back to the cheapest available (%s)",
 			want, candidates[0].ID)
 	}
 	return candidates

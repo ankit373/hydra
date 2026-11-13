@@ -21,14 +21,14 @@ func providerHead(id, prov string) provider.Head {
 func TestViewKeys_PerViewRouting(t *testing.T) {
 	m := testCockpit()
 
-	m.view = ckViewAgents
+	m.view = ckViewWatch
 	m = typed(m, "j")
-	if m.agentSel != 1 {
-		t.Errorf("agents j → %d", m.agentSel)
+	if m.watchSel != 1 {
+		t.Errorf("watch j → %d", m.watchSel)
 	}
 	m = typed(m, "k")
-	if m.agentSel != 0 {
-		t.Errorf("agents k → %d", m.agentSel)
+	if m.watchSel != 0 {
+		t.Errorf("watch k → %d", m.watchSel)
 	}
 
 	m.view = ckViewModels
@@ -87,15 +87,15 @@ func TestViewKeys_PerViewRouting(t *testing.T) {
 	}
 
 	// Arrow keys are the same motion.
-	m.view = ckViewAgents
-	m.agentSel = 0
+	m.view = ckViewWatch
+	m.watchSel = 0
 	m = press(m, "down")
-	if m.agentSel != 1 {
-		t.Errorf("down → %d", m.agentSel)
+	if m.watchSel != 1 {
+		t.Errorf("down → %d", m.watchSel)
 	}
 	m = press(m, "up")
-	if m.agentSel != 0 {
-		t.Errorf("up → %d", m.agentSel)
+	if m.watchSel != 0 {
+		t.Errorf("up → %d", m.watchSel)
 	}
 }
 
@@ -185,15 +185,20 @@ func TestCkScorecardFor_FromRealCalibrator(t *testing.T) {
 	}
 }
 
-func TestCkAgo(t *testing.T) {
-	if got := ckAgo(time.Time{}); got != "—" {
-		t.Errorf("zero time = %q", got)
-	}
-	if got := ckAgo(time.Now().Add(-30 * time.Second)); !strings.Contains(got, "s ago") {
-		t.Errorf("seconds = %q", got)
-	}
-	if got := ckAgo(time.Now().Add(-2 * time.Hour)); !strings.Contains(got, "h") || !strings.Contains(got, "ago") {
-		t.Errorf("hours = %q", got)
+func TestCkAgoAt(t *testing.T) {
+	now := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	for _, tt := range []struct {
+		at   time.Time
+		want string
+	}{
+		{time.Time{}, ""},
+		{now.Add(-30 * time.Second), "just now"},
+		{now.Add(-12 * time.Minute), "12m ago"},
+		{now.Add(-2 * time.Hour), "2h ago"},
+	} {
+		if got := ckAgoAt(tt.at, now); got != tt.want {
+			t.Errorf("ckAgoAt(%v) = %q, want %q", now.Sub(tt.at), got, tt.want)
+		}
 	}
 }
 

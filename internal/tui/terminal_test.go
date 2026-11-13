@@ -116,8 +116,8 @@ func TestPalette_TextRolesMeetAAOnLightAndDark(t *testing.T) {
 		for _, dark := range []bool{true, false} {
 			withTheme(t, p, dark)
 			text := map[string]color.Color{
-				"aqua": ckAqua, "cyan": ckCyan, "violet": ckViolet, "magenta": ckMagenta, "dim": ckDimc, "faint": ckFaint,
-				"cheap": ckCheap, "mid": ckMid, "exp": ckExp,
+				"aqua": ckAccent, "cyan": ckAccentStrong, "violet": ckSecondary, "magenta": ckBrand, "dim": ckDimc, "faint": ckFaint,
+				"cheap": ckOk, "mid": ckWarn, "exp": ckBad,
 			}
 			for name, c := range text {
 				found := false

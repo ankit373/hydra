@@ -1187,7 +1187,7 @@ func TestChatStates_LayoutInvariantsAtEverySize(t *testing.T) {
 					}
 				}
 				last := stripANSI(lines[len(lines)-1])
-				if !strings.Contains(last, "shortcuts") {
+				if !strings.Contains(last, "? keys") {
 					t.Errorf("%s at %dx%d: the status bar is not the final line: %q", name, sz.w, sz.h, last)
 				}
 			})
