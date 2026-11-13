@@ -31,7 +31,7 @@ design/scripts/emit.mjs       copies the CSS to its consumers and writes the lip
 |---|---|
 | `docs/assets/tokens.css` | every website page links it, then `docs/assets/site.css`, the one shared stylesheet; canvas and SVG drawing read the same roles through `Hydra.color()` in `docs/assets/site.js` |
 | `desktop/frontend/src/tokens.generated.css` | imported by `desktop/frontend/src/tokens.css` |
-| `internal/tui/tokens_gen.go` | `internal/tui/styles.go` and the wordmark gradient |
+| `internal/tui/tokens_gen.go` | `internal/tui/styles.go` and the wordmark gradient; padding in cells and the spinner's frame time |
 | `desktop/window_gen.go` | the desktop app's native window background for each theme, painted before the first frame |
 
 Light values sit on `:root`. Dark values apply under `@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme="light"])`, and always under `:root[data-theme="dark"]`.
@@ -102,17 +102,17 @@ The values and their contrast are in the generated table under **Contrast result
 
 ## Type, space, radius, motion
 
-These live in `base.tokens.json` and are the same in both themes. They are generated now; the surfaces adopt them in Phases 3, 6 and 7.
+These live in `base.tokens.json` and are the same in both themes. The website and the desktop app read every type size, space, radius and duration from them; `TestDocs_TypeSizesComeFromTheScale` and `TestAppCSS_SizeSpaceAndMotionComeFromTokens` in `cmd/hydra` fail on a literal. Widths and heights stay literal, since they are the size of a thing and not a step on a scale.
 
 | Group | Tokens |
 |---|---|
 | `font.family` | `text` system-ui stack; `mono` JetBrains Mono, then ui-monospace (code, commands, IDs and numeric columns only); `display` is an open decision between Space Grotesk and system-ui |
 | `font.size` | `xs` 12, `sm` 13, `md` 14, `base` 16, `lg` 18, `xl` 22, `2xl` 28, `3xl` 36, `4xl` 48 px. 12px is the floor for any text and 13px for interactive labels |
 | `font.weight` | `regular` 400, `medium` 500, `semibold` 600, `bold` 700 |
-| `space` | `1` 4, `2` 8, `3` 12, `4` 16, `6` 24, `8` 32, `12` 48, `16` 64, `24` 96, `32` 128 px. The TUI pads 0, 1 or 2 cells |
-| `radius` | `control` 6, `card` 10, `pill` 999 px |
-| `motion.duration` | `fast` 120, `base` 200, `slow` 320 ms; non-essential motion drops to 0 under reduced motion |
-| `motion.easing` | `standard` cubic-bezier(.2, 0, 0, 1), `emphasized` cubic-bezier(.3, 0, 0, 1) |
+| `space` | `0-5` 2, `1` 4, `1-5` 6, `2` 8, `2-5` 10, `3` 12, `4` 16, `5` 20, `6` 24, `8` 32, `12` 48, `16` 64, `24` 96, `32` 128 px. The half steps are for dense rows. A 1px hairline is a line, not a step, and stays literal. The TUI pads 0, 1 cell (`tokSpace2`) or 2 (`tokSpace4`) |
+| `radius` | `mark` 2 (bars and swatches), `control` 6, `card` 10, `pill` 999 px (pills, dots, switches) |
+| `motion.duration` | `fast` 120, `base` 200, `slow` 320 ms, and `loop` 1600 ms for one cycle of a spinner or shimmer; non-essential motion drops to 0 under reduced motion. The TUI spinner steps every `base` |
+| `motion.easing` | `standard` cubic-bezier(.2, 0, 0, 1), `emphasized` cubic-bezier(.3, 0, 0, 1). `linear` and `steps()` are not curves and stay keywords |
 | `focus` | `width` 2px, `offset` 2px |
 
 ## Terminal mapping
@@ -199,6 +199,6 @@ Terminal roles, worst case against the terminal backgrounds above:
 Each of these is scheduled in the design revamp and listed so nobody mistakes it for the pattern to copy:
 
 - **Website radii, widths and display sizes (Phase 7).** Colour, type size, spacing and motion on the site come from tokens and a check fails on a colour literal; corner radii, container widths, 1–2px hairline nudges and the hero display sizes above the 48px top of the scale (fluid, inside `clamp()`) are still literal.
-- **The desktop logo SVG and radii (Phases 6 and 7).** `brand.tsx` keeps its gradient stops, whose pale highlights were drawn for a dark ground; the radii are 8/14/22px rather than the token scale.
+- **The desktop logo SVG.** `brand.tsx` keeps its gradient stops, whose pale highlights were drawn for a dark ground.
 - **TUI cost colours (Phase 8).** The TUI's cost bands still use the status hues: `cost.*` has no terminal mapping, and a sequential scale needs more than the ANSI-16 slots give.
 - **TUI wizards, splash and CLI colours (Phase 8).** `init.go`, `install.go`, `splash.go` and `cmd/hydra` still use their own ANSI-256 values.
