@@ -29,7 +29,7 @@ func (d *Dispatcher) answerCache() (*cache.Store, embed.Embedder) {
 	d.cacheOnce.Do(func() {
 		st, err := cache.Open(d.cfg)
 		if err != nil {
-			log.Printf("⚠️  answer cache unavailable (%v), every dispatch runs a head", err)
+			log.Printf("warning: answer cache unavailable (%v), every dispatch runs a head", err)
 			return
 		}
 		d.answers = st
@@ -202,7 +202,7 @@ func (d *Dispatcher) remember(ctx context.Context, prompt string, opts Options, 
 	if err := st.PutVec(e, vec); err != nil && !errors.Is(err, cache.ErrTruncated) {
 		// A capped answer refused is the cache working, so it is not warned
 		// about; anything else means a write that was meant to happen did not.
-		log.Printf("⚠️  answer not cached: %v", err)
+		log.Printf("warning: answer not cached: %v", err)
 	}
 }
 

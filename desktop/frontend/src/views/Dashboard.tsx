@@ -26,6 +26,7 @@ import {
 import { ArcGauge, Sparkline, SpendTrend, TrustArc } from './DashboardCharts'
 import { useCountUp, useReveal } from '../reveal'
 import { PageHeader } from './PageHeader'
+import { HydraMark } from '../brand'
 
 /**
  * `data` is null until App.tsx's first `GetDashboard()` resolves, the
@@ -645,6 +646,7 @@ export function RecentTable({
 function EmptyState() {
   return (
     <div className="empty" style={{ marginTop: 26 }}>
+      <HydraMark className="empty__mark" decorative />
       <p className="empty__title">No requests yet</p>
       <p>Ask something in Chat and it will appear here.</p>
       <p className="empty__alt">
