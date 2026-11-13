@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,6 +54,7 @@
 }
   </script>
 
+<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="../assets/tokens.css">
 <link rel="stylesheet" href="../assets/site.css">
 <script src="../assets/site.js"></script>
@@ -66,7 +67,7 @@
   font-size:var(--hy-font-size-sm);color:var(--hy-color-text-subtle);line-height:1.65;}
 .fig figcaption b{color:var(--hy-color-text-muted);}
 .split-top{display:flex;justify-content:center;}
-.root-chip{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-cost-high);border:1px solid color-mix(in srgb,var(--hy-color-status-danger) 40%,transparent);
+.root-chip{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-status-danger);border:1px solid color-mix(in srgb,var(--hy-color-status-danger) 40%,transparent);
   background:color-mix(in srgb,var(--hy-color-status-danger) 8%,transparent);border-radius:999px;padding:var(--hy-space-2) var(--hy-space-4);box-shadow:0 0 22px color-mix(in srgb,var(--hy-color-status-danger) 18%,transparent);}
 .split-stem{height:18px;width:1px;background:var(--hy-color-border-default);margin:0 auto;}
 .split-bar{height:1px;background:var(--hy-color-border-default);margin:0 25%;}
@@ -84,12 +85,12 @@
 .twin{display:grid;gap:var(--hy-space-3);}
 .twin-row{display:grid;grid-template-columns:auto 1fr;gap:var(--hy-space-3);align-items:center;
   border:1px solid var(--hy-color-border-subtle);border-left-width:3px;border-radius:10px;padding:var(--hy-space-3) var(--hy-space-4);background:color-mix(in srgb,var(--hy-color-surface-raised) 50%,transparent);}
-.twin-row.dead{border-left-color:var(--hy-color-cost-high);}
-.twin-row.live{border-left-color:var(--hy-color-cost-low);}
+.twin-row.dead{border-left-color:var(--hy-color-status-danger);}
+.twin-row.live{border-left-color:var(--hy-color-status-success);}
 .twin-k{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-text-default);white-space:nowrap;}
 .twin-v{font-size:var(--hy-font-size-md);color:var(--hy-color-text-muted);line-height:1.55;}
-.twin-row.dead .twin-v b{color:var(--hy-color-cost-high);}
-.twin-row.live .twin-v b{color:var(--hy-color-cost-low);}
+.twin-row.dead .twin-v b{color:var(--hy-color-status-danger);}
+.twin-row.live .twin-v b{color:var(--hy-color-status-success);}
 @media(max-width:520px){.twin-row{grid-template-columns:1fr;gap:var(--hy-space-1);}}
 .enditem{padding:var(--hy-space-4) 0;border-top:1px solid var(--hy-color-border-subtle);font-size:var(--hy-font-size-base);color:var(--hy-color-text-muted);line-height:1.7;}
 .enditem b{display:block;margin-bottom:var(--hy-space-1);color:var(--hy-color-text-default);font-size:var(--hy-font-size-base);font-weight:700;}
@@ -102,7 +103,7 @@
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">blog</span>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span><span class="nav-toggle-label">Menu</span></button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>

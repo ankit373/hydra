@@ -41,9 +41,58 @@
       seen = true;
     }
     document.addEventListener('visibilitychange', kick);
-    window.addEventListener('resize', function () { drewStill = false; kick(); });
-    onChange(reduce, function () { drewStill = false; kick(); });
+    function redraw() { drewStill = false; kick(); }
+    window.addEventListener('resize', redraw);
+    onChange(reduce, redraw);
+    onTheme(redraw);
     kick();
+  }
+
+  // The theme follows the OS unless the viewer picks one; the choice is saved per
+  // browser. The inline script in each page's <head> applies it before CSS paints.
+  var KEY = 'hydra-theme', themeFns = [];
+  var NAME = { system: 'Theme: match system', light: 'Theme: light', dark: 'Theme: dark' };
+  function onTheme(fn) { themeFns.push(fn); }
+  // The theme the OS is not showing comes first, so the first press always changes
+  // the screen: system, the other theme, the OS's own, system.
+  function nextTheme(mode) {
+    var order = osDark.matches ? ['system', 'light', 'dark'] : ['system', 'dark', 'light'];
+    return order[(order.indexOf(mode) + 1) % order.length];
+  }
+  function themeChanged() {
+    resolved = {};
+    for (var i = 0; i < themeFns.length; i++) themeFns[i]();
+  }
+  var osDark = window.matchMedia('(prefers-color-scheme: dark)');
+  onChange(osDark, themeChanged);
+  function setTheme(mode) {
+    if (mode === 'system') delete root.dataset.theme; else root.dataset.theme = mode;
+    try { if (mode === 'system') localStorage.removeItem(KEY); else localStorage.setItem(KEY, mode); } catch (e) { /* this page still follows it */ }
+    themeChanged();
+  }
+  var ICONS = '<svg class="i-system" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="fill"/></svg>' +
+    '<svg class="i-light" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>' +
+    '<svg class="i-dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
+  // Built by script because without script it could not work; the page then follows the OS.
+  function themeToggle(header) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'theme-toggle';
+    b.innerHTML = ICONS + '<span class="visually-hidden"></span>';
+    var label = b.lastChild;
+    function show() {
+      var mode = root.dataset.theme || 'system';
+      b.dataset.mode = mode;
+      label.textContent = NAME[mode];
+      b.title = NAME[mode] + '. Click to change.';
+    }
+    b.addEventListener('click', function () {
+      setTheme(nextTheme(b.dataset.mode));
+      show();
+      announce(NAME[b.dataset.mode]);
+    });
+    show();
+    header.appendChild(b);
   }
 
   // The async clipboard can exist and still refuse (permissions, iframes), so it falls back.
@@ -113,6 +162,7 @@
     live.setAttribute('role', 'status');
     document.body.appendChild(live);
     var header = document.querySelector('.site-header');
+    if (header) themeToggle(header);
     var btn = header && header.querySelector('.nav-toggle');
     if (btn) {
       var set = function (open) {
@@ -151,9 +201,9 @@
   }
 
   // Canvas and SVG drawing read the same tokens CSS does, by role name ('accent-default').
-  // Resolved once per role, since canvases ask inside their per-frame loops.
+  // Resolved once per role per theme, since canvases ask inside their per-frame loops;
+  // a page that keeps colours of its own refreshes them in Hydra.onTheme.
   var resolved = {};
-  onChange(window.matchMedia('(prefers-color-scheme: dark)'), function () { resolved = {}; });
   function color(role) {
     if (!(role in resolved)) resolved[role] = getComputedStyle(root).getPropertyValue('--hy-color-' + role).trim();
     return resolved[role];
@@ -163,6 +213,9 @@
     return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
   }
   function rgba(role, a) { return 'rgba(' + rgb(role).join(',') + ',' + a + ')'; }
+  // Whether the dark theme is in force, for drawing that runs the other way on each
+  // (additive light, white highlights). Read on a theme change, not per frame.
+  function dark() { return getComputedStyle(root).getPropertyValue('--hy-theme-dark').trim() === '1'; }
 
   // A region that scrolls sideways must take focus, or a keyboard cannot scroll it
   // (WCAG 2.1.1). Only regions that overflow at this width get a tab stop.
@@ -182,7 +235,7 @@
   document.addEventListener('keyup', recheck);
   document.addEventListener('toggle', recheck, true);
 
-  window.Hydra = { loop: loop, color: color, rgb: rgb, rgba: rgba };
+  window.Hydra = { loop: loop, color: color, rgb: rgb, rgba: rgba, dark: dark, onTheme: onTheme };
   function init() { wire(); reveal(); readingAids(); focusScrollers(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

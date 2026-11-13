@@ -11,7 +11,7 @@ Hydra is a tool people trust with real work, so it should read like a well-made 
 3. **Legible first, branded second.** WCAG 2 AA is the floor for every text role on every surface, in both themes and at every terminal colour depth. Brand lives in the logo, one accent and illustrations, never in body-text colour.
 4. **Meaning never rides on colour alone.** A status is a colour plus a glyph or a word (`✓ checked`, `! warning`, `✗ failed`). That serves NO_COLOR, colour-blind and screen-reader users alike.
 5. **Light and dark are equals.** Each role is targeted against its own theme's background; neither theme is derived from the other.
-6. **Respect the environment.** The TUI uses the terminal's own foreground for body text and never paints a background. The web follows the system theme once light mode ships, and honours reduced motion.
+6. **Respect the environment.** The TUI uses the terminal's own foreground for body text and never paints a background. The website and the desktop app follow the system theme unless the viewer picks one, and honour reduced motion.
 
 ## How it fits together
 
@@ -32,9 +32,18 @@ design/scripts/emit.mjs       copies the CSS to its consumers and writes the lip
 | `docs/assets/tokens.css` | every website page links it, then `docs/assets/site.css`, the one shared stylesheet; canvas and SVG drawing read the same roles through `Hydra.color()` in `docs/assets/site.js` |
 | `desktop/frontend/src/tokens.generated.css` | imported by `desktop/frontend/src/tokens.css` |
 | `internal/tui/tokens_gen.go` | `internal/tui/styles.go` and the wordmark gradient |
-| `desktop/window_gen.go` | the desktop app's native window background, painted before the first frame |
+| `desktop/window_gen.go` | the desktop app's native window background for each theme, painted before the first frame |
 
-Light values sit on `:root`. Dark values apply under `@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme="light"])`, and always under `:root[data-theme="dark"]`. The website and the desktop app pin `data-theme="dark"` until the light theme ships, so today they render dark everywhere.
+Light values sit on `:root`. Dark values apply under `@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme="light"])`, and always under `:root[data-theme="dark"]`.
+
+### Choosing a theme
+
+Both surfaces follow the OS until the viewer picks a theme. A header button cycles system, light and dark; the choice is saved per browser (or per app install) under the `hydra-theme` key in `localStorage`, and every read and write is wrapped so a refused storage leaves the page following the choice for the session.
+
+- **No flash.** A one-line inline script in each page's `<head>`, before any stylesheet, sets `data-theme` from the saved choice. `cmd/hydra/docs_theme_test.go` fails on a page without it, with it after a stylesheet, or with a pinned `data-theme`; `ThemeToggle.test.tsx` checks the desktop entry pages the same way.
+- **Canvas and SVG.** `Hydra.color()` drops its cache and `Hydra.loop()` redraws on any theme change, from the OS or the button. A page that keeps colours of its own refreshes them in `Hydra.onTheme(fn)`. SVG built by script should take `var(--hy-color-…)` in its style so it follows without script.
+- **Effects that depend on direction.** Additive blending, white highlights, coloured glows and drop shadows read one way on dark and another on light. The token `theme.dark` (`--hy-theme-dark`, 0 in light and 1 in dark) is the switch: each such value is one rule through `calc()` or `color-mix()`, never a block copied into both dark scopes. The desktop app's `--hy-scrim`, `--hy-shadow`, `--hy-vignette` and `--hy-glow` (every glow is scaled by it) live in `tokens.css`; the site's `--site-shadow` in `site.css`; canvases ask `Hydra.dark()`.
+- **The native window.** `desktop/window_gen.go` carries both themes' `surface.base`; the app paints the one matching the OS at launch, and the page repaints it whenever the theme in force changes.
 
 **To change a token:** edit the JSON under `design/tokens/`, then run `cd design && npm ci && npm run build` and commit the source and every generated file together. The build fails if any role misses its declared contrast floor. The `Design tokens up to date` CI job rebuilds from a clean install and fails if any generated file differs from what is committed.
 
@@ -85,12 +94,11 @@ Names are purpose, never hue. CSS variables are `--hy-` plus the token path with
 | `focus.ring` | the 2px focus ring at a 2px offset | |
 | `brand.start` / `mid` / `end` | the logo mark and wordmark gradient only | anything else |
 
-`cost.*` aliases the status hues today so nothing changes visually; it moves to its own sequential palette with the charts in Phase 4. The chart series follow the dataviz reference order (blue, orange, aqua, yellow, magenta, green, violet, red) and pass its palette validator against both themes' base surface. In light mode series 3, 4 and 5 are under 3:1 on the base surface, and series 2 also drops under 3:1 on the card and overlay surfaces, so light charts need direct labels or a table view. Dark series all clear 3:1. The chart tokens have no floor in the build yet; they get one when the charts move onto them in Phase 4.
+`cost.*` is a sequential scale on one hue (blue), cheap to expensive: each step sits further from the page than the last, by at least 0.06 in OKLCH lightness, so it runs light to dark on the light theme and dark to light on the dark one. Every step is text-safe (4.5:1 on every surface), because prices are printed in it. It is for price and spend only; a pass, a fail or a diff line is a state and takes `status.*`.
 
-| Series | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-|---|---|---|---|---|---|---|---|---|
-| light | `#2a78d6` | `#eb6834` | `#1baf7a` | `#eda100` | `#e87ba4` | `#008300` | `#6250d6` | `#e34948` |
-| dark | `#3987e5` | `#d95926` | `#199e70` | `#c98500` | `#d55181` | `#008300` | `#9085e9` | `#e66767` |
+The chart series follow the dataviz reference order (blue, orange, aqua, yellow, magenta, green, violet, red). Every series reaches 3:1 on every surface in both themes, and neighbours stay apart for full colour vision (OKLab ΔE ≥ 15) and under protanopia and deuteranopia (ΔE ≥ 8, Machado 2009 simulation). The build checks all three and fails on a miss. The light steps of series 2 to 5 were darkened and nudged in hue to get there (the reference values sat at 1.8 to 2.7:1 on the light surfaces); dark is the reference set unchanged.
+
+The values and their contrast are in the generated table under **Contrast results**.
 
 ## Type, space, radius, motion
 
@@ -152,6 +160,17 @@ WCAG 2 ratios are against `surface.base`, and against the lowest-contrast surfac
 | `status.warning` | `#8e6112` | 5.11 / 4.53 | 73 | `#e0a93b` | 9.48 / 8.76 | 61 |
 | `status.danger` | `#c13646` | 5.09 / 4.52 | 72 | `#ff5a6e` | 6.64 / 6.14 | 46 |
 | `status.info` | `#2d6ab6` | 5.14 / 4.56 | 73 | `#59a7fd` | 8.01 / 7.40 | 53 |
+| `cost.low` | `#2d69b5` | 5.21 / 4.62 | 73 | `#3f83d3` | 5.17 / 4.77 | 36 |
+| `cost.mid` | `#174c91` | 7.98 / 7.08 | 85 | `#59a7fd` | 8.01 / 7.40 | 53 |
+| `cost.high` | `#002f71` | 12.03 / 10.66 | 94 | `#a5d0ff` | 12.50 / 11.55 | 76 |
+| `chart.series-1` | `#2a78d6` | 4.16 / 3.69 | 66 | `#3987e5` | 5.52 / 5.10 | 38 |
+| `chart.series-2` | `#e35b2d` | 3.41 / 3.02 | 59 | `#d95926` | 5.17 / 4.78 | 36 |
+| `chart.series-3` | `#029876` | 3.44 / 3.05 | 59 | `#199e70` | 5.90 / 5.45 | 41 |
+| `chart.series-4` | `#ba7916` | 3.39 / 3.01 | 59 | `#c98500` | 6.54 / 6.05 | 44 |
+| `chart.series-5` | `#d85a98` | 3.39 / 3.01 | 59 | `#d55181` | 5.09 / 4.71 | 36 |
+| `chart.series-6` | `#008300` | 4.66 / 4.13 | 69 | `#008300` | 4.06 / 3.75 | 28 |
+| `chart.series-7` | `#6250d6` | 5.44 / 4.82 | 74 | `#9085e9` | 6.43 / 5.94 | 43 |
+| `chart.series-8` | `#e34948` | 3.72 / 3.30 | 62 | `#e66767` | 6.22 / 5.75 | 43 |
 | `brand.start` | `#00707a` | 5.50 / 4.87 | 75 | `#2af0e0` | 14.01 / 12.94 | 83 |
 | `brand.mid` | `#6d28d9` | 6.69 / 5.93 | 79 | `#8b5cf6` | 4.75 / 4.38 | 33 |
 | `brand.end` | `#a21caf` | 5.96 / 5.28 | 76 | `#e852c8` | 6.19 / 5.72 | 43 |
@@ -179,7 +198,7 @@ Terminal roles, worst case against the terminal backgrounds above:
 
 Each of these is scheduled in the design revamp and listed so nobody mistakes it for the pattern to copy:
 
-- **Light theme on the web and in the desktop app (Phase 4).** The values exist; both surfaces pin `data-theme="dark"`.
 - **Website radii, widths and display sizes (Phase 7).** Colour, type size, spacing and motion on the site come from tokens and a check fails on a colour literal; corner radii, container widths, 1–2px hairline nudges and the hero display sizes above the 48px top of the scale (fluid, inside `clamp()`) are still literal.
-- **Desktop alpha and shadow literals, and the logo SVG (Phases 6 and 7).** `app.css` keeps neutral scrims, shadows and white washes; `brand.tsx` keeps its gradient stops; the radii are 8/14/22px rather than the token scale.
+- **The desktop logo SVG and radii (Phases 6 and 7).** `brand.tsx` keeps its gradient stops, whose pale highlights were drawn for a dark ground; the radii are 8/14/22px rather than the token scale.
+- **TUI cost colours (Phase 8).** The TUI's cost bands still use the status hues: `cost.*` has no terminal mapping, and a sequential scale needs more than the ANSI-16 slots give.
 - **TUI wizards, splash and CLI colours (Phase 8).** `init.go`, `install.go`, `splash.go` and `cmd/hydra` still use their own ANSI-256 values.

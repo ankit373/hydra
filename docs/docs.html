@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,6 +36,7 @@
   }
   </script>
 
+<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/site.js"></script>
@@ -79,7 +80,7 @@
 .doc h2 .cmd{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);}
 .doc h2 .tagline{font-size:var(--hy-font-size-md);color:var(--hy-color-text-subtle);font-weight:400;font-family:var(--hy-font-family-text);}
 .badge{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1px;text-transform:uppercase;padding:var(--hy-space-1) var(--hy-space-2);border-radius:20px;font-weight:600;}
-.badge.ship{color:var(--hy-color-cost-low);border:1px solid color-mix(in srgb,var(--hy-color-status-success) 40%,transparent);background:color-mix(in srgb,var(--hy-color-status-success) 8%,transparent);}
+.badge.ship{color:var(--hy-color-status-success);border:1px solid color-mix(in srgb,var(--hy-color-status-success) 40%,transparent);background:color-mix(in srgb,var(--hy-color-status-success) 8%,transparent);}
 .doc .sum{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);margin:var(--hy-space-2) 0 0;max-width:76ch;}
 .doc .sum b{color:var(--hy-color-text-default);font-weight:600;}
 .sub{margin:var(--hy-space-4) 0 0;}
@@ -89,7 +90,7 @@
 .fx{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);font-size:var(--hy-font-size-md);background:color-mix(in srgb,var(--hy-color-accent-strong) 8%,transparent);padding:1px var(--hy-space-1);border-radius:5px;}
 pre{margin:var(--hy-space-2) 0 0;background:color-mix(in srgb,var(--hy-color-surface-raised) 70%,transparent);border:1px solid var(--hy-color-border-subtle);border-radius:11px;padding:var(--hy-space-3) var(--hy-space-4);
   overflow-x:auto;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);line-height:1.7;color:var(--hy-color-text-default);}
-pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-default);} pre .k{color:var(--hy-color-accent-secondary);} pre .s{color:var(--hy-color-cost-low);}
+pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-default);} pre .k{color:var(--hy-color-accent-secondary);} pre .s{color:var(--hy-color-status-success);}
 .pill-row{display:flex;flex-wrap:wrap;gap:var(--hy-space-2);margin-top:var(--hy-space-3);}
 .mp{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);border:1px solid var(--hy-color-border-subtle);border-radius:6px;padding:var(--hy-space-1) var(--hy-space-2);background:color-mix(in srgb,var(--hy-color-surface-overlay) 40%,transparent);}
 .mp b{color:var(--hy-color-accent-default);font-weight:600;}
@@ -99,14 +100,14 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 
 /* terminal window (TUI renders) */
 .termwin{border:1px solid var(--hy-color-border-default);border-radius:12px;overflow:hidden;background:var(--hy-color-surface-raised);margin-top:var(--hy-space-3);
-  box-shadow:0 22px 55px color-mix(in srgb,var(--hy-color-surface-base) 50%,transparent),0 0 40px color-mix(in srgb,var(--hy-color-brand-mid) 8%,transparent);}
+  box-shadow:0 22px 55px var(--site-shadow),0 0 40px color-mix(in srgb,var(--hy-color-brand-mid) 8%,transparent);}
 .termwin .bar{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-3);background:color-mix(in srgb,var(--hy-color-surface-overlay) 85%,transparent);border-bottom:1px solid var(--hy-color-border-subtle);}
 .termwin .bar i{width:11px;height:11px;border-radius:50%;display:inline-block;}
 .termwin .bar .d1{background:var(--hy-color-status-danger);}.termwin .bar .d2{background:var(--hy-color-status-warning);}.termwin .bar .d3{background:var(--hy-color-status-success);}
 .termwin .bar .ttl{margin-left:var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
 .termwin pre{margin:0;border:0;border-radius:0;background:transparent;font-size:var(--hy-font-size-sm);line-height:1.62;overflow-x:auto;}
-.tg{color:var(--hy-color-cost-low);}.tc{color:var(--hy-color-accent-strong);}.tv{color:var(--hy-color-accent-secondary);}.ta{color:var(--hy-color-accent-default);}
-.td{color:var(--hy-color-text-muted);}.tm{color:var(--hy-color-brand-end);}.tr{color:var(--hy-color-cost-high);}.tf{color:var(--hy-color-text-subtle);}.ty{color:var(--hy-color-cost-mid);}
+.tg{color:var(--hy-color-status-success);}.tc{color:var(--hy-color-accent-strong);}.tv{color:var(--hy-color-accent-secondary);}.ta{color:var(--hy-color-accent-default);}
+.td{color:var(--hy-color-text-muted);}.tm{color:var(--hy-color-brand-end);}.tr{color:var(--hy-color-status-danger);}.tf{color:var(--hy-color-text-subtle);}.ty{color:var(--hy-color-status-warning);}
 .tabs{display:flex;gap:var(--hy-space-2);margin-top:var(--hy-space-4);flex-wrap:wrap;}
 .tab{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);border:1px solid var(--hy-color-border-subtle);border-radius:8px;
   padding:var(--hy-space-2) var(--hy-space-3);cursor:pointer;background:color-mix(in srgb,var(--hy-color-surface-overlay) 40%,transparent);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
@@ -126,7 +127,6 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 .appnav .item{cursor:pointer;transition:background var(--hy-motion-duration-fast),color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast);}
 .appcock{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);}
 .appcock .crow{padding:var(--hy-space-1) 2px;color:var(--hy-color-text-muted);border-bottom:1px solid color-mix(in srgb,var(--hy-color-accent-secondary) 6%,transparent);}
-.appcock .crow.you{color:var(--hy-color-cost-mid);}
 .apptree{font-size:var(--hy-font-size-sm);line-height:1.95;color:var(--hy-color-text-muted);}
 @media(prefers-reduced-motion:reduce){
   .panes{height:auto!important;transition:none;overflow:visible;}
@@ -141,12 +141,13 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
   cursor:pointer;opacity:0;transition:opacity var(--hy-motion-duration-fast),color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast);z-index:2;}
 .codewrap:hover .copybtn,.copybtn:focus-visible{opacity:1;}
 .copybtn:hover{color:var(--hy-color-accent-default);border-color:var(--hy-color-accent-default);}
-.copybtn.done{color:var(--hy-color-cost-low);border-color:color-mix(in srgb,var(--hy-color-status-success) 50%,transparent);opacity:1;}
-@media(hover:none){.copybtn{opacity:.85;}}
+.copybtn.done{color:var(--hy-color-status-success);border-color:color-mix(in srgb,var(--hy-color-status-success) 50%,transparent);opacity:1;}
+/* Touch has no hover to reveal it, so it shows in full: at .85 its label fell under 4.5:1 on light. */
+@media(hover:none){.copybtn{opacity:1;}}
 
 /* desktop app mockup */
 .appwin{border:1px solid var(--hy-color-border-default);border-radius:14px;overflow:hidden;margin-top:var(--hy-space-3);
-  background:linear-gradient(180deg,var(--hy-color-surface-card),var(--hy-color-surface-raised));box-shadow:0 26px 64px color-mix(in srgb,var(--hy-color-surface-base) 55%,transparent),0 0 44px color-mix(in srgb,var(--hy-color-brand-mid) 10%,transparent);}
+  background:linear-gradient(180deg,var(--hy-color-surface-card),var(--hy-color-surface-raised));box-shadow:0 26px 64px var(--site-shadow),0 0 44px color-mix(in srgb,var(--hy-color-brand-mid) 10%,transparent);}
 .appwin .tb{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-3);background:color-mix(in srgb,var(--hy-color-surface-overlay) 92%,transparent);border-bottom:1px solid var(--hy-color-border-subtle);}
 .appwin .tb i{width:11px;height:11px;border-radius:50%;}
 .appwin .tb .ttl{margin-left:var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
@@ -197,7 +198,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 /* corner widget, the original hero creature, relocated: always alive, just for flavor */
 .hydra-widget{display:none;position:fixed;top:66px;right:20px;width:128px;height:128px;z-index:50;
   border:1px solid var(--hy-color-border-subtle);border-radius:14px;overflow:hidden;background:color-mix(in srgb,var(--hy-color-surface-raised) 50%,transparent);
-  backdrop-filter:blur(6px);box-shadow:0 12px 40px color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent);}
+  backdrop-filter:blur(6px);box-shadow:0 12px 40px var(--site-shadow);}
 .hydra-widget canvas{display:block;width:100%;height:100%;}
 @media(min-width:1600px){.hydra-widget{display:block;}}
 </style>
@@ -209,7 +210,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">docs</span>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span><span class="nav-toggle-label">Menu</span></button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html" aria-current="page">Docs</a>
@@ -504,12 +505,12 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
               <div class="pane on" id="av-dash">
                 <div class="ah">fleet · this session</div>
                 <div class="appcards">
-                  <div class="appcard"><div class="t">saved vs frontier</div><div class="v" style="color:var(--hy-color-cost-low)">$6.03</div><div class="spark"><span style="color:var(--hy-color-cost-low)">▁▃▄▆▅▇█▇</span></div></div>
+                  <div class="appcard"><div class="t">saved vs frontier</div><div class="v" style="color:var(--hy-color-status-success)">$6.03</div><div class="spark"><span style="color:var(--hy-color-status-success)">▁▃▄▆▅▇█▇</span></div></div>
                   <div class="appcard"><div class="t">local share</div><div class="v" style="color:var(--hy-color-accent-strong)">85%</div><div class="spark"><span style="color:var(--hy-color-accent-strong)">▂▄▃▅▆▆▇█</span></div></div>
                   <div class="appcard"><div class="t">last confidence</div><div class="v" style="color:var(--hy-color-accent-secondary)">0.98</div><div class="spark"><span style="color:var(--hy-color-accent-secondary)">▅▆▆▇▇█▇█</span></div></div>
                 </div>
                 <div class="ah" style="margin-top:var(--hy-space-4)">governor · claude_pct</div>
-                <div class="spark" style="font-size:var(--hy-font-size-base)"><span style="color:var(--hy-color-cost-mid)">███████████░░░░░░░</span> <span style="color:var(--hy-color-cost-mid)">58%</span></div>
+                <div class="spark" style="font-size:var(--hy-font-size-base)"><span style="color:var(--hy-color-status-warning)">███████████░░░░░░░</span> <span style="color:var(--hy-color-status-warning)">58%</span></div>
               </div>
               <div class="pane" id="av-tree">
                 <div class="ah">supervision tree</div>
@@ -524,12 +525,12 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
                 </div>
               </div>
               <div class="pane" id="av-code">
-                <div class="ah">internal/auth/token.go &nbsp;<span style="color:var(--hy-color-cost-low)">+2</span> <span style="color:var(--hy-color-cost-high)">−1</span></div>
+                <div class="ah">internal/auth/token.go &nbsp;<span style="color:var(--hy-color-status-success)">+2</span> <span style="color:var(--hy-color-status-danger)">−1</span></div>
                 <div class="apptree mono">
                   <div><span style="color:var(--hy-color-text-subtle)">&nbsp;41&nbsp;&nbsp;41</span> &nbsp; func Rotate(k *Key) error {</div>
-                  <div style="background:color-mix(in srgb,var(--hy-color-status-danger) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;42&nbsp;&nbsp;&nbsp;&nbsp;</span> <span style="color:var(--hy-color-cost-high)">−</span> return k.rotate()</div>
-                  <div style="background:color-mix(in srgb,var(--hy-color-status-success) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;42</span> <span style="color:var(--hy-color-cost-low)">+</span> if err := k.validate(); err != nil {</div>
-                  <div style="background:color-mix(in srgb,var(--hy-color-status-success) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;43</span> <span style="color:var(--hy-color-cost-low)">+</span> &nbsp;&nbsp;return err</div>
+                  <div style="background:color-mix(in srgb,var(--hy-color-status-danger) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;42&nbsp;&nbsp;&nbsp;&nbsp;</span> <span style="color:var(--hy-color-status-danger)">−</span> return k.rotate()</div>
+                  <div style="background:color-mix(in srgb,var(--hy-color-status-success) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;42</span> <span style="color:var(--hy-color-status-success)">+</span> if err := k.validate(); err != nil {</div>
+                  <div style="background:color-mix(in srgb,var(--hy-color-status-success) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;43</span> <span style="color:var(--hy-color-status-success)">+</span> &nbsp;&nbsp;return err</div>
                   <div><span style="color:var(--hy-color-text-subtle)">&nbsp;43&nbsp;&nbsp;44</span> &nbsp; }</div>
                 </div>
               </div>
@@ -981,10 +982,9 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     var wrap=document.getElementById('hydraWidget');
     var ctx=cv.getContext('2d'), W=0,H=0,DPR=1;
     var off=document.createElement('canvas'), octx=off.getContext('2d');
-    var N=[],E=[];
+    var N=[],E=[],CY,BL,VI,MA,DARK;
     function node(x,y,z,c,r){N.push({x:x,y:y,z:z,c:c,r:r||2.4,ph:Math.random()*6.283});return N.length-1;}
     function edge(a,b){E.push([a,b]);}
-    var CY=Hydra.rgb('accent-strong'),BL=Hydra.rgb('chart-series-1'),VI=Hydra.rgb('accent-secondary'),MA=Hydra.rgb('brand-end');
     function mix(a,b,k){return [0,1,2].map(function(i){return Math.round(a[i]+(b[i]-a[i])*k);});}
     /* a volumetric dragon head: centre muzzle + mirrored left/right sides joined
        by width-rungs, so it reads as a real 3D skull from any angle. */
@@ -993,7 +993,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       function nd(lx,ly,lz,r,c){if(mir)lx=-lx;var rx=lx*cyw+lz*syw,rz=-lx*syw+lz*cyw;
         return node(cx+rx,cy+ly,cz+rz,c||col,r);}
       function P(x,y,w,r,c){return [nd(x,y,w,r,c),nd(x,y,-w,r,c)];}
-      var eyeC=[Math.min(255,col[0]+120),Math.min(255,col[1]+130),Math.min(255,col[2]+120)];
+      var eyeC=DARK?[Math.min(255,col[0]+120),Math.min(255,col[1]+130),Math.min(255,col[2]+120)]:col.map(function(v){return Math.round(v*0.55);});
       var snout=nd(0.40,0.02,0,1.4);
       var nose=P(0.25,0.12,0.05,1.1), brow=P(0.06,0.22,0.09,1.3), cheek=P(0.09,0.03,0.10,1.1),
           jawF=P(0.29,-0.10,0.06,1.0), jawM=P(0.05,-0.12,0.08,1.2), hinge=P(-0.19,0.05,0.09,1.5),
@@ -1014,6 +1014,11 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       edge(nose[0],nose[1]);edge(brow[0],brow[1]);edge(cheek[0],cheek[1]);edge(jawM[0],jawM[1]);edge(backT[0],backT[1]);
       return neck;
     }
+    // Additive light only reads on a dark page; on light the creature is drawn as ink.
+    function build(){
+    N=[];E=[];
+    CY=Hydra.rgb('accent-strong');BL=Hydra.rgb('chart-series-1');VI=Hydra.rgb('accent-secondary');MA=Hydra.rgb('brand-end');
+    DARK=Hydra.dark();
     var bC=head(0.00,0.72,0.10,-1.35,false,CY);
     var bL=head(-0.64,0.46,0.02, 0.35,true, MA);
     var bR=head(0.64,0.46,0.02, -0.35,false,VI);
@@ -1024,6 +1029,9 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     edge(bC,hub);edge(bL,shL);edge(bR,shR);edge(bC,shL);edge(bC,shR);
     edge(hub,shL);edge(hub,shR);edge(hub,mid);edge(shL,mid);edge(shR,mid);edge(shL,mL);edge(shR,mR);
     edge(mid,cM);edge(mL,cM);edge(mR,cM);edge(mL,mR);edge(mL,lL);edge(mR,lR);edge(cM,cL);edge(lL,cL);edge(lR,cL);edge(lL,lR);edge(cL,tail);edge(lL,tail);edge(lR,tail);
+    }
+    build();
+    Hydra.onTheme(build);
     var mx=0,my=0,rotY=0,curRX=0,curRY=0,t=0;
     var PART=[];for(var pi=0;pi<36;pi++){PART.push({x:(Math.random()*2-1)*1.7,y:(Math.random()*2-1)*1.5,z:(Math.random()*2-1)*1.2,s:Math.random()*0.4+0.18,vy:Math.random()*0.0007+0.0002});}
     function resize(){DPR=Math.min(devicePixelRatio||1,1.7);W=cv.clientWidth;H=cv.clientHeight;
@@ -1035,7 +1043,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     function proj(p,ry,rx){var cy_=Math.cos(ry),sy=Math.sin(ry);var x=p.x*cy_+p.z*sy,z=-p.x*sy+p.z*cy_,y=p.y;
       var cx_=Math.cos(rx),sx=Math.sin(rx);var y2=y*cx_-z*sx,z2=y*sx+z*cx_;var f=3.0,sc=f/(f-z2);return {x:x*sc,y:-y2*sc,z:z2,sc:sc};}
     function renderScene(cx,cy,R,ry,rx){
-      octx.setTransform(DPR,0,0,DPR,0,0);octx.clearRect(0,0,W,H);octx.globalCompositeOperation='lighter';
+      octx.setTransform(DPR,0,0,DPR,0,0);octx.clearRect(0,0,W,H);octx.globalCompositeOperation=DARK?'lighter':'source-over';
       for(var k=0;k<PART.length;k++){var pt=PART[k];if(!REDUCED){pt.y+=pt.vy;}if(pt.y>1.6)pt.y=-1.6;
         var q=proj(pt,ry*0.55,rx*0.55),sx=cx+q.x*R,sy=cy+q.y*R,a=Math.max(0,0.05+q.z*0.05);
         octx.fillStyle=Hydra.rgba('accent-secondary',a);octx.beginPath();octx.arc(sx,sy,Math.max(0.4,pt.s*q.sc*1.2),0,6.283);octx.fill();}
@@ -1045,11 +1053,11 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
         octx.strokeStyle='rgba('+(col[0]|0)+','+(col[1]|0)+','+(col[2]|0)+','+(0.12+depth*0.08)+')';octx.lineWidth=4.5;octx.beginPath();octx.moveTo(a.sx,a.sy);octx.lineTo(b.sx,b.sy);octx.stroke();
         octx.strokeStyle='rgba('+(col[0]|0)+','+(col[1]|0)+','+(col[2]|0)+','+al+')';octx.lineWidth=1.2;octx.beginPath();octx.moveTo(a.sx,a.sy);octx.lineTo(b.sx,b.sy);octx.stroke();}
       for(var j=0;j<N.length;j++){var n=N[j],pp=PJ[j];var pulse=REDUCED?1:(0.7+0.3*Math.sin(t*2.2+n.ph));
-        var rad=(n.r*pp.sc)*pulse*(Math.min(W,H)/600),col=n.c,br=0.5+pp.z*0.35;
+        var rad=(n.r*pp.sc)*pulse*(Math.min(W,H)/600),col=n.c,br=0.5+pp.z*0.35,core=DARK?'text-default':'surface-base';
         var rg=octx.createRadialGradient(pp.sx,pp.sy,0,pp.sx,pp.sy,rad*4.4);
-        rg.addColorStop(0,Hydra.rgba('text-default',0.92*pulse));rg.addColorStop(0.28,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.85*br)+')');rg.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
+        rg.addColorStop(0,Hydra.rgba(core,0.92*pulse));rg.addColorStop(0.28,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.85*br)+')');rg.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
         octx.fillStyle=rg;octx.beginPath();octx.arc(pp.sx,pp.sy,rad*4.4,0,6.283);octx.fill();
-        octx.fillStyle=Hydra.rgba('text-default',0.92*pulse);octx.beginPath();octx.arc(pp.sx,pp.sy,Math.max(0.8,rad*0.7),0,6.283);octx.fill();}
+        octx.fillStyle=Hydra.rgba(core,0.92*pulse);octx.beginPath();octx.arc(pp.sx,pp.sy,Math.max(0.8,rad*0.7),0,6.283);octx.fill();}
     }
     function draw(){
       var cx=W/2,R=Math.min(W,H)*0.46;
@@ -1060,7 +1068,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       renderScene(cx,cy,R,ry,rx);
       ctx.setTransform(DPR,0,0,DPR,0,0);ctx.globalCompositeOperation='source-over';ctx.clearRect(0,0,W,H);
       var g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.6);g.addColorStop(0,Hydra.rgba('brand-mid',0.14));g.addColorStop(0.5,Hydra.rgba('brand-end',0.05));g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-      ctx.globalCompositeOperation='lighter';
+      ctx.globalCompositeOperation=DARK?'lighter':'source-over';
       if(!REDUCED){ctx.filter='blur(10px)';ctx.globalAlpha=0.5;ctx.drawImage(off,0,0,W,H);ctx.filter='blur(4px)';ctx.globalAlpha=0.5;ctx.drawImage(off,0,0,W,H);}
       ctx.filter='none';ctx.globalAlpha=1;ctx.drawImage(off,0,0,W,H);
       ctx.globalCompositeOperation='source-over';t+=0.016;

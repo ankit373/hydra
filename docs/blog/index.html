@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -32,6 +32,7 @@
    ]}
   </script>
 
+<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="../assets/tokens.css">
 <link rel="stylesheet" href="../assets/site.css">
 <script src="../assets/site.js"></script>
@@ -39,7 +40,7 @@
 :root{
   /* per-topic accent, shared by the filter chips and the cards they govern */
   --t-security:var(--hy-color-brand-end);--t-competitive:var(--hy-color-accent-secondary);
-  --t-frontier:var(--hy-color-accent-strong);--t-engineering:var(--hy-color-cost-low);
+  --t-frontier:var(--hy-color-accent-strong);--t-engineering:var(--hy-color-status-success);
 }
 h1,h2{font-family:var(--site-display);}
 
@@ -84,7 +85,7 @@ html:not(.js) .filters{display:none;}
 .featured{display:block;margin-top:var(--hy-space-6);padding:var(--hy-space-8);border-radius:20px;position:relative;overflow:hidden;
   border:1px solid var(--hy-color-border-strong);
   background:linear-gradient(165deg,color-mix(in srgb,var(--hy-color-brand-mid) 14%,var(--hy-color-surface-overlay)),var(--hy-color-surface-raised));
-  box-shadow:0 30px 90px color-mix(in srgb,var(--hy-color-surface-base) 45%,transparent);
+  box-shadow:0 30px 90px var(--site-shadow);
   transition:border-color var(--hy-motion-duration-base),transform var(--hy-motion-duration-base);}
 .featured:hover{border-color:var(--hy-color-accent-default);transform:translateY(-2px);}
 .featured .fk{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.14em;text-transform:uppercase;
@@ -109,7 +110,7 @@ html:not(.js) .filters{display:none;}
   background:color-mix(in srgb,var(--hy-color-surface-card) 55%,transparent);border-top:3px solid var(--card-c,var(--hy-color-border-strong));
   transition:transform var(--hy-motion-duration-base),border-color var(--hy-motion-duration-base),box-shadow var(--hy-motion-duration-base);}
 .post-card:hover{transform:translateY(-3px);border-color:var(--hy-color-border-strong);border-top-color:var(--card-c,var(--hy-color-border-strong));
-  box-shadow:0 16px 46px color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent),0 0 0 1px var(--card-c,transparent);}
+  box-shadow:0 16px 46px var(--site-shadow),0 0 0 1px var(--card-c,transparent);}
 .post-card:hover .title{color:var(--card-c,var(--hy-color-accent-default));}
 .post-card .meta{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);
   margin-bottom:var(--hy-space-2);display:flex;flex-wrap:wrap;gap:var(--hy-space-1) var(--hy-space-2);align-items:center;}
@@ -130,7 +131,7 @@ html:not(.js) .filters{display:none;}
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
   <span class="site-tag">blog</span>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span><span class="nav-toggle-label">Menu</span></button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>

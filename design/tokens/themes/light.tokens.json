@@ -403,15 +403,66 @@
       }
     },
     "cost": {
-      "$description": "Cost bands are data, not status. They alias the status hues until charts move to the chart palette (Phase 4).",
+      "$description": "Cost bands, cheap to expensive: one hue, each step further from the page than the last.",
       "low": {
-        "$value": "{color.status.success}"
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1765,
+            0.4118,
+            0.7098
+          ],
+          "hex": "#2d69b5"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "blue",
+            "ratio": 5.2
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
       },
       "mid": {
-        "$value": "{color.status.warning}"
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0902,
+            0.298,
+            0.5686
+          ],
+          "hex": "#174c91"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "blue",
+            "ratio": 8
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
       },
       "high": {
-        "$value": "{color.status.danger}"
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.1843,
+            0.4431
+          ],
+          "hex": "#002f71"
+        },
+        "$extensions": {
+          "dev.hydra.leonardo": {
+            "scale": "blue",
+            "ratio": 12
+          },
+          "dev.hydra.contrast": {
+            "min": 4.5
+          }
+        }
       }
     },
     "chart": {
@@ -425,50 +476,75 @@
             0.8392
           ],
           "hex": "#2a78d6"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       },
       "series-2": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.9216,
-            0.4078,
-            0.2039
+            0.8902,
+            0.3569,
+            0.1765
           ],
-          "hex": "#eb6834"
+          "hex": "#e35b2d"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       },
       "series-3": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.1059,
-            0.6863,
-            0.4784
+            0.0078,
+            0.5961,
+            0.4627
           ],
-          "hex": "#1baf7a"
+          "hex": "#029876"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       },
       "series-4": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.9294,
-            0.6314,
-            0
+            0.7294,
+            0.4745,
+            0.0863
           ],
-          "hex": "#eda100"
+          "hex": "#ba7916"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       },
       "series-5": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.9098,
-            0.4824,
-            0.6431
+            0.8471,
+            0.3529,
+            0.5961
           ],
-          "hex": "#e87ba4"
+          "hex": "#d85a98"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       },
       "series-6": {
@@ -480,6 +556,11 @@
             0
           ],
           "hex": "#008300"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       },
       "series-7": {
@@ -491,6 +572,11 @@
             0.8392
           ],
           "hex": "#6250d6"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       },
       "series-8": {
@@ -502,6 +588,11 @@
             0.2824
           ],
           "hex": "#e34948"
+        },
+        "$extensions": {
+          "dev.hydra.contrast": {
+            "min": 3
+          }
         }
       }
     },
@@ -549,6 +640,13 @@
           }
         }
       }
+    }
+  },
+  "theme": {
+    "$type": "number",
+    "dark": {
+      "$description": "1 in the dark theme, 0 in light: a switch for effects that run the other way on each, used in calc() and color-mix() so one rule serves both themes.",
+      "$value": 0
     }
   }
 }

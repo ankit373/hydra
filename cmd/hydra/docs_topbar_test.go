@@ -10,8 +10,8 @@ import (
 	"testing"
 )
 
-// maxTopbarLinks: logo, six nav links and the call to action, measured at 845px
-// on the widest page (first-principles) against a 900px fold. A ninth link
+// maxTopbarLinks: logo, six nav links and the call to action, measured at 893px
+// with the theme button on the widest page (first-principles) against a 900px fold. A ninth link
 // means re-measuring, not raising this number on faith.
 const maxTopbarLinks = 8
 
@@ -111,9 +111,9 @@ func TestDocs_TopbarHidesBeforeItOverflows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 845px is the widest bar on one line, measured on first-principles.
-	if foldAt < 845 {
-		t.Errorf("the nav folds at %dpx but needs 845px on one line, so it overflows in between", foldAt)
+	// 893px is the widest bar on one line, theme button included, measured on first-principles.
+	if foldAt < 893 {
+		t.Errorf("the nav folds at %dpx but needs 893px on one line, so it overflows in between", foldAt)
 	}
 	if !regexp.MustCompile(`\.site-nav a\{[^}]*white-space:nowrap`).MatchString(css) {
 		t.Error("the nav links lost white-space:nowrap, so a two-word link wraps inside the bar")

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -38,6 +38,7 @@
   }
   </script>
 
+<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/site.js"></script>
@@ -56,13 +57,15 @@
 .cta{display:flex;gap:var(--hy-space-3);justify-content:center;flex-wrap:wrap;margin-top:var(--hy-space-8);}
 
 /* ── the app preview ─────────────────────────────────────────────────── */
+/* The window's halo: a 45% violet glow lights a dark page and bruises a light one. */
+:root{--win-glow:calc(22% + 23% * var(--hy-theme-dark));}
 .stage{margin:var(--hy-space-12) auto 0;max-width:1000px;padding:0 var(--hy-space-6);}
 .win{border:1px solid var(--hy-color-border-default);border-radius:12px;overflow:hidden;background:var(--hy-color-surface-raised);
-  box-shadow:0 40px 120px -30px color-mix(in srgb,var(--hy-color-brand-mid) 45%,transparent), 0 0 0 1px color-mix(in srgb,var(--hy-color-text-default) 2%,transparent) inset;}
+  box-shadow:0 40px 120px -30px color-mix(in srgb,var(--hy-color-brand-mid) var(--win-glow),transparent), 0 0 0 1px color-mix(in srgb,var(--hy-color-text-default) 2%,transparent) inset;}
 .win-bar{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-3);border-bottom:1px solid var(--hy-color-border-subtle);
   background:color-mix(in srgb,var(--hy-color-surface-raised) 90%,transparent);}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--hy-color-border-default);}
-.dot.r{background:var(--hy-color-cost-high);}.dot.y{background:var(--hy-color-cost-mid);}.dot.g{background:var(--hy-color-cost-low);}
+.dot.r{background:var(--hy-color-status-danger);}.dot.y{background:var(--hy-color-status-warning);}.dot.g{background:var(--hy-color-status-success);}
 .win-title{margin-left:var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
 .win-body{display:grid;grid-template-columns:132px 1fr;min-height:376px;}
 .side{border-right:1px solid var(--hy-color-border-subtle);padding:var(--hy-space-3) var(--hy-space-2);background:color-mix(in srgb,var(--hy-color-surface-base) 50%,transparent);}
@@ -160,15 +163,15 @@ table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
   font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);}
 .pill{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);padding:2px var(--hy-space-2);border-radius:99px;border:1px solid var(--hy-color-border-default);color:var(--hy-color-text-muted);}
 .pill.live{border-color:var(--hy-color-accent-default);color:var(--hy-color-accent-default);}
-.pill.ok{border-color:var(--hy-color-cost-low);color:var(--hy-color-cost-low);}
-.pill.fail{border-color:var(--hy-color-cost-high);color:var(--hy-color-cost-high);}
+.pill.ok{border-color:var(--hy-color-status-success);color:var(--hy-color-status-success);}
+.pill.fail{border-color:var(--hy-color-status-danger);color:var(--hy-color-status-danger);}
 .blink{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--hy-color-accent-default);
   animation:pulse 1.4s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
 @media(prefers-reduced-motion:reduce){.blink{animation:none;}}
 .diff{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);line-height:1.75;}
-.diff .add{color:var(--hy-color-cost-low);}
-.diff .del{color:var(--hy-color-cost-high);}
+.diff .add{color:var(--hy-color-status-success);}
+.diff .del{color:var(--hy-color-status-danger);}
 .diff .ctx{color:var(--hy-color-text-subtle);}
 .caption{text-align:center;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-3);}
 
@@ -195,7 +198,7 @@ table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
 .dl .os{font-family:var(--site-display);font-size:var(--hy-font-size-base);}
 .dl .meta{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
 .dl .sz{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);text-align:right;}
-.dl .get{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);border:1px solid var(--hy-color-border-default);border-radius:7px;
+.dl .get{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);border:1px solid var(--hy-color-border-strong);border-radius:7px;
   padding:var(--hy-space-1) var(--hy-space-3);color:var(--hy-color-accent-default);white-space:nowrap;transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
 .dl .get:hover{background:var(--hy-color-accent-default);color:var(--hy-color-text-inverse);text-decoration:none;border-color:var(--hy-color-accent-default);}
 .dl .sum{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);white-space:nowrap;}
@@ -225,7 +228,7 @@ table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header" id="topbar">
   <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
-  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span><span class="nav-toggle-label">Menu</span></button>
   <nav class="site-nav" id="site-nav" aria-label="Main">
     <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
@@ -306,10 +309,10 @@ table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
                 <div style="font-size:var(--hy-font-size-xs);margin-bottom:2px">claude-sonnet</div>
                 <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle)">anthropic pool · 14 calls</div>
                 <div class="cklbl" style="margin-top:var(--hy-space-3)">MEASURED AT THIS</div>
-                <div class="ckrow"><span>claude-sonnet</span><span style="color:var(--hy-color-cost-low)">0.91</span></div>
+                <div class="ckrow"><span>claude-sonnet</span><span style="color:var(--hy-color-status-success)">0.91</span></div>
                 <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle)">summaries · 38 obs</div>
-                <div class="ckrow" style="margin-top:var(--hy-space-2)"><span>qwen2.5</span><span style="color:var(--hy-color-cost-mid)">0.31</span></div>
-                <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-cost-mid)">summaries · 5 obs · thin</div>
+                <div class="ckrow" style="margin-top:var(--hy-space-2)"><span>qwen2.5</span><span style="color:var(--hy-color-status-warning)">0.31</span></div>
+                <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-status-warning)">summaries · 5 obs · thin</div>
               </div>
             </div>
           </div>
@@ -320,8 +323,8 @@ table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
             <div class="vsub">the models this machine can use, and whether each is ready now</div>
             <table class="mini">
               <tr><th>Model</th><th>Price</th><th>Reachable now</th><th style="text-align:right">Measured</th></tr>
-              <tr><td>claude-opus</td><td>$$$</td><td style="color:var(--hy-color-cost-low)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
-              <tr><td>claude-sonnet</td><td>$$</td><td style="color:var(--hy-color-cost-low)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
+              <tr><td>claude-opus</td><td>$$$</td><td style="color:var(--hy-color-status-success)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
+              <tr><td>claude-sonnet</td><td>$$</td><td style="color:var(--hy-color-status-success)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
               <tr><td>gemini-flash</td><td>$</td><td style="color:var(--hy-color-text-muted)">no API key for google</td><td class="n" style="color:var(--hy-color-text-subtle)">not measured</td></tr>
               <tr><td>qwen2.5-coder:7b</td><td>free</td><td style="color:var(--hy-color-text-muted)">start ollama serve</td><td class="n">0.34 · 77 outcomes</td></tr>
             </table>
@@ -362,7 +365,7 @@ table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
             <div class="cards">
               <div class="card"><div class="k">Calls today</div><div class="v">128</div></div>
               <div class="card"><div class="k">Spend today</div><div class="v" style="color:var(--hy-color-accent-default)">$0.42</div></div>
-              <div class="card"><div class="k">Checked</div><div class="v" style="color:var(--hy-color-cost-low)">121</div></div>
+              <div class="card"><div class="k">Checked</div><div class="v" style="color:var(--hy-color-status-success)">121</div></div>
             </div>
             <table class="mini">
               <tr><th>Model</th><th>Price</th><th style="text-align:right">Calls</th><th style="text-align:right">Cost</th></tr>
@@ -378,12 +381,12 @@ table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
             <div class="vsub">what agents touched, and whether policy allowed it</div>
             <div class="cards">
               <div class="card"><div class="k">Allowed</div><div class="v">1,204</div></div>
-              <div class="card"><div class="k">Denied</div><div class="v" style="color:var(--hy-color-cost-high)">7</div></div>
-              <div class="card"><div class="k">Flagged</div><div class="v" style="color:var(--hy-color-cost-mid)">2</div></div>
+              <div class="card"><div class="k">Denied</div><div class="v" style="color:var(--hy-color-status-danger)">7</div></div>
+              <div class="card"><div class="k">Flagged</div><div class="v" style="color:var(--hy-color-status-warning)">2</div></div>
             </div>
             <div class="row"><span style="flex:1">Ledger chain intact</span><span class="pill ok">verified</span></div>
             <div class="row"><span style="flex:1">OWASP LLM Top-10 coverage</span><span style="color:var(--hy-color-text-muted)">8 / 10 rules</span></div>
-            <div class="row"><span style="flex:1">Prompt-injection markers seen</span><span style="color:var(--hy-color-cost-mid)">2 blocked</span></div>
+            <div class="row"><span style="flex:1">Prompt-injection markers seen</span><span style="color:var(--hy-color-status-warning)">2 blocked</span></div>
             <div style="margin-top:var(--hy-space-3);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle)">
               EVERY DECISION IS APPEND-ONLY AND HASH-CHAINED · THE LOG STAYS ON THIS MACHINE</div>
           </div>

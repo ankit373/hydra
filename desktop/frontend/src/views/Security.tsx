@@ -28,7 +28,7 @@ import type {
   Threats,
   Trend,
 } from '../types'
-import { clockTime, coverageBand, costBand, toSecurityCSV, usdWhole } from '../format'
+import { clockTime, coverageBand, toSecurityCSV, usdWhole } from '../format'
 import { MCPServers } from './MCPServers'
 import { PageHeader } from './PageHeader'
 import { Tabs } from './Tabs'
@@ -52,7 +52,7 @@ function findCheckStatus(checks: Check[], name: string): string | undefined {
 // the category count (#753).
 const COVERAGE_SLICES: Record<CoverageStatus, Omit<DonutSegment, 'value'> | null> = {
   enforced: { label: 'Enforced', colorVar: 'var(--hy-color-status-success)' },
-  configured: { label: 'Configured', colorVar: 'var(--hy-color-accent-default)' },
+  configured: { label: 'Configured', colorVar: 'var(--hy-color-status-info)' },
   partial: { label: 'Partial', colorVar: 'var(--hy-color-status-warning)' },
   gap: { label: 'Gap', colorVar: 'var(--hy-color-status-danger)' },
   'n/a': null,
@@ -298,7 +298,7 @@ function RegisterTable({ register }: { register: RiskRegister }) {
                   <span className="sec-risk__id mono" title="stable risk ID">{k.id}</span>
                 </td>
                 <td><span className={`sec-cat__status ${sevClass(k.severity)}`}>{k.severity}</span></td>
-                <td className={`num ${k.breached ? 'cost--expensive' : ''}`}>{k.dueInDays}d</td>
+                <td className={`num ${k.breached ? 'tone--bad' : ''}`}>{k.dueInDays}d</td>
                 <td className="num">{usdWhole(k.defectCostUsd)}</td>
                 <td className="card__note">
                   {(k.frameworks ?? []).map((f) => `${f.framework} ${f.control}`).join(' · ')}
@@ -559,7 +559,7 @@ function PrivilegeView({ rows }: { rows: AgentPrivilege[] }) {
                 </td>
                 <td className="num">{p.allowed}</td>
                 <td className="num">{p.denied}</td>
-                <td className={`num ${p.unscoped && p.writesOrExecs > 0 ? 'cost--expensive' : ''}`}>
+                <td className={`num ${p.unscoped && p.writesOrExecs > 0 ? 'tone--bad' : ''}`}>
                   {p.writesOrExecs}
                 </td>
                 <td className="card__note">
@@ -785,7 +785,7 @@ function BlastView({ blast }: { blast: BlastReport }) {
               <span className="rank__track">
                 <span
                   className={`rank__fill rank__fill--${
-                    !f.known ? 'free' : (f.dependents ?? 0) > 0 ? 'expensive' : 'cheap'
+                    !f.known ? 'free' : (f.dependents ?? 0) > 0 ? 'risk' : 'safe'
                   }`}
                   style={{ width: f.known ? `${((f.radius ?? 0) / max) * 100}%` : '0%' }}
                 />
@@ -985,7 +985,7 @@ function PolicyAuditView({ audit }: { audit: PolicyAudit }) {
                 <tr key={r.index}>
                   <td className="mono">{r.index}</td>
                   <td className="mono">{r.summary}</td>
-                  <td className={r.decision === 'deny' ? 'cost--expensive' : 'cost--cheap'}>{r.decision}</td>
+                  <td className={r.decision === 'deny' ? 'tone--bad' : 'tone--good'}>{r.decision}</td>
                   <td className="num">
                     {/* An inline proportional bar so a rule doing all the
                         work is visible without reading every number. */}
@@ -1097,7 +1097,6 @@ function CountBars({ title, rows }: { title: string; rows?: SecurityCount[] }) {
       <div className="table__wrap">
         <div className="rank">
           {rows.map((r) => {
-            const band = costBand(r.count, max)
             return (
               <div className="rank__row" key={r.label}>
                 <span className="rank__name" title={r.label}>
@@ -1105,11 +1104,11 @@ function CountBars({ title, rows }: { title: string; rows?: SecurityCount[] }) {
                 </span>
                 <span className="rank__track">
                   <span
-                    className={`rank__fill rank__fill--${band}`}
+                    className="rank__fill rank__fill--risk"
                     style={{ width: `${(r.count / max) * 100}%` }}
                   />
                 </span>
-                <span className={`rank__value cost--${band}`}>{r.count}</span>
+                <span className="rank__value">{r.count}</span>
               </div>
             )
           })}
@@ -1152,7 +1151,7 @@ function EvidenceView({ events, truncated }: { events: LedgerEvent[]; truncated:
             {rows.map((e, i) => (
               <tr key={`${e.ts}-${i}`}>
                 <td className="mono">{e.ts ? clockTime(e.ts) : '—'}</td>
-                <td className={e.decision === 'deny' ? 'cost--expensive' : 'cost--cheap'}>
+                <td className={e.decision === 'deny' ? 'tone--bad' : 'tone--good'}>
                   {e.decision}
                   {e.flagged && <span className="sec-cat__status sec-cat__status--gap">flagged</span>}
                 </td>
@@ -1244,16 +1243,15 @@ function ByHead({ rows }: { rows: HeadRisk[] }) {
         <div className="rank">
           {rows.map((r) => {
             const total = r.denied + r.flagged
-            const band = costBand(total, max)
             return (
               <div className="rank__row" key={r.head}>
                 <span className="rank__name" title={r.head}>
                   {r.head}
                 </span>
                 <span className="rank__track">
-                  <span className={`rank__fill rank__fill--${band}`} style={{ width: `${(total / max) * 100}%` }} />
+                  <span className="rank__fill rank__fill--risk" style={{ width: `${(total / max) * 100}%` }} />
                 </span>
-                <span className={`rank__value cost--${band}`}>
+                <span className="rank__value">
                   {r.denied} denied · {r.flagged} flagged
                 </span>
               </div>
@@ -1274,7 +1272,7 @@ function Checks({ checks }: { checks: Check[] }) {
         {checks.map((c) => (
           <div className="card" key={c.name}>
             <div className="card__label">{c.name}</div>
-            <div className={`card__value--sm ${c.status === 'BROKEN' ? 'cost--expensive' : ''}`}>
+            <div className={`card__value--sm ${c.status === 'BROKEN' ? 'tone--bad' : ''}`}>
               {c.status}
             </div>
             <div className="card__note">{c.detail}</div>
