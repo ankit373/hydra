@@ -97,6 +97,10 @@ func judgeOptions(run Options, tierHint, system string) dispatch.Options {
 	}
 }
 
+// judgeSystem frames the judge for any kind of work. Calling it a code
+// evaluator scored a cover letter as if it were a function (#1451).
+const judgeSystem = "You judge how well each response does what the prompt asked. Respond only with valid JSON."
+
 func (j *LLMJudge) Judge(ctx context.Context, prompt string, attempts []Attempt) (*JudgeVerdict, error) {
 	successful := successfulAttempts(attempts)
 	if len(successful) == 0 {
@@ -124,8 +128,7 @@ func (j *LLMJudge) Judge(ctx context.Context, prompt string, attempts []Attempt)
 	if j.ask == nil {
 		return nil, fmt.Errorf("judge: no dispatcher")
 	}
-	result, err := j.ask(jCtx, judgePrompt, judgeOptions(j.run, j.tier,
-		"You are a code and reasoning quality evaluator. Respond only with valid JSON."))
+	result, err := j.ask(jCtx, judgePrompt, judgeOptions(j.run, j.tier, judgeSystem))
 	if err != nil {
 		return nil, fmt.Errorf("judge dispatch: %w", err)
 	}

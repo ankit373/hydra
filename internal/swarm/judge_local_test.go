@@ -4,6 +4,7 @@ package swarm
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,5 +162,23 @@ func assertConstrained(t *testing.T, c *capture, run Options) {
 		if !o.NoCache {
 			t.Errorf("dispatch %d: NoCache = false", i)
 		}
+	}
+}
+
+// A swarm runs writing, extraction and support work as often as code, so the
+// judge must not be told it is evaluating code (#1451).
+func TestModeBestJudgeIsNotFramedAsCode(t *testing.T) {
+	c := &capture{}
+	j := newLLMJudge(nil, "4", Options{})
+	j.ask = c.fn
+	_, _ = j.Judge(context.Background(), "write a short cover letter", []Attempt{
+		{Head: provider.Head{ID: "a"}, Status: StatusOK, Output: "one"},
+		{Head: provider.Head{ID: "b"}, Status: StatusOK, Output: "two"},
+	})
+	if len(c.seen) == 0 {
+		t.Fatal("the judge never dispatched, so this proves nothing")
+	}
+	if sys := strings.ToLower(c.seen[0].System); strings.Contains(sys, "code") {
+		t.Errorf("judge system prompt frames the work as code: %q", c.seen[0].System)
 	}
 }
