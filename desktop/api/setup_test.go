@@ -4,14 +4,14 @@ package api
 
 import (
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // withPath puts dir as the only entry on $PATH, so exec.LookPath finds
@@ -222,50 +222,36 @@ func TestInstallHyctl_UnsupportedOSReturnsGuidance(t *testing.T) {
 	}
 }
 
-// The full round trip: fetch the (fake) installer over HTTP, run it, and
-// re-check via CheckHyctl, exactly what the frontend's install button
-// triggers. The fake script stands in for install.sh so the test never
-// reaches GitHub or writes outside its own temp directory.
-func TestInstallHyctl_RunsTheFetchedScript(t *testing.T) {
+// hyctlRelease serves a v9.9.9 hyctl archive holding body, and points
+// InstallHyctl at a temp dir that CheckHyctl also searches.
+func hyctlRelease(t *testing.T, body string, withSums bool) string {
+	t.Helper()
+	name := fmt.Sprintf("hydra_9.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	archive := testutil.TarGz(t, "hyctl", []byte(body))
+	files := map[string][]byte{name: archive}
+	if withSums {
+		files["checksums.txt"] = []byte(testutil.SumLine(name, archive))
+	}
+	fakeAppRelease(t, files)
+	dir := t.TempDir()
+	orig := installDir
+	installDir = func() string { return dir }
+	t.Cleanup(func() { installDir = orig })
+	withHyctlSearchDirs(t, dir)
+	return dir
+}
+
+// The full round trip the frontend's install button triggers: download,
+// verify, install, then CheckHyctl finds the new binary.
+func TestInstallHyctl_InstallsTheVerifiedRelease(t *testing.T) {
 	if !installSupported(runtime.GOOS) {
 		t.Skip("InstallHyctl only runs the installer on macOS/Linux")
 	}
-
-	binDir := t.TempDir()
-	hyctlPath := filepath.Join(binDir, "hyctl")
-	script := fmt.Sprintf(`#!/bin/sh
-set -e
-cat > %q <<'EOF'
-#!/bin/sh
-echo 'hydra v0.0.0-fake'
-EOF
-chmod +x %q
-echo "installed to %s"
-`, hyctlPath, hyctlPath, binDir)
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(script))
-	}))
-	defer ts.Close()
-
-	restoreURL := installScriptURL
-	installScriptURL = ts.URL
-	t.Cleanup(func() { installScriptURL = restoreURL })
-
-	// binDir first so the post-install CheckHyctl finds the script's fake
-	// hyctl ahead of anything real; /usr/bin and /bin stay on PATH because
-	// the fake script itself shells out to cat/chmod, real external commands
-	// that need resolving, unlike the other tests here, which only use sh
-	// builtins (echo, exit) and can tolerate an empty PATH.
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+"/usr/bin"+string(os.PathListSeparator)+"/bin")
-	withHyctlSearchDirs(t)
+	hyctlRelease(t, "#!/bin/sh\necho 'hydra v0.0.0-fake'\n", true)
 
 	r := New().InstallHyctl()
-	if r.Error != "" {
-		t.Fatalf("InstallHyctl returned an error: %s\nlog:\n%s", r.Error, r.Log)
-	}
-	if !r.OK {
-		t.Errorf("OK = false after a successful install; log:\n%s", r.Log)
+	if r.Error != "" || !r.OK {
+		t.Fatalf("InstallHyctl = %+v", r)
 	}
 	if r.Version != "hydra v0.0.0-fake" {
 		t.Errorf("Version = %q, want hydra v0.0.0-fake", r.Version)
@@ -275,60 +261,18 @@ echo "installed to %s"
 	}
 }
 
-// A download failure (bad URL, network error, non-200) must come back as a
-// result the frontend can render, not a panic or a hang.
-func TestInstallHyctl_DownloadFailureIsReported(t *testing.T) {
+// With no checksums.txt nothing is installed, and the reason is reported.
+func TestInstallHyctl_NoChecksumsInstallsNothing(t *testing.T) {
 	if !installSupported(runtime.GOOS) {
 		t.Skip("InstallHyctl only runs the installer on macOS/Linux")
 	}
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer ts.Close()
-
-	restoreURL := installScriptURL
-	installScriptURL = ts.URL
-	t.Cleanup(func() { installScriptURL = restoreURL })
+	dir := hyctlRelease(t, "#!/bin/sh\necho x\n", false)
 
 	r := New().InstallHyctl()
-	if r.OK {
-		t.Error("OK = true despite the download failing")
+	if r.OK || r.Error == "" {
+		t.Errorf("InstallHyctl = %+v, want a refusal", r)
 	}
-	if r.Error == "" {
-		t.Error("no Error despite the download failing")
-	}
-}
-
-// A script that runs but exits non-zero (the real install.sh does this on an
-// unsupported OS/arch or a checksum mismatch) must be reported as a failure
-// with whatever it printed before dying, not silently swallowed.
-func TestInstallHyctl_ScriptFailureIsReportedWithLog(t *testing.T) {
-	if !installSupported(runtime.GOOS) {
-		t.Skip("InstallHyctl only runs the installer on macOS/Linux")
-	}
-
-	const script = "#!/bin/sh\necho 'about to fail'\nexit 1\n"
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(script))
-	}))
-	defer ts.Close()
-
-	restoreURL := installScriptURL
-	installScriptURL = ts.URL
-	t.Cleanup(func() { installScriptURL = restoreURL })
-
-	withPath(t, t.TempDir())
-	withHyctlSearchDirs(t)
-
-	r := New().InstallHyctl()
-	if r.OK {
-		t.Error("OK = true despite the installer exiting non-zero")
-	}
-	if r.Error == "" {
-		t.Error("no Error despite the installer exiting non-zero")
-	}
-	if r.Log == "" {
-		t.Error("Log is empty; the installer did print before failing")
+	if _, err := os.Stat(filepath.Join(dir, "hyctl")); err == nil {
+		t.Error("hyctl was installed without a checksum")
 	}
 }

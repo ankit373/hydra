@@ -5,10 +5,11 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"os"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/build"
+	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/update"
 )
 
@@ -85,33 +86,35 @@ func TestGetUpdateStatus_RespectsNoUpdateCheckEnvVar(t *testing.T) {
 	}
 }
 
-// TriggerUpgrade wires stdout+stderr into the same Accumulator every other
-// subprocess capture in this codebase uses, and reports success/failure by
-// the process exit code.
-func TestTriggerUpgrade_ReportsSuccessAndCapturesOutput(t *testing.T) {
-	orig := installAppScriptCommand
-	installAppScriptCommand = "echo installed-ok"
-	t.Cleanup(func() { installAppScriptCommand = orig })
-
-	r := New().TriggerUpgrade()
-	if !r.OK {
-		t.Errorf("OK = false, want true for an exit-0 command; output: %q", r.Output)
-	}
-	if !strings.Contains(r.Output, "installed-ok") {
-		t.Errorf("Output = %q, want it to contain the script's stdout", r.Output)
-	}
+// fakeAppRelease serves files as release v9.9.9 and hides gh.
+func fakeAppRelease(t *testing.T, files map[string][]byte) {
+	t.Helper()
+	api, dl := testutil.FakeRelease(t, "v9.9.9", files)
+	origAPI, origDL := update.ReleaseURL, update.DownloadURL
+	update.ReleaseURL, update.DownloadURL = api, dl
+	t.Cleanup(func() { update.ReleaseURL, update.DownloadURL = origAPI, origDL })
+	t.Setenv("PATH", t.TempDir())
 }
 
-func TestTriggerUpgrade_ReportsFailure(t *testing.T) {
-	orig := installAppScriptCommand
-	installAppScriptCommand = "echo boom >&2; exit 1"
-	t.Cleanup(func() { installAppScriptCommand = orig })
+// withAppExecutable makes TriggerUpgrade treat exe as the running app.
+func withAppExecutable(t *testing.T, exe string) {
+	t.Helper()
+	orig := appExecutable
+	appExecutable = func() (string, error) { return exe, nil }
+	t.Cleanup(func() { appExecutable = orig })
+}
 
+// assertUpgrade checks OK and that exe now holds want.
+func assertUpgrade(t *testing.T, exe string, wantOK bool, want string) {
+	t.Helper()
 	r := New().TriggerUpgrade()
-	if r.OK {
-		t.Error("OK = true, want false for a non-zero exit")
+	if r.OK != wantOK {
+		t.Errorf("OK = %v, want %v; output:\n%s", r.OK, wantOK, r.Output)
 	}
-	if !strings.Contains(r.Output, "boom") {
-		t.Errorf("Output = %q, want it to contain the script's stderr", r.Output)
+	if r.Output == "" {
+		t.Error("Output is empty; the notice has nothing to show")
+	}
+	if got, _ := os.ReadFile(exe); string(got) != want {
+		t.Errorf("app holds %q, want %q", got, want)
 	}
 }

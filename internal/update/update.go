@@ -8,10 +8,13 @@
 package update
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -129,28 +132,44 @@ func resolveLatest() string {
 }
 
 func fetchLatest() string {
-	client := &http.Client{Timeout: 3 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, ReleaseURL, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	tag, _ := Latest(ctx)
+	return tag
+}
+
+// tagPattern is a release tag; the tag becomes part of download URLs.
+var tagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+
+// Latest asks GitHub for the newest published release tag, skipping the cache.
+func Latest(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ReleaseURL, nil)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return ""
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d from %s", resp.StatusCode, ReleaseURL)
+	}
 	var payload struct {
 		TagName string `json:"tag_name"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return ""
+		return "", err
 	}
-	return payload.TagName
+	if !tagPattern.MatchString(payload.TagName) {
+		return "", fmt.Errorf("latest release has an unexpected tag %q", payload.TagName)
+	}
+	return payload.TagName, nil
 }
 
 // semverGT reports whether a > b, following SemVer 2.0.0 precedence.
