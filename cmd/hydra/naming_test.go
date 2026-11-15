@@ -98,12 +98,16 @@ func TestTapFormulaDesc_MatchesRootHelp(t *testing.T) {
 	}
 }
 
-// The skills and AGENTS.md are instructions a model follows, so a script they
-// name that was removed (dispatch/route.sh, #86) sends it to a dead command.
+// The skills, AGENTS.md and registry files are what people and models read,
+// so a script they name that was removed (dispatch/route.sh, #86, #1757) is a dead end.
 func TestAgentInstructions_NeverNameAScriptThatDoesNotExist(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join("..", "..", "skills", "*.md"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("no skills found (%v), the guard would silently pass", err)
+	var files []string
+	for _, pattern := range []string{"skills/*.md", "registry/*.yaml"} {
+		matches, err := filepath.Glob(filepath.Join("..", "..", filepath.FromSlash(pattern)))
+		if err != nil || len(matches) == 0 {
+			t.Fatalf("nothing matches %s (%v), the guard would silently pass", pattern, err)
+		}
+		files = append(files, matches...)
 	}
 	files = append(files, filepath.Join("..", "..", "AGENTS.md"))
 	script := regexp.MustCompile(`[\w./-]+\.sh\b`)

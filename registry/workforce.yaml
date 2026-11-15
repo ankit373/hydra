@@ -1,8 +1,8 @@
 # Hydra Workforce Registry, the "org chart"
 # ─────────────────────────────────────────────────────────────────────────────
 # Maps each skill to a department, role, tier preference, and constraints.
-# Read by company.sh when emitting playbook manifests, and by the brain
-# (Claude Code) when picking which skill to invoke for a task.
+# hyctl does not read this file. The brain (the agent driving hyctl) can read
+# it when picking which skill to invoke for a task.
 #
 # Each entry:
 #   department        , which org function this skill serves
@@ -296,5 +296,5 @@ skills:
     department: engineering
     role: IC workforce
     invokes_as: null
-    notes: "Stage is performed by route.sh / parallel.sh / edit.sh under brain coordination."
+    notes: "Stage is performed by hyctl dispatch / hyctl parallel / hyctl edit under brain coordination."
     parallel_safe: true
