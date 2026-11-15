@@ -131,3 +131,14 @@ func TestRecordVerifiedEdit_WritesVerdict(t *testing.T) {
 		t.Errorf("verdict = %+v", c)
 	}
 }
+
+// The example keeps the instruction as its task, never the file-filled prompt.
+func TestRecordVerifiedEdit_StoresInstructionNotFilledPrompt(t *testing.T) {
+	all := corpusAfterRecord(t, nil, sampleEdit)
+	if len(all) != 1 {
+		t.Fatalf("filed %d examples, want 1", len(all))
+	}
+	if all[0].Task != sampleEdit.Prompt || all[0].TaskHash != evalset.TaskHashFor(sampleEdit.Prompt) {
+		t.Errorf("task %q, hash %q; want the instruction %q", all[0].Task, all[0].TaskHash, sampleEdit.Prompt)
+	}
+}
