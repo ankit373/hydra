@@ -108,8 +108,11 @@ internal/ope/           ← Off-policy estimation: IPW over sampled logs, plus c
                           evaluation with bootstrap intervals. `hyctl trace evaluate`.
 internal/stats/         ← Pure maths, one implementation each: seeded paired bootstrap, Tango, exact
                           McNemar, binomial CDF, Clopper–Pearson, Wilson, pass^k, BetaCDF and
-                          BetaQuantile. Imported by ope, entity, budget and trust; the benchmark
-                          harness (#1198) will use it too.
+                          BetaQuantile. Imported by ope, entity, budget, trust and the benchmark
+                          harness.
+internal/bench/         ← Benchmark harness: pinned datasets, committed splits, scored arms. `hyctl bench`.
+                          `replay/` runs acceptance policies on cached labelled answers over seeded
+                          splits, with no model calls. `hyctl bench replay`.
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/embed/         ← Vectors from an embedding model already on the machine. No new dependency.
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.
