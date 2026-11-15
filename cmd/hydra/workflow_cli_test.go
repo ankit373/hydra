@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -300,5 +301,61 @@ func TestDispatchRouter_RefusesAnUnknownEnum(t *testing.T) {
 	r := dispatchRouter{}
 	if _, err := r.Route(t.Context(), "p", "NONSENSE"); err == nil {
 		t.Fatal("an unknown enum was passed through to the router")
+	}
+}
+
+// --needs N belongs to --step N, the same pairing as --enum, and "" is no
+// needs rather than the default of every earlier step.
+func TestWorkflowRun_NeedsPairsWithStep(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeWorkflowConfig(t, s.HydraHome)
+	// The run fails for want of a head; what is asserted is the stored record.
+	_, _, _ = run(t, "workflow", "run", "--id", "wf-needs",
+		"--step", "extract", "--needs", "",
+		"--step", "summarise", "--needs", "1",
+		"--step", "draft replies", "--needs", " 1 ,")
+	w, err := workflow.Load("wf-needs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range [][]int{{}, {1}, {1}} {
+		if got := w.Steps[i].Needs; !slices.Equal(got, want) {
+			t.Errorf("step %d needs %v, want %v", i+1, got, want)
+		}
+	}
+	if got := stripANSICodes(needsLabel(w, 0)); got != "needs nothing" {
+		t.Errorf("step 1 is labelled %q, want needs nothing", got)
+	}
+
+	for _, tc := range []struct {
+		name, want string
+		args       []string
+	}{
+		{"count mismatch", "one --needs per --step",
+			[]string{"workflow", "run", "--step", "a", "--step", "b", "--needs", "1"}},
+		{"not a number", "not a step number",
+			[]string{"workflow", "run", "--step", "a", "--needs", "first"}},
+		{"a later step", "comes after it",
+			[]string{"workflow", "run", "--step", "a", "--step", "b", "--needs", "2", "--needs", "1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testutil.NewSandbox(t)
+			_, _, err := run(t, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("err = %v, want it to say %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// A plain chain prints no needs line; one with side-by-side steps names each.
+func TestNeedsLabel_OnlyWhenNotAChain(t *testing.T) {
+	chain := workflow.Workflow{Steps: []workflow.Step{{N: 1}, {N: 2}}}
+	if got := needsLabel(chain, 1); got != "" {
+		t.Errorf("a chain step is labelled %q, want nothing", got)
+	}
+	fan := workflow.Workflow{Steps: []workflow.Step{{N: 1}, {N: 2, Needs: []int{1}}, {N: 3, Needs: []int{1}}}}
+	if got := needsLabel(fan, 2); got != "needs 1" {
+		t.Errorf("step 3 is labelled %q, want needs 1", got)
 	}
 }

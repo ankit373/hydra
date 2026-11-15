@@ -79,8 +79,9 @@ internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-ed
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
-internal/workflow/      ← Ordered multi-step tasks, each step routed on its own; state saved
-                          before every step so a killed run resumes, plus a heartbeat file beside
+internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
+                          needs (nil = every earlier one) and ready steps run together, at most 4;
+                          state saved before every step so a killed run resumes, plus a heartbeat file beside
                           the record: a status is only what the last writer knew, so a killed run
                           read as `running` for ever until `Observed()` resolved it against a live
                           beat (#898). `hyctl workflow`.
@@ -442,6 +443,11 @@ hyctl probe            # lists one head per model, and "2 of 423 enabled"
 hyctl workflow run --task "fix the flaky test" \
   --step "list the failing tests" --enum SIMPLE \
   --step "write the fix" --enum EXPERT
+# Steps 2 and 3 need only step 1, so they run at the same time
+hyctl workflow run --task "answer the support tickets" \
+  --step "pull out the product and complaint" --enum SIMPLE --needs "" \
+  --step "summarise the top issues" --enum MODERATE --needs 1 \
+  --step "draft a reply for each" --enum STANDARD --needs 1
 hyctl workflow list ; hyctl workflow show <id> ; hyctl workflow resume <id>
 
 # Review a diff: rules and file selection from open-code-review, Heads from Hydra.
