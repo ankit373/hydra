@@ -311,6 +311,19 @@ h2.big{font-size:clamp(var(--hy-font-size-2xl),4.4vw,var(--hy-font-size-4xl));le
 .lede{color:var(--hy-color-text-muted);font-size:clamp(var(--hy-font-size-base),1.7vw,var(--hy-font-size-lg));max-width:59ch;margin-top:var(--hy-space-4);}
 .lede b{color:var(--hy-color-text-default);font-weight:600;}
 
+/* ── section 1b · what people use it for ───────────────────────────────── */
+.usegrid{display:grid;gap:var(--hy-space-4);margin-top:var(--hy-space-8);grid-template-columns:1fr;}
+@media(min-width:760px){.usegrid{grid-template-columns:repeat(2,1fr);}}
+@media(min-width:1100px){.usegrid{grid-template-columns:repeat(3,1fr);}}
+.use h3{font-size:var(--hy-font-size-lg);margin-top:var(--hy-space-2);}
+.use .ut{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-accent-default);}
+.use pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:var(--hy-font-size-xs);}
+.use dl{display:grid;grid-template-columns:auto 1fr;gap:var(--hy-space-1) var(--hy-space-3);margin-top:var(--hy-space-4);font-size:var(--hy-font-size-md);}
+.use dt{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);text-transform:uppercase;letter-spacing:1px;padding-top:2px;}
+.use dd{margin:0;color:var(--hy-color-text-muted);min-width:0;}
+.use dd b{color:var(--hy-color-status-success);}
+.use dd code{font-family:var(--hy-font-family-mono);font-size:.94em;}
+
 /* ── section 2 · universe / galaxy ─────────────────────────────────────── */
 .galaxy-frame{position:relative;margin-top:var(--hy-space-8);border:1px solid var(--hy-color-border-default);border-radius:16px;overflow:hidden;
   background:radial-gradient(140% 100% at 72% 68%,color-mix(in srgb,var(--hy-color-accent-default) 6%,transparent),transparent 46%),linear-gradient(180deg,var(--hy-color-surface-raised),var(--hy-color-surface-base));
@@ -505,6 +518,67 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
   <div id="heroRelease" style="position:absolute;bottom:0;left:0;width:1px;height:1px;" aria-hidden="true"></div>
 </div>
 <div class="hero-buffer" aria-hidden="true"></div>
+
+<!-- ══ 1b · WHAT PEOPLE USE IT FOR ═════════════════════════════════════════ -->
+<section class="blk wrap reveal" id="uses">
+  <div class="klabel"><span>What people use it for</span><b>any kind of work</b></div>
+  <h2 class="big">Code is one kind of work. <span class="grad">So is everything else</span>.</h2>
+  <p class="lede">Five real requests, run on one machine with Gemini, Claude and a local Qwen available. Each card shows what was asked, the model Hydra sent it to, how the answer was checked, and what it cost. Your models and costs will differ.</p>
+
+  <div class="usegrid">
+    <article class="card use">
+      <div class="ut">reply</div>
+      <h3>Answer a refund request</h3>
+      <pre><code translate="no">hyctl dispatch --kind writing.support --enum STANDARD "draft a short, friendly reply to this refund request: …"</code></pre>
+      <dl>
+        <dt>model</dt><dd>Gemini 3.8 Flash (High)</dd>
+        <dt>check</dt><dd>none yet: <code translate="no">--confidence</code> waits until this kind of work has a record</dd>
+        <dt>cost</dt><dd>$0.000765</dd>
+      </dl>
+    </article>
+    <article class="card use">
+      <div class="ut">extract</div>
+      <h3>Invoice fields to JSON</h3>
+      <pre><code translate="no">hyctl dispatch --kind extraction.invoices --enum SIMPLE --check 'cmd:check-jsonschema --schemafile invoice.schema.json {file}' "return only JSON with invoice_number, date and total from this email: …"</code></pre>
+      <dl>
+        <dt>model</dt><dd>Gemini 3.8 Flash (Medium)</dd>
+        <dt>check</dt><dd>the JSON fits the schema: <b>pass</b></dd>
+        <dt>cost</dt><dd>$0.000029</dd>
+      </dl>
+    </article>
+    <article class="card use">
+      <div class="ut">summarise</div>
+      <h3>A report in three bullets</h3>
+      <pre><code translate="no">hyctl dispatch --kind summary --enum SIMPLE --check ground "$(cat prompt.txt)"</code></pre>
+      <dl>
+        <dt>model</dt><dd>Gemini 3.8 Flash (Medium)</dd>
+        <dt>check</dt><dd>all 6 claims it checked appear in the source: <b>grounded</b></dd>
+        <dt>cost</dt><dd>$0.000091</dd>
+      </dl>
+    </article>
+    <article class="card use">
+      <div class="ut">classify</div>
+      <h3>Label a support ticket</h3>
+      <pre><code translate="no">hyctl dispatch --local --kind classification --check match:labels=labels.txt "label this ticket as billing, bug or how-to: …"</code></pre>
+      <dl>
+        <dt>model</dt><dd>Qwen2.5-Coder 7B, local through Ollama</dd>
+        <dt>check</dt><dd>the label is one of the allowed set: <b>pass</b>. Nothing left the machine</dd>
+        <dt>cost</dt><dd>$0.00</dd>
+      </dl>
+    </article>
+    <article class="card use">
+      <div class="ut">code</div>
+      <h3>Fix a function until its tests pass</h3>
+      <pre><code translate="no">hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and collapse repeated dashes so slug_test.go passes"</code></pre>
+      <dl>
+        <dt>model</dt><dd>Gemini 3.8 Flash (High)</dd>
+        <dt>check</dt><dd><code translate="no">go test ./...</code>: <b>pass</b>, so the edit was kept</dd>
+        <dt>cost</dt><dd>$0.000780</dd>
+      </dl>
+    </article>
+  </div>
+  <p class="cmp-note">The same five are in the <a href="https://github.com/ankit373/hydra#what-people-use-it-for">README</a>, with the check Hydra can run on each kind of work and what exists today.</p>
+</section>
 
 <!-- ══ 2 · WHERE WE FIT IN THE UNIVERSE ═════════════════════════════════════ -->
 <section class="blk wrap reveal" id="universe">
