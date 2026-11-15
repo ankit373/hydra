@@ -23,7 +23,8 @@ type call struct {
 	enum   string
 }
 
-func (s *stubRouter) Route(_ context.Context, prompt, enum string) (StepResult, error) {
+func (s *stubRouter) Route(_ context.Context, prompt string, step Step) (StepResult, error) {
+	enum := step.Enum
 	s.calls = append(s.calls, call{prompt: prompt, enum: enum})
 	s.routing = append(s.routing, enum)
 	if s.answer != nil {
@@ -304,5 +305,28 @@ func TestProgressAndCost(t *testing.T) {
 	}
 	if got := w.CostUSD(); got < 0.0299 || got > 0.0301 {
 		t.Errorf("CostUSD() = %v, want 0.03", got)
+	}
+}
+
+// The step records the head a failed check replaced, so `workflow show` can say so.
+func TestRun_RecordsTheHeadARerunReplaced(t *testing.T) {
+	w := threeSteps(t)
+	r := &stubRouter{answer: func(n int, _, _ string) (StepResult, error) {
+		res := StepResult{Output: "ok", Head: "strong"}
+		if n == 1 {
+			res.FirstHead = "cheap"
+		}
+		return res, nil
+	}}
+	var snaps []Workflow
+	got, err := Run(context.Background(), w, r, memSaver(&snaps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := got.Steps[0]; !s.Escalated || s.FirstHead != "cheap" {
+		t.Errorf("step 1 = %+v, want escalated from cheap", s)
+	}
+	if got.Steps[1].Escalated {
+		t.Error("a step with no rerun reads as escalated")
 	}
 }

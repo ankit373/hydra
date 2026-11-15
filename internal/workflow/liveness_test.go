@@ -156,7 +156,7 @@ type beatRouter struct {
 	seen func()
 }
 
-func (b beatRouter) Route(context.Context, string, string) (StepResult, error) {
+func (b beatRouter) Route(context.Context, string, Step) (StepResult, error) {
 	if b.seen != nil {
 		b.seen()
 	}

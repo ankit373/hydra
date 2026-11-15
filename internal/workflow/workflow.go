@@ -64,6 +64,8 @@ type Step struct {
 	Prompt string   `json:"prompt"`
 	Enum   string   `json:"enum,omitempty"` // routing hint for THIS step
 	Tools  []string `json:"tools,omitempty"`
+	Kind   string   `json:"kind,omitempty"`  // kind of work, the record a failed check's rerun climbs on
+	Check  []string `json:"check,omitempty"` // dispatch --check specs this step's answer must pass
 	// Needs are the step numbers this step waits for and reads. nil, as in a
 	// record from before #1591, means every earlier step; empty means none.
 	Needs []int `json:"needs"`
@@ -77,6 +79,9 @@ type Step struct {
 	Tier   int    `json:"tier,omitempty"`
 	Output string `json:"output,omitempty"`
 	Err    string `json:"err,omitempty"`
+	// Escalated says a failed check reran the step on a stronger head than FirstHead.
+	Escalated bool   `json:"escalated,omitempty"`
+	FirstHead string `json:"first_head,omitempty"`
 
 	CostUSD    float64 `json:"cost_usd"`
 	DurationMS int64   `json:"duration_ms"`

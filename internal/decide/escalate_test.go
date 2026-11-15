@@ -130,3 +130,21 @@ func TestOnFail_UnaskedSaysNoMeasuredHeadBeatsIt(t *testing.T) {
 		t.Fatalf("Unasked = %q after the stronger head was judged", got)
 	}
 }
+
+func TestOnFail_FailedIsTheLastAnswersRealFail(t *testing.T) {
+	o := onFail(1, verdicts{detail: "missing total"})
+	o.Judge(context.Background(), answer("cheap", "s1"))
+	if got := o.Failed(); got != "verifier:cmd:a failed: missing total" {
+		t.Errorf("Failed = %q after a real fail", got)
+	}
+	o.Checks[0].Oracle = verdicts{pass: true}
+	o.Judge(context.Background(), answer("strong", "s2"))
+	if got := o.Failed(); got != "" {
+		t.Errorf("Failed = %q after the rerun passed", got)
+	}
+	unchecked := onFail(1, verdicts{err: errors.New("no context")})
+	unchecked.Judge(context.Background(), answer("cheap", "s1"))
+	if got := unchecked.Failed(); got != "" {
+		t.Errorf("Failed = %q for an answer no check could judge", got)
+	}
+}

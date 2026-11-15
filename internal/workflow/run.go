@@ -21,12 +21,15 @@ type StepResult struct {
 	Model   string
 	Tier    int
 	CostUSD float64
+	// FirstHead is set when a failed check reran the step: the head it replaced.
+	FirstHead string
 }
 
-// Router runs one step's prompt. internal/dispatch satisfies this via the
-// adapter in cmd/hydra; a test satisfies it with a stub.
+// Router runs one step's prompt, routed and checked as the step says.
+// internal/dispatch satisfies this via the adapter in cmd/hydra; a test
+// satisfies it with a stub.
 type Router interface {
-	Route(ctx context.Context, prompt, enum string) (StepResult, error)
+	Route(ctx context.Context, prompt string, step Step) (StepResult, error)
 }
 
 // Saver persists progress. Injected so a test can assert that state was written
@@ -158,11 +161,11 @@ func launchReady(ctx context.Context, w *Workflow, r Router, save Saver, launche
 		return fmt.Errorf("workflow %s: cannot record step %d before running it: %w", w.ID, batch[0]+1, err)
 	}
 	for _, i := range batch {
-		prompt, enum := w.stepPrompt(i), w.Steps[i].Enum
+		prompt, step := w.stepPrompt(i), w.Steps[i]
 		*inflight++
 		go func() {
 			start := time.Now()
-			res, err := r.Route(ctx, prompt, enum)
+			res, err := r.Route(ctx, prompt, step)
 			results <- finished{i: i, res: res, err: err, took: time.Since(start), ended: time.Now()}
 		}()
 	}
@@ -187,6 +190,7 @@ func record(w *Workflow, f finished, save Saver) error {
 	s.Model = f.res.Model
 	s.Tier = f.res.Tier
 	s.CostUSD = f.res.CostUSD
+	s.Escalated, s.FirstHead = f.res.FirstHead != "", f.res.FirstHead
 	if err := save(*w); err != nil {
 		return fmt.Errorf("workflow %s: step %d ran but its result could not be saved: %w", w.ID, f.i+1, err)
 	}

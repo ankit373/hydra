@@ -301,7 +301,7 @@ func TestWorkflowResume_UnknownID(t *testing.T) {
 func TestDispatchRouter_RefusesAnUnknownEnum(t *testing.T) {
 	testutil.NewSandbox(t)
 	r := dispatchRouter{}
-	if _, err := r.Route(t.Context(), "p", "NONSENSE"); err == nil {
+	if _, err := r.Route(t.Context(), "p", workflow.Step{Enum: "NONSENSE"}); err == nil {
 		t.Fatal("an unknown enum was passed through to the router")
 	}
 }

@@ -24,6 +24,7 @@ type OnFail struct {
 	judged  []Judged
 	answers []*dispatch.Result
 	asked   int
+	failed  string // the last answer's first real fail, "" if none
 	// open is the answer last passed over, until a later answer is judged.
 	open *dispatch.Result
 }
@@ -58,6 +59,7 @@ func (o *OnFail) Judge(ctx context.Context, r *dispatch.Result) (next bool, reas
 			}
 		}
 	}
+	o.failed = reason
 	if reason == "" || o.asked >= o.Max {
 		return false, ""
 	}
@@ -68,6 +70,10 @@ func (o *OnFail) Judge(ctx context.Context, r *dispatch.Result) (next bool, reas
 
 // Verdicts is every check's verdict on every answer judged, in order.
 func (o *OnFail) Verdicts() []Judged { return o.judged }
+
+// Failed is the last answer judged's first real fail, "" when every check that
+// ran passed it. An answer no check could judge is not failed.
+func (o *OnFail) Failed() string { return o.failed }
 
 // Answers is every answer judged, in order; the last is the one dispatch serves.
 func (o *OnFail) Answers() []*dispatch.Result { return o.answers }

@@ -22,7 +22,7 @@ type funcRouter struct {
 	fn    func(ctx context.Context, prompt string) (StepResult, error)
 }
 
-func (f *funcRouter) Route(ctx context.Context, prompt, _ string) (StepResult, error) {
+func (f *funcRouter) Route(ctx context.Context, prompt string, _ Step) (StepResult, error) {
 	f.mu.Lock()
 	f.asked = append(f.asked, prompt)
 	f.mu.Unlock()
