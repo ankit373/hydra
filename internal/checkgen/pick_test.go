@@ -3,7 +3,11 @@
 package checkgen
 
 import (
+	"context"
+	"strings"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/evalset"
 
 	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/provider"
@@ -73,5 +77,24 @@ func TestPickGenerator_KeepsLocalOnlyPromptsLocal(t *testing.T) {
 	}
 	if id, _ := pickID(t, heads[:2], scores, secret, false); id != "" {
 		t.Errorf("secret prompt with no local head picked %q, want none", id)
+	}
+}
+
+// The report splits false-pass rates on this, so a same-family check must say so on its verdict.
+func TestRun_SameFamilyWriterIsInTheVerdictDetail(t *testing.T) {
+	span, _ := setup(t, &fakeGen{})
+	same, err := NewSpec("labels", "refund", Task{Text: "reply"}, GenInfo{Head: gptSmall.ID, Family: "openai", SameFamily: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(context.Background(), []Spec{same}, "refund", gptBig, span); err != nil {
+		t.Fatal(err)
+	}
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answers) != 1 || !strings.Contains(answers[0].Checks[0].Detail, "answer's own family") {
+		t.Fatalf("verdicts = %+v, want the same-family flag in the detail", answers)
 	}
 }

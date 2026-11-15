@@ -31,6 +31,8 @@ type Task struct {
 type GenInfo struct {
 	Head   string `json:"head"`
 	Family string `json:"family"`
+	// SameFamily is PickGenerator's flag: no head of another family could write it.
+	SameFamily bool `json:"same_family,omitempty"`
 }
 
 // Spec is one generated check. Body is its kind's JSON; ID hashes the rest.
