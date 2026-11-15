@@ -1,10 +1,11 @@
 # Hydra Domain Registry
 # ─────────────────────────────────────────────────────────────────────────────
-# Maps roles/domains to routing enum keys (from routing.yaml).
-# NEVER reference tier numbers here, always use enum keys.
+# A reference table: for each kind of work, which routing key (from
+# routing.yaml) suits each task. The router does not read it; you or the
+# orchestrator use it to pick `--enum`. Never write tier numbers here.
 #
-# To add a role     → add a domain block (copy _template pattern)
-# To adjust routing → change the enum key (e.g. SIMPLE → STANDARD)
+# To add a domain   → add a block, keeping domains in alphabetical order
+# To adjust routing → change the key (e.g. SIMPLE → STANDARD)
 # To change what a key means globally → edit routing.yaml instead
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -12,7 +13,16 @@ version: "1.0"
 
 domains:
 
-  # ── Software Engineering ────────────────────────────────────────────────────
+  ai_workflows:
+    aliases: [agentic, llm-ops, agent, workflow-automation, prompt-eng, rag]
+    task_routing:
+      prompt_templates:        GRUNT      # prompt stub, system prompt template
+      tool_definitions:        SIMPLE     # tool schema, function definition
+      rag_pipeline:            STANDARD   # RAG setup, retrieval logic
+      agent_wiring:            MODERATE   # agent loop, tool routing, memory
+      multi_agent_pipeline:    HARD       # multi-agent workflow, handoff logic
+      orchestration_design:    EXPERT     # agent architecture, eval framework
+      novel_agent_systems:     CORE       # new agent paradigm, research design
 
   backend:
     aliases: [api, server, rest, graphql, grpc, microservice, monolith, hono, express, fastapi]
@@ -26,31 +36,45 @@ domains:
       complex_logic:           HARD       # payment flow, complex state machine
       core_business_logic:     CORE       # pricing engine, fraud detection core
 
-  frontend:
-    aliases: [ui, react, vue, svelte, astro, nextjs, nuxt, web, spa, pwa]
+  brainstorming:
+    aliases: [brainstorm, ideation, exploration, spike, rfc]
     task_routing:
-      boilerplate_scaffold:    GRUNT      # empty component, story stub
-      static_markup:           TRIVIAL    # HTML/JSX skeleton, layout structure
-      simple_component:        SIMPLE     # Button, Input, Badge, Avatar, Icon
-      form_validation:         STANDARD   # form with validation, controlled inputs
-      stateful_component:      MODERATE   # data table, modal with state, tabs, accordion
-      complex_feature:         COMPLEX    # drag-drop, virtual scroll, canvas, infinite list
-      state_management:        HARD       # Zustand store, Pinia module, Redux slice
-      core_architecture:       CORE       # design system foundation, routing architecture
+      raw_ideas:               TRIVIAL    # rough idea list, bullet dump
+      structured_ideation:     MODERATE   # structured brainstorm, opportunity map
+      tradeoff_analysis:       HARD       # tradeoff matrix, build-vs-buy
+      architectural_exploration: EXPERT   # architectural options, system design
+      breakthrough_thinking:   CORE       # first-principles rethink, novel approach
 
-  mobile:
-    aliases: [rn, react-native, flutter, ios, android, expo]
+  cxo_executive:
+    aliases: [ceo, cfo, coo, cbo, cto, vp, director, executive, leadership, board]
     task_routing:
-      boilerplate_scaffold:    GRUNT
-      screen_skeleton:         TRIVIAL
-      simple_screen:           SIMPLE
-      navigation_flow:         STANDARD
-      stateful_screen:         MODERATE
-      native_integration:      COMPLEX    # camera, biometrics, push notifications
-      offline_sync:            HARD
-      core_architecture:       CORE
+      template_docs:           GRUNT      # deck template, report stub
+      status_updates:          SIMPLE     # weekly update, standup summary
+      briefings:               MODERATE   # exec briefing, board update
+      financial_analysis:      HARD       # P&L analysis, budget forecast, unit economics
+      strategic_narrative:     EXPERT     # company strategy, investor narrative
+      high_stakes_decisions:   CORE       # risk tradeoffs, M&A, pivots
 
-  # ── Infrastructure & Operations ─────────────────────────────────────────────
+  data_analysis:
+    aliases: [analyst, data-analyst, bi, reporting, dashboard, sql, analytics]
+    task_routing:
+      query_stubs:             GRUNT      # empty SQL file, notebook stub
+      simple_queries:          SIMPLE     # basic SELECT, filter, aggregate
+      analysis_scripts:        STANDARD   # EDA, pivot tables, trend analysis
+      dashboards:              MODERATE   # dashboard design, chart logic
+      statistical_models:      COMPLEX    # regression, classification, forecasting
+      advanced_analytics:      HARD       # causal inference, time series, ML-driven
+      executive_insights:      VERY_HARD  # strategic analysis, board-level narrative
+
+  data_pipeline:
+    aliases: [data-eng, etl, pipeline, airflow, dbt, spark, kafka, streaming, flink]
+    task_routing:
+      schema_boilerplate:      GRUNT      # empty table schema, migration stub
+      simple_transforms:       SIMPLE     # basic transform, dbt model stub
+      dag_orchestration:       STANDARD   # Airflow DAG, Prefect flow, Dagster job
+      complex_pipeline:        COMPLEX    # streaming join, incremental load, CDC
+      real_time_streaming:     HARD       # Kafka topology, Flink job, windowing
+      platform_design:         EXPERT     # lakehouse architecture, data mesh
 
   devops_sre:
     aliases: [devops, sre, platform, infra, infrastructure, k8s, kubernetes, cloud, ops]
@@ -64,39 +88,16 @@ domains:
       multi_env_infra:         HARD       # multi-region, blue-green, canary
       platform_architecture:   EXPERT     # service mesh, cluster topology, eBPF
 
-  infra_platform:
-    aliases: [terraform, pulumi, aws, gcp, azure, cloudflare, workers, cdk, opentofu]
+  docs_technical_writer:
+    aliases: [docs, documentation, technical-writer, writer, content, readme, wiki]
     task_routing:
-      resource_templates:      GRUNT      # Terraform stub, empty module
-      simple_resources:        TRIVIAL    # S3 bucket, basic IAM role
-      iac_modules:             STANDARD   # Terraform module, Pulumi component
-      network_config:          MODERATE   # VPC, subnets, firewall rules, peering
-      security_config:         COMPLEX    # WAF, Shield, KMS, secrets manager
-      multi_cloud_setup:       HARD       # multi-cloud landing zone, federation
-      ha_design:               EXPERT     # HA architecture, DR strategy, RTO/RPO
-
-  release_eng:
-    aliases: [release, deployment, gitops, versioning, semver, ship, rollout]
-    task_routing:
-      changelog_stub:          GRUNT      # changelog template, release notes stub
-      version_scripts:         SIMPLE     # version bump script, tag script
-      deploy_config:           STANDARD   # deploy manifest, rollout config
-      rollback_strategy:       MODERATE   # canary rollback, feature flag cutover
-      multi_region_deploy:     HARD       # global rollout, region failover
-      platform_design:         EXPERT     # deployment platform architecture
-
-  # ── Quality & Testing ───────────────────────────────────────────────────────
-
-  qa_testing:
-    aliases: [qa, testing, quality, tester, test, spec, e2e]
-    task_routing:
-      test_stubs:              GRUNT      # empty test file, describe block
-      unit_tests:              SIMPLE     # unit test suite, mock setup
-      component_tests:         STANDARD   # React Testing Library, component specs
-      integration_tests:       MODERATE   # API integration tests, DB tests
-      e2e_tests:               COMPLEX    # Playwright suite, Cypress flows
-      test_strategy:           HARD       # test pyramid design, coverage strategy
-      chaos_engineering:       EXPERT     # fault injection, chaos experiments
+      doc_stubs:               GRUNT      # empty README, section placeholder, template
+      api_docs:                SIMPLE     # endpoint docs, JSDoc/TSDoc, OpenAPI
+      how_to_guides:           STANDARD   # how-to guide, tutorial, cookbook
+      architecture_docs:       MODERATE   # ADR, component diagram description
+      design_docs:             COMPLEX    # design doc, RFC, spec
+      system_docs:             HARD       # system overview, runbook, postmortem
+      executive_narrative:     EXPERT     # vision doc, engineering blog, board narrative
 
   dx_developer_experience:
     aliases: [dx, devex, developer-experience, tooling, cli-tools, scripts]
@@ -108,17 +109,66 @@ domains:
       dx_strategy:             HARD
       platform_dx:             EXPERT
 
-  performance_eng:
-    aliases: [performance, perf, optimization, profiling, benchmarking, latency]
+  finance_ops:
+    aliases: [finance, accounting, bookkeeping, invoicing, payroll, fp&a, ap, ar]
     task_routing:
-      benchmark_stubs:         GRUNT      # benchmark file stub, perf test template
-      profiling_scripts:       SIMPLE     # profiling setup, flamegraph config
-      perf_analysis:           MODERATE   # bottleneck analysis, query optimisation
-      optimization_impl:       COMPLEX    # cache strategy, async refactor, batching
-      capacity_planning:       HARD       # load model, scaling projections
-      perf_architecture:       EXPERT     # system-level perf design, NUMA/CPU topology
+      invoice_fields:          GRUNT      # pull vendor, date, total off an invoice
+      expense_category:        SIMPLE     # label an expense line, match a GL code
+      reconciliation_notes:    STANDARD   # explain a mismatch between two ledgers
+      variance_analysis:       COMPLEX    # budget vs actual, with the reasons
+      forecast_model:          HARD       # cash flow forecast, scenario model
+      capital_allocation:      EXPERT     # where to spend, raise or cut
 
-  # ── Data & AI ───────────────────────────────────────────────────────────────
+  frontend:
+    aliases: [ui, react, vue, svelte, astro, nextjs, nuxt, web, spa, pwa]
+    task_routing:
+      boilerplate_scaffold:    GRUNT      # empty component, story stub
+      static_markup:           TRIVIAL    # HTML/JSX skeleton, layout structure
+      simple_component:        SIMPLE     # Button, Input, Badge, Avatar, Icon
+      form_validation:         STANDARD   # form with validation, controlled inputs
+      stateful_component:      MODERATE   # data table, modal with state, tabs, accordion
+      complex_feature:         COMPLEX    # drag-drop, virtual scroll, canvas, infinite list
+      state_management:        HARD       # Zustand store, Pinia module, Redux slice
+      core_architecture:       CORE       # design system foundation, routing architecture
+
+  hr:
+    aliases: [people, people-ops, recruiting, talent, hiring, hris]
+    task_routing:
+      resume_fields:           GRUNT      # name, titles, dates off a CV
+      policy_lookup:           SIMPLE     # "how many leave days do I have?"
+      job_description:         STANDARD   # job post from a role brief
+      interview_plan:          MODERATE   # loop design, scorecard, questions
+      performance_review:      COMPLEX    # review draft from notes and goals
+      sensitive_case:          EXPERT     # grievance, layoff plan, comp equity
+
+  infra_platform:
+    aliases: [terraform, pulumi, aws, gcp, azure, cloudflare, workers, cdk, opentofu]
+    task_routing:
+      resource_templates:      GRUNT      # Terraform stub, empty module
+      simple_resources:        TRIVIAL    # S3 bucket, basic IAM role
+      iac_modules:             STANDARD   # Terraform module, Pulumi component
+      network_config:          MODERATE   # VPC, subnets, firewall rules, peering
+      security_config:         COMPLEX    # WAF, Shield, KMS, secrets manager
+      multi_cloud_setup:       HARD       # multi-cloud landing zone, federation
+      ha_design:               EXPERT     # HA architecture, DR strategy, RTO/RPO
+
+  legal_contracts:
+    aliases: [legal, contracts, counsel, nda, msa, terms, privacy-policy]
+    task_routing:
+      clause_extraction:       GRUNT      # pull dates, parties, amounts
+      clause_lookup:           SIMPLE     # "what is the notice period?"
+      nda_redline:             MODERATE   # mark up a standard NDA
+      contract_review:         EXPERT     # risks and gaps in a full agreement
+      dispute_strategy:        CORE       # litigation or settlement position
+
+  marketing_content:
+    aliases: [marketing, copy, copywriting, seo, social, campaign, newsletter, brand]
+    task_routing:
+      tag_and_sort:            GRUNT      # tag posts, dedupe a keyword list
+      headline_variants:       SIMPLE     # ten subject lines, a meta description
+      blog_post:               STANDARD   # a post from an outline
+      campaign_plan:           COMPLEX    # channels, calendar, budget split
+      positioning:             EXPERT     # message house, category story
 
   ml_data_science:
     aliases: [ml, ai, data-science, ds, machine-learning, deep-learning, nlp, cv, llm]
@@ -132,39 +182,87 @@ domains:
       model_architecture:      VERY_HARD  # custom model arch, attention mechanism
       research_design:         EXPERT     # novel algorithm, experiment design
 
-  data_pipeline:
-    aliases: [data-eng, etl, pipeline, airflow, dbt, spark, kafka, streaming, flink]
+  mobile:
+    aliases: [rn, react-native, flutter, ios, android, expo]
     task_routing:
-      schema_boilerplate:      GRUNT      # empty table schema, migration stub
-      simple_transforms:       SIMPLE     # basic transform, dbt model stub
-      dag_orchestration:       STANDARD   # Airflow DAG, Prefect flow, Dagster job
-      complex_pipeline:        COMPLEX    # streaming join, incremental load, CDC
-      real_time_streaming:     HARD       # Kafka topology, Flink job, windowing
-      platform_design:         EXPERT     # lakehouse architecture, data mesh
+      boilerplate_scaffold:    GRUNT
+      screen_skeleton:         TRIVIAL
+      simple_screen:           SIMPLE
+      navigation_flow:         STANDARD
+      stateful_screen:         MODERATE
+      native_integration:      COMPLEX    # camera, biometrics, push notifications
+      offline_sync:            HARD
+      core_architecture:       CORE
 
-  data_analysis:
-    aliases: [analyst, data-analyst, bi, reporting, dashboard, sql, analytics]
+  operations:
+    aliases: [bizops, business-ops, procurement, logistics, supply-chain, admin, office]
     task_routing:
-      query_stubs:             GRUNT      # empty SQL file, notebook stub
-      simple_queries:          SIMPLE     # basic SELECT, filter, aggregate
-      analysis_scripts:        STANDARD   # EDA, pivot tables, trend analysis
-      dashboards:              MODERATE   # dashboard design, chart logic
-      statistical_models:      COMPLEX    # regression, classification, forecasting
-      advanced_analytics:      HARD       # causal inference, time series, ML-driven
-      executive_insights:      VERY_HARD  # strategic analysis, board-level narrative
+      form_filling:            GRUNT      # fill a template from a record
+      ticket_routing:          SIMPLE     # send a request to the right queue
+      sop_writing:             STANDARD   # standard operating procedure
+      vendor_comparison:       MODERATE   # compare quotes against requirements
+      process_redesign:        HARD       # remove a step, re-plan a workflow
+      org_design:              EXPERT     # team structure, operating model
 
-  ai_workflows:
-    aliases: [agentic, llm-ops, agent, workflow-automation, prompt-eng, rag]
+  performance_eng:
+    aliases: [performance, perf, optimization, profiling, benchmarking, latency]
     task_routing:
-      prompt_templates:        GRUNT      # prompt stub, system prompt template
-      tool_definitions:        SIMPLE     # tool schema, function definition
-      rag_pipeline:            STANDARD   # RAG setup, retrieval logic
-      agent_wiring:            MODERATE   # agent loop, tool routing, memory
-      multi_agent_pipeline:    HARD       # multi-agent workflow, handoff logic
-      orchestration_design:    EXPERT     # agent architecture, eval framework
-      novel_agent_systems:     CORE       # new agent paradigm, research design
+      benchmark_stubs:         GRUNT      # benchmark file stub, perf test template
+      profiling_scripts:       SIMPLE     # profiling setup, flamegraph config
+      perf_analysis:           MODERATE   # bottleneck analysis, query optimisation
+      optimization_impl:       COMPLEX    # cache strategy, async refactor, batching
+      capacity_planning:       HARD       # load model, scaling projections
+      perf_architecture:       EXPERT     # system-level perf design, NUMA/CPU topology
 
-  # ── Security ────────────────────────────────────────────────────────────────
+  product_management:
+    aliases: [product, pm, product-manager, roadmap, strategy, features, discovery]
+    task_routing:
+      meeting_notes:           GRUNT      # meeting notes template, standup stub
+      user_stories:            SIMPLE     # user story, acceptance criteria, Gherkin
+      feature_spec:            STANDARD   # feature spec, scope doc
+      prd:                     MODERATE   # full PRD, requirements doc
+      roadmap:                 HARD       # quarterly roadmap, OKR breakdown
+      strategy_doc:            EXPERT     # product strategy, market analysis, positioning
+
+  qa_testing:
+    aliases: [qa, testing, quality, tester, test, spec, e2e]
+    task_routing:
+      test_stubs:              GRUNT      # empty test file, describe block
+      unit_tests:              SIMPLE     # unit test suite, mock setup
+      component_tests:         STANDARD   # React Testing Library, component specs
+      integration_tests:       MODERATE   # API integration tests, DB tests
+      e2e_tests:               COMPLEX    # Playwright suite, Cypress flows
+      test_strategy:           HARD       # test pyramid design, coverage strategy
+      chaos_engineering:       EXPERT     # fault injection, chaos experiments
+
+  release_eng:
+    aliases: [release, deployment, gitops, versioning, semver, ship, rollout]
+    task_routing:
+      changelog_stub:          GRUNT      # changelog template, release notes stub
+      version_scripts:         SIMPLE     # version bump script, tag script
+      deploy_config:           STANDARD   # deploy manifest, rollout config
+      rollback_strategy:       MODERATE   # canary rollback, feature flag cutover
+      multi_region_deploy:     HARD       # global rollout, region failover
+      platform_design:         EXPERT     # deployment platform architecture
+
+  research:
+    aliases: [literature, desk-research, market-research, academic, survey, citations]
+    task_routing:
+      citation_format:         GRUNT      # reformat references to a style
+      abstract_summary:        SIMPLE     # summarise one paper or report
+      source_comparison:       MODERATE   # what three sources agree and differ on
+      literature_review:       COMPLEX    # review across many sources
+      study_design:            EXPERT     # method, sample, threats to validity
+
+  sales:
+    aliases: [sdr, bdr, account-executive, crm, outreach, prospecting, deals]
+    task_routing:
+      crm_cleanup:             GRUNT      # dedupe contacts, fix fields
+      lead_qualification:      SIMPLE     # label a lead by fit and intent
+      outreach_email:          STANDARD   # personalised first email
+      call_summary:            MODERATE   # notes, objections, next steps
+      proposal_draft:          COMPLEX    # proposal from discovery notes
+      deal_strategy:           HARD       # stakeholder map, pricing approach
 
   security_ciso:
     aliases: [security, ciso, infosec, appsec, devsecops, compliance, audit, pentest]
@@ -177,48 +275,21 @@ domains:
       zero_trust_design:       EXPERT     # zero-trust architecture, SASE, ZTNA
       risk_strategy:           CORE       # security roadmap, board risk register
 
-  # ── Product & Business ──────────────────────────────────────────────────────
-
-  product_management:
-    aliases: [product, pm, product-manager, roadmap, strategy, features, discovery]
+  support:
+    aliases: [customer-support, helpdesk, customer-service, cx, tickets, faq]
     task_routing:
-      meeting_notes:           GRUNT      # meeting notes template, standup stub
-      user_stories:            SIMPLE     # user story, acceptance criteria, Gherkin
-      feature_spec:            STANDARD   # feature spec, scope doc
-      prd:                     MODERATE   # full PRD, requirements doc
-      roadmap:                 HARD       # quarterly roadmap, OKR breakdown
-      strategy_doc:            EXPERT     # product strategy, market analysis, positioning
+      ticket_tagging:          GRUNT      # tag and route a ticket
+      faq_reply:               SIMPLE     # answer from the help center
+      troubleshooting:         STANDARD   # step-by-step fix for a known issue
+      refund_dispute:          STANDARD   # reply to a refund or billing dispute
+      escalation_summary:      MODERATE   # hand-off note for tier 2
+      incident_comms:          COMPLEX    # customer update during an outage
 
-  cxo_executive:
-    aliases: [ceo, cfo, coo, cbo, cto, vp, director, executive, leadership, board]
+  translation:
+    aliases: [translate, localization, l10n, i18n, localisation]
     task_routing:
-      template_docs:           GRUNT      # deck template, report stub
-      status_updates:          SIMPLE     # weekly update, standup summary
-      briefings:               MODERATE   # exec briefing, board update
-      financial_analysis:      HARD       # P&L analysis, budget forecast, unit economics
-      strategic_narrative:     EXPERT     # company strategy, investor narrative
-      high_stakes_decisions:   CORE       # risk tradeoffs, M&A, pivots
-
-  # ── Documentation & Communication ───────────────────────────────────────────
-
-  docs_technical_writer:
-    aliases: [docs, documentation, technical-writer, writer, content, readme, wiki]
-    task_routing:
-      doc_stubs:               GRUNT      # empty README, section placeholder, template
-      api_docs:                SIMPLE     # endpoint docs, JSDoc/TSDoc, OpenAPI
-      how_to_guides:           STANDARD   # how-to guide, tutorial, cookbook
-      architecture_docs:       MODERATE   # ADR, component diagram description
-      design_docs:             COMPLEX    # design doc, RFC, spec
-      system_docs:             HARD       # system overview, runbook, postmortem
-      executive_narrative:     EXPERT     # vision doc, engineering blog, board narrative
-
-  # ── Specialised Engineering ─────────────────────────────────────────────────
-
-  brainstorming:
-    aliases: [brainstorm, ideation, exploration, research, spike, rfc]
-    task_routing:
-      raw_ideas:               TRIVIAL    # rough idea list, bullet dump
-      structured_ideation:     MODERATE   # structured brainstorm, opportunity map
-      tradeoff_analysis:       HARD       # tradeoff matrix, build-vs-buy
-      architectural_exploration: EXPERT   # architectural options, system design
-      breakthrough_thinking:   CORE       # first-principles rethink, novel approach
+      string_extraction:       GRUNT      # pull UI strings into a catalog
+      short_strings:           SIMPLE     # button labels, menu items
+      document_translation:    STANDARD   # a page of prose
+      marketing_transcreation: COMPLEX    # adapt copy, idiom and tone
+      legal_translation:       EXPERT     # contracts and terms, where wording binds
