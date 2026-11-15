@@ -42,8 +42,8 @@ func objectiveDispatcher(t *testing.T) *Dispatcher {
 		t.Fatal(err)
 	}
 	d.cal = cal
-	record(t, cal, "best", objectiveClass, 25, 25)
-	record(t, cal, "thrifty", objectiveClass, 24, 25)
+	record(t, cal, "best", objectiveClass, 100, 100)
+	record(t, cal, "thrifty", objectiveClass, 96, 100)
 	prices := map[string]float64{"best": 0.02, "thrifty": 0.01}
 	d.price = func(h provider.Head) (float64, bool) { usd, ok := prices[h.ID]; return usd, ok }
 	return d

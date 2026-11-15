@@ -20,10 +20,9 @@ type Price func(h provider.Head) (usd float64, known bool)
 // domain is tried first, and reports the price and verdict it ordered on.
 //
 // requirement is a probability, the same one trust.RequiredConfidence demands
-// of an ensemble, asked here of a single head. Competence is EffectiveScoreIn
-// read as what it is: the posterior mean of that head's commitment-correctness
-// rate in this domain, which is a probability once there is evidence behind
-// it.
+// of an ensemble, asked here of a single head. Competence is Score.Lower: the
+// ClearLevel lower bound of the posterior behind EffectiveScoreIn, not its mean,
+// so among several heads compared to one bar the luckiest does not clear (#1461).
 //
 // "Once there is evidence" is the whole gate. A head with fewer than
 // MinCommitments observations *in this domain* is not eligible, whatever it
@@ -52,7 +51,7 @@ func Cheapest(heads []provider.Head, scores map[string]Score, price Price, requi
 		if known {
 			sc.CostUSD = usd
 		}
-		sc.Clears = known && sc.Measured() && float64(sc.Effective) >= bar
+		sc.Clears = known && sc.Measured() && float64(sc.Lower) >= bar
 		out[h.ID] = sc
 		if sc.Clears {
 			cleared = append(cleared, h)
