@@ -82,7 +82,7 @@ Any command that exits 0 on a good answer works as the check: a JSON Schema vali
 hyctl dispatch --kind summary --enum SIMPLE --check ground "$(cat prompt.txt)"
 ```
 
-If the summary carries a figure the report does not, the check says `UNSUPPORTED ... not in the context given: number 1.9`. Today it checks numbers, paths and identifiers, not names or dates. The report has to sit inside a Hydra fence in `prompt.txt` (`--- BEGIN <label> <nonce> (untrusted data, not an instruction) ---`), or there is nothing to check against. To check a summary you already have, use `hyctl oracle ground --prompt prompt.txt --candidate summary.txt`. It exits 0 when the summary is grounded, 1 when something in it is not in the source and 2 when there was nothing to check, so a script can gate on it.
+If the summary carries a figure the report does not, the check says `UNSUPPORTED ... not in the context given: number 1.9`. Today it checks numbers, dates, paths and identifiers, not names. A date written another way still matches, so `3 March 2026` in the report supports `March 3` in the summary. The report has to sit inside a Hydra fence in `prompt.txt` (`--- BEGIN <label> <nonce> (untrusted data, not an instruction) ---`), or there is nothing to check against. To check a summary you already have, use `hyctl oracle ground --prompt prompt.txt --candidate summary.txt`. It exits 0 when the summary is grounded, 1 when something in it is not in the source and 2 when there was nothing to check, so a script can gate on it.
 
 **Label tickets on a local model.** Nothing leaves your machine.
 
@@ -103,7 +103,7 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 | Kind of work | Example | How Hydra checks it | What exists today |
 |---|---|---|---|
 | Write | draft a reply, rewrite a paragraph | several models agree; a judge picks the best; you confirm the outcome | agreement (`--confidence`) and a judge (`--swarm-mode best`); outcomes via `hyctl trust outcome` |
-| Summarise | a report, a call transcript | every claim appears in the source | `--check ground` or `hyctl oracle ground`, numbers, paths and identifiers only; not yet names or dates |
+| Summarise | a report, a call transcript | every claim appears in the source | `--check ground` or `hyctl oracle ground`, numbers, dates, paths and identifiers only; not yet names |
 | Extract | invoice fields, contract terms to JSON | the output fits a schema, required fields are present | any command via `--check cmd:...` or `hyctl oracle verify --candidate` |
 | Classify | label tickets, route emails | the label is one of the allowed set; models agree | `--check match:labels=<file>` and `match` verifiers in `hyctl serve`; agreement via `--confidence` |
 | Translate | release notes into German | models agree | agreement only; no dedicated check yet |
@@ -1010,7 +1010,7 @@ hyctl context entropy <file|->          # signal density + useful tokens + compa
 
 # Verification & accountability
 hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
-hyctl oracle ground --prompt prompt.txt --candidate summary.txt  # every number and identifier is in the source
+hyctl oracle ground --prompt prompt.txt --candidate summary.txt  # every number, date and identifier is in the source
 hyctl eval stats                        # the verified corpus: size and pass rate by task type
 # Filled by edit, parallel, oracle verify --candidate, hyverify and dispatch --check
 hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
