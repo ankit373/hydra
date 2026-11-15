@@ -216,10 +216,11 @@ func runTextTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	}
 
 	result, err := d.Dispatch(ctx, prompt, dispatch.Options{
-		TierHint: enumToTier(task.Enum),
-		RunID:    runID,
-		TaskID:   taskID,
-		Resource: task.Context,
+		TierHint:    enumToTier(task.Enum),
+		RunID:       runID,
+		TaskID:      taskID,
+		Resource:    task.Context,
+		PromptCache: policy.ForPrompt(config.ScriptHome(), prompt).PromptCache,
 	})
 	if err != nil {
 		return failText(task, err.Error())
@@ -322,6 +323,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		MaxCostSource: "policy.yaml max_cost_usd",
 		MaxMemoryMB:   fp.MaxMemoryMB,
 		MaxCPUSeconds: fp.MaxCPUSeconds,
+		PromptCache:   fp.PromptCache,
 	})
 	if err != nil {
 		cleanupBackup()

@@ -41,7 +41,7 @@ rules:
 // parallel only, never hyctl dispatch (#838).
 func TestResolveCostCeiling_PolicyAppliesWithNoFlag(t *testing.T) {
 	home := policyHome(t, ceilingPolicy)
-	got, src := resolveCostCeiling(home, false, 0, policy.Spec{EnumTier: 8})
+	got, src := costCeiling(policy.ForFile(home, policy.Spec{EnumTier: 8}), false, 0)
 	if got != 0.25 {
 		t.Errorf("ceiling = %v, want 0.25 from the policy defaults", got)
 	}
@@ -55,7 +55,7 @@ func TestResolveCostCeiling_PolicyAppliesWithNoFlag(t *testing.T) {
 // pass whether or not the rule matched, so this asserts the rule's own number.
 func TestResolveCostCeiling_ThreadsTheSpecSoRulesMatch(t *testing.T) {
 	home := policyHome(t, ceilingPolicy)
-	got, _ := resolveCostCeiling(home, false, 0, policy.Spec{EnumTier: 1})
+	got, _ := costCeiling(policy.ForFile(home, policy.Spec{EnumTier: 1}), false, 0)
 	if got != 5.00 {
 		t.Errorf("ceiling = %v at tier 1, want 5.00 from the matching rule", got)
 	}
@@ -63,7 +63,7 @@ func TestResolveCostCeiling_ThreadsTheSpecSoRulesMatch(t *testing.T) {
 
 func TestResolveCostCeiling_FlagWins(t *testing.T) {
 	home := policyHome(t, ceilingPolicy)
-	got, src := resolveCostCeiling(home, true, 1.50, policy.Spec{EnumTier: 8})
+	got, src := costCeiling(policy.ForFile(home, policy.Spec{EnumTier: 8}), true, 1.50)
 	if got != 1.50 {
 		t.Errorf("ceiling = %v, want the flag's 1.50", got)
 	}
@@ -77,7 +77,7 @@ func TestResolveCostCeiling_FlagWins(t *testing.T) {
 // silently keep the policy's ceiling the user just lifted.
 func TestResolveCostCeiling_ExplicitZeroLiftsThePolicyCeiling(t *testing.T) {
 	home := policyHome(t, ceilingPolicy)
-	got, src := resolveCostCeiling(home, true, 0, policy.Spec{EnumTier: 8})
+	got, src := costCeiling(policy.ForFile(home, policy.Spec{EnumTier: 8}), true, 0)
 	if got != 0 {
 		t.Errorf("ceiling = %v, want 0: --max-cost 0 lifts the policy ceiling", got)
 	}
@@ -90,7 +90,7 @@ func TestResolveCostCeiling_ExplicitZeroLiftsThePolicyCeiling(t *testing.T) {
 // this in refuses nothing that was not already refused. A regression here is
 // every existing install suddenly capped.
 func TestResolveCostCeiling_ShippedDefaultStillRefusesNothing(t *testing.T) {
-	got, _ := resolveCostCeiling(t.TempDir(), false, 0, policy.Spec{EnumTier: 8})
+	got, _ := costCeiling(policy.ForFile(t.TempDir(), policy.Spec{EnumTier: 8}), false, 0)
 	if got != 0 {
 		t.Errorf("ceiling = %v under the embedded policy, want 0 (unlimited)", got)
 	}

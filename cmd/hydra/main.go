@@ -848,19 +848,9 @@ func truncLabel(s string, n int) string {
 
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
-// resolveCostCeiling picks the denial-of-wallet ceiling and names its source.
-//
-// policy.yaml's max_cost_usd reached hyctl edit and hyctl parallel and never
-// the command that spends the money, so the guard had never once fired (#838).
-// An explicit --max-cost still wins, including --max-cost 0, which is how a
-// policy ceiling is lifted for one run: hence flagSet rather than a zero check.
-func resolveCostCeiling(hydraHome string, flagSet bool, flagVal float64, spec policy.Spec) (float64, string) {
-	return costCeiling(policy.ForFile(hydraHome, spec), flagSet, flagVal)
-}
-
-// costCeiling is the same choice over an already-decided policy, for a caller
-// that needs the deadline off the same FilePolicy and must not evaluate
-// policy.yaml twice to get both.
+// costCeiling picks the denial-of-wallet ceiling from a decided policy and
+// names its source. An explicit --max-cost wins, including --max-cost 0, which
+// lifts a policy ceiling for one run: hence flagSet rather than a zero check (#838).
 func costCeiling(fp policy.FilePolicy, flagSet bool, flagVal float64) (float64, string) {
 	if flagSet {
 		return flagVal, "--max-cost"
@@ -1100,6 +1090,22 @@ func cmdDispatch() *cobra.Command {
 					effectiveConf = derived
 				}
 			}
+			// An enum is a routing instruction, not just a cost label: resolve
+			// it to a tier when no explicit --tier was given (#165).
+			tierHint := tier
+			if tierHint == "" && enumKey != "" {
+				tierHint = dispatch.EnumToTier(enumKey)
+			}
+			// One policy decision for whichever path below runs. A named tier
+			// resolves to its number, so an enum_tier rule matches either spelling.
+			enumTier, _ := dispatch.ResolveTier(tierHint)
+			fp := policy.ForFile(config.ScriptHome(), policy.Spec{
+				File:         file,
+				Prompt:       prompt,
+				PromptLength: len(prompt),
+				EnumTier:     enumTier,
+			})
+
 			// A check judges one answer and scores its span; an ensemble has neither yet.
 			if len(checks) > 0 && (effectiveConf > 0 || doSwarm) {
 				return errors.New("--check judges a single dispatch's answer; it does not combine " +
@@ -1128,6 +1134,7 @@ func cmdDispatch() *cobra.Command {
 					MaxEstCostUSD: swarmMaxCost,
 					LocalOnly:     localOnly,
 					System:        system,
+					PromptCache:   fp.PromptCache,
 					A2AFile:       a2aFile,
 					JudgeTierHint: swarmJudge,
 					Confidence:    effectiveConf,
@@ -1153,6 +1160,7 @@ func cmdDispatch() *cobra.Command {
 					MaxEstCostUSD: swarmMaxCost,
 					LocalOnly:     localOnly,
 					System:        system,
+					PromptCache:   fp.PromptCache,
 					A2AFile:       a2aFile,
 					// JudgeTierHint is not a no-op here: RunSPRT's behavioral
 					// equivalence judge (judgeEquivalence) dispatches through it to
@@ -1204,6 +1212,7 @@ func cmdDispatch() *cobra.Command {
 					MaxEstCostUSD:  swarmMaxCost,
 					LocalOnly:      localOnly,
 					System:         system,
+					PromptCache:    fp.PromptCache,
 					A2AFile:        a2aFile,
 					JudgeTierHint:  swarmJudge,
 					RunID:          runID,
@@ -1226,28 +1235,12 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			// ── normal single dispatch ─────────────────────────────────────
-			// An enum is a routing instruction, not just a cost label: resolve
-			// it to a tier when no explicit --tier was given (#165).
-			tierHint := tier
-			if tierHint == "" && enumKey != "" {
-				tierHint = dispatch.EnumToTier(enumKey)
-			}
 			// policy.yaml's max_cost_usd reached hyctl edit and hyctl parallel
 			// and never the command that spends the money. An explicit
 			// --max-cost still wins, including --max-cost 0 to lift a ceiling
 			// the policy set, which is why this asks Changed rather than
 			// reading the zero (#838).
-			// A named tier resolves to its number, so an enum_tier rule matches
-			// the same whichever spelling routed the dispatch.
-			enumTier, _ := dispatch.ResolveTier(tierHint)
-			ceiling, ceilingFrom := resolveCostCeiling(
-				config.ScriptHome(), cmd.Flags().Changed("max-cost"), maxCost,
-				policy.Spec{
-					File:         file,
-					Prompt:       prompt,
-					PromptLength: len(prompt),
-					EnumTier:     enumTier,
-				})
+			ceiling, ceilingFrom := costCeiling(fp, cmd.Flags().Changed("max-cost"), maxCost)
 			rcp := recipe.Default(checks)
 			opts := dispatch.Options{
 				Recipe:         &rcp,
@@ -1261,6 +1254,7 @@ func cmdDispatch() *cobra.Command {
 				TaskID:         taskID,
 				MaxCostUSD:     ceiling,
 				MaxCostSource:  ceilingFrom,
+				PromptCache:    fp.PromptCache,
 				Classification: &promptClass,
 				// The same key --confidence reads. A plain dispatch now routes
 				// on it too, so the domain a session fills is the domain its

@@ -883,6 +883,9 @@ $ hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--enum</span
       <div class="sub"><div class="lbl">Good enough</div>
         <p>Hydra counts a model as good enough at a task type only when it is still good enough after allowing for luck. A model that got 22 of 24 answers right may just have had a good run, and when several models are held to one bar, the one whose average clears it is often only the luckiest. So the bar is checked against the lowest rate the model&rsquo;s record supports at 95%, not against its average. 95% is the level <span class="fx">--confidence</span> uses by default. <span class="fx">--dry-run</span> prints both numbers, for example an average of 91 and at least 82 at 95%.</p>
       </div>
+      <div class="sub"><div class="lbl">Prompt caching</div>
+        <p>On by default for every request, whatever the kind of work. <span class="fx">prompt_cache: true</span> in <span class="fx">registry/policy.yaml</span> asks providers that cache only when asked, such as Anthropic, to cache the system prompt and tool list, so a repeated start is billed at the cache read rate. OpenAI, Gemini and DeepSeek cache on their own. A policy rule that sets <span class="fx">prompt_cache: false</span> turns it off for the work it matches.</p>
+      </div>
       <div class="sub"><div class="lbl">Usage</div>
         <pre translate="no">hyctl dispatch <span class="s">"refactor auth to JWT refresh"</span>
 hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="fl">--kind</span> summary <span class="s">"summarise this call transcript: ..."</span>

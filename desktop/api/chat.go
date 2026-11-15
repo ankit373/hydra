@@ -9,6 +9,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -162,10 +163,11 @@ func (a *API) Chat(prompt, enum, runID, tier, head string) (*ChatReply, error) {
 		TierHint: tierHint,
 		// A picked model is pinned, not merely preferred: dispatch refuses
 		// rather than answering from something the user did not choose.
-		Head:   head,
-		Enum:   enum,
-		RunID:  runID,
-		TaskID: taskID,
+		Head:        head,
+		Enum:        enum,
+		RunID:       runID,
+		TaskID:      taskID,
+		PromptCache: policy.ForPrompt(config.ScriptHome(), prompt).PromptCache,
 	})
 	if err != nil {
 		if errors.Is(err, dispatch.ErrNoHeads) {

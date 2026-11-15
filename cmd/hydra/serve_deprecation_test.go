@@ -37,9 +37,10 @@ func TestServeRouter_DefaultHydraBuildsWhatDevelopBuilt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// PromptCache is the shipped policy's prompt_cache, which every request reads (#1474).
 	want := dispatch.Options{
 		TierHint: dispatch.EnumToTier("STANDARD"), Enum: "STANDARD",
-		MaxTokens: 64, Messages: msgs, RunID: "run-x",
+		MaxTokens: 64, Messages: msgs, RunID: "run-x", PromptCache: true,
 	}
 	if !reflect.DeepEqual(got, want) || ev != nil {
 		t.Errorf("default `hydra` built %+v evidence %+v, want develop's %+v and no evidence", got, ev, want)

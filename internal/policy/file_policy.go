@@ -52,7 +52,7 @@ type FilePolicy struct {
 	MaxCPUSeconds       int      `yaml:"max_cpu_seconds" enforced:"true"`
 	UseRepoMap          bool     `yaml:"use_repo_map"`
 	DedupFileReads      bool     `yaml:"dedup_file_reads"`
-	PromptCache         bool     `yaml:"prompt_cache"`
+	PromptCache         bool     `yaml:"prompt_cache" enforced:"true"`
 	Defensive           bool     `yaml:"defensive"`
 	MatchedRules        []string `yaml:"-"`
 }

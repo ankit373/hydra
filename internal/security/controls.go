@@ -101,7 +101,9 @@ func filePolicyControl() Control {
 		"and the wall-clock limit deadlines the dispatch and the validator after it. The memory and "+
 		"CPU limits cap a subprocess head through internal/sandbox. Both "+
 		"`hyctl edit` and `hyctl parallel` enforce them, so a refusal reads the same "+
-		"either way (#769). The other %d are declared and read by nothing",
+		"either way (#769). prompt_cache reaches every dispatch, whatever the kind of work, and asks "+
+		"a provider that caches only on request to cache the stable start of the prompt. "+
+		"The other %d are declared and read by nothing",
 		n, len(enforced), all, strings.Join(enforced, ", "),
 		filePolicyEnforcementSite, all-len(enforced))
 	// A condition naming a field the evaluator does not know can never be

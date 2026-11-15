@@ -53,6 +53,8 @@ type Options struct {
 	// Prompt parameters.
 	System    string
 	MaxTokens int
+	// PromptCache is policy.yaml's prompt_cache, passed to every head and the judge.
+	PromptCache bool
 
 	// A2AFile is a path to an A2A handoff JSON file (--a2a): its structured
 	// context is prepended to the prompt before any head fires. Mirrors the

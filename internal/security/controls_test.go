@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -49,6 +50,9 @@ func TestControls_FilePolicyIsEnforcedButPartial(t *testing.T) {
 	}
 	if c.Status() != "limited" {
 		t.Errorf("Status() = %q, want limited: partly enforced is neither inert nor active", c.Status())
+	}
+	if !slices.Contains(policy.EnforcedKeys(), "prompt_cache") || !strings.Contains(c.Detail, "prompt_cache") {
+		t.Errorf("Detail = %q, want prompt_cache among the fields that take effect (#1474)", c.Detail)
 	}
 	// Only actionable if it names where the caps do and do not apply.
 	if !strings.Contains(c.Detail, filePolicyEnforcementSite) {
