@@ -5,6 +5,8 @@ package editor
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -104,5 +106,28 @@ func TestRecordVerifiedEdit_NoEmbedderStillFilesTheExample(t *testing.T) {
 		if all[0].Candidate == "" || !all[0].Passed {
 			t.Error("the verdict itself was not recorded")
 		}
+	}
+}
+
+// The verdict log gets the validator's verdict keyed by the bytes on disk, and
+// never the candidate's text.
+func TestRecordVerifiedEdit_WritesVerdict(t *testing.T) {
+	testutil.NewSandbox(t)
+	file := filepath.Join(t.TempDir(), "query.sql")
+	if err := os.WriteFile(file, []byte("SELECT 1;\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v := sampleEdit
+	v.File, v.Candidate, v.Passed, v.Detail = file, "SELECT 1;", false, "syntax error"
+	RecordVerifiedEdit(context.Background(), nil, v)
+
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil || len(answers) != 1 || len(answers[0].Checks) != 1 {
+		t.Fatalf("verdict log = %+v, err=%v; want one answer with one check", answers, err)
+	}
+	c := answers[0].Checks[0]
+	if c.CandidateHash != evalset.Hash("SELECT 1;\n") || c.Check != validatorSource ||
+		c.Passed || c.Head != "cody" || c.Detail != "syntax error" {
+		t.Errorf("verdict = %+v", c)
 	}
 }

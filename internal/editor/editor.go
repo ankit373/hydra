@@ -397,7 +397,7 @@ func RecordVerifiedEdit(ctx context.Context, emb embed.Embedder, v VerifiedEdit)
 	_, _ = evalset.Add(evalset.DefaultPath(), evalset.Example{
 		TaskHash:   evalset.TaskHashFor(v.Prompt),
 		Domain:     trust.DomainForFile(v.File),
-		Source:     "editor:validator",
+		Source:     validatorSource,
 		Candidate:  v.Candidate,
 		Passed:     v.Passed,
 		Detail:     v.Detail,
@@ -407,7 +407,19 @@ func RecordVerifiedEdit(ctx context.Context, emb embed.Embedder, v VerifiedEdit)
 		Embedding:  util.EncodeVec(vec),
 		EmbedModel: model,
 	})
+	// Keyed by the bytes on disk, which are what review hashes when a human
+	// later judges this file, so that truth joins this verdict.
+	if raw, err := os.ReadFile(v.File); err == nil {
+		_ = evalset.AddVerdict(evalset.VerdictsPath(), evalset.Verdict{
+			TaskHash: evalset.TaskHashFor(v.Prompt), CandidateHash: evalset.Hash(string(raw)),
+			Head: v.Head, Domain: trust.DomainForFile(v.File), Check: validatorSource,
+			Passed: v.Passed, Detail: v.Detail,
+		})
+	}
 }
+
+// validatorSource names the edit validator wherever its verdict is filed.
+const validatorSource = "editor:validator"
 
 // embedTask vectorises the instruction, never the prompt the head saw: that one
 // is mostly file content, and a classifier reading this corpus is handed the
