@@ -206,10 +206,12 @@ func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured
 	return f, serveRouter{d: d, objective: rank.Cost, verifiers: verifiers, confidence: 0.95, maxEscalations: 2, cal: shared}
 }
 
+// recordN spreads the misses evenly, so the record is one steady rate and not
+// a change the detector would cut.
 func recordN(t *testing.T, cal *trust.Calibrator, source string, correct, total int) {
 	t.Helper()
 	for i := range total {
-		mustUpdate(t, cal, source, true, i < correct)
+		mustUpdate(t, cal, source, true, (i+1)*correct/total > i*correct/total)
 	}
 }
 
