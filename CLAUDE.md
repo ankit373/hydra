@@ -101,6 +101,8 @@ internal/mcpregistry/   ← MCP server trust registry: sync official registry, s
                           saved tools/list at $HYDRA_HOME/mcp_tools/<server>.json, never a live server
                           (#1303). `hyctl mcp registry`.
 internal/oracle/        ← Checks as calibrated evidence: any command (tests, a schema check), label match, predicates. `hyctl oracle`.
+internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, claims, rubric, tests), stored once
+                          at $HYDRA_HOME/evalset/checks/, run on one answer with a verdict per check. Nothing calls it yet.
 internal/vet/           ← Review a diff: open-code-review resolves the files and rules, the router
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace
