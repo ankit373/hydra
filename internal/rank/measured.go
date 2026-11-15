@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/stats"
 )
 
 // MinCommitments is how many judged answers a head needs before anything it
@@ -18,6 +19,10 @@ import (
 // the catalogue's declared score is worth as many observations as we require
 // before we will listen to a measurement at all. One number, not two.
 const MinCommitments = 20
+
+// ClearLevel is how sure the router must be that a head reaches a bar before it
+// counts as clearing it. 0.95 is the level --confidence defaults to and tied uses.
+const ClearLevel = 0.95
 
 // Measurement is what this machine's verified history says about a head: how
 // many answers it committed to that something later judged, and how many of
@@ -55,9 +60,12 @@ type Score struct {
 	// measured, and reporting no evidence for it would be a lie.
 	N        int `json:"n"`
 	InDomain int `json:"in_domain,omitempty"`
+	// Lower is the in-domain posterior's ClearLevel lower bound in percent, rounded
+	// down, set only when Measured. Cheapest gates on it rather than on Effective.
+	Lower int `json:"lower,omitempty"`
 
 	// CostUSD is what one nominal call costs, set by Cheapest and Strongest.
-	// Clears is set by Cheapest alone: whether measured in-domain competence
+	// Clears is set by Cheapest alone: whether a measured head's Lower
 	// reached its requirement, so a false one never reads as a failed bar.
 	CostUSD float64 `json:"cost_usd,omitempty"`
 	Clears  bool    `json:"clears,omitempty"`
@@ -107,9 +115,34 @@ func EffectiveScore(declared int, m Measurement) int {
 // domain's own rows, so using them as its prior would let the same evidence
 // vote twice, once as its own expectation.
 func EffectiveScoreIn(declared int, m Measurement) int {
+	return posterior(borrowedPrior(declared, m), m.InDomainCorrect, m.InDomainTotal)
+}
+
+// borrowedPrior is the prior EffectiveScoreIn updates: declared moved by at most
+// MinCommitments observations from other domains.
+func borrowedPrior(declared int, m Measurement) int {
 	elsewhere := atMost(m.Correct-m.InDomainCorrect, m.Total-m.InDomainTotal, MinCommitments)
-	base := posterior(declared, elsewhere.Correct, elsewhere.Total)
-	return posterior(base, m.InDomainCorrect, m.InDomainTotal)
+	return posterior(declared, elsewhere.Correct, elsewhere.Total)
+}
+
+// lowerIn is the ClearLevel lower bound of the Beta posterior whose mean is
+// EffectiveScoreIn, in percent rounded down. A point mass at 0 or 1 has no spread.
+func lowerIn(declared int, m Measurement) int {
+	prior := float64(MinCommitments) * float64(borrowedPrior(declared, m)) / 100
+	correct := float64(max(m.InDomainCorrect, 0))
+	a := prior + correct
+	b := float64(MinCommitments) - prior + float64(m.InDomainTotal) - correct
+	switch {
+	case a <= 0:
+		return 0
+	case b <= 0:
+		return 100
+	}
+	q, err := stats.BetaQuantile(1-ClearLevel, a, b)
+	if err != nil {
+		return 0 // a bound nothing could compute clears nothing
+	}
+	return int(math.Floor(q * 100))
 }
 
 // atMost scales a count down to at most n observations, keeping its rate. A
@@ -141,7 +174,7 @@ func posterior(declared, correct, total int) int {
 // ranked on so a caller can explain the order it got rather than recompute it
 // and risk disagreeing. A nil lookup ranks on declared scores alone.
 func ByMeasured(heads []provider.Head, lookup Lookup) ([]provider.Head, map[string]Score) {
-	scores := scoreWith(heads, lookup, EffectiveScore)
+	scores := scoreWith(heads, lookup, EffectiveScore, nil)
 	return rankBy(heads, scores), scores
 }
 
@@ -165,10 +198,11 @@ func SortMeasured(heads []provider.Head, lookup Lookup) ([]provider.Head, map[st
 // it did not compute itself. Same scorer SortMeasured uses, so an explanation
 // cannot describe an order nobody got.
 func Scores(heads []provider.Head, lookup Lookup) map[string]Score {
-	return scoreWith(heads, lookup, EffectiveScoreIn)
+	return scoreWith(heads, lookup, EffectiveScoreIn, lowerIn)
 }
 
-func scoreWith(heads []provider.Head, lookup Lookup, eff func(int, Measurement) int) map[string]Score {
+// lower is nil for the pooled ranking, which has no domain and so no bar to clear.
+func scoreWith(heads []provider.Head, lookup Lookup, eff, lower func(int, Measurement) int) map[string]Score {
 	scores := make(map[string]Score, len(heads))
 	for _, h := range heads {
 		if _, seen := scores[h.ID]; seen {
@@ -183,6 +217,9 @@ func scoreWith(heads []provider.Head, lookup Lookup, eff func(int, Measurement) 
 			// Reporting a count no level was allowed to read would name
 			// evidence the ranking never used.
 			sc.N, sc.InDomain = m.Total, m.InDomainTotal
+		}
+		if lower != nil && sc.Measured() {
+			sc.Lower = lower(h.CapScore, m)
 		}
 		scores[h.ID] = sc
 	}

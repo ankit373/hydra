@@ -3,11 +3,13 @@
 package rank
 
 import (
-	"math/rand"
+	"math"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/stats"
 )
 
 // heads used across these tests: a cheap local head with a low declared score
@@ -47,7 +49,8 @@ func measured(id string, correct, total int) Lookup {
 // fallback rather than the default.
 func TestCheapest_MeasuredCheapHeadBeatsTheStrongerOne(t *testing.T) {
 	heads := pair()
-	scores := Scores(heads, measured("cheap", 100, 100))
+	// 200 of 200 on a prior of 55: mean 96, lower bound 93. At 100 of 100 the bound is 88.
+	scores := Scores(heads, measured("cheap", 200, 200))
 	got, out := Cheapest(heads, scores, listPrice, 0.90)
 
 	if got[0].ID != "cheap" {
@@ -173,7 +176,7 @@ func TestCheapest_TheChoiceDoesNotDependOnInputOrder(t *testing.T) {
 	free := func(provider.Head) (float64, bool) { return 0, true }
 
 	want, _ := Cheapest(heads, Scores(heads, all), free, 0.90)
-	rng := rand.New(rand.NewSource(1))
+	rng := rand.New(rand.NewPCG(1, 2))
 	for i := 0; i < 50; i++ {
 		shuffled := append([]provider.Head(nil), heads...)
 		rng.Shuffle(len(shuffled), func(a, b int) { shuffled[a], shuffled[b] = shuffled[b], shuffled[a] })
@@ -218,3 +221,108 @@ func TestCheapest_DoesNotMutateTheScoresItWasGiven(t *testing.T) {
 
 // order is the candidate chain as one comparable string.
 func order(heads []provider.Head) string { return strings.Join(ids(heads), ",") }
+
+// trialClears draws n results at rate p for each of heads heads declared 90, and reports
+// whether any clears bar on the lower bound, and whether any would have on the mean.
+func trialClears(rng *rand.Rand, heads, n int, p, bar float64) (lower, mean bool) {
+	hs := make([]provider.Head, heads)
+	got := make(map[string]Measurement, heads)
+	for i := range hs {
+		hs[i] = provider.Head{ID: string(rune('a' + i)), CapScore: 90}
+		k := 0
+		for range n {
+			if rng.Float64() < p {
+				k++
+			}
+		}
+		got[hs[i].ID] = Measurement{Correct: k, Total: n, InDomainCorrect: k, InDomainTotal: n}
+	}
+	free := func(provider.Head) (float64, bool) { return 0, true }
+	_, out := Cheapest(hs, Scores(hs, func(id string) Measurement { return got[id] }), free, bar)
+	for _, sc := range out {
+		lower = lower || sc.Clears
+		mean = mean || float64(sc.Effective) >= bar*100
+	}
+	return lower, mean
+}
+
+// Five heads truly at 0.85 against a 0.90 bar, 20 results each: on the mean the
+// luckiest one clears about 93% of the time. On the lower bound none ever does.
+func TestCheapest_LuckyHeadsDoNotClear(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1461, 1537))
+	const trials = 2000
+	var byLower, byMean int
+	for range trials {
+		lower, mean := trialClears(rng, 5, 20, 0.85, 0.90)
+		if lower {
+			byLower++
+		}
+		if mean {
+			byMean++
+		}
+	}
+	if byLower != 0 {
+		t.Errorf("a head truly at 0.85 cleared 0.90 in %d of %d trials", byLower, trials)
+	}
+	t.Run("the mean gate fails this", func(t *testing.T) {
+		if byMean < trials*85/100 {
+			t.Errorf("the mean let a lucky head clear in only %d of %d trials, so this test proves nothing", byMean, trials)
+		}
+	})
+}
+
+// A head truly at 0.97 with 200 results clears 0.90 almost always. At 100 results
+// the 95% bound needs 95 of them right, which happens only about 92% of the time.
+func TestCheapest_StrongHeadStillClears(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1461, 1537))
+	const trials = 2000
+	cleared := 0
+	for range trials {
+		if lower, _ := trialClears(rng, 1, 200, 0.97, 0.90); lower {
+			cleared++
+		}
+	}
+	if cleared < trials*99/100 {
+		t.Errorf("a head truly at 0.97 cleared 0.90 in %d of %d trials, want at least 99%%", cleared, trials)
+	}
+}
+
+// Lower and Effective describe one posterior: prior 85 borrowed from 36 of 40 elsewhere
+// (scaled to 18 of 20), then 45 of 50 in-domain, is Beta(17+45, 3+5).
+func TestScore_LowerBoundUsesTheSamePrior(t *testing.T) {
+	m := Measurement{Correct: 81, Total: 90, InDomainCorrect: 45, InDomainTotal: 50}
+	sc := Scores([]provider.Head{{ID: "h", CapScore: 80}}, func(string) Measurement { return m })["h"]
+	a, b := 17.0+45, 3.0+5
+	if want := int(math.Round(100 * a / (a + b))); sc.Effective != want {
+		t.Fatalf("Effective = %d, want %d: the prior is not the one this test built", sc.Effective, want)
+	}
+	q, err := stats.BetaQuantile(1-ClearLevel, a, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := int(math.Floor(100 * q)); sc.Lower != want {
+		t.Errorf("Lower = %d, want %d", sc.Lower, want)
+	}
+}
+
+// Lower is reported only for a measured head, and never above its mean.
+func TestScore_LowerOnlyWhenMeasured(t *testing.T) {
+	heads := pair()
+	for _, n := range []int{MinCommitments - 1, MinCommitments, 500} {
+		sc := Scores(heads, measured("cheap", n, n))["cheap"]
+		if (sc.Lower > 0) != sc.Measured() || sc.Lower > sc.Effective {
+			t.Errorf("%d in-domain: Lower = %d, Effective = %d, Measured = %v", n, sc.Lower, sc.Effective, sc.Measured())
+		}
+	}
+}
+
+// A posterior with no failures on a prior of 100, or no successes on a prior of 0,
+// is a point mass: its bound is the point, not a refused quantile.
+func TestScore_LowerAtAPointMass(t *testing.T) {
+	for _, c := range []struct{ declared, correct, want int }{{100, 20, 100}, {0, 0, 0}} {
+		heads := []provider.Head{{ID: "h", CapScore: c.declared}}
+		if got := Scores(heads, measured("h", c.correct, 20))["h"].Lower; got != c.want {
+			t.Errorf("declared %d, %d of 20: Lower = %d, want %d", c.declared, c.correct, got, c.want)
+		}
+	}
+}
