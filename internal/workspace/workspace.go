@@ -2,7 +2,7 @@
 
 // Package workspace validates file paths against the workspace registry
 // (registry/workspace.yaml) and provides git root detection and per-extension
-// validator lookup. Go port of dispatch/scope.sh.
+// validator lookup.
 package workspace
 
 import (
