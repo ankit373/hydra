@@ -13,6 +13,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/workflow"
 )
 
 // anthropicRecording answers like Anthropic and keeps every request body.
@@ -85,7 +86,7 @@ func TestWorkflowStep_PassesPromptCache(t *testing.T) {
 	var got dispatch.Options
 	var seen context.Context
 	r := dispatchRouter{dispatchFn: capturedDispatch(&got, &seen)}
-	if _, err := r.Route(context.Background(), "draft the release note", "SIMPLE"); err != nil {
+	if _, err := r.Route(context.Background(), "draft the release note", workflow.Step{Enum: "SIMPLE"}); err != nil {
 		t.Fatal(err)
 	}
 	if !got.PromptCache {

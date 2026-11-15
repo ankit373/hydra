@@ -23,6 +23,7 @@ import (
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/workflow"
 )
 
@@ -89,11 +90,18 @@ func (r dispatchRouter) options(prompt, enum string) (dispatch.Options, policy.F
 	}, fp, nil
 }
 
-func (r dispatchRouter) Route(ctx context.Context, prompt, enum string) (workflow.StepResult, error) {
-	opts, fp, err := r.options(prompt, enum)
+func (r dispatchRouter) Route(ctx context.Context, prompt string, step workflow.Step) (workflow.StepResult, error) {
+	opts, fp, err := r.options(prompt, step.Enum)
 	if err != nil {
 		return workflow.StepResult{}, err
 	}
+	opts.Domain = step.Kind
+	// The prompt carries the needed steps' output fenced, so ground checks against it.
+	checks, err := parseChecks(step.Check, prompt)
+	if err != nil {
+		return workflow.StepResult{}, err
+	}
+	esc := checkRule(&opts, checks, policy.Escalations(fp))
 	ctx, cancel := fp.Deadline(ctx)
 	defer cancel()
 
@@ -110,13 +118,39 @@ func (r dispatchRouter) Route(ctx context.Context, prompt, enum string) (workflo
 		}
 		return workflow.StepResult{}, err
 	}
-	return workflow.StepResult{
+	out := workflow.StepResult{
 		Output:  res.Output,
 		Head:    res.Head.ID,
 		Model:   res.Head.Name,
 		Tier:    rank.UITier(res.Head),
 		CostUSD: res.CostUSD,
-	}, nil
+	}
+	if len(checks) == 0 {
+		return out, nil
+	}
+	// A cached answer is served without reaching the hook, so it is judged here.
+	if len(esc.Answers()) == 0 {
+		esc.Judge(ctx, res)
+	}
+	// The step paid for every answer it judged, the rejected ones included.
+	answers := esc.Answers()
+	if len(answers) > 1 {
+		out.FirstHead, out.CostUSD = answers[0].Head.ID, 0
+		for _, a := range answers {
+			out.CostUSD += a.CostUSD
+		}
+	}
+	// A bad output must not flow into the next step as its context.
+	if why := esc.Failed(); why != "" {
+		on := res.Head.ID
+		if out.FirstHead != "" {
+			on = out.FirstHead + " and again on " + on
+		} else if u := esc.Unasked(); u != "" {
+			why += "; " + u
+		}
+		return workflow.StepResult{}, fmt.Errorf("check failed on %s: %s", on, why)
+	}
+	return out, nil
 }
 
 func cmdWorkflow() *cobra.Command {
@@ -136,7 +170,7 @@ func cmdWorkflow() *cobra.Command {
 
 func cmdWorkflowRun() *cobra.Command {
 	var steps []string
-	var enums, needs, writes []string
+	var enums, needs, writes, stepChecks, stepKinds []string
 	var task, id, system string
 	var localOnly, dryRun bool
 	var maxCost float64
@@ -190,6 +224,9 @@ func cmdWorkflowRun() *cobra.Command {
 				}
 				built = append(built, s)
 			}
+			if err := attachChecks(built, stepChecks, stepKinds); err != nil {
+				return err
+			}
 			if id == "" {
 				id = runid.New()
 			} else if err := refuseStoredID(id); err != nil {
@@ -221,6 +258,10 @@ func cmdWorkflowRun() *cobra.Command {
 		"what the step at the same position writes, comma separated: a path, doc:<name>#<section>, record:<table>/<id>")
 	cmd.Flags().StringArrayVar(&needs, "needs", nil,
 		"step numbers the step at the same position waits for, e.g. 1,2; \"\" for none (default: every earlier step)")
+	cmd.Flags().StringArrayVar(&stepChecks, "step-check", nil, "N=<check>: a dispatch --check step N's answer must pass; "+
+		"a real fail reruns the step once on a head measured stronger at its --step-kind, and a step still failing stops the workflow. Repeatable")
+	cmd.Flags().StringArrayVar(&stepKinds, "step-kind", nil, "N=<kind>: step N's kind of work, which it routes on and a rerun climbs on: "+
+		strings.Join(trust.Kinds, ", "))
 	cmd.Flags().StringVar(&task, "task", "", "what the whole workflow is for (default: the first step)")
 	cmd.Flags().StringVar(&id, "id", "", "workflow id (default: generated)")
 	cmd.Flags().StringVar(&system, "system", "", "system prompt applied to every step")
@@ -240,6 +281,42 @@ func splitList(v string) []string {
 		}
 	}
 	return out
+}
+
+// attachChecks reads each N=<check> and N=<kind> onto step N, refusing a bad
+// one before anything runs. Keyed by number rather than paired by position like
+// --enum: a step may need several checks or none.
+func attachChecks(steps []workflow.Step, checks, kinds []string) error {
+	for _, spec := range checks {
+		i, check, err := stepSpec("--step-check", spec, len(steps))
+		if err == nil {
+			_, err = parseCheck(check, "")
+		}
+		if err != nil {
+			return fmt.Errorf("--step-check %q: %w", spec, err)
+		}
+		steps[i].Check = append(steps[i].Check, check)
+	}
+	for _, spec := range kinds {
+		i, kind, err := stepSpec("--step-kind", spec, len(steps))
+		if err == nil {
+			steps[i].Kind, err = trust.ParseKind(kind)
+		}
+		if err != nil {
+			return fmt.Errorf("--step-kind %q: %w", spec, err)
+		}
+	}
+	return nil
+}
+
+// stepSpec splits N=<value> into step N's index and the value.
+func stepSpec(flag, spec string, steps int) (int, string, error) {
+	n, v, ok := strings.Cut(spec, "=")
+	i, err := strconv.Atoi(strings.TrimSpace(n))
+	if !ok || err != nil || i < 1 || i > steps {
+		return 0, "", fmt.Errorf("want %s N=<value> with N a step from 1 to %d", flag, steps)
+	}
+	return i - 1, v, nil
 }
 
 // parseNeeds reads "1,2" as step numbers and "" as none, which is not the
@@ -353,7 +430,7 @@ func dryRunWorkflow(ctx context.Context, w workflow.Workflow) error {
 		if err != nil {
 			return err
 		}
-		opts.DryRun = true
+		opts.DryRun, opts.Domain = true, s.Kind
 		res, err := d.Dispatch(ctx, s.Prompt, opts)
 		if err != nil {
 			return err
@@ -527,6 +604,9 @@ func printWorkflow(w workflow.Workflow) {
 		}
 		fmt.Fprintln(stdout, workflowRow(s.N, truncLabel(s.Title, 28),
 			statusLabel(workflow.ObservedStep(s.Status, observed)), tier, head, took, spent))
+		if s.Escalated {
+			fmt.Fprintf(stdout, "      %s\n", dimStyle.Render("↳ rerun after a failed check on "+s.FirstHead))
+		}
 		if s.Err != "" {
 			fmt.Fprintf(stdout, "      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
 		}
