@@ -243,6 +243,9 @@ func spanFacts(s *waterfall.Span) string {
 	if s.InputRef != "" {
 		parts = append(parts, s.ID[:min(8, len(s.ID))])
 	}
+	if from, ok := s.Meta["escalated_from"].(string); ok && from != "" {
+		parts = append(parts, "escalated from "+from[:min(8, len(from))])
+	}
 	// Scores go last and are named, because "was it right" is a different
 	// question from the status the head reported and must not be confused
 	// with it.

@@ -494,3 +494,13 @@ func TestCLI_TraceViewRendersAParkedSpan(t *testing.T) {
 		t.Errorf("a parked span does not read as waiting:\n%s", stripANSI(out))
 	}
 }
+
+func TestSpanFacts_NamesTheSpanAnEscalationCameFrom(t *testing.T) {
+	next := &waterfall.Span{Meta: map[string]any{"escalated_from": "a1b2c3d4e5f60718"}}
+	if got := spanFacts(next); !strings.Contains(got, "escalated from a1b2c3d4") {
+		t.Errorf("spanFacts = %q, want the predecessor's short id", got)
+	}
+	if got := spanFacts(&waterfall.Span{}); strings.Contains(got, "escalated") {
+		t.Errorf("a first attempt reads as an escalation: %q", got)
+	}
+}
