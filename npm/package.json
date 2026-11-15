@@ -1,13 +1,15 @@
 {
   "name": "hyctl",
   "version": "1.0.1",
-  "description": "Hydra (hyctl), local-first, multi-vendor AI control plane. Discovers every model on your machine and routes each task to the cheapest head that clears your target confidence.",
+  "description": "Hydra (hyctl) sends each AI task to the model best suited to it, and checks the answer. It finds every model on your machine and picks the cheapest one that clears your target confidence.",
   "keywords": [
     "ai",
     "llm",
     "orchestration",
     "cli",
     "router",
+    "llm-router",
+    "model-routing",
     "ollama",
     "claude",
     "openai",

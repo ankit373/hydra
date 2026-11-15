@@ -1,10 +1,10 @@
 cff-version: 1.2.0
 message: "If you use Hydra in your work, please cite it as below."
 type: software
-title: "Hydra (hyctl): the trust control plane for AI development"
+title: "Hydra (hyctl): sends each AI task to the model best suited to it, and checks the answer"
 abstract: >-
-  Hydra (hyctl) is a local-first, multi-vendor AI control plane. It routes
-  each task to a model by confidence of correctness, not just price: the
+  Hydra (hyctl) is local-first and works across vendors. It routes each
+  task to a model by confidence of correctness, not just price: the
   cheapest model on your machine or account that clears the confidence you
   set. One command, every model.
 authors:
