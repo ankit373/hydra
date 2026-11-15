@@ -178,7 +178,7 @@ func TestOneCostValue_RowRunlogAndResultAgree(t *testing.T) {
 func TestEscalate_EscalatedAnswerIsCostedNotCached(t *testing.T) {
 	testutil.NewSandbox(t)
 	d := climbingDispatcher(t,
-		climbing{answeringHead(t, "h1", "first", 90), 92, 0.01}, climbing{answeringHead(t, "h2", "second", 90), 98, 0.02})
+		climbing{answeringHead(t, "h1", "first", 90), 96, 0.01}, climbing{answeringHead(t, "h2", "second", 90), 98, 0.02})
 	d.cfg = &config.Config{CacheAnswers: true}
 	const prompt = "rotate the signing key"
 
@@ -217,7 +217,7 @@ func TestEscalate_EscalatedAnswerIsCostedNotCached(t *testing.T) {
 func TestEscalate_ExhaustedReturnsLastAnswerNotError(t *testing.T) {
 	testutil.NewSandbox(t)
 	d := climbingDispatcher(t,
-		climbing{answeringHead(t, "h1", "first", 90), 92, 0.01}, climbing{answeringHead(t, "h2", "second", 90), 98, 0.02})
+		climbing{answeringHead(t, "h1", "first", 90), 96, 0.01}, climbing{answeringHead(t, "h2", "second", 90), 98, 0.02})
 	judged := 0
 	res, err := d.Dispatch(context.Background(), "hi", Options{
 		RunID: "run-exhausted", TaskID: "task-exhausted", Domain: climbClass,
@@ -246,7 +246,7 @@ func TestEscalate_FurtherHeadsFitTheRemainingCeiling(t *testing.T) {
 	h1, h2 := answeringHead(t, "h1", "first", 90), answeringHead(t, "h2", "second", 90)
 	h1.Meta = map[string]string{"model": "test/priced"}
 	h2.Meta = h1.Meta
-	d := climbingDispatcher(t, climbing{h1, 92, 0.01}, climbing{h2, 98, 0.02})
+	d := climbingDispatcher(t, climbing{h1, 96, 0.01}, climbing{h2, 98, 0.02})
 	d.pricing = pricedModel(t, "test/priced", 2, 4)
 	// 4000 chars estimate 1000 in and 500 out, $0.004 a call, which the stub also bills.
 	res, err := d.Dispatch(context.Background(), strings.Repeat("x", 4000), Options{
@@ -268,8 +268,8 @@ func TestEscalate_FurtherHeadsFitTheRemainingCeiling(t *testing.T) {
 func TestEscalate_ClimbsByInClassMeasurement(t *testing.T) {
 	testutil.NewSandbox(t)
 	d := climbingDispatcher(t,
-		climbing{answeringHead(t, "h1", "a", 90), 92, 0.01},
-		climbing{answeringHead(t, "h2", "b", 90), 96, 0.03},
+		climbing{answeringHead(t, "h1", "a", 90), 96, 0.01},
+		climbing{answeringHead(t, "h2", "b", 90), 98, 0.03},
 		climbing{answeringHead(t, "h3", "c", 90), 100, 0.02})
 	if got := judgedHeads(t, d); strings.Join(got, ",") != "h1,h2,h3" {
 		t.Errorf("escalation asked %v, want h1,h2,h3: each step the weakest head measured to beat the last", got)

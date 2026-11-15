@@ -42,10 +42,10 @@ var listPrices = map[string]float64{"paid": 0.0225, "local": 0}
 // and the question left is whether being *enough* ends the auction.
 func bothMeasured(t *testing.T, d *Dispatcher) {
 	t.Helper()
-	// paid:  (100 + 20*0.92) / 120 = 0.987 -> 99
-	// local: (100 + 20*0.55) / 120 = 0.925 -> 93
-	record(t, d.cal, "paid", "go", 100, 100)
-	record(t, d.cal, "local", "go", 100, 100)
+	// paid:  (200 + 20*0.92) / 220 = 0.993 -> 99, 95% lower bound 98
+	// local: (200 + 20*0.55) / 220 = 0.959 -> 96, 95% lower bound 93
+	record(t, d.cal, "paid", "go", 200, 200)
+	record(t, d.cal, "local", "go", 200, 200)
 }
 
 // The whole point: with no tier pinned, work goes to the cheapest head this
