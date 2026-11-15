@@ -1856,11 +1856,12 @@ func (d *Dispatcher) explain(candidates []provider.Head, domain string) map[stri
 }
 
 // domainMeasurement reads both levels the estimator needs: what this head has
-// done everywhere, and what it has done in this domain.
+// done everywhere, and what it has done in this domain since its last detected
+// change. Pooled counts stay cumulative: they only locate a capped prior.
 func (d *Dispatcher) domainMeasurement(domain string) rank.Lookup {
 	return func(headID string) rank.Measurement {
 		correct, total := d.cal.Commitments(headID)
-		inCorrect, inTotal := d.cal.CommitmentsIn(headID, domain)
+		inCorrect, inTotal := d.cal.CommitmentsSince(headID, domain)
 		return rank.Measurement{
 			Correct: correct, Total: total,
 			InDomainCorrect: inCorrect, InDomainTotal: inTotal,
