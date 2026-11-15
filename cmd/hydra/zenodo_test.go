@@ -4,6 +4,8 @@ package main
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -115,5 +117,20 @@ func TestCitationMetadata_AgreesWithZenodo(t *testing.T) {
 	}
 	if len(c.Authors) == 0 || z.Creators[0].Name != c.Authors[0].Family+", "+c.Authors[0].Given {
 		t.Errorf("first author differs: .zenodo.json %q, CITATION.cff %+v", z.Creators[0].Name, c.Authors)
+	}
+}
+
+// Zenodo, npm and PyPI index these files, so they must not use retired framing
+// ("control plane", "for AI development", "head") in prose (#1489).
+func TestPublishedMetadata_UsesCurrentVocabulary(t *testing.T) {
+	retired := regexp.MustCompile(`(?i)control plane|for AI development|\bheads?\b`)
+	for _, f := range [][]string{
+		{"CITATION.cff"}, {".zenodo.json"}, {"desktop", "wails.json"},
+		{"npm", "package.json"}, {"npm", "README.md"},
+		{"pip", "pyproject.toml"}, {"pip", "README.md"},
+	} {
+		if m := retired.FindString(repoFile(t, f...)); m != "" {
+			t.Errorf("%s says %q", filepath.Join(f...), m)
+		}
 	}
 }
