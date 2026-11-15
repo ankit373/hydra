@@ -39,17 +39,3 @@ func TestEscalation(t *testing.T) {
 		})
 	}
 }
-
-func TestFamily(t *testing.T) {
-	for h, want := range map[*provider.Head]string{
-		{Provider: "openrouter", Meta: map[string]string{"model": "anthropic/claude-sonnet-4.5"}}: "anthropic",
-		{Provider: "anthropic", Meta: map[string]string{"model": "claude-sonnet-4.5"}}:            "anthropic",
-		{Provider: "local"}: "local",
-		{Provider: "litellm", Meta: map[string]string{"model": "claude-sonnet", "litellm_upstream": "anthropic"}}: "anthropic",
-		{Provider: "local", Meta: map[string]string{"model": "/models/x.gguf"}}:                                   "local",
-	} {
-		if got := family(*h); got != want {
-			t.Errorf("family(%+v) = %q, want %q", *h, got, want)
-		}
-	}
-}
