@@ -34,6 +34,7 @@ func TestCommittedSplits_CountsAndRanks(t *testing.T) {
 		"banking77": {13083, 4},
 		"clinc150":  {23700, 9},
 		"gsm8k":     {1319, 0},
+		"snips":     {700, 0},
 	} {
 		rows := committedSplits(t, suite)
 		ids := map[string]bool{}
@@ -116,6 +117,19 @@ func TestCommittedSplits_GoldenIDs(t *testing.T) {
 			{"test/1052", bench.SplitTest, 13382222736159128620},
 			{"test/1315", bench.SplitTest, 2835625184471401485},
 		},
+		// GetWeather/038 and /091 are one utterance twice, so they share a split.
+		"snips": {
+			{"AddToPlaylist/000", bench.SplitTest, 6877933496308745925},
+			{"AddToPlaylist/001", bench.SplitCalibration, 18314066029455627002},
+			{"BookRestaurant/050", bench.SplitTest, 1771049039075587191},
+			{"GetWeather/038", bench.SplitTest, 18415524535172597543},
+			{"GetWeather/091", bench.SplitTest, 4825332026269625147},
+			{"PlayMusic/099", bench.SplitCalibration, 12133457510002533270},
+			{"RateBook/068", bench.SplitTest, 16191843517917514951},
+			{"SearchCreativeWork/000", bench.SplitCalibration, 7861067061793763177},
+			{"SearchScreeningEvent/084", bench.SplitTest, 2933418588231071479},
+			{"SearchScreeningEvent/099", bench.SplitTest, 5347372601004811504},
+		},
 	}
 	for suite, want := range golden {
 		by := map[string]bench.SplitRow{}
@@ -138,7 +152,7 @@ func TestCommittedSmokeIDs_AreTheFirstTestItemsByRank(t *testing.T) {
 		t.Fatal(err)
 	}
 	var want strings.Builder
-	for _, suite := range []string{"banking77", "clinc150", "gsm8k"} {
+	for _, suite := range []string{"banking77", "clinc150", "gsm8k", "snips"} {
 		for _, it := range bench.FirstByRank(SplitItems(committedSplits(t, suite)), bench.SplitTest, SmokeTestItems) {
 			want.WriteString(suite + "\t" + it.ID + "\n")
 		}
@@ -155,7 +169,7 @@ func TestCommittedLock_PinsWhatTheLoadersRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string][]string{"banking77": {"categories.json", "train.csv", "test.csv"}, "clinc150": {"data_full.json"},
-		"gsm8k": {"test.jsonl"}}
+		"gsm8k": {"test.jsonl"}, "snips": snipsFiles()}
 	if len(lock) != len(Registry()) {
 		t.Fatalf("lock pins %v, registry has %d suites", bench.Names(lock), len(Registry()))
 	}

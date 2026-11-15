@@ -27,6 +27,7 @@ func Registry() map[string]func() bench.Suite {
 		"banking77": func() bench.Suite { return &banking77{labelSuite: labelSuite{name: "banking77"}} },
 		"clinc150":  func() bench.Suite { return &clinc150{labelSuite: labelSuite{name: "clinc150"}} },
 		"gsm8k":     func() bench.Suite { return gsm8k{} },
+		"snips":     func() bench.Suite { return &snips{} },
 	}
 }
 
