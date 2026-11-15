@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1792,6 +1793,26 @@ func (d *Dispatcher) constrain(candidates []provider.Head, domain string, requir
 	}
 	ordered, annotated := rank.Cheapest(candidates, scores, d.price, requirement)
 	return ordered, annotated, requirement
+}
+
+// PricedScores is each head's measured score for domain with CostUSD set to one
+// nominal call. A head with no known price costs +Inf, so nothing unpriced reads as free.
+func (d *Dispatcher) PricedScores(heads []provider.Head, domain string) map[string]rank.Score {
+	scores := d.explain(heads, domain)
+	if scores == nil {
+		scores = make(map[string]rank.Score, len(heads))
+	}
+	for _, h := range heads {
+		sc := scores[h.ID]
+		sc.CostUSD = math.Inf(1)
+		if d.price != nil {
+			if c, ok := d.price(h); ok {
+				sc.CostUSD = c
+			}
+		}
+		scores[h.ID] = sc
+	}
+	return scores
 }
 
 // Constrained reports the head an unpinned dispatch for this domain would run,
