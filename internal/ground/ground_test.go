@@ -263,3 +263,61 @@ func TestCheck_RelativeDateIsNotAClaim(t *testing.T) {
 		t.Errorf("claims=%d unsupported=%+v, want none", v.Claims, v.Unsupported)
 	}
 }
+
+const report = "The deal was signed by Priya Raman, chief executive of Acme Holdings, on Tuesday."
+
+// A summary that names someone the source never mentions is the error that
+// matters most for summaries, and it holds no number for the old rules to see.
+func TestCheck_FlagsAnInventedName(t *testing.T) {
+	for _, answer := range []string{
+		"The deal was signed by Priya Rao of Acme Holdings.",
+		"The deal was signed by Priya Raman of Apex Holdings.",
+		"The deal was signed by Daniel Okafor of Acme Holdings.",
+	} {
+		v := Check(answer, prompt(report))
+		if v.Grounded || len(v.Unsupported) != 1 || v.Unsupported[0].Kind != KindName {
+			t.Errorf("%q: grounded=%v unsupported=%+v, want one name claim", answer, v.Grounded, v.Unsupported)
+		}
+	}
+}
+
+// One direction only, as with qualified symbols: the full name supports the
+// surname and a reworded title, and a surname in the source does not support
+// a full name it never gave.
+func TestCheck_SurnameSupportedByFullName(t *testing.T) {
+	for _, answer := range []string{
+		"Acme Holdings closed the deal. Raman signed it on Tuesday.",
+		"ACME HOLDINGS chief executive Priya Raman signed it.",
+	} {
+		if v := Check(answer, prompt(report)); !v.Grounded || v.Claims == 0 {
+			t.Errorf("%q: grounded=%v claims=%d unsupported=%+v", answer, v.Grounded, v.Claims, v.Unsupported)
+		}
+	}
+	v := Check("The deal was signed by Priya Raman.", prompt("Raman signed the deal on Tuesday."))
+	if v.Grounded {
+		t.Error("a surname alone supported a full name the source never gave")
+	}
+}
+
+// A capital at a sentence start, a single capitalised word and an acronym say
+// nothing about names. Words written in lowercase elsewhere are ordinary too.
+func TestCheck_SentenceStartIsNotAName(t *testing.T) {
+	for _, answer := range []string{
+		"The Board met in the morning. Then Raman spoke.",
+		"Signed by Raman. PII was redacted by the EU team.",
+		"Open the Task List to list each task.",
+	} {
+		if v := Check(answer, prompt(report)); v.Claims != 0 {
+			t.Errorf("%q: claims=%d unsupported=%+v, want none", answer, v.Claims, v.Unsupported)
+		}
+	}
+}
+
+// Jerome H. Powell is one name: the initial's dot ends neither it nor the sentence.
+func TestNames_ReadsInitialsAndParticles(t *testing.T) {
+	got := names("Voting for it were Jerome H. Powell and Mike van der Hoorn's club.", nil, nil)
+	want := []string{"Jerome H. Powell", "Mike van der Hoorn"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("names = %q, want %q", got, want)
+	}
+}
