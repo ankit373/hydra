@@ -3,9 +3,6 @@
 package executor
 
 import (
-	"os"
-	"strings"
-
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/sandbox"
 )
@@ -23,14 +20,6 @@ var toolEnv = map[string][]string{
 	"cursor":      {"CURSOR_CONFIG_DIR"},
 }
 
-// extraEnvVar lets an operator restore a variable this package does not know
-// a head needs. Comma-separated names, e.g. HYDRA_HEAD_ENV=FOO_TOKEN,BAR_URL.
-//
-// It exists because the allowlist cannot be complete: every CLI agent reads
-// its own settings and they change. Without an escape hatch the fix for one
-// unlisted variable is to stop using Hydra.
-const extraEnvVar = "HYDRA_HEAD_ENV"
-
 // headEnv is the environment a head subprocess runs with: the base set, that
 // provider's own credential, its tool configuration, and nothing else.
 //
@@ -44,10 +33,6 @@ func headEnv(h provider.Head) []string {
 	names := make([]string, 0, 8)
 	names = append(names, apiKeyEnvs[h.Provider]...)
 	names = append(names, toolEnv[h.Provider]...)
-	for _, k := range strings.Split(os.Getenv(extraEnvVar), ",") {
-		if k = strings.TrimSpace(k); k != "" {
-			names = append(names, k)
-		}
-	}
+	names = append(names, sandbox.HeadExtra()...)
 	return sandbox.WithVars(names...)
 }

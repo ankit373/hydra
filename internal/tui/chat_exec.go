@@ -18,6 +18,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/oracle"
@@ -27,6 +28,7 @@ import (
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/verify"
+	"github.com/ankit373/hydra/internal/workspace"
 )
 
 // ckMaxFixes caps Auto's fix-and-reverify loop: a change that is still failing
@@ -262,7 +264,7 @@ func ckRealEditStage(ctx context.Context, t *ckTask, prompt string) (*editor.Res
 // real on-disk path, which is what is being verified. dir is the worktree for
 // isolated threads, so the verifier checks the thread's copy, not the user's.
 func ckRealVerifyStage(ctx context.Context, argv []string, dir string) (oracle.Verdict, error) {
-	o := &oracle.CommandOracle{Args: argv, Source: "verifier:tui", Dir: dir}
+	o := &oracle.CommandOracle{Args: argv, Source: "verifier:tui", Dir: dir, Env: workspace.ValidatorEnvNames(config.ScriptHome())}
 	return o.Verify(ctx, "", trust.Task{})
 }
 

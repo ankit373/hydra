@@ -74,7 +74,7 @@ func (h *harness) run(t *testing.T, extra ...string) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := append([]string{"--candidate", h.candidate, "--out", h.out}, extra...)
+	args := append([]string{"--candidate", h.candidate, "--out", h.out, "--env", "HYVERIFY_TEST_WANT"}, extra...)
 	args = append(args, "--", exe, h.candidate)
 	return run(args, &h.stdout, &h.stderr)
 }
@@ -296,7 +296,7 @@ func TestRun_WarnsWhenNoTaskNamesTheWork(t *testing.T) {
 // A verifier that cannot start has produced no verdict about the candidate, so
 // it must not read as a failing one.
 func TestJudge_DistinguishesANonStartFromAFailure(t *testing.T) {
-	passed, detail := judge([]string{filepath.Join(t.TempDir(), "not-a-program")})
+	passed, detail := judge([]string{filepath.Join(t.TempDir(), "not-a-program")}, nil)
 	if passed {
 		t.Fatal("a verifier that never ran reported a pass")
 	}

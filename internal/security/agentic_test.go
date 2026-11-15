@@ -3,6 +3,8 @@
 package security
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,6 +49,47 @@ func TestComputeAgentic_IdentityAbuseIsEnforced(t *testing.T) {
 	got := agenticByID(computeAgentic(ledger.Policy{}, SupplyChain{}, true))["ASI03"]
 	if got.Status != Enforced {
 		t.Errorf("ASI03 = %q, want %q (%s)", got.Status, Enforced, got.Detail)
+	}
+}
+
+// ASI03 is computed from the environments Hydra builds, so a credential that
+// would reach a subprocess turns it Partial and names it, never its value.
+func TestComputeAgentic_IdentityAbuseReportsWhatCrosses(t *testing.T) {
+	cases := map[string]struct {
+		key, val, want string
+	}{
+		"head extra": {"HYDRA_HEAD_ENV", "OTHER_API_KEY", "OTHER_API_KEY (via HYDRA_HEAD_ENV)"},
+		"proxy auth": {"HTTPS_PROXY", "http://u:hunter2@proxy:3128", "HTTPS_PROXY (login in URL)"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			testutil.NewSandbox(t)
+			t.Setenv(tc.key, tc.val)
+			got := agenticByID(computeAgentic(ledger.Policy{}, SupplyChain{}, true))["ASI03"]
+			if got.Status != Partial || !strings.Contains(got.Detail, tc.want) {
+				t.Errorf("ASI03 = %q %q, want Partial naming %q", got.Status, got.Detail, tc.want)
+			}
+			if strings.Contains(got.Detail, "hunter2") {
+				t.Error("ASI03 printed a secret value")
+			}
+		})
+	}
+}
+
+// A credential named in validator_env is refused, and the report says so.
+func TestComputeAgentic_IdentityAbuseNamesRefusedValidatorEnv(t *testing.T) {
+	sb := testutil.NewSandbox(t)
+	dir := filepath.Join(sb.HydraHome, "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	yml := "validator_env: [AWS_PROFILE, PLAYWRIGHT_BROWSERS_PATH]\n"
+	if err := os.WriteFile(filepath.Join(dir, "workspace.yaml"), []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := agenticByID(computeAgentic(ledger.Policy{}, SupplyChain{}, true))["ASI03"]
+	if got.Status != Enforced || !strings.Contains(got.Detail, "AWS_PROFILE and was refused") {
+		t.Errorf("ASI03 = %q %q, want Enforced naming the refused AWS_PROFILE", got.Status, got.Detail)
 	}
 }
 
