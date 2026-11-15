@@ -809,7 +809,10 @@ turned out wrong, it reports per kind of work how often each check passed one,
 and how often two checks passed the same one. Beside each pair it prints what
 the rate would be if the two failed independently. A pair rate well above that
 means the two should count as one check. Under 20 shared wrong answers it prints
-no rate, because the 95% bound would be wider than the rate.
+no rate, because the 95% bound would be wider than the rate. A check can also
+get weaker over time, like a test suite that stops covering a path or a judge
+model swapped underneath. Each check's rate is watched for that change, and a
+check whose rate changed gets a line with when, and its rate and bound since.
 
 Hydra also notices when a model or a check gets worse. Each source's record in
 each kind of work is watched for a change in how often it is right, and `hyctl
