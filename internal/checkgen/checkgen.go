@@ -20,10 +20,13 @@ import (
 // SpecKinds are the shapes a generated check can take, one per generator.
 var SpecKinds = []string{"labels", "fields", "claims", "rubric", "tests"}
 
-// Task is what a generator reads: the request and its kind-of-work key.
+// Task is what a generator reads: the request, its kind-of-work key, and the
+// writer PickGenerator chose, with Ask bound to that head.
 type Task struct {
-	Text string
-	Kind string
+	Text   string
+	Kind   string
+	Writer GenInfo
+	Ask    func(ctx context.Context, prompt string) (string, error)
 }
 
 // GenInfo names who wrote a check. Family sits beside the head because a
