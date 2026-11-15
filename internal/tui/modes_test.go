@@ -37,11 +37,11 @@ func TestModes_PickerOpensSelectsAndCloses(t *testing.T) {
 	if !m.modePick {
 		t.Fatal("m on an empty input did not open the picker")
 	}
-	if ckModes[m.modeSel].name != "auto" {
+	if ckModes[m.modeSel].name != "ask" {
 		t.Errorf("the picker did not open on the current mode: %s", ckModes[m.modeSel].name)
 	}
 	m = press(m, "esc")
-	if m.modePick || m.mode != "auto" {
+	if m.modePick || m.mode != "ask" {
 		t.Fatal("esc did not close the picker unchanged")
 	}
 
@@ -139,8 +139,8 @@ func TestModes_PickerRendersEveryMode(t *testing.T) {
 }
 
 func TestModes_LookupAndCommands(t *testing.T) {
-	if got := ckModeByName("nonsense").name; got != "auto" {
-		t.Errorf("unknown mode resolved to %q, want auto", got)
+	if got := ckModeByName("nonsense").name; got != "ask" {
+		t.Errorf("unknown mode resolved to %q, want ask", got)
 	}
 	for _, name := range []string{"ask", "edit", "plan", "auto", "architect", "careful", "unattended"} {
 		if !ckIsMode(name) {

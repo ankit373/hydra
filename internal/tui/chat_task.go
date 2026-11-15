@@ -129,6 +129,9 @@ func (m Cockpit) beginTask(th *ckThread, task, modeName string) (Cockpit, tea.Cm
 	th.clock = th.clock.Tick(ckThreadAgent(th.id))
 
 	th.log = append(th.log, m.routeLines(t, h, enum, ov, pinned)...)
+	if file != "" && md.name == "ask" {
+		th.log = append(th.log, ckDimS.Render("  Ask never writes files, shift+tab to Auto to change it"))
+	}
 	if f := ckFileRe.FindString(task); f != "" {
 		if radius, deps, kappa, ok := m.metrics.ckBlastFor(f); ok {
 			risk := ckCheapS

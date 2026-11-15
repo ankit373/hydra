@@ -209,7 +209,7 @@ func TestChatMain_KeepsTheNewestLinesAndTheInput(t *testing.T) {
 	if strings.Contains(got, "log line 100") {
 		t.Errorf("an old line survived a 12-row window:\n%s", got)
 	}
-	if !strings.Contains(got, "half-typed prompt") || !strings.Contains(got, "Auto") {
+	if !strings.Contains(got, "half-typed prompt") || !strings.Contains(got, "Ask") {
 		t.Errorf("the input line or mode chip is missing:\n%s", got)
 	}
 	// Even with no room for the border, the input itself survives.

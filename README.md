@@ -1080,7 +1080,7 @@ Chat has **modes**: what a task does (`shift+tab` cycles the basics, `m` opens t
 
 | Mode | What it does |
 |---|---|
-| **Ask** | Answer only, never writes files |
+| **Ask** | The default. Answer only, never writes files; `shift+tab` reaches Auto when a task should change one |
 | **Edit** | Direct change when the prompt names an existing file (validated, rollback-safe, snapshotted); otherwise answers and says so |
 | **Plan** | Drafts numbered steps on a cheap routing level and waits, `enter`/`y` runs them, `esc` discards |
 | **Auto** | Plan → edit → **verify**: runs `go test ./...` (or your workspace.yaml validator) through the oracle, feeds failures back for up to 2 fixes, and renders a proof strip: `plan ✓ · edit ✓ file +A/−R · tests ✓/✗` |
