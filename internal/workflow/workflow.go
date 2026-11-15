@@ -72,6 +72,8 @@ type Step struct {
 	// Writes are what the step writes, as a2a keys: file:<path>, doc:<name>#<section>,
 	// record:<table>/<id>. Two steps that write the same one never run together.
 	Writes []string `json:"writes,omitempty"`
+	// Reads are the hashes of the blocks this step is given, beyond its needs.
+	Reads []string `json:"reads,omitempty"`
 
 	Status Status `json:"status"`
 	Head   string `json:"head,omitempty"`
@@ -111,6 +113,9 @@ type Workflow struct {
 	// Coupled says two files are linked in the code graph, so writing both at
 	// once is a clash too. Set by the caller when a graph exists; never stored.
 	Coupled func(fileA, fileB string) bool `json:"-"`
+	// Blocks is the request's context store, keyed by hash. Kept with the
+	// record so a resume sees the same blocks, and deleted with it.
+	Blocks map[string]Block `json:"blocks,omitempty"`
 }
 
 // Observed is the status to show a reader. The stored one, except that a run
