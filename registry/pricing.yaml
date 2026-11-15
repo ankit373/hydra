@@ -1,7 +1,8 @@
 # Hydra Pricing Registry
 # ─────────────────────────────────────────────────────────────────────────────
-# Per-tier $/1M tokens. Used by route.sh to compute estimated cost per call
-# from prompt + response token counts and append to logs/cost.jsonl.
+# Per-tier $/1M tokens. internal/pricing falls back to these for a head with no
+# catalog price, to cost each call from its prompt and response tokens. Each
+# call's cost is written to logs/cost.jsonl.
 #
 # Prices reflect public list rates as of 2026-11. List-priced tiers come from
 # OpenRouter /api/v1/models, read 2026-11-12. Antigravity costs are
@@ -89,7 +90,7 @@ tiers:
     output_per_million: 0.00
     notes: "Local Ollama, compute cost only"
 
-# ── Pool budgets (informational; for cost.sh totals) ─────────────────────────
+# ── Pool budgets (informational; nothing reads these yet) ────────────────────
 pool_budgets:
   claude_direct:    null         # pay-as-you-go
   agy_claude:       null         # included in Antigravity plan

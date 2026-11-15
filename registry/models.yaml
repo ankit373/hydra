@@ -6,7 +6,7 @@
 # To add a model    → add an entry, assign a unique tier
 # To swap a model   → change model_flag only
 # To reorder tiers  → change tier number AND update routing.yaml to match
-# To disable        → set enabled: false (route.sh auto-escalates)
+# To disable        → set enabled: false (the head is not offered to the router)
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # ⚠️  model_flag VALUES ARE INSTALL-SPECIFIC DEFAULTS, VERIFY, DON'T TRUST.
@@ -16,7 +16,7 @@
 # guarantee that a given model or version is current or available to you.
 # Before relying on a tier, confirm its model_flag actually exists in your
 # provider (agy model list · `ollama list` · the provider's API). Mismatched
-# flags fail at dispatch and route.sh auto-escalates to the next tier.
+# flags fail at dispatch, and `hyctl dispatch` moves on to the next head.
 # (A `hydra doctor` command that validates these against live providers is planned.)
 # ─────────────────────────────────────────────────────────────────────────────
 

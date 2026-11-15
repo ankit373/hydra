@@ -15,9 +15,9 @@
 #   allowed_globs, paths inside root that may be edited (relative to root)
 #   denied_globs , paths inside root that must NEVER be edited (wins over allowed)
 #   git          , auto | true | false
-#                   auto: scope.sh walks up from target file to find .git
+#                   auto: internal/workspace walks up from target file to find .git
 #                   true: workspace root itself is a git repo
-#                   false: no git, edit.sh falls back to .hydra-bak file backup
+#                   false: no git, hyctl edit falls back to .hydra-bak file backup
 #
 # Default workspace is selected by:
 #   1. HYDRA_WORKSPACE env var
@@ -58,7 +58,7 @@ workspaces: {}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Validators, per-extension safety check run after every edit.
-# If the validator exits non-zero, edit.sh auto-rolls back and escalates.
+# If the validator exits non-zero, hyctl edit rolls the file back.
 # Set to null to skip validation for that extension.
 # Override with HYDRA_VALIDATE=off to disable globally.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -75,8 +75,8 @@ validators:
   yaml: "python3 -c \"import yaml,sys; yaml.safe_load(open(sys.argv[1]))\" {file}"
   yml:  "python3 -c \"import yaml,sys; yaml.safe_load(open(sys.argv[1]))\" {file}"
   sh:   "bash -n {file}"
-  # ts/tsx: prefer workspace-local tsc; edit.sh tries `npx --no-install tsc --noEmit {file}` first,
-  # falls back to a marker-leakage check only. Declared null here so edit.sh uses its built-in path.
+  # ts/tsx: null here so hyctl edit uses the repo's node_modules/.bin/tsc --noEmit when it
+  # exists, and runs no check when it does not.
   ts:   null
   tsx:  null
 
