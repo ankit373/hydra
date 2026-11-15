@@ -67,10 +67,15 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, 
 	}, unlisted: unlisted}, nil
 }
 
-// servePolicyCeiling is policy.yaml's max_cost_usd for a served request, which
-// names no file, and where it came from.
+// servePolicy is policy.yaml decided for a served request, which names no
+// file. Read per request, so a policy edit applies without a restart.
+func servePolicy() policy.FilePolicy {
+	return policy.ForFile(config.ScriptHome(), policy.Spec{})
+}
+
+// servePolicyCeiling is servePolicy's max_cost_usd and where it came from.
 func servePolicyCeiling() (float64, string) {
-	return costCeiling(policy.ForFile(config.ScriptHome(), policy.Spec{}), false, 0)
+	return costCeiling(servePolicy(), false, 0)
 }
 
 // decisionPrice estimates one call from the input's size; decision sources bill input only.

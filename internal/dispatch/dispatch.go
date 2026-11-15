@@ -138,6 +138,10 @@ type Options struct {
 	MaxMemoryMB   int
 	MaxCPUSeconds int
 
+	// PromptCache is policy.yaml's prompt_cache: ask a provider that caches
+	// only on request to cache the stable start of the prompt.
+	PromptCache bool
+
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
 	// "derive one" (see runid.ResolveRun/ResolveTask), pass them explicitly
@@ -1134,6 +1138,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			ToolChoice:    opts.ToolChoice,
 			MaxMemoryMB:   opts.MaxMemoryMB,
 			MaxCPUSeconds: opts.MaxCPUSeconds,
+			PromptCache:   opts.PromptCache,
 		}, onDelta)
 		if err != nil {
 			lastErr = err

@@ -28,6 +28,11 @@ func ForFile(hydraHome string, spec Spec) FilePolicy {
 	return eng.Decide(spec)
 }
 
+// ForPrompt is ForFile for work on no file: a chat turn, a review, a served request.
+func ForPrompt(hydraHome, prompt string) FilePolicy {
+	return ForFile(hydraHome, Spec{Prompt: prompt, PromptLength: len(prompt)})
+}
+
 // Deadline bounds a dispatch by max_wall_seconds, or returns ctx unchanged
 // when the policy sets no ceiling.
 func (fp FilePolicy) Deadline(ctx context.Context) (context.Context, context.CancelFunc) {

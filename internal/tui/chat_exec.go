@@ -198,13 +198,14 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 	defer d.Close()
 	class := policy.Classify(prompt)
 	localOnly := t.localOnly || (d.PIILocalOnly() && class.PII)
+	promptCache := policy.ForPrompt(config.ScriptHome(), prompt).PromptCache
 	switch strat {
 	case 'B':
 		sw := swarm.New(d, d.Heads(), d)
 		res, err := sw.Run(ctx, prompt, swarm.Options{
 			Mode: swarm.ModeBest, TierHint: tierHint, MaxHeads: 3,
 			LocalOnly: localOnly, RunID: t.runID, TaskID: t.taskID,
-			Classification: &class,
+			Classification: &class, PromptCache: promptCache,
 		})
 		if err != nil {
 			return ckStageOut{}, err
@@ -218,7 +219,7 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 		res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
 			Confidence: t.confidence, TierHint: tierHint,
 			LocalOnly: localOnly, RunID: t.runID, TaskID: t.taskID,
-			Classification: &class,
+			Classification: &class, PromptCache: promptCache,
 		})
 		if err != nil {
 			return ckStageOut{}, err
@@ -237,7 +238,7 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 		res, err := d.Dispatch(ctx, prompt, dispatch.Options{
 			TierHint: tierHint, LocalOnly: localOnly,
 			MaxCostUSD: t.mode.capUSD, RunID: t.runID, TaskID: t.taskID,
-			Classification: &class,
+			Classification: &class, PromptCache: promptCache,
 			// Only the plain path streams. A swarm has several heads answering
 			// at once and 'C' picks by judge after N replies, so there is no
 			// single stream to show; those get a progress panel (#798).

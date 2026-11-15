@@ -19,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/decide"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
@@ -197,7 +198,9 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		OnStream:    streamEvents(req.OnEvent),
 		RunID:       req.RequestID,
 	}
-	opts.MaxCostUSD, opts.MaxCostSource = requestCeiling(req.MaxCostUSD)
+	fp := servePolicy()
+	opts.MaxCostUSD, opts.MaxCostSource = requestCeiling(fp, req.MaxCostUSD)
+	opts.PromptCache = fp.PromptCache
 
 	// A class is reported only where it routes. A pinned head is the client's
 	// choice of model, so a class can neither reorder nor be claimed for it.
@@ -231,8 +234,8 @@ func isServedDefault(rt serve.Route, enum string) bool {
 
 // requestCeiling is the lower of the client's and the policy's, read per request
 // so a policy edit applies without a restart. The header can only lower it.
-func requestCeiling(client float64) (float64, string) {
-	policyUSD, from := servePolicyCeiling()
+func requestCeiling(fp policy.FilePolicy, client float64) (float64, string) {
+	policyUSD, from := costCeiling(fp, false, 0)
 	switch {
 	case policyUSD > 0 && (client <= 0 || policyUSD < client):
 		return policyUSD, from

@@ -94,6 +94,7 @@ func judgeOptions(run Options, tierHint, system string) dispatch.Options {
 		LocalOnly:     run.LocalOnly,
 		MaxCostUSD:    run.MaxEstCostUSD,
 		MaxCostSource: "the run's cost ceiling",
+		PromptCache:   run.PromptCache,
 	}
 }
 

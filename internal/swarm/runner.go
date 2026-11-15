@@ -89,10 +89,11 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 
 	exec := executorFor(h)
 	resp, err := exec.Execute(execCtx, executor.Request{
-		Prompt:    prompt,
-		Head:      h,
-		MaxTokens: opts.MaxTokens,
-		System:    opts.System,
+		Prompt:      prompt,
+		Head:        h,
+		MaxTokens:   opts.MaxTokens,
+		System:      opts.System,
+		PromptCache: opts.PromptCache,
 	})
 
 	a.FinishedAt = time.Now()
