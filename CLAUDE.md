@@ -125,7 +125,9 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           field comparison, also used by the bench's extraction suite. Answers, summaries and
                           analysis get two claims checks, one sentence at a time (40 at most, past that not checked):
                           gen:claims-ground with `ground.Check`, gen:claims-judge with one yes/no question per sentence.
-                          Nothing calls it yet.
+                          Writing gets a rubric of yes/no items from the request, any item the request does not back
+                          dropped, fewer than 3 not checked: gen:rubric-code (word cap, phrase present or absent, no
+                          model) and gen:rubric-judge (one question per item). Nothing calls it yet.
 internal/vet/           ← Review a diff: open-code-review resolves the files and rules, the router
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace
