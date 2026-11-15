@@ -107,8 +107,9 @@ internal/reliability/   ← Is a stated confidence honest? Brier + Murphy decomp
 internal/ope/           ← Off-policy estimation: IPW over sampled logs, plus counterfactual policy
                           evaluation with bootstrap intervals. `hyctl trace evaluate`.
 internal/stats/         ← Pure maths, one implementation each: seeded paired bootstrap, Tango, exact
-                          McNemar, binomial CDF, Clopper–Pearson, Wilson, pass^k. Imported by ope,
-                          entity, budget and trust; the benchmark harness (#1198) will use it too.
+                          McNemar, binomial CDF, Clopper–Pearson, Wilson, pass^k, BetaCDF and
+                          BetaQuantile. Imported by ope, entity, budget and trust; the benchmark
+                          harness (#1198) will use it too.
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/embed/         ← Vectors from an embedding model already on the machine. No new dependency.
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.

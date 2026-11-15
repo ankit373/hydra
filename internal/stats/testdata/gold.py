@@ -72,3 +72,7 @@ for k in (1, 2):
 
 print("# Normal")
 print(f"Phi(1.959964)={norm.cdf(1.959964)!r} Phi^-1(0.95)={norm.ppf(0.95)!r} Phi^-1(1e-10)={norm.ppf(1e-10)!r}")
+
+print("# Beta quantile, fractional shapes: beta.ppf(p, a, b)")
+for p, a, b in [(0.05, 17.4, 2.6), (0.5, 17.4, 2.6), (0.95, 17.4, 2.6), (0.05, 0.3, 0.7), (0.05, 2.5, 40.5), (0.05, 118, 9)]:
+    print(f"p={p} a={a} b={b} {beta.ppf(p, a, b)!r}")
