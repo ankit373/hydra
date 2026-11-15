@@ -193,7 +193,9 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           absent on a single-shot dispatch, which is not a conversation of
                           length zero, while `structure.*` is always present because a count
                           of zero questions is a reading (#1110).
-  policy.yaml           ← File-policy rules. Three of its fields take effect, in both
+  policy.yaml           ← Execution policy in two sections: general settings for any kind
+                          of work (cost, time, retries) and editing files (edit format,
+                          validators, worktrees). Three of its fields take effect, in both
                           `hyctl edit` and `hyctl parallel`: diff_size_cap_pct rolls an
                           over-large edit back, max_cost_usd refuses a head before it runs,
                           max_wall_seconds deadlines the dispatch (#424, #769). All three are
