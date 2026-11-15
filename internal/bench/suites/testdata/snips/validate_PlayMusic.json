@@ -1,0 +1,22 @@
+{
+ "PlayMusic": [
+  {
+   "data": [
+    {
+     "text": "play "
+    },
+    {
+     "text": "Miles Davis",
+     "entity": "artist"
+    },
+    {
+     "text": " on "
+    },
+    {
+     "text": "Deezer",
+     "entity": "service"
+    }
+   ]
+  }
+ ]
+}

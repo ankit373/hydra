@@ -1,0 +1,22 @@
+{
+ "SearchScreeningEvent": [
+  {
+   "data": [
+    {
+     "text": "when is "
+    },
+    {
+     "text": "Arrival",
+     "entity": "movie_name"
+    },
+    {
+     "text": " playing "
+    },
+    {
+     "text": "nearby",
+     "entity": "spatial_relation"
+    }
+   ]
+  }
+ ]
+}

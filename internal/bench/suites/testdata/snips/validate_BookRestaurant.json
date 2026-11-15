@@ -1,0 +1,29 @@
+{
+ "BookRestaurant": [
+  {
+   "data": [
+    {
+     "text": "book a table for "
+    },
+    {
+     "text": "4",
+     "entity": "party_size_number"
+    },
+    {
+     "text": " at "
+    },
+    {
+     "text": "7 pm",
+     "entity": "timeRange"
+    },
+    {
+     "text": " in "
+    },
+    {
+     "text": "Lisbon",
+     "entity": "city"
+    }
+   ]
+  }
+ ]
+}

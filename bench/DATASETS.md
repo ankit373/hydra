@@ -3,10 +3,11 @@
 The raw data is **not** committed. `bench/datasets.lock` pins each file by commit and
 sha256; `hyctl bench fetch` downloads it to `$HYDRA_HOME/bench/data/<suite>/` and refuses
 any file whose hash differs. What is committed is derived: `bench/splits/<suite>.tsv`
-(`id  split  rank  label`), generated once by `go generate ./internal/bench/suites`, and
-`bench/configs/smoke.ids`, the first 100 test ids by rank per suite.
+(`id  split  rank  label`; a Snips label is its gold fields as JSON), generated once by
+`go generate ./internal/bench/suites`, and `bench/configs/smoke.ids`, the first 100 test ids
+by rank per suite.
 
-Every suite has been public since 2019–2021 and is **likely in pre-training data**.
+Every suite has been public since 2017–2021 and is **likely in pre-training data**.
 Paired differences against the frontier arm are the claim; absolute rates are context.
 
 ## Banking77
@@ -57,6 +58,23 @@ Paired differences against the frontier arm are the claim; absolute rates are co
 | Checks | `GSM8KFormatCheck` (the answer ends in a `####` line) and `GSM8KArithmeticCheck` (every `<<expression=result>>` note recomputes; no notes is a fail). Both are free and run on the answer text alone. The prompt asks for both, with no worked examples |
 | Citation | Cobbe et al., *Training Verifiers to Solve Math Word Problems*, 2021 |
 
+## Snips (extraction)
+
+| | |
+|---|---|
+| Source | https://github.com/sonos/nlu-benchmark (`2017-06-custom-intent-engines/<intent>/validate_<intent>.json`) |
+| Revision | `b86ac7f1577868c42158d0dec77db50956046696` |
+| Files | seven, one per intent; each sha256 is in `bench/datasets.lock` |
+| Licence | CC0 1.0, **verified**: LICENSE at the pinned commit, 2026-11-16 |
+| Items | the validate split only, 100 per intent: **700**. The larger train files are not pinned, since no arm trains |
+| Gold | the slots each utterance fills, as fields: `{"city": "Lisbon", "timeRange": "7 pm"}`. No utterance fills one slot twice; the loader refuses one that does |
+| Split | 188 calibration · 512 test · **0 excluded** |
+| Ids | `<intent>/<row>`, e.g. `GetWeather/038`: the 0-based record in that intent's file |
+| Class | `extraction.snips` |
+| Prompt | the utterance, fenced, and every key that intent's utterances fill. The answer is one JSON object with only the keys the message gives a value for |
+| Grade | every gold field present and equal after the fields check's normalising (`checkgen.SameValue`: text folded for case and spacing, numbers by value), and no other key with a value. An answer that is not a JSON object is a format fail |
+| Citation | Coucke et al., *Snips Voice Platform: an embedded Spoken Language Understanding system for private-by-design voice interfaces*, 2018 |
+
 ## Duplicates and excluded items
 
 Copies of one utterance are found under the split key below, which ignores case,
@@ -68,6 +86,7 @@ differ are label noise no arm can score, so every copy is `excluded`.
 | Banking77 | 62 (124) | 2 (4) |
 | CLINC150 | 92 (188) | 4 (9) |
 | GSM8K | 0 | 0 |
+| Snips | 5 (10) | 0 |
 
 | Suite | Utterances | Labels | Ids |
 |---|---|---|---|
@@ -86,8 +105,8 @@ differ are label noise no arm can score, so every copy is `excluded`.
   collapses whitespace, so "what's my balance?" and "whats my balance" share a split. It is
   a leakage key, not the grader's label normaliser, which must keep `-` significant. The
   only non-ASCII in Banking77 and CLINC150 is `£`, `€`, `’`, a no-break space and `…`, and
-  GSM8K adds `¾`, curly quotes and dashes. NFC changes none of them, so the key needs no new
-  dependency.
+  GSM8K adds `¾`, curly quotes and dashes, and Snips precomposed Latin letters (`é`, `ñ`,
+  `Å`, `Ō`, `ş`). NFC changes none of them, so the key needs no new dependency.
 - `hyctl bench run` recomputes every row's split, rank and label from the data and refuses
   a TSV that disagrees.
 - **Rank**: `sha256("rank\0" ‖ suite ‖ "\0" ‖ id)`, first 8 bytes. A tier takes the first
