@@ -231,6 +231,8 @@ A costlier defect ⟹ a higher confidence bar ⟹ SPRT samples more before it st
 
 ### 4 · Blast radius: Molloy-Reed percolation
 
+*This law and the next apply when the work is a change to code. The rest apply to any task.*
+
 Treat the code as a graph with degree mean $\langle k\rangle$ and second moment $\langle k^2\rangle$. A **giant connected component**, a cascade-capable core where one change can ripple everywhere, exists precisely when the Molloy-Reed criterion holds:
 
 $$\kappa = \frac{\langle k^2 \rangle}{\langle k \rangle} \ge 2$$
@@ -241,6 +243,8 @@ Files inside a high-$\kappa$ core get their confidence bar raised: an edit to a 
 ⊢ Molloy-Reed (1995), proven · ▣ computed from `graph.json` in [`internal/graph`](internal/graph), see `hyctl graph blast`
 
 ### 5 · Optimal parallelism: Amdahl + coordination
+
+*For code changes only, like §4.*
 
 Fanning work across $n$ agents speeds the parallel part but adds coordination cost that grows with $n$. With serial fraction $s$ and per-agent coupling $k$, wall-clock time is
 
@@ -528,18 +532,23 @@ Every model is placed on a routing level by capability score, and `--enum` or `-
 
 ```bash
 # Let Hydra pick the best available model
-hyctl dispatch "refactor auth middleware to use JWT refresh tokens"
+hyctl dispatch --kind writing.support "draft a short, friendly reply to this refund request: ..."
 
 # Preview the full fallback chain before dispatching
-hyctl dispatch --dry-run "write a SQL migration"
+hyctl dispatch --dry-run --kind extraction "pull the invoice number, date and total from this email as JSON"
 #
-#   Primary:   claude (score: 95)
-#   Fallback:  codex  (score: 88)  ← if claude unavailable
-#   Fallback:  openai (score: 88)  ← if codex unavailable
-#   Local:     ollama/qwen3:8b     ← always available
+#   Primary  →  Claude Code  (score 95, cli)
+#   Fallback chain:
+#     1. Claude Opus 4.6 (Thinking)   score 92  registry
+#     2. OpenAI Codex                 score 88  cli
+#     ...
+#     10. Qwen2.5-Coder:7b (Ollama)   score 66  port
 
 # Force local: no API calls regardless of policy
-hyctl dispatch --local "write unit tests for this function"
+hyctl dispatch --local --kind classification "label each ticket as billing, bug or how-to: ..."
+
+# Code is one kind of work among the rest
+hyctl dispatch --kind code "refactor the auth middleware to use JWT refresh tokens"
 ```
 
 ### 📺 Output as It Arrives
@@ -738,7 +747,7 @@ without any extra configuration.
 Most routers pick a model and hope. Hydra can check the answer: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)**: it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds that the answer is correct cross your target P(correct).
 
 ```bash
-hyctl dispatch --confidence 0.95 "is this migration safe to run in prod?"
+hyctl dispatch --confidence 0.95 "does this contract let either side cancel early? quote the clause"
 ```
 
 **Calibration is a prerequisite, not a nice-to-have.** An uncalibrated source
@@ -748,18 +757,20 @@ estimate cannot move at all, so Hydra refuses the run rather than sampling every
 model to arrive back at 50%, and tells you what does carry evidence:
 
 ```
-$ hyctl dispatch --confidence 0.9 --domain go "is this safe?"
-Error: no head this run would sample has been scored in domain "go", so
+$ hyctl dispatch --confidence 0.9 --kind writing.support "draft a reply to this refund request: ..."
+Error: no head this run would sample has been scored in domain "writing.support", so
 --confidence would sample every head, move the estimate nowhere and hand back 50%.
+A source only carries evidence once its verdicts have been scored against outcomes.
 
-  Scored in "go":  verifier:go
-  ...but none of them is among the heads this run selects.
-  Other domains with evidence: gotest, trust-bench
-  Record an outcome:     hyctl trust record --source <head-id> --domain go --said-correct --outcome correct
+  Other domains with evidence: trust-bench-v2
+  Record an outcome:     hyctl trust record --source <head-id> --domain writing.support --said-correct --outcome correct
 ```
 
-The distinction matters: a task type nothing has ever scored and a task type scored
-only by a source this run would not sample need different fixes.
+When some source has scored the task type but this run would not sample it, the
+error names it instead (`Scored in "go": verifier:go ...but none of them is among
+the heads this run selects`). The distinction matters: a task type nothing has ever
+scored and a task type scored only by a source this run would not sample need
+different fixes.
 
 It leans on **per-source calibration** you build from real outcomes, each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
 
@@ -786,6 +797,8 @@ command for it, so the ledger above is one copy-paste away rather than something
 to go looking for. `trust stats` says outright when achieved confidence has never
 left the 50% prior, which means the runs paid for models without learning
 anything, rather than leaving that to be inferred from a savings figure.
+
+#### For code: raise the bar on risky files
 
 **Blast-radius aware.** Point Hydra at a dependency graph (`graph.json` from [Graphify](https://github.com/safishamsi/graphify) or any tree-sitter indexer) and the confidence bar scales with how much code an edit could break, a fix to a hub everything imports demands far more certainty than a leaf helper:
 
@@ -959,6 +972,7 @@ hyctl context entropy <file|->          # signal density + useful tokens + compa
 
 # Verification & accountability
 hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
+hyctl oracle ground --prompt prompt.txt --candidate summary.txt  # every number and identifier is in the source
 hyctl eval stats                        # the verified corpus: size and pass rate by task type
 # Filled by edit, parallel, oracle verify --candidate, hyverify and dispatch --check
 hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
@@ -1093,8 +1107,8 @@ opposite of what SIMPLE asks for.
 
 ```bash
 hyctl status            # every name, the routing level it resolves to, and what serves it
-hyctl dispatch --dry-run --tier simple "add a DTO"
-hyctl dispatch --dry-run --swarm --enum SIMPLE "add a DTO"   # the same models
+hyctl dispatch --dry-run --tier simple "summarise this paragraph"
+hyctl dispatch --dry-run --swarm --enum SIMPLE "summarise this paragraph"   # the same models
 ```
 
 Older configs carry a `[[tiers]]` block that assigned models to those names by
@@ -1203,7 +1217,7 @@ For Ollama models, add a family pattern:
 | **Causal A2A handoffs**: vector clocks, concurrent-edit conflict detection | ✅ Shipped |
 | **Context-entropy governor**: compact on falling signal density, not length | ✅ Shipped |
 | **MCP accountability ledger**: record + gate what every agent touches | ✅ Shipped |
-| **Verification oracles**: tests/compile/lint as first-class evidence | ✅ Shipped |
+| **Checks as evidence**: tests, schemas, label lists, source grounding and model agreement | ✅ Shipped |
 | **Runtime model registry**: `hyctl models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
 | **Percolation-κ blast radius**: Molloy-Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor**: first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
