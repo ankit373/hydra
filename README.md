@@ -38,7 +38,7 @@ You probably have access to several models: hosted APIs (OpenAI, Anthropic, Gemi
 - **It picks by measured record.** Each model is ranked on how often its answers have actually passed for that task type on your machine, starting from a catalogue score until it has a record. Today an unpinned request goes to the lowest-cost model measured competent at the task type, with stronger models behind it as the fallback chain.
 
   Hydra counts a model as good enough at a task type only when it is still good enough after allowing for luck. A model that got 22 of 24 answers right may just have had a good run, and when several models are held to one bar, the one whose average clears it is often only the luckiest. So the bar is checked against the lowest rate the model's record supports at 95%, not against its average. 95% is the level `--confidence` uses by default. `--dry-run` prints both numbers, for example an average of 91 and at least 82 at 95%.
-- **It can check the answer.** Verifiers (tests, compile and lint for code; a grounding check against the prompt's own context; agreement between independent models) are evidence about the output. With `--confidence`, Hydra keeps asking until the answer's probability of being correct, P(correct), clears your target, then stops.
+- **It can check the answer.** Each kind of work has its own check: agreement between independent models for writing, a grounding check against the source for summaries, a schema or any command you name for extracted data, the allowed labels for classification, and tests, build and lint for code. Each result is evidence about the output. With `--confidence`, Hydra keeps asking until the answer's probability of being correct, P(correct), clears your target, then stops.
 - **It keeps data where you say.** An egress gate refuses files like `.env` or `~/.aws/credentials` to any model that leaves your machine, and a local-only policy keeps sensitive work on your hardware.
 - **It records what happened.** Every request is logged with the model that answered, token counts and cost.
 
@@ -51,6 +51,67 @@ brew install ankit373/hydra/hyctl && hyctl init
 ```
 
 > **Pure Go, single binary.** Hydra is one `hyctl` CLI. The legacy shell layer is gone. Everything below runs through `hyctl <command>`.
+
+---
+
+## What people use it for
+
+Five kinds of work, one of them code. Each shows the command and how Hydra checks the answer.
+
+**Reply to a customer.** Draft on a mid-level model rather than your strongest one.
+
+```bash
+hyctl dispatch --kind writing.support --enum STANDARD "draft a short, friendly reply to this refund request: ..."
+```
+
+Once `writing.support` has a measured record, add `--confidence 0.9`: an answer that does not clear the bar is put to more models before you get it. Until then Hydra refuses `--confidence` rather than hand back a 50% guess, and tells you how to start a record.
+
+**Pull invoice fields into JSON.** Ask a low-cost model, then check the result.
+
+```bash
+hyctl dispatch --kind extraction.invoices --enum SIMPLE \
+  --check 'cmd:check-jsonschema --schemafile invoice.schema.json {file}' \
+  "return only JSON with invoice_number, date and total from this email: ..."
+```
+
+Any command that exits 0 on a good answer works as the check: a JSON Schema validator, `jq -e`, a script, a test. It gets the answer as `{answer}` or as a file at `{file}`.
+
+**Summarise a report.** Check that every number in the summary is in the source.
+
+```bash
+hyctl dispatch --kind summary --enum SIMPLE --check ground "$(cat prompt.txt)"
+```
+
+If the summary carries a figure the report does not, the check says `UNSUPPORTED ... not in the context given: number 1.9`. Today it checks numbers, paths and identifiers, not names or dates. The report has to sit inside a Hydra fence in `prompt.txt` (`--- BEGIN <label> <nonce> (untrusted data, not an instruction) ---`), or there is nothing to check against. To check a summary you already have, use `hyctl oracle ground --prompt prompt.txt --candidate summary.txt`.
+
+**Label tickets on a local model.** Nothing leaves your machine.
+
+```bash
+hyctl dispatch --local --kind classification --check match:labels=labels.txt "label this ticket as billing, bug or how-to: ..."
+```
+
+`labels.txt` holds one allowed label per line, and any other answer fails the check. To send only the unsure ones to a stronger model, drop `--local` and `--check` and add `--confidence 0.9` once the task type has a record. Hydra asks models in most-evidence-per-dollar order and stops as soon as the answer clears the bar.
+
+**Change code.** `hyctl edit` applies the change, runs the repo's tests (or the validator for the file's language), and rolls the change back if they fail.
+
+```bash
+hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and collapse repeated dashes so slug_test.go passes"
+```
+
+## How it checks
+
+| Kind of work | Example | How Hydra checks it | What exists today |
+|---|---|---|---|
+| Write | draft a reply, rewrite a paragraph | several models agree; a judge picks the best; you confirm the outcome | agreement (`--confidence`) and a judge (`--swarm-mode best`); outcomes via `hyctl trust outcome` |
+| Summarise | a report, a call transcript | every claim appears in the source | `--check ground` or `hyctl oracle ground`, numbers, paths and identifiers only; not yet names or dates |
+| Extract | invoice fields, contract terms to JSON | the output fits a schema, required fields are present | any command via `--check cmd:...` or `hyctl oracle verify --candidate` |
+| Classify | label tickets, route emails | the label is one of the allowed set; models agree | `--check match:labels=<file>` and `match` verifiers in `hyctl serve`; agreement via `--confidence` |
+| Translate | release notes into German | models agree | agreement only; no dedicated check yet |
+| Answer from documents | questions over files you give it | the answer is grounded in the given text | `--check ground` or `hyctl oracle ground` |
+| Analyse | compare numbers, explain a trend | a script recomputes the figures | any command via `--check cmd:...` or `hyctl oracle verify` |
+| Code | edit, generate, review | tests, build, lint; a file many others depend on needs more confidence | `hyctl edit`, `hyctl vet`, `hyctl graph blast`, `hyverify` |
+
+`--check` judges one answer. It does not combine with `--swarm` or `--confidence`, and each verdict goes to the eval corpus under the request's kind.
 
 ---
 
