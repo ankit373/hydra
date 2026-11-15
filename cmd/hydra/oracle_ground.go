@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/ground"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -98,13 +99,20 @@ the caller's decision.`,
 			measured, why := oracle.Measured(cal, src, domain)
 			llr := oracle.LLR(cal, src, domain, v)
 
+			var spanEv runlog.Event
 			if scoreSpan != "" {
-				if err := scoreGrounding(scoreRun, scoreSpan, src, v.Passed, v.Detail); err != nil {
+				ev, err := scoreGrounding(scoreRun, scoreSpan, src, v.Passed, v.Detail)
+				if err != nil {
 					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("span score: "+err.Error()))
 				} else {
 					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("scored span "+scoreSpan))
 				}
+				spanEv = ev
 			}
+			fileVerdict(spanEv, evalset.Verdict{
+				CandidateHash: candidateHash(string(candidateRaw)),
+				Domain:        domain, Check: src, Passed: v.Passed, Detail: v.Detail,
+			})
 
 			if jsonOut {
 				out := map[string]any{
@@ -152,19 +160,16 @@ the caller's decision.`,
 
 // scoreGrounding attaches the verdict to the span that produced the answer, so
 // a failing check is visible in `hyctl trace view` beside the work it judges.
-func scoreGrounding(runID, spanID, source string, passed bool, detail string) error {
-	if runID == "" {
-		runs, err := runlog.Runs()
-		if err != nil || len(runs) == 0 {
-			return errors.New("--span given but no run to attach it to; pass --run")
-		}
-		runID = runs[0]
+func scoreGrounding(runID, spanID, source string, passed bool, detail string) (runlog.Event, error) {
+	ev, err := loadSpan(runID, spanID)
+	if err != nil {
+		return ev, err
 	}
 	val := 0.0
 	if passed {
 		val = 1
 	}
-	return runlog.AppendScore(runID, spanID, runlog.Score{
+	return ev, runlog.AppendScore(ev.RunID, ev.SpanID, runlog.Score{
 		Name: "grounding", Value: val, Comment: detail, Source: source,
 	})
 }

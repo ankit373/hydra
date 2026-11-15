@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/payload"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/waterfall"
@@ -469,6 +470,15 @@ span keeps whatever the head itself reported.`,
 			}
 			if err != nil {
 				return err
+			}
+			check := source
+			if check == "" {
+				check = "human"
+			}
+			if ev, sErr := loadSpan(runID, spanID); sErr != nil {
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("verdict log: "+sErr.Error()))
+			} else {
+				fileVerdict(ev, evalset.Verdict{Check: check, Passed: value > 0, Detail: comment})
 			}
 			mark := okStyle.Render("✔")
 			if value <= 0 {

@@ -503,3 +503,33 @@ func TestCLI_EvalClassifyRefusalsNameTheRemedy(t *testing.T) {
 		t.Errorf("a tiny corpus did not say so: %v", err)
 	}
 }
+
+// A verdict on a span lands in the verdict log under the span's full id, with
+// the head that produced the answer, and never the answer's text.
+func TestCLI_OracleVerifyWritesOneVerdictOnTheSpan(t *testing.T) {
+	s := cliSandbox(t)
+	const runID = "20260908T060000Z-8888888888888888"
+	_, okSpan := seedRun(t, runID)
+	f := filepath.Join(t.TempDir(), "answer.md")
+	if err := os.WriteFile(f, []byte("# Notes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := run(t, "oracle", "verify", "--candidate", f, "--domain", "docs",
+		"--source", "verifier:markdownlint", "--run", runID, "--span", okSpan[:8],
+		"--", s.FakeBinary(t, "always-pass")); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil || len(answers) != 1 || len(answers[0].Checks) != 1 {
+		t.Fatalf("verdict log = %+v, err=%v; want one answer with one check", answers, err)
+	}
+	c := answers[0].Checks[0]
+	want := evalset.Verdict{SpanID: okSpan, RunID: runID, Head: "h2", Domain: "docs",
+		CandidateHash: evalset.Hash("# Notes\n"), Check: "verifier:markdownlint", Passed: true}
+	c.V, c.TS, c.Detail = 0, "", ""
+	if c != want {
+		t.Errorf("verdict = %+v, want %+v", c, want)
+	}
+}
