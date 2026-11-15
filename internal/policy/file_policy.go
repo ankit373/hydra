@@ -32,7 +32,8 @@ type Spec struct {
 	ContextPct    int    `json:"context_pct"`
 }
 
-// FilePolicy is the merged output of policy evaluation.
+// FilePolicy is the merged output of policy evaluation. A field tagged
+// enforced:"true" is read by a caller; TestEnforcedTag_MatchesCallers checks the tags.
 type FilePolicy struct {
 	EditMode            string   `yaml:"edit_mode"`
 	Atomic              bool     `yaml:"atomic"`
@@ -47,11 +48,11 @@ type FilePolicy struct {
 	EscalateOnFail      bool     `yaml:"escalate_on_fail"`
 	RubberDuck          bool     `yaml:"rubber_duck"`
 	ConfidenceThreshold float64  `yaml:"confidence_threshold"`
-	DiffSizeCapPct      int      `yaml:"diff_size_cap_pct"`
-	MaxCostUSD          float64  `yaml:"max_cost_usd"`
-	MaxWallSeconds      int      `yaml:"max_wall_seconds"`
-	MaxMemoryMB         int      `yaml:"max_memory_mb"`
-	MaxCPUSeconds       int      `yaml:"max_cpu_seconds"`
+	DiffSizeCapPct      int      `yaml:"diff_size_cap_pct" enforced:"true"`
+	MaxCostUSD          float64  `yaml:"max_cost_usd" enforced:"true"`
+	MaxWallSeconds      int      `yaml:"max_wall_seconds" enforced:"true"`
+	MaxMemoryMB         int      `yaml:"max_memory_mb" enforced:"true"`
+	MaxCPUSeconds       int      `yaml:"max_cpu_seconds" enforced:"true"`
 	UseRepoMap          bool     `yaml:"use_repo_map"`
 	DedupFileReads      bool     `yaml:"dedup_file_reads"`
 	PromptCache         bool     `yaml:"prompt_cache"`
@@ -111,6 +112,26 @@ func (e *FilePolicyEngine) Decide(spec Spec) FilePolicy {
 		}
 	}
 	return fp
+}
+
+// Keys lists the policy.yaml keys a FilePolicy can set.
+func Keys() []string { return yamlKeys(false) }
+
+// EnforcedKeys lists the keys some caller reads, per the enforced tag.
+func EnforcedKeys() []string { return yamlKeys(true) }
+
+func yamlKeys(enforcedOnly bool) []string {
+	var keys []string
+	t := reflect.TypeFor[FilePolicy]()
+	for i := range t.NumField() {
+		f := t.Field(i)
+		key := f.Tag.Get("yaml")
+		if key == "" || key == "-" || (enforcedOnly && f.Tag.Get("enforced") != "true") {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func defaultFilePolicy() FilePolicy {
