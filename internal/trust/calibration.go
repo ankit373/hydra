@@ -101,6 +101,11 @@ type Stat struct {
 	// Where it is false the rates are the prior deformed by one-sided counts,
 	// which is a shape, not a measurement (#1142).
 	Discriminating bool `json:"discriminating"`
+	// Since* is the said-correct record since the cell's last detected change,
+	// the whole record when there is none. Changed is when it was found.
+	SinceCorrect int       `json:"since_correct"`
+	SinceTotal   int       `json:"since_total"`
+	Changed      time.Time `json:"changed,omitzero"`
 }
 
 // Calibrator maintains an online confusion posterior per (source, domain) and
@@ -363,6 +368,7 @@ func (c *Calibrator) Report() []Stat {
 		if conf.discriminating() {
 			d = se*math.Log(se/(1-sp)) + (1-se)*math.Log((1-se)/sp)
 		}
+		sinceCorrect, sinceTotal := c.since(k, conf)
 		stats = append(stats, Stat{
 			Source:         k.source,
 			Domain:         k.domain,
@@ -372,6 +378,9 @@ func (c *Calibrator) Report() []Stat {
 			Sp:             sp,
 			D:              d,
 			Discriminating: conf.discriminating(),
+			SinceCorrect:   sinceCorrect,
+			SinceTotal:     sinceTotal,
+			Changed:        conf.changed,
 		})
 	}
 	c.mu.RUnlock()
