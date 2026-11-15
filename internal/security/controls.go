@@ -5,7 +5,6 @@ package security
 import (
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/a2a"
@@ -74,35 +73,10 @@ func Controls(events []ledger.Event, audit PolicyAudit, chain ledger.ChainResult
 }
 
 // filePolicyEnforcementSite names where registry/policy.yaml's caps are
-// applied, and enforcedCaps names which of them take effect.
-//
-// These are the only claims in this file that cannot be checked at runtime: no
-// amount of introspection tells a running binary whether its caller used a
-// return value. They are established by reading the source, reported with
-// Verified:false so nobody mistakes them for observations, and MUST be updated
-// by hand as the wiring changes, the same deliberate-drift discipline
-// desktop/api/dashboard_test.go already uses for its duplicated tier key.
-//
-// That hand-sync is exactly what drifted: #501 made the caps apply and this
-// text kept saying "none are applied … discards the result", so the one
-// surface whose purpose is an honest posture was understating it (#424).
+// applied. Which caps take effect comes from policy.EnforcedKeys, whose tags a
+// policy test checks against the fields callers read. Reading the source is
+// not a runtime check, so this control stays Verified:false.
 const filePolicyEnforcementSite = "internal/policy/caps.go"
-
-// enforcedCaps are the FilePolicy fields something actually reads, by their
-// policy.yaml names, so the line names what an operator can rely on rather
-// than listing the seventeen they cannot.
-//
-// Hand-maintained, and the reason this const block carries Verified:false. The
-// count it is measured against is *derived* from the struct, so adding a field
-// to FilePolicy cannot quietly inflate what this claims, and a test asserts
-// every name here is a real yaml tag.
-var enforcedCaps = []string{"diff_size_cap_pct", "max_cost_usd", "max_wall_seconds"}
-
-// policyFieldCount is how many knobs registry/policy.yaml can set, read off
-// the struct rather than written down: my first version of this line said
-// eight fields were unenforced when the real number was seventeen, which is
-// the same kind of stale hand-written claim this control exists to report.
-func policyFieldCount() int { return reflect.TypeOf(policy.FilePolicy{}).NumField() }
 
 func filePolicyControl() Control {
 	c := Control{Name: "File-policy caps", Verified: false}
@@ -121,13 +95,15 @@ func filePolicyControl() Control {
 	// be relying on are applied, and several fields still are not. Reporting
 	// this as fully active would overstate it in the other direction.
 	c.Wired, c.Limited = true, true
-	c.Detail = fmt.Sprintf("%d rule(s) declared, and %d of %d policy fields take effect (%s) at %s: "+
+	enforced, all := policy.EnforcedKeys(), len(policy.Keys())
+	c.Detail = fmt.Sprintf("%d rule(s) declared, and %d of %d policy fields take effect (%s). From %s, "+
 		"an over-large diff is rolled back, a head over the cost ceiling is refused before it runs, "+
-		"and the wall-clock limit deadlines the dispatch and the validator after it. Both "+
-		"`hyctl edit` and `hyctl parallel` enforce them from there, so a refusal reads the same "+
+		"and the wall-clock limit deadlines the dispatch and the validator after it. The memory and "+
+		"CPU limits cap a subprocess head through internal/sandbox. Both "+
+		"`hyctl edit` and `hyctl parallel` enforce them, so a refusal reads the same "+
 		"either way (#769). The other %d are declared and read by nothing",
-		n, len(enforcedCaps), policyFieldCount(), strings.Join(enforcedCaps, ", "),
-		filePolicyEnforcementSite, policyFieldCount()-len(enforcedCaps))
+		n, len(enforced), all, strings.Join(enforced, ", "),
+		filePolicyEnforcementSite, all-len(enforced))
 	// A condition naming a field the evaluator does not know can never be
 	// satisfied, so the rule around it is not merely unexercised, it is dead.
 	// Said separately from the field count above because the remedy differs: a
