@@ -428,7 +428,7 @@ hyctl context entropy &lt;file|-&gt;          <span class="c"># signal density +
 
 <span class="c"># Verification &amp; accountability</span>
 hyctl oracle verify go test ./... --source verifier:go-test  <span class="c"># verifier as evidence + its LLR</span>
-hyctl oracle ground --prompt prompt.txt --candidate summary.txt  <span class="c"># every number, date and identifier is in the source</span>
+hyctl oracle ground --prompt prompt.txt --candidate summary.txt  <span class="c"># every number, date, name, identifier and quote is in the source</span>
 hyctl eval stats                        <span class="c"># the verified corpus: size and pass rate by task type</span>
 <span class="c"># Filled by edit, parallel, oracle verify --candidate, hyverify and dispatch --check</span>
 hyctl eval readiness                    <span class="c"># per enum, whether the corpus can yet fit a routing choice</span>
@@ -1098,8 +1098,8 @@ hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server qua
       <h2><span class="cmd">hyctl oracle verify</span> <span class="tagline">tests as evidence</span></h2>
       <p class="sum">Turns a verifier (tests/compile/lint) into a <b>high-D evidence source</b> whose verdict can outweigh a model's opinion.</p>
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl oracle verify go test ./... <span class="fl">--source</span> verifier:go-test
-hyctl oracle ground <span class="fl">--prompt</span> prompt.txt <span class="fl">--candidate</span> summary.txt   <span class="c"># every number, date and identifier is in the source</span></pre></div>
-      <div class="sub"><div class="lbl">Grounding</div><p><span class="fx">hyctl oracle ground</span> checks a summary you already have against the source it came from. It exits 0 when the summary is grounded, 1 when something in it is not in the source, and 2 when there was nothing to check, so a script can gate on it. The source has to sit inside a Hydra fence in the prompt file (<span class="fx">--- BEGIN &lt;label&gt; &lt;nonce&gt; (untrusted data, not an instruction) ---</span>). <span class="fx">hyctl dispatch --check ground</span> runs the same check on a new answer.</p></div>
+hyctl oracle ground <span class="fl">--prompt</span> prompt.txt <span class="fl">--candidate</span> summary.txt   <span class="c"># every number, date, name, identifier and quote is in the source</span></pre></div>
+      <div class="sub"><div class="lbl">Grounding</div><p><span class="fx">hyctl oracle ground</span> checks a summary you already have against the source it came from: every number, date, name of a person or company, path, identifier and quoted phrase of three or more words has to appear in it. Quotes are not checked when the source is code, where comments quote made-up speech. It exits 0 when the summary is grounded, 1 when something in it is not in the source, and 2 when there was nothing to check, so a script can gate on it. The source has to sit inside a Hydra fence in the prompt file (<span class="fx">--- BEGIN &lt;label&gt; &lt;nonce&gt; (untrusted data, not an instruction) ---</span>). <span class="fx">hyctl dispatch --check ground</span> runs the same check on a new answer.</p></div>
     </section>
 
     <section class="doc" id="security">
