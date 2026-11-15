@@ -76,6 +76,16 @@ func ClopperPearsonUpper(k, n int, alpha float64) (float64, error) {
 	}
 }
 
+// ClopperPearsonLower is the exact one-sided lower bound: the upper bound on the
+// failure rate, mirrored. k == 0 gives 0.
+func ClopperPearsonLower(k, n int, alpha float64) (float64, error) {
+	if n <= 0 || k < 0 || k > n {
+		return 0, fmt.Errorf("stats: Clopper–Pearson needs 0 ≤ k ≤ n and n > 0, got k=%d n=%d", k, n)
+	}
+	u, err := ClopperPearsonUpper(n-k, n, alpha)
+	return 1 - u, err
+}
+
 // Wilson is the score interval for k successes in n trials. It stays inside [0, 1]
 // where the normal approximation does not, and n = 0, no evidence, is the whole range.
 func Wilson(k, n int, z float64) (lo, hi float64, err error) {

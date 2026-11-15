@@ -196,3 +196,41 @@ func TestPassHatK_RefusesWhatItCannotAnswer(t *testing.T) {
 		}
 	}
 }
+
+// References are scipy's beta.ppf(α, k, n − k + 1), the lower end of a two-sided 95% interval.
+func TestClopperPearsonLower_MatchesUpperBySymmetry(t *testing.T) {
+	cases := []struct {
+		k, n int
+		want float64
+	}{
+		{3, 50, 0.012548587835334057},
+		{97, 100, 0.91482394702572},
+		{1, 2, 0.01257911709342505},
+		{2, 2, 0.15811388300841897},
+		{35, 500, 0.0492386447203788},
+	}
+	for _, c := range cases {
+		lo, err := ClopperPearsonLower(c.k, c.n, 0.025)
+		if err != nil {
+			t.Fatal(err)
+		}
+		near(t, "lower", lo, c.want, 1e-9)
+		hi, err := ClopperPearsonUpper(c.n-c.k, c.n, 0.025)
+		if err != nil {
+			t.Fatal(err)
+		}
+		near(t, "mirror", lo, 1-hi, exact)
+	}
+	if _, err := ClopperPearsonLower(4, 3, 0.025); err == nil {
+		t.Fatal("k > n gave a bound")
+	}
+}
+
+func TestClopperPearsonLower_ZeroSuccessesIsZero(t *testing.T) {
+	for _, n := range []int{1, 20, 1319} {
+		lo, err := ClopperPearsonLower(0, n, 0.025)
+		if err != nil || lo != 0 {
+			t.Fatalf("n=%d: lower %v, %v; want exactly 0", n, lo, err)
+		}
+	}
+}
