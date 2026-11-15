@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,15 +42,23 @@ func writeGroundFiles(t *testing.T, answer string) (promptPath, answerPath strin
 	return promptPath, answerPath
 }
 
-// The headline case: an invented tier and an invented symbol are named.
+// wantExit fails unless err carries exit status want, which is what a script gates on.
+func wantExit(t *testing.T, err error, want int) {
+	t.Helper()
+	var status exitStatus
+	if !errors.As(err, &status) || int(status) != want {
+		t.Fatalf("err = %v, want exit status %d", err, want)
+	}
+}
+
+// The headline case: an invented tier and an invented symbol are named, and
+// the exit code says so (#1736).
 func TestOracleGround_NamesWhatTheContextDoesNotSupport(t *testing.T) {
 	testutil.NewSandbox(t)
 	p, a := writeGroundFiles(t, "UITier puts a LocalOnly head at tier 12 via rank.EffectiveScoreIn.")
 
 	out, _, err := run(t, "oracle", "ground", "--prompt", p, "--candidate", a)
-	if err != nil {
-		t.Fatal(err)
-	}
+	wantExit(t, err, groundUnsupported)
 	for _, want := range []string{"UNSUPPORTED", "12", "rank.EffectiveScoreIn"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)
@@ -70,10 +79,9 @@ func TestOracleGround_PassesAGroundedAnswer(t *testing.T) {
 	}
 }
 
-// Both "nothing to check against" and "nothing to check" report not-checked,
-// and neither exits non-zero: they are honest answers to the question asked,
-// not failed checks.
-func TestOracleGround_ReportsNotCheckedWithoutFailing(t *testing.T) {
+// Both "nothing to check against" and "nothing to check" report not-checked
+// with their own exit code, so neither reads as a pass or as a failed check.
+func TestOracleGround_ReportsNotCheckedApart(t *testing.T) {
 	testutil.NewSandbox(t)
 	dir := t.TempDir()
 
@@ -89,9 +97,7 @@ func TestOracleGround_ReportsNotCheckedWithoutFailing(t *testing.T) {
 		{"no claims", fenced, prose, "no checkable claim"},
 	} {
 		out, _, err := run(t, "oracle", "ground", "--prompt", c.prompt, "--candidate", c.answer)
-		if err != nil {
-			t.Fatalf("%s: %v", c.name, err)
-		}
+		wantExit(t, err, groundNotChecked)
 		if !strings.Contains(out, "NOT CHECKED") || !strings.Contains(out, c.want) {
 			t.Errorf("%s: want a not-checked report mentioning %q:\n%s", c.name, c.want, out)
 		}
@@ -152,9 +158,7 @@ func TestOracleGround_JSONCarriesTheSpansAndTheRefusal(t *testing.T) {
 	p, a := writeGroundFiles(t, "UITier puts a LocalOnly head at tier 12.")
 
 	out, _, err := run(t, "oracle", "ground", "--prompt", p, "--candidate", a, "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	wantExit(t, err, groundUnsupported)
 	var got struct {
 		Checked  bool   `json:"checked"`
 		Grounded bool   `json:"grounded"`
@@ -222,10 +226,9 @@ func TestTwoChecksOnOneSpanFoldToOneAnswer(t *testing.T) {
 	_, okSpan := seedRun(t, runID)
 	p, a := writeGroundFiles(t, "UITier puts a LocalOnly head at tier 12.")
 
-	if _, _, err := run(t, "oracle", "ground", "--prompt", p, "--candidate", a,
-		"--run", runID, "--span", okSpan[:8]); err != nil {
-		t.Fatal(err)
-	}
+	_, _, err := run(t, "oracle", "ground", "--prompt", p, "--candidate", a,
+		"--run", runID, "--span", okSpan[:8])
+	wantExit(t, err, groundUnsupported)
 	score := cmdTraceScore()
 	score.SetArgs([]string{runID, "--span", okSpan, "--name", "review", "--value", "1"})
 	captureStdout(t, func() {

@@ -82,7 +82,7 @@ Any command that exits 0 on a good answer works as the check: a JSON Schema vali
 hyctl dispatch --kind summary --enum SIMPLE --check ground "$(cat prompt.txt)"
 ```
 
-If the summary carries a figure the report does not, the check says `UNSUPPORTED ... not in the context given: number 1.9`. Today it checks numbers, paths and identifiers, not names or dates. The report has to sit inside a Hydra fence in `prompt.txt` (`--- BEGIN <label> <nonce> (untrusted data, not an instruction) ---`), or there is nothing to check against. To check a summary you already have, use `hyctl oracle ground --prompt prompt.txt --candidate summary.txt`.
+If the summary carries a figure the report does not, the check says `UNSUPPORTED ... not in the context given: number 1.9`. Today it checks numbers, paths and identifiers, not names or dates. The report has to sit inside a Hydra fence in `prompt.txt` (`--- BEGIN <label> <nonce> (untrusted data, not an instruction) ---`), or there is nothing to check against. To check a summary you already have, use `hyctl oracle ground --prompt prompt.txt --candidate summary.txt`. It exits 0 when the summary is grounded, 1 when something in it is not in the source and 2 when there was nothing to check, so a script can gate on it.
 
 **Label tickets on a local model.** Nothing leaves your machine.
 

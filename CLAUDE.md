@@ -495,6 +495,8 @@ hyctl trace view ; hyctl trace view <run-id> --span <id> ; hyctl trace view --js
 # Was the answer right? A verdict on a span, appended after the fact
 hyctl trace score --span <id> --name tests --value 1 --comment "suite passed"
 hyctl oracle verify --span <id> --domain go -- go test ./...   # attributes its own verdict
+# Exit 0 grounded, 1 unsupported, 2 not checked (no fence, or nothing checkable)
+hyctl oracle ground --prompt prompt.txt --candidate summary.txt --span <id>
 
 # Fold old run logs into compressed monthly segments (lossless; readers unaffected)
 hyctl trace seal --dry-run ; hyctl trace seal --older-than 168h
