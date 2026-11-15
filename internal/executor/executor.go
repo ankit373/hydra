@@ -43,6 +43,10 @@ type Request struct {
 	// process for this to bound. 0 means no ceiling.
 	MaxMemoryMB   int
 	MaxCPUSeconds int
+
+	// PromptCache asks providers that cache only on request (Anthropic) to cache
+	// the stable start of the prompt. False sends exactly what it always did.
+	PromptCache bool
 }
 
 // Response is the result of a successful execution.

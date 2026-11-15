@@ -281,3 +281,85 @@ func TestAnthropic_InputTokensIncludeCacheTokens(t *testing.T) {
 		t.Errorf("cache read/write = %d/%d, want 1800/200", resp.CacheReadTokens, resp.CacheWriteTokens)
 	}
 }
+
+// cacheReq has a system prompt and two tools given out of name order.
+func cacheReq(on bool) Request {
+	return Request{
+		Prompt: "summarise the attached minutes", System: "You are a careful editor.",
+		Head: anthropicHead(), PromptCache: on,
+		Tools: []ToolDef{
+			{Type: "function", Function: ToolFunction{Name: "search_notes", Description: "find a note"}},
+			{Type: "function", Function: ToolFunction{Name: "fetch_doc", Description: "read a doc"}},
+		},
+	}
+}
+
+// recordedBody runs req through the streamed path and returns what was sent.
+func recordedBody(t *testing.T, req Request) []byte {
+	t.Helper()
+	s := newAnthropicStub(t, []string{sse("message_start", anthropicStart), anthropicText("ok"),
+		sse("message_delta", anthropicStop), anthropicClosed})
+	if _, err := (&HTTPExecutor{}).ExecuteStream(context.Background(), req, func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	return s.body
+}
+
+func TestAnthropicBody_CacheControlOnLastSystemBlock(t *testing.T) {
+	req := cacheReq(true)
+	req.Tools = nil
+	raw := recordedBody(t, req)
+	var body struct {
+		System []anthropicBlock `json:"system"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("system is not a list of blocks: %v\n%s", err, raw)
+	}
+	if len(body.System) != 1 || body.System[0].Text != req.System {
+		t.Fatalf("system = %+v, want one block with the system prompt", body.System)
+	}
+	if cc := body.System[0].CacheControl; cc == nil || cc.Type != "ephemeral" {
+		t.Errorf("last system block cache_control = %+v, want ephemeral", cc)
+	}
+	if n := strings.Count(string(raw), `"cache_control"`); n != 1 {
+		t.Errorf("%d cache_control markers with no tools, want 1", n)
+	}
+}
+
+// Off must send what was sent before PromptCache existed, byte for byte. want
+// is what main sent for this request before this change, recorded the same way.
+func TestAnthropicBody_NoCacheControlWhenOff(t *testing.T) {
+	const want = `{"max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"summarise the attached minutes"}]}],"model":"claude-test-1","stream":true,"system":"You are a careful editor.","tools":[{"name":"search_notes","description":"find a note","input_schema":{"type":"object","properties":{}}},{"name":"fetch_doc","description":"read a doc","input_schema":{"type":"object","properties":{}}}]}`
+	if got := string(recordedBody(t, cacheReq(false))); got != want {
+		t.Errorf("body with PromptCache off changed:\n got %s\nwant %s", got, want)
+	}
+}
+
+func TestAnthropicBody_ToolsSortedAndLastMarked(t *testing.T) {
+	raw := recordedBody(t, cacheReq(true))
+	var body struct {
+		Tools []anthropicTool `json:"tools"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Tools) != 2 || body.Tools[0].Name != "fetch_doc" || body.Tools[1].Name != "search_notes" {
+		t.Fatalf("tools = %+v, want sorted by name", body.Tools)
+	}
+	if body.Tools[0].CacheControl != nil {
+		t.Error("the first tool carries a cache marker; only the last should")
+	}
+	if cc := body.Tools[1].CacheControl; cc == nil || cc.Type != "ephemeral" {
+		t.Errorf("last tool cache_control = %+v, want ephemeral", cc)
+	}
+	// One on the tools and one on the system block.
+	if n := strings.Count(string(raw), `"cache_control"`); n != 2 {
+		t.Errorf("%d cache_control markers, want 2", n)
+	}
+	// Caller order must not change the bytes.
+	swapped := cacheReq(true)
+	swapped.Tools[0], swapped.Tools[1] = swapped.Tools[1], swapped.Tools[0]
+	if again := recordedBody(t, swapped); string(again) != string(raw) {
+		t.Errorf("tool order changed the request:\n%s\n%s", raw, again)
+	}
+}
