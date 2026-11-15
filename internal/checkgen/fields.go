@@ -74,14 +74,14 @@ func (fieldsGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
 	if len(body.Fields) == 0 {
 		return nil, nil
 	}
-	s, err := NewSpec("fields", body, task, task.Writer)
+	s, err := NewSpec("fields", "", body, task, task.Writer)
 	if err != nil {
 		return nil, err
 	}
 	return []Spec{s}, nil
 }
 
-func (fieldsGen) Oracle(s Spec) (oracle.Oracle, error) {
+func (fieldsGen) Oracle(s Spec, _ Env) (oracle.Oracle, error) {
 	var b fieldsBody
 	if err := json.Unmarshal(s.Body, &b); err != nil {
 		return nil, fmt.Errorf("checkgen fields: spec %s: %w", s.ID, err)

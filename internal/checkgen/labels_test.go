@@ -52,7 +52,7 @@ func TestLabels_ReadsSetFromRequest(t *testing.T) {
 	if !strings.Contains(asked, "untrusted data") || !strings.Contains(asked, req) {
 		t.Errorf("the request did not reach the writer fenced: %q", asked)
 	}
-	o, err := labelsGen{}.Oracle(specs[0])
+	o, err := labelsGen{}.Oracle(specs[0], Env{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestLabels_NoSetIsNotChecked(t *testing.T) {
 			t.Errorf("task %q gave specs %v with no error", task.Text, specs)
 		}
 	}
-	if _, err := (labelsGen{}).Oracle(Spec{Body: []byte(`{`)}); err == nil {
+	if _, err := (labelsGen{}).Oracle(Spec{Body: []byte(`{`)}, Env{}); err == nil {
 		t.Error("a corrupt spec body built an oracle")
 	}
 }

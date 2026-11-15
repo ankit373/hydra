@@ -28,7 +28,7 @@ func (*fakeGen) Generate(_ context.Context, task Task) ([]Spec, error) {
 	gen := GenInfo{Head: "local:qwen", Family: "qwen"}
 	var out []Spec
 	for _, w := range []string{"refund", "invoice"} {
-		s, err := NewSpec("labels", w, task, gen)
+		s, err := NewSpec("labels", "", w, task, gen)
 		if err != nil {
 			return nil, err
 		}
@@ -37,7 +37,7 @@ func (*fakeGen) Generate(_ context.Context, task Task) ([]Spec, error) {
 	return out, nil
 }
 
-func (g *fakeGen) Oracle(s Spec) (oracle.Oracle, error) {
+func (g *fakeGen) Oracle(s Spec, _ Env) (oracle.Oracle, error) {
 	if g.broken {
 		return brokenOracle{}, nil
 	}
@@ -98,7 +98,7 @@ var answering = provider.Head{ID: "openai/gpt-x", Provider: "openai"}
 
 func TestRun_WritesOneVerdictPerSpecWithBothFamilies(t *testing.T) {
 	span, specs := setup(t, &fakeGen{})
-	res, err := Run(context.Background(), specs, "your refund is on its way", answering, span)
+	res, err := Run(context.Background(), specs, "your refund is on its way", answering, span, Env{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestRun_WritesOneVerdictPerSpecWithBothFamilies(t *testing.T) {
 
 func TestRun_OracleErrorIsNotCheckedAndWritesNothing(t *testing.T) {
 	span, specs := setup(t, &fakeGen{broken: true})
-	res, err := Run(context.Background(), specs, "your refund is on its way", answering, span)
+	res, err := Run(context.Background(), specs, "your refund is on its way", answering, span, Env{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestRun_OracleErrorIsNotCheckedAndWritesNothing(t *testing.T) {
 func TestRun_StoresSpecOnceByHash(t *testing.T) {
 	span, specs := setup(t, &fakeGen{})
 	for range 2 {
-		if _, err := Run(context.Background(), specs[:1], "refund", answering, span); err != nil {
+		if _, err := Run(context.Background(), specs[:1], "refund", answering, span, Env{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -225,18 +225,110 @@ func TestRegister_RefusesUnknownKindOfWork(t *testing.T) {
 
 func TestRun_SpecNobodyCanBuildIsNotChecked(t *testing.T) {
 	span, _ := setup(t, &fakeGen{})
-	if _, err := NewSpec("vibes", "x", Task{}, GenInfo{}); err == nil {
+	if _, err := NewSpec("vibes", "", "x", Task{}, GenInfo{}); err == nil {
 		t.Error("NewSpec took a spec kind that does not exist")
 	}
-	orphan, err := NewSpec("rubric", "is it polite?", Task{Text: "reply"}, GenInfo{})
+	orphan, err := NewSpec("rubric", "", "is it polite?", Task{Text: "reply"}, GenInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := Run(context.Background(), []Spec{orphan, {Kind: "labels"}}, "hi", answering, span)
+	res, err := Run(context.Background(), []Spec{orphan, {Kind: "labels"}}, "hi", answering, span, Env{})
 	if err == nil {
 		t.Error("a spec with no id was run without an error")
 	}
 	if res[0].Checked() || Label(res[:1]) != LabelNotChecked {
 		t.Errorf("a spec kind with no generator read as checked: %+v", res[0])
+	}
+}
+
+// askGen writes a "rubric" spec per variant whose oracle asks the writer head through Env.
+type askGen struct{}
+
+func (askGen) Kind() string { return "rubric" }
+
+func (askGen) Generate(_ context.Context, task Task) ([]Spec, error) {
+	var out []Spec
+	for _, v := range []string{"code", "judge"} {
+		s, err := NewSpec("rubric", v, "is it polite?", task, GenInfo{Head: "local:qwen", Family: "qwen"})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+func (askGen) Oracle(s Spec, env Env) (oracle.Oracle, error) {
+	if env.Ask == nil {
+		return nil, errors.New("no model to ask")
+	}
+	return askOracle{gen: s.Generator, ask: env.Ask}, nil
+}
+
+type askOracle struct {
+	gen GenInfo
+	ask func(context.Context, GenInfo, string) (string, error)
+}
+
+func (o askOracle) Verify(ctx context.Context, c string, _ trust.Task) (oracle.Verdict, error) {
+	reply, err := o.ask(ctx, o.gen, c)
+	return oracle.Verdict{Passed: reply == "yes"}, err
+}
+
+func TestRun_PassesEnvToOracle(t *testing.T) {
+	span, specs := setup(t, askGen{})
+	var asked []string
+	env := Env{Ask: func(_ context.Context, gen GenInfo, prompt string) (string, error) {
+		asked = append(asked, gen.Head+" "+prompt)
+		return "yes", nil
+	}}
+	res, err := Run(context.Background(), specs, "thanks for waiting", answering, span, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Label(res) != LabelAllPassed || len(asked) != 2 || asked[0] != "local:qwen thanks for waiting" {
+		t.Fatalf("results = %+v, asked = %q; want both passed through the writer head", res, asked)
+	}
+	res, err = Run(context.Background(), specs, "thanks for waiting", answering, span, Env{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Label(res) != LabelNotChecked {
+		t.Errorf("with no model to ask, label = %q, want %q", Label(res), LabelNotChecked)
+	}
+}
+
+func TestRun_VariantNamesItsOwnCheck(t *testing.T) {
+	span, specs := setup(t, askGen{})
+	env := Env{Ask: func(context.Context, GenInfo, string) (string, error) { return "no", nil }}
+	if _, err := Run(context.Background(), specs, "whatever", answering, span, env); err != nil {
+		t.Fatal(err)
+	}
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answers) != 1 || len(answers[0].Checks) != 2 {
+		t.Fatalf("verdict log = %+v, want one answer with two checks", answers)
+	}
+	for i, want := range []string{"gen:rubric-code", "gen:rubric-judge"} {
+		if got := answers[0].Checks[i].Check; got != want {
+			t.Errorf("check %d = %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestNewSpec_VariantChangesID(t *testing.T) {
+	task := Task{Text: "reply to the customer"}
+	a, errA := NewSpec("rubric", "code", "x", task, GenInfo{})
+	b, errB := NewSpec("rubric", "judge", "x", task, GenInfo{})
+	if err := errors.Join(errA, errB); err != nil {
+		t.Fatal(err)
+	}
+	if a.ID == b.ID {
+		t.Error("two variants of the same body share an id, so one would overwrite the other in the store")
+	}
+	if a.Check() != "gen:rubric-code" || (Spec{Kind: "labels"}).Check() != "gen:labels" {
+		t.Errorf("check ids = %q, %q", a.Check(), Spec{Kind: "labels"}.Check())
 	}
 }
