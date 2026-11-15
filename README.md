@@ -1309,7 +1309,8 @@ hydra/
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
 │   ├── payload/                 # Opt-in prompt/response store: chunked, packed, redacted,
-│   │                            #   bounded by a byte budget that evicts oldest packs
+│   │                            #   bounded by a byte budget that evicts oldest packs,
+│   │                            #   except packs that hold a pinned payload
 │   ├── waterfall/               # A run as nested spans on a timeline, with each one's
 │   │                            #   verdicts (hyctl trace view, hyctl trace score)
 │   ├── runlog/                  # Per-run span log (~/.hydra/logs/runs/): identity, parent, level,

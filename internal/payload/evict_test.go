@@ -3,7 +3,10 @@
 package payload
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -14,9 +17,16 @@ import (
 // from real source so it compresses like real payloads rather than to nothing.
 func fill(t *testing.T, s *Store, n, size int) []string {
 	t.Helper()
+	return fillFrom(t, s, 0, n, size)
+}
+
+// fillFrom is fill with blob numbers starting at first, so a second call
+// writes new content rather than deduplicating against the first.
+func fillFrom(t *testing.T, s *Store, first, n, size int) []string {
+	t.Helper()
 	body := strings.Join(corpus(t), "\n")
 	refs := make([]string, 0, n)
-	for i := 0; i < n; i++ {
+	for i := first; i < first+n; i++ {
 		start := (i * 7919) % (len(body) - size)
 		content := fmt.Sprintf("// blob %d\n", i) + body[start:start+size]
 		h, err := s.Put(content, 1)
@@ -205,5 +215,144 @@ func TestConcurrentStores_DoNotCorruptEachOthersOffsets(t *testing.T) {
 	}
 	if n != writers*each {
 		t.Fatalf("read back %d blobs, wrote %d", n, writers*each)
+	}
+}
+
+func pinTestStore(t *testing.T) (*Store, string) {
+	t.Helper()
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetBudget(48 << 10)
+	return s, dir
+}
+
+func TestEvict_SkipsPinnedPack(t *testing.T) {
+	s, _ := pinTestStore(t)
+	first := fill(t, s, 1, 8<<10)
+	if err := s.Pin("pack-a", first); err != nil {
+		t.Fatal(err)
+	}
+	refs := fillFrom(t, s, 1, 59, 8<<10)
+	if _, err := s.Get(first[0]); err != nil {
+		t.Fatalf("pinned blob was evicted: %v", err)
+	}
+	evicted := 0
+	for _, h := range refs[:10] {
+		if _, err := s.Get(h); err == ErrNotFound {
+			evicted++
+		}
+	}
+	if evicted == 0 {
+		t.Fatal("every old unpinned blob survived, so eviction never ran")
+	}
+}
+
+// Pinning a manifest alone would keep the list of chunk names and lose the text.
+func TestEvict_PinnedManifestKeepsItsChunks(t *testing.T) {
+	s, _ := pinTestStore(t)
+	body := strings.Join(corpus(t), "\n")[:16<<10]
+	ref, err := s.PutSegments([]Segment{{Label: "user", Content: body}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := s.Load(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes, err := s.expand([]string{ref})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spread := false
+	for _, h := range hashes {
+		spread = spread || s.index[h].Pack != s.index[ref].Pack
+	}
+	if !spread {
+		t.Fatal("every chunk shares the manifest's pack, so this proves nothing")
+	}
+	if err := s.Pin("pack-a", []string{ref}); err != nil {
+		t.Fatal(err)
+	}
+	fill(t, s, 60, 8<<10)
+	got, err := s.Load(ref)
+	if err != nil {
+		t.Fatalf("pinned manifest lost its chunks: %v", err)
+	}
+	if got != want {
+		t.Fatal("pinned manifest loads different text")
+	}
+}
+
+func TestEvict_StopsWhenOnlyPinnedPacksRemain(t *testing.T) {
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	s, _ := pinTestStore(t)
+	var refs []string
+	for i := 0; i < 30; i++ {
+		refs = append(refs, fillFrom(t, s, i, 1, 8<<10)...)
+		if err := s.Pin("all", refs); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, h := range refs {
+		if _, err := s.Get(h); err != nil {
+			t.Fatalf("pinned blob %s was evicted: %v", h, err)
+		}
+	}
+	st := s.Stat()
+	if st.PackBytes <= 48<<10 || st.PinnedBytes != st.PackBytes {
+		t.Fatalf("pack %d B, pinned %d B: want every byte pinned and over budget", st.PackBytes, st.PinnedBytes)
+	}
+	if n := strings.Count(logs.String(), "held by pinned packs"); n != 1 {
+		t.Fatalf("warned %d times, want once:\n%s", n, logs.String())
+	}
+}
+
+func TestPin_SurvivesReopen(t *testing.T) {
+	s, dir := pinTestStore(t)
+	first := fill(t, s, 1, 8<<10)
+	if err := s.Pin("pack-a", first); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened.SetBudget(48 << 10)
+	fillFrom(t, reopened, 1, 59, 8<<10)
+	if _, err := reopened.Get(first[0]); err != nil {
+		t.Fatalf("pin was lost on reopen: %v", err)
+	}
+}
+
+func TestUnpin_MakesPackEvictableAgain(t *testing.T) {
+	s, _ := pinTestStore(t)
+	first := fill(t, s, 1, 8<<10)
+	if err := s.Pin("pack-a", first); err != nil {
+		t.Fatal(err)
+	}
+	fillFrom(t, s, 1, 30, 8<<10)
+	if err := s.Unpin("pack-a"); err != nil {
+		t.Fatal(err)
+	}
+	fillFrom(t, s, 31, 30, 8<<10)
+	if _, err := s.Get(first[0]); err != ErrNotFound {
+		t.Fatalf("unpinned blob still readable (%v)", err)
+	}
+	if st := s.Stat(); st.PinnedBytes != 0 {
+		t.Fatalf("%d B still reported pinned after unpin", st.PinnedBytes)
+	}
+}
+
+// Pinning a ref that is already gone must fail, not promise text that is lost.
+func TestPin_RefusesUnknownRef(t *testing.T) {
+	s, _ := pinTestStore(t)
+	if err := s.Pin("pack-a", []string{Hash("never stored")}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("got %v, want ErrNotFound", err)
 	}
 }

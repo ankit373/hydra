@@ -134,7 +134,8 @@ internal/classify/      ← What the verified corpus says about work like this: 
                           leave-one-out evaluation of whether that predicts anything at all.
 internal/payload/       ← Opt-in store for prompt/response text. Chunked, packed,
                           dictionary-compressed, redacted before write, bounded by a byte
-                          budget that evicts oldest packs. `hyctl trace payloads`.
+                          budget that evicts oldest packs. A pinned payload (pins.json, per
+                          owner) keeps its pack, and its chunks' packs. `hyctl trace payloads`.
 internal/waterfall/     ← A run as nested spans on a timeline, with the verdicts on each.
                           `hyctl trace view`.
 internal/runlog/        ← Per-run event log, v2 spans: identity + parent, level, tokens,
