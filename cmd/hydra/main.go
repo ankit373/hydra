@@ -2160,23 +2160,11 @@ func cmdOracle() *cobra.Command {
 			// Resolved once, for the example and the span score alike, since the
 			// span already recorded the routing decision. Refused rather than
 			// half-filled: this corpus is never pruned.
-			runID := scoreRun
 			var spanEv runlog.Event
 			if scoreSpan != "" {
-				if runID == "" {
-					runs, rErr := runlog.Runs()
-					if rErr != nil || len(runs) == 0 {
-						return fmt.Errorf("--span given but no run to attach it to; pass --run")
-					}
-					runID = runs[0]
-				}
-				events, lErr := runlog.Load(runID)
-				if lErr != nil {
-					return fmt.Errorf("run %s: %w", runID, lErr)
-				}
-				ev, ok := runlog.Span(events, scoreSpan)
-				if !ok {
-					return fmt.Errorf("span %q not found in run %s, or ambiguous", scoreSpan, runID)
+				ev, sErr := loadSpan(scoreRun, scoreSpan)
+				if sErr != nil {
+					return sErr
 				}
 				spanEv = ev
 			}
@@ -2211,6 +2199,12 @@ func cmdOracle() *cobra.Command {
 					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("recorded to the eval set"))
 				}
 			}
+			if candidate != "" || scoreSpan != "" {
+				fileVerdict(spanEv, evalset.Verdict{
+					TaskHash: evalset.TaskHashFor(taskText), CandidateHash: candidateHash(candidate),
+					Domain: domain, Check: src, Passed: v.Passed, Detail: v.Detail,
+				})
+			}
 
 			// Attribute the verdict to the span that produced the candidate.
 			// The oracle has always computed this; until #758 it had nowhere
@@ -2220,7 +2214,7 @@ func cmdOracle() *cobra.Command {
 				if v.Passed {
 					val = 1
 				}
-				if sErr := runlog.AppendScore(runID, scoreSpan, runlog.Score{
+				if sErr := runlog.AppendScore(spanEv.RunID, spanEv.SpanID, runlog.Score{
 					Name: "oracle", Value: val, Comment: v.Detail, Source: src,
 				}); sErr != nil {
 					// Reported, never fatal: the verification itself is the

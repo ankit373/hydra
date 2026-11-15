@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/payload"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/waterfall"
@@ -301,6 +302,13 @@ func TestCLI_TraceScoreThenViewShowsTheVerdict(t *testing.T) {
 		}
 	}); !strings.Contains(out, "tests = 1") {
 		t.Errorf("scoring did not confirm what it recorded:\n%s", out)
+	}
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil || len(answers) != 1 || len(answers[0].Checks) != 1 {
+		t.Fatalf("verdict log = %+v, err=%v; want one answer with one check", answers, err)
+	}
+	if c := answers[0].Checks[0]; c.SpanID != okSpan || c.Check != "verifier:go" || !c.Passed || c.Head != "h2" {
+		t.Errorf("verdict = %+v, want the full span id, its head and the scorer", c)
 	}
 
 	out := captureStdout(t, func() {
