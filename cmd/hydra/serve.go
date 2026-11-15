@@ -19,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/decide"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/payload"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
@@ -186,17 +187,18 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		return dispatch.Options{}, nil, err
 	}
 	opts := dispatch.Options{
-		TierHint:    tier,
-		Enum:        enum,
-		Head:        head,
-		LocalOnly:   r.localOnly,
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		Messages:    req.Messages,
-		Tools:       req.Tools,
-		ToolChoice:  req.ToolChoice,
-		OnStream:    streamEvents(req.OnEvent),
-		RunID:       req.RequestID,
+		TierHint:     tier,
+		Enum:         enum,
+		Head:         head,
+		LocalOnly:    r.localOnly,
+		MaxTokens:    req.MaxTokens,
+		Temperature:  req.Temperature,
+		Messages:     req.Messages,
+		Tools:        req.Tools,
+		ToolChoice:   req.ToolChoice,
+		OnStream:     streamEvents(req.OnEvent),
+		RunID:        req.RequestID,
+		Conversation: cmp.Or(req.Conversation, conversationKey(req.Messages)),
 	}
 	fp := servePolicy()
 	opts.MaxCostUSD, opts.MaxCostSource = requestCeiling(fp, req.MaxCostUSD)
@@ -224,6 +226,21 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		opts.NoCache = opts.NoCache || req.Objective != ""
 	}
 	return opts, ev, nil
+}
+
+// conversationKey hashes the system message and the first user message, which
+// a client resends unchanged every turn. Empty when there is no user message.
+func conversationKey(msgs []executor.Message) string {
+	var system string
+	for _, m := range msgs {
+		switch {
+		case (m.Role == "system" || m.Role == "developer") && system == "":
+			system = m.Content
+		case m.Role == "user":
+			return payload.Hash(system + "\x00" + m.Content)
+		}
+	}
+	return ""
 }
 
 // isServedDefault is hydra/standard, the pre-E1 `hydra`, which keeps the

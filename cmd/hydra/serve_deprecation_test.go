@@ -19,6 +19,7 @@ import (
 
 // On a server started with no flags, `hydra` must build exactly the options
 // develop built before #1206: the --enum default, pinned, and no objective.
+// The conversation key is new since, and only records; it does not route.
 func TestServeRouter_DefaultHydraBuildsWhatDevelopBuilt(t *testing.T) {
 	testutil.NewSandbox(t)
 	c := cmdServe()
@@ -41,6 +42,7 @@ func TestServeRouter_DefaultHydraBuildsWhatDevelopBuilt(t *testing.T) {
 	want := dispatch.Options{
 		TierHint: dispatch.EnumToTier("STANDARD"), Enum: "STANDARD",
 		MaxTokens: 64, Messages: msgs, RunID: "run-x", PromptCache: true,
+		Conversation: conversationKey(msgs),
 	}
 	if !reflect.DeepEqual(got, want) || ev != nil {
 		t.Errorf("default `hydra` built %+v evidence %+v, want develop's %+v and no evidence", got, ev, want)
