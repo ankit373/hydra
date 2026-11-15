@@ -158,13 +158,12 @@ func Reconstruct(events []runlog.Event) (*Tree, *Timeline) {
 	return t, tl
 }
 
-// isTaskSpan reports the event that declares a task's own span and nothing
-// else. Keyed on the absence of an agent and a head rather than on the span id,
-// so tree stays ignorant of span identity, which is what keeps it a separate
-// reading from the waterfall.
+// isTaskSpan reports an event on a task's own span: its start, finish and
+// route. Keyed on the absence of an agent and a head rather than on the span
+// id, so tree stays ignorant of span identity and a separate reading.
 func isTaskSpan(e runlog.Event) bool {
 	switch e.Kind {
-	case runlog.KindTaskStarted, runlog.KindTaskFinished:
+	case runlog.KindTaskStarted, runlog.KindTaskFinished, runlog.KindRoute:
 		return e.Agent == "" && e.Head == "" && e.SpanID != ""
 	}
 	return false
