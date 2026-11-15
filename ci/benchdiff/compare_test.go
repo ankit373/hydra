@@ -4,16 +4,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 func report(rs ...Result) Report { return Report{Schema: schema, Suite: "s", Results: rs} }
 
 func routed(id, head string, cost float64) Result {
-	return Result{ID: id, Head: head, Tier: 7, CostUSD: cost}
+	return Result{ID: id, Work: "code", Head: head, Tier: 7, CostUSD: cost}
 }
 
 func ensembled(id string, samples int, correct bool, cost float64) Result {
@@ -31,7 +35,7 @@ func TestCompare_IdenticalReportsChangeNothing(t *testing.T) {
 	if len(d.Changes) != 0 || len(d.Gate) != 0 {
 		t.Fatalf("changes %v, gate %v, want none", d.Changes, d.Gate)
 	}
-	md := render(d, "s", "")
+	md := render(d, r, "")
 	for _, want := range []string{marker, "0 of 2 prompts changed", "Gate (advisory): nothing crossed."} {
 		if !strings.Contains(md, want) {
 			t.Errorf("comment lacks %q:\n%s", want, md)
@@ -56,7 +60,7 @@ func TestCompare_ReportsEachDecisionChangeOnce(t *testing.T) {
 	if want := []string{"a", "new", "gone"}; !reflect.DeepEqual(ids, want) {
 		t.Fatalf("changed %v, want %v", ids, want)
 	}
-	md := render(d, "s", "")
+	md := render(d, head, "")
 	for _, want := range []string{
 		"| `a` | flash-high T7, 0 fallbacks, $0.010000 | ollama/qwen T7, 0 fallbacks, $0.000000 |",
 		"| `new` | (not in suite) |",
@@ -87,7 +91,7 @@ func TestCompare_GatesOnCostEscalationVerifierAndRefusal(t *testing.T) {
 			t.Errorf("gate lacks %q:\n%s", want, gate)
 		}
 	}
-	md := render(d, "s", "")
+	md := render(d, head, "")
 	for _, want := range []string{
 		"| Estimated cost (USD) | 0.030000 | 0.060000 | +100.0% |",
 		"| Escalation rate (SPRT > 1 head) | 0/2 (0%) | 1/2 (50%) | +50.0 pp |",
@@ -153,11 +157,12 @@ func TestCompare_NoEvidenceCountsAsRefused(t *testing.T) {
 
 // A suite edit is part of the PR, so its text must not break the table.
 func TestRender_EscapesSuiteText(t *testing.T) {
-	d, err := compare(report(), report(routed("a|b`c", "x|y", 0)))
+	head := report(routed("a|b`c", "x|y", 0))
+	d, err := compare(report(), head)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if md := render(d, "s", ""); !strings.Contains(md, "| `a\\|b'c` | (not in suite) | x\\|y T7,") {
+	if md := render(d, head, ""); !strings.Contains(md, "| `a\\|b'c` | (not in suite) | x\\|y T7,") {
 		t.Fatalf("suite text not escaped:\n%s", md)
 	}
 }
@@ -183,14 +188,15 @@ func TestCompare_RefusesMismatchedSchemas(t *testing.T) {
 // A missing base has nothing to rise from, so it must not gate, or
 // -fail-on-gate fails every PR whose base cannot build the harness.
 func TestRender_NamesTheMissingBase(t *testing.T) {
-	d, err := compare(report(), report(routed("a", "x", 0.01), ensembled("b", 3, true, 0.02)))
+	head := report(routed("a", "x", 0.01), ensembled("b", 3, true, 0.02))
+	d, err := compare(report(), head)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(d.Gate) != 0 {
 		t.Fatalf("a missing base gated: %v", d.Gate)
 	}
-	md := render(d, "s", "Base did not produce a report.")
+	md := render(d, head, "Base did not produce a report.")
 	if !strings.Contains(md, "Base did not produce a report.") || !strings.Contains(md, "2 of 2 prompts changed") {
 		t.Fatalf("missing base not reported:\n%s", md)
 	}
@@ -249,5 +255,108 @@ func TestRunSuite_IsDeterministicAndExercisesEveryPath(t *testing.T) {
 	// One prompt flipping must not be the whole verifier signal.
 	if n := totals(first).Correct; n < 2 {
 		t.Errorf("%d prompts verified correct, want at least 2", n)
+	}
+}
+
+// Every kind of work is routed both with --kind and without, so a change to
+// any kind's routing has a prompt that can show it.
+func TestSuite_CoversEveryKindWithAndWithoutTheFlag(t *testing.T) {
+	var s Suite
+	if err := json.Unmarshal(suiteJSON, &s); err != nil {
+		t.Fatal(err)
+	}
+	with, without := map[string]bool{}, map[string]bool{}
+	for _, p := range s.Prompts {
+		if _, err := p.domain(); err != nil {
+			t.Error(err)
+		}
+		if p.Kind != "" {
+			with[p.Work] = true
+		} else {
+			without[p.Work] = true
+		}
+	}
+	for _, k := range trust.Kinds {
+		if !with[k] || !without[k] {
+			t.Errorf("kind %s: with --kind %v, without %v", k, with[k], without[k])
+		}
+	}
+}
+
+// The seeded cells sit one point either side of the 0.90 bar on the 95% lower
+// bound. The cheap head under it has a mean over 90, so a gate on the mean
+// would route to it; the bound sends the prompt to the dearer head that clears.
+func TestRunSuite_LowerBoundGatesBothWays(t *testing.T) {
+	rep, err := runSuite(context.Background(), suiteJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, r := range rep.Results {
+		got[r.ID] = r.Head
+	}
+	for id, want := range map[string]string{
+		"writing-kind":     "pro-low",         // bound 90: clears
+		"extraction-kind":  "flash-med",       // bound 90: clears
+		"summary-kind":     "pro-high",        // flash-low is at bound 89, mean 92
+		"translation-kind": "sonnet-thinking", // agy is at bound 89, mean 92
+	} {
+		if got[id] != want {
+			t.Errorf("%s routed to %q, want %q", id, got[id], want)
+		}
+	}
+}
+
+// Each check type passes a scripted right answer and fails a wrong one.
+func TestRunSuite_ChecksPassAndFail(t *testing.T) {
+	rep, err := runSuite(context.Background(), suiteJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, r := range rep.Results {
+		if r.Check == nil {
+			continue
+		}
+		if r.Check.NotChecked {
+			t.Errorf("%s: %s did not run", r.ID, r.Check.Source)
+		}
+		if want := strings.HasSuffix(r.ID, "-pass"); r.Check.Passed != want {
+			t.Errorf("%s: passed %v, want %v", r.ID, r.Check.Passed, want)
+		}
+		typ := strings.Split(r.ID, "-")[1]
+		seen[fmt.Sprintf("%s %v", typ, r.Check.Passed)] = true
+	}
+	for _, want := range []string{"ground true", "ground false", "match true", "match false", "cmd true", "cmd false"} {
+		if !seen[want] {
+			t.Errorf("no check case for %q", want)
+		}
+	}
+}
+
+func TestRender_CountsChangesPerKindAndNamesTheSuiteSize(t *testing.T) {
+	sum := routed("s", "flash-low", 0)
+	sum.Work = "summary"
+	checked := routed("c", "x", 0)
+	checked.Check = &Check{Source: "verifier:grounding", Passed: true}
+	moved := sum
+	moved.Head = "pro-high"
+	base := report(sum, checked)
+	head := report(moved, checked)
+	d, err := compare(base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := render(d, head, "")
+	for _, want := range []string{
+		"1 of 2 prompts", "Suite `s` covers 2 kinds of work; 0 prompts run an SPRT ensemble and 1 a --check.",
+		"| summary | 1 / 1 |",
+		"| code | 0 / 1 |",
+		"| writing | 0 / 0 |",
+		"| Checks passed | 1/1 (100%) | 1/1 (100%) | +0 |",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("comment lacks %q:\n%s", want, md)
+		}
 	}
 }

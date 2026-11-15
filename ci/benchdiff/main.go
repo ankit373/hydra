@@ -93,7 +93,7 @@ func cmdCompare(args []string) error {
 	if base.Suite != head.Suite && note == "" {
 		note = fmt.Sprintf("Base ran suite `%s`, head `%s`: the PR changes the suite itself.", base.Suite, head.Suite)
 	}
-	md := render(d, head.Suite, note)
+	md := render(d, head, note)
 	if *out == "" {
 		fmt.Print(md)
 	} else if err := os.WriteFile(*out, []byte(md), 0o644); err != nil {

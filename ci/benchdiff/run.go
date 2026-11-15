@@ -16,12 +16,15 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/ground"
+	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/policy"
 	// The same discovery hyctl registers; env and port find nothing in the sandbox.
 	_ "github.com/ankit373/hydra/internal/provider/agy"
@@ -33,6 +36,8 @@ import (
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/internal/util"
+	"github.com/ankit373/hydra/internal/workspace"
 )
 
 //go:embed suite.json
@@ -60,15 +65,65 @@ type Calibrated struct {
 
 // Prompt is one routing case. Confidence > 0 also runs the SPRT ensemble, whose
 // heads answer Answer unless Answers names theirs; Expected is the verifier's key.
+// Work is the kind of work it is, for the report; Kind is hyctl's --kind, if passed.
 type Prompt struct {
 	ID         string            `json:"id"`
+	Work       string            `json:"work"`
 	Prompt     string            `json:"prompt"`
+	Context    string            `json:"context,omitempty"`
 	Enum       string            `json:"enum,omitempty"`
 	Domain     string            `json:"domain,omitempty"`
+	Kind       string            `json:"kind,omitempty"`
 	Confidence float64           `json:"confidence,omitempty"`
 	Answer     string            `json:"answer,omitempty"`
 	Answers    map[string]string `json:"answers,omitempty"`
 	Expected   string            `json:"expected,omitempty"`
+	Check      *CheckSpec        `json:"check,omitempty"`
+}
+
+// CheckSpec is one --check, built with the oracles hyctl builds: ground,
+// match on Labels (named ID, as a labels file is) or Pattern, or cmd.
+type CheckSpec struct {
+	Type    string   `json:"type"`
+	ID      string   `json:"id,omitempty"`
+	Labels  []string `json:"labels,omitempty"`
+	Pattern string   `json:"pattern,omitempty"`
+	Command string   `json:"command,omitempty"`
+}
+
+// checker is the one command a cmd check can run: it passes when its two arguments match.
+const checker = "bench-check"
+
+// text is the prompt as the head sees it, context fenced the way hyctl parallel fences it.
+func (p Prompt) text() string {
+	if p.Context == "" {
+		return p.Prompt
+	}
+	return util.WrapUntrusted("CONTEXT", p.Context) + "\n\nTASK:\n" + p.Prompt
+}
+
+// domain is the routing cell, refusing what hyctl dispatch refuses before it routes.
+func (p Prompt) domain() (string, error) {
+	if !slices.Contains(trust.Kinds, p.Work) {
+		return "", fmt.Errorf("%s: work %q is not a kind of work", p.ID, p.Work)
+	}
+	if p.Check != nil && p.Confidence > 0 {
+		return "", fmt.Errorf("%s: --check does not combine with a confidence run", p.ID)
+	}
+	if p.Kind == "" {
+		return p.Domain, nil
+	}
+	if p.Domain != "" {
+		return "", fmt.Errorf("%s: --kind and --domain both name the routing cell", p.ID)
+	}
+	k, err := trust.ParseKind(p.Kind)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", p.ID, err)
+	}
+	if work, _, _ := strings.Cut(k, "."); work != p.Work {
+		return "", fmt.Errorf("%s: --kind %s is not work %s", p.ID, p.Kind, p.Work)
+	}
+	return k, nil
 }
 
 // deadProxy blocks real egress (the pricing fetch); loopback is never proxied.
@@ -110,7 +165,17 @@ func runSuite(ctx context.Context, raw []byte) (Report, error) {
 	sum := sha256.Sum256(raw)
 	rep := Report{Schema: schema, Suite: hex.EncodeToString(sum[:6])}
 	for _, p := range s.Prompts {
-		rep.Results = append(rep.Results, route(ctx, d, sw, cal, p))
+		domain, err := p.domain()
+		if err != nil {
+			return Report{}, err
+		}
+		var chk *answerCheck
+		if p.Check != nil {
+			if chk, err = build(*p.Check, p.text()); err != nil {
+				return Report{}, fmt.Errorf("%s: %w", p.ID, err)
+			}
+		}
+		rep.Results = append(rep.Results, route(ctx, d, sw, cal, p, domain, chk))
 	}
 	return rep, nil
 }
@@ -139,14 +204,18 @@ func sandbox(root string, s Suite) error {
 		}
 	}
 	// Discovery only looks the binaries up; a dry run never executes them.
-	script, ext := "#!/bin/sh\nexit 1\n", ""
+	script, check, ext := "#!/bin/sh\nexit 1\n", "#!/bin/sh\n[ \"$1\" = \"$2\" ]\n", ""
 	if runtime.GOOS == "windows" {
 		script, ext = "@echo off\r\nexit /b 1\r\n", ".bat"
+		check = "@echo off\r\nif \"%~1\"==\"%~2\" exit /b 0\r\nexit /b 1\r\n"
 	}
 	for _, name := range s.Binaries {
 		if err := os.WriteFile(filepath.Join(bin, name+ext), []byte(script), 0o700); err != nil {
 			return err
 		}
+	}
+	if err := os.WriteFile(filepath.Join(bin, checker+ext), []byte(check), 0o700); err != nil {
+		return err
 	}
 	if err := os.WriteFile(config.Path(), []byte(s.Config), 0o600); err != nil {
 		return err
@@ -230,20 +299,21 @@ func seed(rows []Calibrated) error {
 
 // route makes the decisions `hyctl dispatch --dry-run [--confidence]` makes,
 // then runs the SPRT over the planned heads with answers from the suite.
-func route(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal *trust.Calibrator, p Prompt) Result {
-	dec := d.Decide(ctx, p.Prompt, p.Domain, nil, nil, "")
-	opts := dispatch.Options{DryRun: true, Enum: p.Enum, Domain: p.Domain, Decision: &dec}
+func route(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal *trust.Calibrator, p Prompt, domain string, chk *answerCheck) Result {
+	prompt := p.text()
+	dec := d.Decide(ctx, prompt, domain, nil, nil, "")
+	opts := dispatch.Options{DryRun: true, Enum: p.Enum, Domain: domain, Decision: &dec}
 	if p.Enum != "" {
 		opts.TierHint = dispatch.EnumToTier(p.Enum)
 	}
-	r := Result{ID: p.ID, Rule: dec.Rule}
-	res, err := d.Dispatch(ctx, p.Prompt, opts)
+	r := Result{ID: p.ID, Work: p.Work, Rule: dec.Rule}
+	res, err := d.Dispatch(ctx, prompt, opts)
 	if err != nil {
 		r.Refused = refusal(err)
 		return r
 	}
 	r.Head, r.Tier, r.Fallbacks = res.Head.ID, rank.UITier(res.Head), len(res.Fallbacks)
-	in := executor.EstimateTokens(p.Prompt)
+	in := executor.EstimateTokens(prompt)
 	r.CostUSD = round(d.EstimateCost(r.Tier, in, in/2), 6)
 
 	// As cmdDispatch does: personal data raises the bar to the defect model's
@@ -252,18 +322,71 @@ func route(ctx context.Context, d *dispatch.Dispatcher, sw *swarm.Swarm, cal *tr
 	if dec.Action.Type == signals.ActionRequireConfidence {
 		target = max(target, dec.Action.Value)
 	}
-	if policy.Classify(p.Prompt).PII {
-		pii := trust.Task{Domain: p.Domain, BlastRadius: 1, TouchesPII: true}
+	if policy.Classify(prompt).PII {
+		pii := trust.Task{Domain: domain, BlastRadius: 1, TouchesPII: true}
 		target = max(target, trust.NewDefectModel().RequiredConfidence(pii))
 		localOnly = localOnly || d.PIILocalOnly()
 	}
 	if target > 0 {
-		r.SPRT = ensemble(ctx, sw, cal, p, opts, localOnly, target)
+		r.SPRT = ensemble(ctx, sw, cal, p, prompt, opts, localOnly, target)
 		if r.SPRT.Samples > 0 {
 			r.CostUSD = r.SPRT.SpentUSD
 		}
 	}
+	if chk != nil {
+		r.Check = chk.judge(ctx, cal, p.Answer, domain)
+	}
 	return r
+}
+
+// answerCheck is one built --check and the calibration source it records under.
+type answerCheck struct {
+	oracle oracle.Oracle
+	source string
+}
+
+// judge checks the scripted answer as runChecks does, without training the
+// head on it, so no prompt's verdict moves another prompt's routing.
+func (c answerCheck) judge(ctx context.Context, cal *trust.Calibrator, answer, domain string) *Check {
+	r := &Check{Source: c.source}
+	v, err := c.oracle.Verify(ctx, answer, trust.Task{Domain: domain})
+	if err != nil {
+		r.NotChecked = true
+		return r
+	}
+	r.Passed = v.Passed
+	if measured, _ := oracle.Measured(cal, c.source, domain); measured {
+		r.LLR = round(oracle.LLR(cal, c.source, domain, v), 3)
+	}
+	return r
+}
+
+// build makes the oracle hyctl's parseCheck makes for the same --check.
+func build(c CheckSpec, prompt string) (*answerCheck, error) {
+	switch c.Type {
+	case "ground":
+		g := &ground.Oracle{Prompt: prompt}
+		return &answerCheck{g, g.Key()}, nil
+	case "match":
+		id := c.ID
+		if c.Pattern != "" {
+			id = c.Pattern
+		}
+		m, err := oracle.NewMatch(id, c.Labels, c.Pattern)
+		if err != nil {
+			return nil, err
+		}
+		return &answerCheck{m, m.Source}, nil
+	case "cmd":
+		fields := strings.Fields(c.Command)
+		if len(fields) == 0 || fields[0] != checker || !strings.Contains(c.Command, "{answer}") {
+			return nil, fmt.Errorf("a cmd check runs %s on {answer}", checker)
+		}
+		o := &oracle.CommandOracle{Template: c.Command, Source: "verifier:" + fields[0],
+			Env: workspace.ValidatorEnvNames(config.ScriptHome())}
+		return &answerCheck{o, o.Source}, nil
+	}
+	return nil, fmt.Errorf("unknown check %q", c.Type)
 }
 
 const noEvidence = "no_evidence"
@@ -271,15 +394,15 @@ const noEvidence = "no_evidence"
 // ensemble runs swarm.RunSPRT's plan and sources, with a scripted executor and
 // text equivalence in place of live heads and the LLM judge.
 func ensemble(ctx context.Context, sw *swarm.Swarm, cal *trust.Calibrator,
-	p Prompt, opts dispatch.Options, localOnly bool, target float64) *SPRT {
-	heads, _, err := sw.Plan(p.Prompt, swarm.Options{
+	p Prompt, prompt string, opts dispatch.Options, localOnly bool, target float64) *SPRT {
+	heads, _, err := sw.Plan(prompt, swarm.Options{
 		Mode: swarm.ModeBest, TierHint: opts.TierHint, Enum: p.Enum,
-		LocalOnly: localOnly, Confidence: target, Domain: p.Domain,
+		LocalOnly: localOnly, Confidence: target, Domain: opts.Domain,
 	})
 	if err != nil {
 		return &SPRT{Decision: "unplanned"}
 	}
-	res, err := trust.Run(ctx, trust.Task{Domain: trust.Domain(p.Domain)}, sw.Sources(p.Prompt, heads),
+	res, err := trust.Run(ctx, trust.Task{Domain: trust.Domain(opts.Domain)}, sw.Sources(prompt, heads),
 		scripted{p}, cal, trust.Target{Confidence: target})
 	if errors.Is(err, trust.ErrNoEvidence) {
 		return &SPRT{Decision: noEvidence}

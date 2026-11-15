@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // schema is the report shape; a compare across two shapes is refused.
@@ -32,6 +34,7 @@ type Report struct {
 // else the chosen head's estimate.
 type Result struct {
 	ID        string  `json:"id"`
+	Work      string  `json:"work"`
 	Head      string  `json:"head,omitempty"`
 	Tier      int     `json:"tier,omitempty"`
 	Fallbacks int     `json:"fallbacks"`
@@ -39,6 +42,16 @@ type Result struct {
 	Refused   string  `json:"refused,omitempty"`
 	CostUSD   float64 `json:"cost_usd"`
 	SPRT      *SPRT   `json:"sprt,omitempty"`
+	Check     *Check  `json:"check,omitempty"`
+}
+
+// Check is a --check's verdict on the scripted answer. LLR is set only when
+// the source is measured in the prompt's cell, as hyctl prints it.
+type Check struct {
+	Source     string  `json:"source"`
+	Passed     bool    `json:"passed,omitempty"`
+	NotChecked bool    `json:"not_checked,omitempty"`
+	LLR        float64 `json:"llr,omitempty"`
 }
 
 // SPRT is the ensemble's outcome. Correct is the verifier: the accepted
@@ -69,6 +82,7 @@ func (s *SPRT) escalated() bool { return s != nil && s.Samples > 1 }
 // Totals aggregates a report for the summary table.
 type Totals struct {
 	Prompts, Refused, Ensembles, Escalated, Accepted, Correct int
+	Checks, Passed                                            int
 	CostUSD                                                   float64
 }
 
@@ -79,6 +93,12 @@ func totals(r Report) Totals {
 		t.CostUSD += x.CostUSD
 		if x.refused() != "" {
 			t.Refused++
+		}
+		if x.Check != nil {
+			t.Checks++
+			if x.Check.Passed {
+				t.Passed++
+			}
 		}
 		if x.SPRT == nil {
 			continue
@@ -190,19 +210,51 @@ func cell(r Result) string {
 			s += fmt.Sprintf(" after %d heads at %.1f%%, %s", p.Samples, p.Confidence*100, verdict)
 		}
 	}
+	if c := r.Check; c != nil {
+		switch {
+		case c.NotChecked:
+			s += ", " + c.Source + " not checked"
+		case c.Passed:
+			s += ", " + c.Source + " pass"
+		default:
+			s += ", " + c.Source + " fail"
+		}
+		if c.LLR != 0 {
+			s += fmt.Sprintf(" %+.3f nats", c.LLR)
+		}
+	}
 	return s
 }
 
+// byKind counts each kind of work's prompts in head and how many changed.
+// A prompt only base has counts as a change under its base kind.
+func byKind(d Diff, head Report) (total, changed map[string]int) {
+	total, changed = map[string]int{}, map[string]int{}
+	for _, r := range head.Results {
+		total[r.Work]++
+	}
+	for _, c := range d.Changes {
+		r := c.Head
+		if r == nil {
+			r = c.Base
+		}
+		changed[r.Work]++
+	}
+	return total, changed
+}
+
 // render is the PR comment. note says why there is no base, when there is none.
-func render(d Diff, suite, note string) string {
+func render(d Diff, head Report, note string) string {
 	var b strings.Builder
 	b.WriteString(marker + "\n### Routing bench\n\n")
 	if note != "" {
 		fmt.Fprintf(&b, "%s\n\n", note)
 	}
-	fmt.Fprintf(&b, "%d of %d prompts changed their routing decision. Suite `%s`, no keys, no network: "+
-		"heads are fake binaries and SPRT answers are scripted, so this measures routing, not model quality.\n\n",
-		len(d.Changes), d.Head.Prompts, suite)
+	total, changed := byKind(d, head)
+	fmt.Fprintf(&b, "%d of %d prompts changed their routing decision. Suite `%s` covers %d kinds of work; "+
+		"%d prompts run an SPRT ensemble and %d a --check. No keys, no network: heads are fake binaries and "+
+		"answers are scripted, so this measures routing, not model quality.\n\n",
+		len(d.Changes), d.Head.Prompts, md(head.Suite), len(total), d.Head.Ensembles, d.Head.Checks)
 	b.WriteString("| | base | head | change |\n|---|---|---|---|\n")
 	fmt.Fprintf(&b, "| Estimated cost (USD) | %.6f | %.6f | %s |\n", d.Base.CostUSD, d.Head.CostUSD, pct(d.Base.CostUSD, d.Head.CostUSD))
 	rise := "n/a"
@@ -215,7 +267,15 @@ func render(d Diff, suite, note string) string {
 		ratio(d.Head.Accepted, d.Head.Ensembles), d.Head.Accepted-d.Base.Accepted)
 	fmt.Fprintf(&b, "| Verifier correct | %s | %s | %+d |\n", ratio(d.Base.Correct, d.Base.Ensembles),
 		ratio(d.Head.Correct, d.Head.Ensembles), d.Head.Correct-d.Base.Correct)
+	fmt.Fprintf(&b, "| Checks passed | %s | %s | %+d |\n", ratio(d.Base.Passed, d.Base.Checks),
+		ratio(d.Head.Passed, d.Head.Checks), d.Head.Passed-d.Base.Passed)
 	fmt.Fprintf(&b, "| Refused | %d | %d | %+d |\n\n", d.Base.Refused, d.Head.Refused, d.Head.Refused-d.Base.Refused)
+
+	b.WriteString("| kind of work | changed / prompts |\n|---|---|\n")
+	for _, k := range trust.Kinds {
+		fmt.Fprintf(&b, "| %s | %d / %d |\n", k, changed[k], total[k])
+	}
+	b.WriteString("\n")
 
 	if len(d.Changes) > 0 {
 		fmt.Fprintf(&b, "<details open><summary>Decision changes (%d)</summary>\n\n", len(d.Changes))
