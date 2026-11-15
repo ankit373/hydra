@@ -1,0 +1,41 @@
+# Named recipes, and per kind of work the menu hydra may try (`hyctl recipe list`).
+# A check here names the kind of --check the request must bring: ground, match
+# or cmd. A recipe whose check the request lacks is skipped for that request.
+# `single` is built in: one call, stopping on the request's own checks if any.
+# A kind with no menu gets `single` only.
+
+recipes:
+  # The strongest measured head, once.
+  - name: strong_once
+    objective: quality
+    samples: 1
+    stop: none
+  # The cheapest measured head, up to 4 answers, keep the first the tests pass.
+  - name: cheap_k_tests
+    objective: cost
+    samples: 4
+    checks: [cmd]
+    stop: first_pass
+  # The cheapest measured head, up to 3 answers, keep the first the schema command passes.
+  - name: cheap_k_schema
+    objective: cost
+    samples: 3
+    checks: [cmd]
+    stop: first_pass
+  # The cheapest measured head, 3 answers, all judged by the label match.
+  - name: cheap_k_vote_label
+    objective: cost
+    samples: 3
+    checks: [match]
+    stop: all
+
+menus:
+  code:
+    default: single
+    recipes: [single, cheap_k_tests, strong_once]
+  extraction:
+    default: single
+    recipes: [single, cheap_k_schema, strong_once]
+  classification:
+    default: single
+    recipes: [single, cheap_k_vote_label]

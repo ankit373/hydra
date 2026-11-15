@@ -258,6 +258,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
       <a href="#dispatch"><code translate="no">hyctl dispatch</code></a>
       <a href="#swarm"><code translate="no">--swarm</code></a>
       <a href="#confidence"><code translate="no">--confidence</code></a>
+      <a href="#recipe"><code translate="no">hyctl recipe</code></a>
       <a href="#edit"><code translate="no">hyctl edit</code></a>
       <a href="#review"><code translate="no">hyctl review</code></a>
       <a href="#parallel"><code translate="no">hyctl parallel</code></a>
@@ -946,6 +947,14 @@ hyctl dispatch <span class="fl">--confidence</span> 0.90 <span class="fl">--file
         <p>In synthetic benchmarks this cuts model calls by about 49% on easy tasks and 24% on a mixed workload at 98% accuracy or better, while asking <i>more</i> models than a fixed swarm on hard tasks, which a fixed-size ensemble cannot do.</p>
       </div>
       <a class="more" href="/first-principles.html#sprt">See the SPRT walk derived →</a>
+    </section>
+
+    <section class="doc" id="recipe">
+      <h2><span class="cmd">hyctl recipe</span> <span class="tagline">what hydra may try per kind of work</span></h2>
+      <p class="sum">A <b>recipe</b> is one way to get an answer: which model, how many answers to sample, which checks judge them and when to stop.</p>
+      <div class="sub"><div class="lbl">Shipped menus</div><p><b>code</b>: single, cheap_k_tests (the cheapest measured model, up to 4 answers, keep the first the tests pass), strong_once (the strongest measured model, once). <b>extraction</b>: single, cheap_k_schema (up to 3 answers, keep the first the schema command passes), strong_once. <b>classification</b>: single, cheap_k_vote_label (3 answers, judged by a label match). Every other kind gets <b>single</b>, one call. A recipe whose check the request did not bring, say a label vote with no <span class="fx">--check match:labels=&hellip;</span>, is skipped for that request, and a <span class="fx">--kind</span> request&rsquo;s run log says why. Nothing picks among the menu yet: every request still runs single.</p></div>
+      <div class="sub"><div class="lbl">Change them</div><p>Copy <span class="fx">registry/recipes.yaml</span> to <span class="fx">$HYDRA_HOME/registry/recipes.yaml</span> and edit it. A bad entry fails at load and names its line.</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl recipe list <span class="fl">--kind</span> extraction</pre></div>
     </section>
 
     <section class="doc" id="edit">

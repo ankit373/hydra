@@ -46,6 +46,8 @@ Code is one task type among several, with its own verifiers. Summaries, extracti
 
 The kinds of work Hydra keeps a record for are `writing`, `summary`, `extraction`, `classification`, `translation`, `answer`, `analysis`, `agent` and `code`. Name one with `hyctl dispatch --kind summary "..."`, or add an area such as `--kind extraction.invoices`, and the request is ranked and logged under that kind.
 
+Each kind of work also has a menu of **recipes**: which model, how many answers to sample, which checks judge them and when to stop. Code, extraction and classification ship with a few, such as `cheap_k_tests` (the cheapest measured model, up to 4 answers, keep the first the tests pass); every other kind gets `single`, one call. `hyctl recipe list --kind extraction` prints a menu. Change them in a copy of `registry/recipes.yaml` under `$HYDRA_HOME/registry/`; a bad entry fails at load and names its line. Nothing picks among a menu yet, so every request still runs `single`.
+
 ```bash
 brew install ankit373/hydra/hyctl && hyctl init
 ```

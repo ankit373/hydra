@@ -162,7 +162,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdVet(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
-		cmdWorkflow(), cmdServe(), cmdBench(),
+		cmdWorkflow(), cmdRecipe(), cmdServe(), cmdBench(),
 		cmdSecurity(), cmdPolicy(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 		cmdRlimitExec(),
 	)
@@ -879,6 +879,7 @@ func cmdDispatch() *cobra.Command {
 		confidence   float64
 		domain       string
 		kind         string
+		recipeSkips  []recipe.Skip
 		file         string
 		graphPath    string
 		irreversible bool
@@ -909,6 +910,12 @@ func cmdDispatch() *cobra.Command {
 					return err
 				}
 				domain = k
+				// Loaded here so a bad recipes.yaml fails before routing, with its line.
+				book, err := recipe.Load(config.ScriptHome())
+				if err != nil {
+					return err
+				}
+				_, recipeSkips = book.MenuFor(k, checks)
 			}
 			// A dispatch writes nothing to disk, so the workspace verifier it
 			// used to run judged the working tree and never saw the answer: the
@@ -1244,6 +1251,7 @@ func cmdDispatch() *cobra.Command {
 			rcp := recipe.Default(checks)
 			opts := dispatch.Options{
 				Recipe:         &rcp,
+				RecipeSkips:    recipeSkips,
 				TierHint:       tierHint,
 				LocalOnly:      localOnly,
 				DryRun:         dryRun,
