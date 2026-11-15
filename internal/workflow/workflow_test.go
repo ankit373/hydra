@@ -273,3 +273,22 @@ func TestList_OrdersAWholeSecondBelowTheNanosecondAfterIt(t *testing.T) {
 		t.Errorf("got %s first, want the newer aaa: %v", list[0].ID, []string{list[0].ID, list[1].ID})
 	}
 }
+
+// A resume reruns a step under its stored checks, so they must survive the record.
+func TestStep_CheckRoundTripsThroughJSON(t *testing.T) {
+	testutil.NewSandbox(t)
+	w := saved(t, "wf-check", []Step{{Prompt: "pull the totals as JSON", Kind: "extraction.general",
+		Check: []string{"cmd:check-jsonschema --schemafile s.json {file}", "ground"}}})
+	w.Steps[0].Escalated, w.Steps[0].FirstHead = true, "litellm/a"
+	if err := Save(w); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load("wf-check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := got.Steps[0]
+	if len(s.Check) != 2 || s.Check[1] != "ground" || s.Kind != "extraction.general" || !s.Escalated || s.FirstHead != "litellm/a" {
+		t.Errorf("step after round trip = %+v", s)
+	}
+}

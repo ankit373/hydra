@@ -1073,6 +1073,9 @@ hyctl workflow run --step A --needs "" --step B --needs 1 --step C --needs 1   #
 hyctl workflow run --step A --writes doc:replies#t12 --step B --writes doc:replies#t12   # same target: one at a time
 hyctl workflow run --dry-run ...        # each step's routing chain and ceiling, nothing run
 hyctl workflow run --local --max-cost 0.05 ...   # per-step caps, on top of policy.yaml's
+hyctl workflow run --step "pull the totals as JSON" --step "summarise them" \
+  --step-kind 1=extraction --step-check '1=cmd:check-jsonschema --schemafile totals.json {file}'
+#   a step's check fails: it reruns once on a model measured stronger at its kind, else the workflow stops there
 hyctl workflow resume <id>              # continue a killed workflow from where it stopped
 hyctl workflow show <id>                # each step's model, routing level, cost and output
 

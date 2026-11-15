@@ -41,7 +41,7 @@ func TestWorkflowStep_CarriesThePolicyCeilingAndDeadline(t *testing.T) {
 	var got dispatch.Options
 	var seen context.Context
 	r := dispatchRouter{dispatchFn: capturedDispatch(&got, &seen)}
-	if _, err := r.Route(context.Background(), "write the fix", "SIMPLE"); err != nil {
+	if _, err := r.Route(context.Background(), "write the fix", workflow.Step{Enum: "SIMPLE"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -72,7 +72,7 @@ func TestWorkflowStep_WallCeilingIsReportedAsThePolicyRefusing(t *testing.T) {
 		}
 		return nil, errors.New("signal: killed")
 	}}
-	_, err := r.Route(context.Background(), "p", "SIMPLE")
+	_, err := r.Route(context.Background(), "p", workflow.Step{Enum: "SIMPLE"})
 	if err == nil || !strings.Contains(err.Error(), "max_wall_seconds_exceeded") {
 		t.Fatalf("error = %v, want the policy's own wall-clock refusal", err)
 	}

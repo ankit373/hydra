@@ -93,7 +93,9 @@ internal/workflow/      ← Multi-step tasks, each step routed on its own. A ste
                           state saved before every step so a killed run resumes, plus a heartbeat file beside
                           the record: a status is only what the last writer knew, so a killed run
                           read as `running` for ever until `Observed()` resolved it against a live
-                          beat (#898). `hyctl workflow`.
+                          beat (#898). A step can carry `--check` specs and a kind; a failed check
+                          reruns it once through `decide.OnFail`, and a still-failing step stops the
+                          run (#1590). `hyctl workflow`.
 internal/serve/         ← OpenAI-compatible endpoint in front of the router, so any tool that
                           speaks OpenAI routes through Hydra. `hyctl serve`. Also
                           `POST /v1/decisions` and `/v1/systemone`, each answered in its own shape.
