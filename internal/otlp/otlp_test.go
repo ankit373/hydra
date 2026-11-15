@@ -162,6 +162,40 @@ func TestBuild_CarriesHydrasOwnFieldsAlongsideGenAI(t *testing.T) {
 	}
 }
 
+// The first pick goes out beside act_prob, which is its probability. A row
+// from before it was logged exports none, not a step of 0.
+func TestBuild_CarriesTheFirstPickOnlyWhenLogged(t *testing.T) {
+	logged := sampleRow()
+	logged.SpanID, logged.FirstHead, logged.FallbackStep = "0102030405060708", "cheap", 2
+	old := sampleRow()
+	old.SpanID = "0102030405060709"
+	p, err := Build(nil, []cost.Row{logged, old}, "hydra", "1.4.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spans := p.ResourceSpans[0].ScopeSpans[0].Spans
+	for i, attrs := range [][]KeyValue{spans[0].Attributes, spendAttrs(logged), spans[1].Attributes, spendAttrs(old)} {
+		got := map[string]Value{}
+		for _, a := range attrs {
+			got[a.Key] = a.Value
+		}
+		head, hasHead := got["hydra.routing.first_head"]
+		step, hasStep := got["hydra.routing.fallback_step"]
+		if i >= 2 {
+			if hasHead || hasStep {
+				t.Errorf("attrs %d: an old row exported a first pick", i)
+			}
+			continue
+		}
+		if !hasHead || head.StringValue == nil || *head.StringValue != "cheap" {
+			t.Errorf("attrs %d: first_head %+v, want cheap", i, head)
+		}
+		if !hasStep || step.IntValue == nil || *step.IntValue != "2" {
+			t.Errorf("attrs %d: fallback_step %+v, want 2", i, step)
+		}
+	}
+}
+
 // A row whose timestamp will not parse cannot be placed on a timeline.
 // Defaulting to now would file a months-old dispatch under today.
 func TestBuild_RefusesAnUnparseableTimestamp(t *testing.T) {

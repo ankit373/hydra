@@ -5,6 +5,7 @@
 package dispatch
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -817,6 +818,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// the probability it was chosen. At the default ExploreRate of 0 this is
 	// the identity and actProb is 1.
 	candidates, actProb := d.pick(candidates, opts)
+	// actProb belongs to this head, so the logs name it apart from whichever
+	// head the fallback chain ends on.
+	first := candidates[0]
 
 	if opts.DryRun {
 		// Why this order, not just what it is: a reordering the user cannot
@@ -1131,7 +1135,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			TTFTMs:       resp.TTFT.Milliseconds(),
 			Meta:         dispatchMeta(opts, resp),
 		})
-		_ = d.logDispatch(r, prompt, opts, actProb, span)
+		_ = d.logDispatch(r, prompt, opts, firstPick{head: first, prob: actProb, step: i}, span)
 		d.recordBudget(r)
 		// Paid for and logged above, so a rejected answer is still on the books;
 		// what it must not become is the cached or handed-off one.
@@ -1863,9 +1867,20 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	_ = os.Rename(tmp, statePath)
 }
 
+// firstPick is the head the router chose first, the probability it chose it
+// with, and how far down the tried order the answering head was (0 is itself).
+type firstPick struct {
+	head provider.Head
+	prob float64
+	step int
+}
+
 // logDispatch writes to dispatch.jsonl and cost.jsonl.
-func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb float64, span string) error {
+func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, first firstPick, span string) error {
 	tier := rank.UITier(r.Head)
+	firstTier := rank.UITier(first.head)
+	firstModel := cmp.Or(first.head.Meta["model"], first.head.ID)
+	firstPool := headPool(first.head)
 	wallMs := r.Response.Duration.Milliseconds()
 
 	logDir := filepath.Join(config.Dir(), "logs")
@@ -1889,12 +1904,17 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 		"prompt_preview": truncate(prompt, 80),
 		"task_id":        taskID,
 		"run_id":         runID,
-		// keep_prob is 1: nothing samples these rows yet. Written anyway so a
-		// reader never has to guess whether an absent field means "certain" or
-		// "unrecorded" (#605).
-		"act_prob":  actProb,
-		"keep_prob": 1.0,
-		"span_id":   span,
+		// act_prob is the first pick's probability, not the answering head's.
+		// keep_prob is 1: nothing samples these rows yet, but an absent field
+		// would read as either "certain" or "unrecorded" (#605).
+		"act_prob":      first.prob,
+		"keep_prob":     1.0,
+		"span_id":       span,
+		"first_head":    first.head.ID,
+		"first_model":   firstModel,
+		"first_tier":    firstTier,
+		"first_pool":    firstPool,
+		"fallback_step": first.step,
 	}
 	if opts.Objective != "" {
 		dispatchEntry["objective"] = string(opts.Objective)
@@ -1929,9 +1949,14 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 			"source":          legacySource,
 			"task_id":         taskID,
 			"run_id":          runID,
-			"act_prob":        actProb,
+			"act_prob":        first.prob,
 			"keep_prob":       1.0,
 			"span_id":         span,
+			"first_head":      first.head.ID,
+			"first_model":     firstModel,
+			"first_tier":      firstTier,
+			"first_pool":      firstPool,
+			"fallback_step":   first.step,
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb

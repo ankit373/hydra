@@ -29,6 +29,13 @@ var costWriterExemptions = map[string]string{
 	// The dispatch log carries the preview on its own entry rather than on the
 	// cost row; swarm has one writer for both.
 	"prompt_preview": "swarm only: swarm has no separate dispatch-log entry",
+
+	// A swarm runs every head it fans out to, so there is no first pick.
+	"first_head":    "dispatch only: a swarm makes no pick",
+	"first_model":   "dispatch only: a swarm makes no pick",
+	"first_tier":    "dispatch only: a swarm makes no pick",
+	"first_pool":    "dispatch only: a swarm makes no pick",
+	"fallback_step": "dispatch only: a swarm has no fallback chain",
 }
 
 func TestCostWriters_NeitherOmitsWhatTheOtherRecords(t *testing.T) {
