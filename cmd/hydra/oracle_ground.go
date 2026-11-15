@@ -80,8 +80,7 @@ the caller's decision.`,
 						"verdict": o.Last,
 					})
 				}
-				fmt.Fprintf(stdout, "\n  %s  %s\n", warnStyle.Render("NOT CHECKED"), dimStyle.Render(src))
-				fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(verr.Error()))
+				printNotGrounded(src, verr)
 				return nil
 			}
 			if verr != nil {
@@ -118,24 +117,7 @@ the caller's decision.`,
 				return printJSON(out)
 			}
 
-			status := cortexStyle.Render("GROUNDED")
-			if !v.Passed {
-				status = warnStyle.Render("UNSUPPORTED")
-			}
-			fmt.Fprintf(stdout, "\n  %s  %s\n", status, dimStyle.Render(src))
-			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(v.Detail))
-			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
-				"%d claims checked against %d bytes of context · %.0f%% of the answer's words appear in it",
-				o.Last.Claims, o.Last.Context, o.Last.Overlap*100)))
-			if measured {
-				fmt.Fprintf(stdout, "  calibrated evidence  %+.3f nats\n\n", llr)
-			} else {
-				// A number here would be the prior wearing a measurement's
-				// clothes, which is the one thing an evidence source must not do.
-				fmt.Fprintf(stdout, "  %s\n", warnStyle.Render("insufficient evidence to state a strength"))
-				fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(why+
-					"; train it with --record once you know whether the answer was right"))
-			}
+			printGrounding(src, o.Last, v, measured, why, llr)
 			return nil
 		},
 	}
@@ -148,6 +130,34 @@ the caller's decision.`,
 	cmd.Flags().StringVar(&scoreSpan, "span", "", "span this verdict judges, so `hyctl trace view` can show it")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 	return cmd
+}
+
+// printNotGrounded says the check had nothing to judge. Never a pass.
+func printNotGrounded(src string, reason error) {
+	fmt.Fprintf(stdout, "\n  %s  %s\n", warnStyle.Render("NOT CHECKED"), dimStyle.Render(src))
+	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(reason.Error()))
+}
+
+// printGrounding prints a grounding verdict, its unsupported spans and its
+// calibrated strength, or why no strength can be stated yet.
+func printGrounding(src string, last ground.Verdict, v oracle.Verdict, measured bool, why string, llr float64) {
+	status := cortexStyle.Render("GROUNDED")
+	if !v.Passed {
+		status = warnStyle.Render("UNSUPPORTED")
+	}
+	fmt.Fprintf(stdout, "\n  %s  %s\n", status, dimStyle.Render(src))
+	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(v.Detail))
+	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
+		"%d claims checked against %d bytes of context · %.0f%% of the answer's words appear in it",
+		last.Claims, last.Context, last.Overlap*100)))
+	if measured {
+		fmt.Fprintf(stdout, "  calibrated evidence  %+.3f nats\n\n", llr)
+		return
+	}
+	// A number here would be the prior wearing a measurement's clothes.
+	fmt.Fprintf(stdout, "  %s\n", warnStyle.Render("insufficient evidence to state a strength"))
+	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(why+
+		"; train it with `hyctl oracle ground --record` once you know whether the answer was right"))
 }
 
 // scoreGrounding attaches the verdict to the span that produced the answer, so

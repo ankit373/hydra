@@ -854,6 +854,7 @@ hyctl dispatch --kind summary "..."  # rank models on their record for this kind
 hyctl dispatch --local "..."   # local models only, no API calls
 hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many models, judge best
 hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
+hyctl dispatch --check ground "..."     # check the answer against the context the prompt fenced
 
 # Serve the router to anything that speaks OpenAI
 hyctl serve                             # OpenAI-compatible endpoint, loopback only

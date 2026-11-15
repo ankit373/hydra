@@ -401,7 +401,9 @@ hyctl trust reliability --source <head> ; hyctl trust reliability --source <head
 # Close the loop in one command: verify the answer, score the span, train every voter
 # Verify an answer by applying it: `hyctl edit` validates the file it just wrote.
 # `hyctl dispatch --verify` is refused, a dispatch writes nothing, so its verifier
-# would judge the repository rather than the answer (#982).
+# would judge the repository rather than the answer (#982). `--check ground` reads
+# the answer itself, so a dispatch can run it.
+hyctl dispatch --check ground "summarise this: <fenced source>"
 hyctl edit --file "$PWD/internal/auth/token.go" --enum MODERATE --prompt "rotate signing key"
 hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain <task_hash>
 
