@@ -898,7 +898,8 @@ hyctl context entropy <file|->          # signal density + useful tokens + compa
 
 # Verification & accountability
 hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
-hyctl eval stats                        # the verified corpus: size and pass rate by domain
+hyctl eval stats                        # the verified corpus: size and pass rate by task type
+# Filled by edit, parallel, oracle verify --candidate, hyverify and dispatch --check
 hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
 hyctl eval list --failed                # the examples the oracle rejected
 hyctl eval training                     # vectors per embedding model, whether a classifier could be fitted

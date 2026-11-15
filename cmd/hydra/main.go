@@ -1332,7 +1332,7 @@ func cmdDispatch() *cobra.Command {
 			// Every way the answer reaches the screen ends here, so a check runs on all of them.
 			finish := func() error {
 				printOutputWarning(result.OutputProvenance)
-				runChecks(ctx, answerChecks, result.Output, domain, runID, result.SpanID)
+				runChecks(ctx, answerChecks, result, prompt, enumKey, domain, runID)
 				return nil
 			}
 			if sr != nil && sr.Streamed() {
@@ -2226,24 +2226,15 @@ func cmdOracle() *cobra.Command {
 			// rarest thing Hydra produces. It is kept outside the trace store
 			// so no retention pass can ever reach it (#625).
 			if candidate != "" {
-				breadcrumb, _ := config.Breadcrumb()
-				added, aerr := evalset.Add(evalset.DefaultPath(), evalset.Example{
+				fileExample(evalset.Example{
 					// Hydra does not see the task on this path, so it is the
 					// caller's to name; unnamed stays unknown rather than being
 					// stood in for by the domain, which collided (#973).
 					TaskHash: evalset.TaskHashFor(taskText),
 					Domain:   domain, Source: src, Candidate: candidate,
-					Passed: v.Passed, Detail: v.Detail, Config: breadcrumb,
+					Passed: v.Passed, Detail: v.Detail,
 					Enum: enum, Tier: tier, Head: spanEv.Head,
 				})
-				switch {
-				case aerr != nil:
-					// Never fail a verification because its example could not
-					// be filed; report it so the loss is visible.
-					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("eval set: "+aerr.Error()))
-				case added:
-					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("recorded to the eval set"))
-				}
 			}
 			if candidate != "" || scoreSpan != "" {
 				fileVerdict(spanEv, evalset.Verdict{
@@ -4258,10 +4249,7 @@ func replayTrustRun(spanID string, passed bool) {
 	if err != nil {
 		return
 	}
-	outcome := trust.OutcomeIncorrect
-	if passed {
-		outcome = trust.OutcomeCorrect
-	}
+	outcome := trust.OutcomeFor(passed)
 	n, err := trust.ApplyRunOutcome(cal, run.Domain, run.Ledger, outcome)
 	if err != nil || n == 0 {
 		return

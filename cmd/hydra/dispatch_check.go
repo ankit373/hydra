@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/ground"
 	"github.com/ankit373/hydra/internal/oracle"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -85,9 +88,9 @@ func parseMatch(arg string) (answerCheck, error) {
 	return answerCheck{oracle: o, source: o.Source}, nil
 }
 
-// runChecks judges a dispatch's answer and scores the span that produced it.
-// It reports and never fails the dispatch: the answer was already paid for.
-func runChecks(ctx context.Context, checks []answerCheck, answer, domain, runID, spanID string) {
+// runChecks judges a dispatch's answer, scores its span, files the verdict in the
+// eval corpus and trains the head that answered. It never fails the dispatch.
+func runChecks(ctx context.Context, checks []answerCheck, r *dispatch.Result, prompt, enum, domain, runID string) {
 	if len(checks) == 0 {
 		return
 	}
@@ -96,8 +99,11 @@ func runChecks(ctx context.Context, checks []answerCheck, answer, domain, runID,
 		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("calibration: "+err.Error()))
 		return
 	}
+	// The corpus keeps one example per task and answer, so every verdict folds into one.
+	var sources, failed []string
+	passed := true
 	for _, c := range checks {
-		v, verr := c.oracle.Verify(ctx, answer, trust.Task{Domain: domain})
+		v, verr := c.oracle.Verify(ctx, r.Output, trust.Task{Domain: domain})
 		if verr != nil {
 			printNotChecked(c.source, verr)
 			continue
@@ -112,16 +118,46 @@ func runChecks(ctx context.Context, checks []answerCheck, answer, domain, runID,
 			printCheck(c.source, v, measured, why, llr)
 		}
 		var spanEv runlog.Event // a cached answer has no span of its own to score
-		if spanID != "" {
-			ev, err := scoreVerdict(runID, spanID, name, c.source, v.Passed, v.Detail)
+		if r.SpanID != "" {
+			ev, err := scoreVerdict(runID, r.SpanID, name, c.source, v.Passed, v.Detail)
 			if err != nil {
 				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("span score: "+err.Error()))
 			}
 			spanEv = ev
 		}
 		fileVerdict(spanEv, evalset.Verdict{
-			CandidateHash: candidateHash(answer), Domain: domain, Check: c.source, Passed: v.Passed, Detail: v.Detail,
+			CandidateHash: candidateHash(r.Output), Domain: domain, Check: c.source, Passed: v.Passed, Detail: v.Detail,
 		})
+		if r.SpanID == "" {
+			continue // no head ran, so there is no example to file or head to train
+		}
+		sources, passed = append(sources, c.source), passed && v.Passed
+		if !v.Passed {
+			failed = append(failed, c.source+": "+v.Detail)
+		}
+	}
+	if len(sources) == 0 {
+		return // nothing was checked, so there is no verdict to keep
+	}
+	fileExample(evalset.Example{
+		TaskHash: evalset.TaskHashFor(prompt), Domain: domain, Source: strings.Join(sources, ","),
+		Head: r.Head.ID, Enum: enum, Tier: rank.UITier(r.Head),
+		Candidate: r.Output, Passed: passed, Detail: strings.Join(failed, "; "),
+	})
+	// The answer is the head's implicit claim of correctness, as hyctl edit records it.
+	_ = cal.Update(r.Head.ID, domain, true, trust.OutcomeFor(passed))
+}
+
+// fileExample adds a verdict to the eval corpus. Reported, never fatal: losing
+// the example must not fail the verification that produced it.
+func fileExample(e evalset.Example) {
+	e.Config, _ = config.Breadcrumb()
+	added, err := evalset.Add(evalset.DefaultPath(), e)
+	switch {
+	case err != nil:
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("eval set: "+err.Error()))
+	case added:
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("recorded to the eval set"))
 	}
 }
 
