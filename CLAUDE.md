@@ -80,6 +80,8 @@ internal/graph/         ← Code dependency graph (graph.json) → blast radius 
 internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection.
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
+internal/idle/          ← Compaction while a conversation is idle (#1475). Typed `State` with a ref back to
+                          each source turn; `ExtractConstraints` copies rule lines byte for byte, no model.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Ordered multi-step tasks, each step routed on its own; state saved
                           before every step so a killed run resumes, plus a heartbeat file beside
