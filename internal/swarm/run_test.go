@@ -14,6 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
@@ -386,6 +387,8 @@ func TestPlan_NoHeadsIsAnError(t *testing.T) {
 type fixedPricing struct{ perCall float64 }
 
 func (f fixedPricing) EstimateCost(_, _, _ int) float64 { return f.perCall }
+
+func (f fixedPricing) PriceCall(provider.Head, pricing.Usage) float64 { return f.perCall }
 
 // ── SPRT ──────────────────────────────────────────────────────────────────────
 
