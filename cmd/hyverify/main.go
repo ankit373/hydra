@@ -18,11 +18,14 @@ import (
 
 	"github.com/ankit373/hydra/internal/build"
 	"github.com/ankit373/hydra/internal/cache"
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/verify"
+	"github.com/ankit373/hydra/internal/workspace"
 )
 
 // DefaultOut sits in the working directory, never in ~/.hydra: a tool that
@@ -54,6 +57,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		head       = fs.String("head", "", "model that produced the candidate")
 		out        = fs.String("out", DefaultOut, "corpus to append to")
 		embedModel = fs.String("embed-model", "", "embedding model to vectorise the task with (off unless named)")
+		passEnv    = fs.String("env", "", "comma-separated variables the verifier may see beyond the default set; credentials are refused")
 		version    = fs.Bool("version", false, "print the build and exit")
 	)
 	fs.Usage = func() {
@@ -104,7 +108,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitNoVerdict
 	}
 
-	passed, detail := judge(argv)
+	env := append(workspace.ValidatorEnvNames(config.ScriptHome()), strings.Split(*passEnv, ",")...)
+	passed, detail := judge(argv, env)
 
 	dom := *domain
 	if dom == "" {
@@ -210,9 +215,10 @@ func reaches(candidate string, argv []string) bool {
 // judge runs the verifier. Exit zero is the pass, as it is for every oracle in
 // the tree; a command that cannot start is a failure to verify, not a failing
 // candidate, so it says so in the detail rather than silently labelling one.
-func judge(argv []string) (passed bool, detail string) {
+// env names the extra variables it may see: validator_env and --env.
+func judge(argv, env []string) (passed bool, detail string) {
 	acc := util.NewAccumulator(maxOutput)
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := sandbox.Confine(exec.CommandContext(context.Background(), argv[0], argv[1:]...), env)
 	cmd.Stdout, cmd.Stderr = acc, acc
 	err := cmd.Run()
 	out := firstLine(acc.String())

@@ -91,6 +91,9 @@ type CommandOracle struct {
 	// Dir is the command's working directory; empty inherits the process CWD.
 	// Set when the verified change lives elsewhere, e.g. a task's git worktree.
 	Dir string
+	// Env names extra variables the command may see beyond
+	// sandbox.ValidatorEnv's default set, usually workspace.yaml's validator_env.
+	Env []string
 	// writeTemp allows tests to stub file materialization; nil uses the real one.
 	writeTemp func(content string) (path string, cleanup func(), err error)
 }
@@ -120,7 +123,7 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 	}
 	// A verifier is `go test ./...` or a linter: it spawns a tree, and without
 	// this a cancelled run leaves the compile jobs behind (#738).
-	cmd := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
+	cmd := sandbox.Confine(exec.CommandContext(ctx, parts[0], parts[1:]...), o.Env)
 	cmd.Dir = o.Dir
 	// Both streams share one bounded Accumulator, matching CombinedOutput's
 	// interleaving, but capped, unlike the bytes.Buffer it replaces.

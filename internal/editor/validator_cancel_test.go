@@ -106,7 +106,7 @@ func TestRunValidatorCmd_CancellationIsNotAnExitCode(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		_, rc, err := runValidatorCmd(ctx, tmpl, "ignored")
+		_, rc, err := runValidatorCmd(ctx, tmpl, "ignored", nil)
 		done <- result{rc, err}
 	}()
 

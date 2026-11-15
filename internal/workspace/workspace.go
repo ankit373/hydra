@@ -53,6 +53,8 @@ type registryFile struct {
 	Version    string                    `yaml:"version"`
 	Workspaces map[string]workspaceEntry `yaml:"workspaces"`
 	Validators map[string]interface{}    `yaml:"validators"`
+	// ValidatorEnv names extra variables validators and oracles may see.
+	ValidatorEnv []string `yaml:"validator_env"`
 }
 
 type workspaceEntry struct {
@@ -75,6 +77,7 @@ type SkippedWorkspace struct {
 type Registry struct {
 	workspaces []Workspace
 	validators map[string]string // ext → command template
+	env        []string          // validator_env names
 	skipped    []SkippedWorkspace
 }
 
@@ -99,7 +102,7 @@ func Load(hydraHome string) (*Registry, error) {
 		return nil, fmt.Errorf("parse workspace.yaml: %w", err)
 	}
 
-	r := &Registry{validators: make(map[string]string)}
+	r := &Registry{validators: make(map[string]string), env: rf.ValidatorEnv}
 	for name, e := range rf.Workspaces {
 		root := filepath.Clean(e.Root)
 		if !filepath.IsAbs(root) {
@@ -311,6 +314,26 @@ func (r *Registry) Resolve(path string) (Resolved, error) {
 // The caller replaces {file} with the actual path.
 func (r *Registry) ValidatorFor(ext string) string {
 	return r.validators[strings.TrimPrefix(ext, ".")]
+}
+
+// ValidatorEnv returns the validator_env names: variables beyond the default
+// set that validators and oracles may see. sandbox.ValidatorEnv refuses any
+// that look like credentials.
+func (r *Registry) ValidatorEnv() []string {
+	if r == nil {
+		return nil
+	}
+	return r.env
+}
+
+// ValidatorEnvNames loads the registry and returns its validator_env names.
+// An unreadable registry yields none, which leaves the default set in place.
+func ValidatorEnvNames(hydraHome string) []string {
+	r, err := Load(hydraHome)
+	if err != nil {
+		return nil
+	}
+	return r.ValidatorEnv()
 }
 
 // HasAnyValidator reports whether at least one extension has a real

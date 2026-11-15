@@ -247,7 +247,7 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		}
 
 		if vtmpl != "" {
-			vout, vrc, verr := runValidatorCmd(ctx, vtmpl, req.File)
+			vout, vrc, verr := runValidatorCmd(ctx, vtmpl, req.File, reg.ValidatorEnv())
 			if errors.Is(verr, ErrValidatorUnavailable) {
 				// Not the head's fault and not a verdict, so nothing is
 				// recorded: validatorPassed stays nil and says so.
@@ -716,8 +716,9 @@ func rollback(file, origContent string, origExisted bool) {
 // runValidatorCmd executes a validator template safely.
 // Splits around {file} so paths containing spaces are never fragmented by Fields.
 // A non-nil error means the run was cancelled, which is not an exit code: a
-// killed validator exits non-zero exactly like a failing one.
-func runValidatorCmd(ctx context.Context, vtmpl, file string) (output string, exitCode int, err error) {
+// killed validator exits non-zero exactly like a failing one. env names the
+// extra variables it may see, on top of sandbox.ValidatorEnv's default set.
+func runValidatorCmd(ctx context.Context, vtmpl, file string, env []string) (output string, exitCode int, err error) {
 	var parts []string
 	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
 		parts = append(strings.Fields(vtmpl[:idx]), file)
@@ -728,7 +729,7 @@ func runValidatorCmd(ctx context.Context, vtmpl, file string) (output string, ex
 	if len(parts) == 0 {
 		return "", 0, nil
 	}
-	c := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
+	c := sandbox.Confine(exec.CommandContext(ctx, parts[0], parts[1:]...), env)
 	out, runErr := c.CombinedOutput()
 	if runErr != nil {
 		if ctx.Err() != nil {

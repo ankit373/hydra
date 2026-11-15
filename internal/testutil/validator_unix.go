@@ -120,3 +120,24 @@ func ProcessGone(pid int, within time.Duration) bool {
 	}
 	return false
 }
+
+// LeakedSecret is the value LeakProbe exports under credential names.
+const LeakedSecret = "credential-must-not-cross"
+
+// LeakProbe exports LeakedSecret under credential names and returns a
+// validator script that exits 1 if any of them reached it, 0 otherwise.
+func LeakProbe(t *testing.T) string {
+	t.Helper()
+	for _, k := range []string{
+		"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY",
+		"SSH_AUTH_SOCK", "GITHUB_TOKEN",
+	} {
+		t.Setenv(k, LeakedSecret)
+	}
+	script := filepath.Join(t.TempDir(), "probe.sh")
+	body := "#!/bin/sh\n/usr/bin/env | /usr/bin/grep -q " + LeakedSecret + " && exit 1\nexit 0\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return script
+}

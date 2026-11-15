@@ -399,7 +399,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 			vtmpl = tscTemplate(resolved.GitRoot)
 		}
 		if vtmpl != "" {
-			rc, verr := runValidate(ctx, vtmpl, file)
+			rc, verr := runValidate(ctx, vtmpl, file, reg.ValidatorEnv())
 			if verr != nil {
 				// The deadline is the policy stopping the validator, not the
 				// validator rejecting the edit, the same distinction the
@@ -629,8 +629,8 @@ func rollback(file, origContent string, origExisted bool, gitRoot, backup string
 // paths-with-spaces from being fragmented by strings.Fields.
 // A non-nil error means the run was cancelled or ran past max_wall_seconds,
 // which is not an exit code: a killed validator exits non-zero exactly like a
-// failing one.
-func runValidate(ctx context.Context, vtmpl, file string) (int, error) {
+// failing one. env names the extra variables it may see.
+func runValidate(ctx context.Context, vtmpl, file string, env []string) (int, error) {
 	var parts []string
 	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
 		parts = append(strings.Fields(vtmpl[:idx]), file)
@@ -641,7 +641,7 @@ func runValidate(ctx context.Context, vtmpl, file string) (int, error) {
 	if len(parts) == 0 {
 		return 0, nil
 	}
-	c := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
+	c := sandbox.Confine(exec.CommandContext(ctx, parts[0], parts[1:]...), env)
 	if err := c.Run(); err != nil {
 		if ctx.Err() != nil {
 			return 0, ctx.Err()
