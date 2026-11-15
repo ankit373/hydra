@@ -259,3 +259,36 @@ func TestSSEDialects_AllRefuseAMidStreamError(t *testing.T) {
 		})
 	}
 }
+
+// promptTokenCount already counts the cached content, so InputTokens is left as is.
+func TestGemini_CachedContentTokenCountRead(t *testing.T) {
+	const body = `{"modelVersion":"gemini-test","candidates":[{"finishReason":"STOP",` +
+		`"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":` +
+		`{"promptTokenCount":2000,"candidatesTokenCount":5,"cachedContentTokenCount":1600}}`
+	check := func(t *testing.T, resp *Response) {
+		t.Helper()
+		if resp.CacheReadTokens != 1600 || resp.InputTokens != 2000 {
+			t.Errorf("cache read %d of %d, want 1600 of 2000", resp.CacheReadTokens, resp.InputTokens)
+		}
+	}
+
+	t.Run("stream", func(t *testing.T) {
+		newGeminiStub(t, []string{body})
+		resp, err := (&HTTPExecutor{}).ExecuteStream(context.Background(),
+			Request{Prompt: "p", Head: geminiHead()}, func(string) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(t, resp)
+	})
+	t.Run("buffered", func(t *testing.T) {
+		geminiEnv(t)
+		srv, _ := serve(t, 200, body)
+		t.Setenv("GEMINI_BASE_URL", srv.URL)
+		resp, err := (&HTTPExecutor{}).Execute(context.Background(), Request{Prompt: "p", Head: geminiHead()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(t, resp)
+	})
+}

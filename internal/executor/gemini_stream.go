@@ -10,6 +10,14 @@ import (
 	"net/http"
 )
 
+// geminiUsage backs both Gemini paths. promptTokenCount already includes the
+// cached content, so it is the full prompt as it stands.
+type geminiUsage struct {
+	PromptTokenCount        int `json:"promptTokenCount"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount"`
+}
+
 // geminiChunk is one SSE payload of streamGenerateContent. usageMetadata
 // repeats and is cumulative, so the last one is the whole call's count and the
 // first is the count of a few tokens (#851).
@@ -20,10 +28,7 @@ type geminiChunk struct {
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
-	UsageMetadata *struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
-	} `json:"usageMetadata"`
+	UsageMetadata  *geminiUsage `json:"usageMetadata"`
 	PromptFeedback *struct {
 		BlockReason string `json:"blockReason"`
 	} `json:"promptFeedback"`
@@ -57,7 +62,7 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 	httpReq.Header.Set("Accept", "text/event-stream")
 
 	gotModel := model
-	var inTok, outTok int
+	var usage geminiUsage
 	var finish string
 	var tools toolCallStream
 
@@ -76,12 +81,9 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 		}
 		gotModel = firstNonEmpty(chunk.ModelVersion, gotModel)
 		if u := chunk.UsageMetadata; u != nil {
-			if u.PromptTokenCount > 0 {
-				inTok = u.PromptTokenCount
-			}
-			if u.CandidatesTokenCount > 0 {
-				outTok = u.CandidatesTokenCount
-			}
+			keepReported(&usage.PromptTokenCount, u.PromptTokenCount)
+			keepReported(&usage.CandidatesTokenCount, u.CandidatesTokenCount)
+			keepReported(&usage.CachedContentTokenCount, u.CachedContentTokenCount)
 		}
 		// Only the first candidate, the one the buffered path returns. With
 		// candidateCount above 1 the rest are alternative answers, and
@@ -113,7 +115,8 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 		return nil, err
 	}
 
-	answer := httpResponse(req, sink.output(), gotModel, inTok, outTok, start)
+	answer := httpResponse(req, sink.output(), gotModel, usage.PromptTokenCount, usage.CandidatesTokenCount, start)
+	answer.CacheReadTokens = usage.CachedContentTokenCount
 	answer.Truncated = sink.truncated()
 	answer.TTFT = sink.firstTokenAt()
 	answer.ToolCalls = tools.done()
