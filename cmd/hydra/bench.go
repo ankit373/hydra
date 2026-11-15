@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ankit373/hydra/internal/bench"
+	"github.com/ankit373/hydra/internal/bench/replay"
 	"github.com/ankit373/hydra/internal/bench/suites"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/executor"
@@ -47,7 +49,7 @@ func cmdBench() *cobra.Command {
 		Use:   "bench",
 		Short: "Benchmark harness: pinned datasets, committed splits, scored arms",
 	}
-	cmd.AddCommand(cmdBenchFetch(), cmdBenchRun(), cmdBenchReport(), cmdBenchTable())
+	cmd.AddCommand(cmdBenchFetch(), cmdBenchRun(), cmdBenchReport(), cmdBenchTable(), cmdBenchReplay())
 	return cmd
 }
 
@@ -115,6 +117,59 @@ func cmdBenchTable() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&resultsDir, "results", "bench/results", "where run directories are")
 	cmd.Flags().StringVar(&outPath, "out", "", "the markdown file to write")
+	return cmd
+}
+
+func cmdBenchReplay() *cobra.Command {
+	var candidates, check string
+	var policies []string
+	var alphas []float64
+	var splits int
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "replay --candidates <file.jsonl>",
+		Short: "Replay acceptance policies on cached, labelled answers, with no model calls",
+		Long: "Splits the tasks 50/50 per seed (seeds 0..--splits-1), calibrates each policy on one\n" +
+			"half and runs it on the other. False accept per task is wrong accepted answers over\n" +
+			"all test tasks. Each kind is replayed on its own. Row format: bench/README.md.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if splits < 1 {
+				return fmt.Errorf("bench: --splits must be at least 1, got %d", splits)
+			}
+			f, err := os.Open(candidates)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			rows, err := replay.Read(f)
+			if err != nil {
+				return err
+			}
+			seeds := make([]uint64, splits)
+			for i := range seeds {
+				seeds[i] = uint64(i)
+			}
+			rep, err := replay.Run(rows, replay.Config{Policies: policies, Alphas: alphas, Seeds: seeds, Check: check})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return json.NewEncoder(stdout).Encode(rep)
+			}
+			fmt.Fprint(stdout, replay.Table(rep))
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&candidates, "candidates", "", "JSONL, one row per (task, head) candidate")
+	f.StringSliceVar(&policies, "policy", []string{"always_strongest", "first_check_pass"},
+		"policies to replay: "+strings.Join(replay.Names(), ", "))
+	f.Float64SliceVar(&alphas, "alpha", []float64{0.01, 0.05, 0.10}, "target false accept per task")
+	f.IntVar(&splits, "splits", 20, "random calibrate/test splits, seeded 0..n-1")
+	f.StringVar(&check, "check", "", "the primary check first_check_pass accepts on")
+	f.BoolVar(&jsonOut, "json", false, "print every split and summary as JSON")
+	_ = cmd.MarkFlagRequired("candidates")
 	return cmd
 }
 
