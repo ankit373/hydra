@@ -2092,15 +2092,17 @@ func humanBytes(n int64) string {
 func cmdOracle() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "oracle",
-		Short: "Run deterministic verifiers (tests/compile/lint) as evidence sources",
+		Short: "Check an answer with a command, a label list or its source text, and count the result as evidence",
 	}
 	var source, domain, candidateFile, record, scoreRun, scoreSpan, enumKey string
 	var tierNum int
 	var taskText string
 	verify := &cobra.Command{
 		Use:   "verify <command...>",
-		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
-		Args:  cobra.MinimumNArgs(1),
+		Short: "Run any command that passes or fails an answer, such as tests or a schema check, and count the verdict as evidence",
+		Example: `  hyctl oracle verify --domain go -- go test ./...
+  hyctl oracle verify --candidate answer.json -- jq -e '.total | type == "number"' answer.json`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Validated before running the verifier at all: a garbage --record
 			// used to be silently ignored, no error, no calibration write, no

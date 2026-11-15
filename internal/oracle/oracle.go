@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-// Package oracle turns deterministic verifiers, test runners, compilers,
-// linters, into first-class evidence sources for the Trust Control Plane. A
-// passing suite is far stronger evidence of correctness than any single model's
-// opinion, so a calibrated oracle contributes a large log-likelihood ratio to
-// the SPRT ensemble (SPEC §4: "verifiers as sources too").
+// Package oracle checks an answer and counts the verdict as evidence: any
+// command that passes or fails it (tests, a schema check), a label match
+// against an allowed set, or a true/false predicate.
 package oracle
 
 import (
