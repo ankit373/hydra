@@ -14,10 +14,10 @@
 #   *_lt        numeric <         file_lines_lt: 50
 #   *_gte       numeric >=        context_pct_gte: 75
 #   *_lte       numeric <=        enum_tier_lte: 4
-#   *_in        in JSON list      stage_name_in: [build, ship]
+#   *_in        in JSON list      file_extension_in: [ts, tsx]
 #   *_contains  substring match   prompt_contains: rename
 #   *_present   not null/empty    file_present: true
-#   (no suffix) implicit _eq      in_playbook: true
+#   (no suffix) implicit _eq      has_git: true
 #
 # A numeric comparison never matches a field the task did not supply. enum_tier,
 # file_lines and file_count are absent when non-positive (a real tier is 1-10, a
@@ -129,41 +129,6 @@ rules:
     apply:
       edit_mode: agentic
 
-  # ── Atomic safety for risky multi-file work ────────────────────────────────
-
-  - name: multi_file_rename_atomic
-    when:
-      task_type_eq: rename
-      file_count_gt: 1
-    apply:
-      atomic: true
-      validate_strict: true
-
-  - name: migration_atomic
-    when:
-      task_type_in: [migration, refactor_global]
-    apply:
-      atomic: true
-      validate_strict: true
-      rubber_duck: true
-
-  # ── Playbook-aware defaults ────────────────────────────────────────────────
-
-  - name: playbook_build_or_ship_commits
-    when:
-      in_playbook_eq: true
-      stage_name_in: [build, ship, deploy]
-    apply:
-      auto_commit: true
-      validate_strict: true
-
-  - name: playbook_security_stage
-    when:
-      stage_name_eq: security_audit
-    apply:
-      rubber_duck: true
-      validate_strict: true
-
   # ── Context-pressure adjustments ───────────────────────────────────────────
   # Both of these are inert today: nothing populates context_pct, so neither has
   # ever fired. Kept rather than deleted because the number exists (the claude_pct
@@ -246,23 +211,6 @@ rules:
     apply:
       edit_mode: rewrite       # weak models drop markers in SR/diff formats
 
-  # ── Test/lint loops for risky work ─────────────────────────────────────────
-
-  - name: ts_strict_uses_test_loop
-    when:
-      file_extension_in: [ts, tsx]
-      task_type_in: [feature, fix, refactor]
-    apply:
-      lint_loop: true
-
-  - name: migration_uses_test_loop
-    when:
-      task_type_eq: migration
-    apply:
-      test_loop: true
-      lint_loop: true
-      max_retries: 3
-
   # ── Worktree isolation for risky parallel work ─────────────────────────────
 
   - name: parallel_in_git_use_worktrees
@@ -279,30 +227,6 @@ rules:
       file_count_gt: 2
     apply:
       use_repo_map: true       # inject compressed repo summary
-
-  - name: defensive_for_security_or_migration
-    when:
-      task_type_in: [migration, security_fix, refactor_global]
-    apply:
-      defensive: true          # gather more context before editing
-      use_repo_map: true
-
-  # ── Cost + wall-clock ceilings ─────────────────────────────────────────────
-
-  - name: loop_modes_need_cost_ceiling
-    when:
-      task_type_in: [migration, refactor_global]  # tasks that trigger loops
-    apply:
-      max_cost_usd: 2.00       # bound runaway test loops
-      max_wall_seconds: 1800   # 30 min
-
-  - name: playbook_ship_higher_budget
-    when:
-      in_playbook_eq: true
-      stage_name_in: [build, ship, deploy]
-    apply:
-      max_cost_usd: 5.00
-      max_wall_seconds: 3600
 
   # ── Always-on tail rule ────────────────────────────────────────────────────
 
