@@ -3,11 +3,11 @@
 // Package ground checks an answer against the context the dispatch was given.
 //
 // Not a hallucination detector. It answers one narrow question with high
-// precision: does the answer state a number, date, name, path, flag or symbol
-// that appears nowhere in what the model was handed? That is extrinsic
-// hallucination, where a model contradicts ground truth sitting in its own
-// context, and it is the only part of the problem a check with no trained model
-// can speak to.
+// precision: does the answer state a number, date, name, path, flag or symbol,
+// or quote a phrase, that appears nowhere in what the model was handed? That is
+// extrinsic hallucination, where a model contradicts ground truth sitting in
+// its own context, and it is the only part of the problem a check with no
+// trained model can speak to.
 //
 // Everything else it declines to judge. With no fenced context there is no
 // verdict at all, because "nothing to check against" and "checked and fine"
@@ -38,6 +38,8 @@ const (
 	KindDate Kind = "date"
 	// KindName is a proper name of two or more words: a person, a company.
 	KindName Kind = "name"
+	// KindQuote is a phrase in double quotes, which says the source said it.
+	KindQuote Kind = "quote"
 )
 
 // Claim is one span of the answer that had to appear in the context.
@@ -139,6 +141,13 @@ func Check(answer, prompt string) Verdict {
 	for _, n := range names(rest, lowercaseUse(prompt, answer), source) {
 		words := lowerWords(n)
 		claim(n, "name:"+strings.Join(words, " "), KindName, nameSupported(words, promptWords))
+	}
+
+	if !looksLikeCode(spans) {
+		said := normalise(prompt)
+		for _, q := range quotes(answer) {
+			claim(q, "quote:"+normalise(q), KindQuote, quoted(q, said))
+		}
 	}
 
 	cited := citations(rest)
@@ -402,6 +411,68 @@ func lowercaseUse(texts ...string) map[string]bool {
 		}
 	}
 	return out
+}
+
+// looksLikeCode reports whether the fenced context reads as source code: a
+// markdown code fence, or one line in five ending in { } ; or ). Comments in
+// code quote made-up speech and terms, so quotes there are not checked.
+func looksLikeCode(spans []util.Untrusted) bool {
+	var lines, code int
+	for _, s := range spans {
+		if strings.Contains(s.Content, "```") {
+			return true
+		}
+		for _, l := range strings.Split(s.Content, "\n") {
+			if l = strings.TrimSpace(l); l == "" {
+				continue
+			}
+			lines++
+			if strings.ContainsAny(l[len(l)-1:], "{};)") {
+				code++
+			}
+		}
+	}
+	return code >= 2 && code*5 >= lines
+}
+
+// quoteRE is a span in straight or curly double quotes. Single quotes are left
+// out: apostrophes make them too noisy to pair.
+var quoteRE = regexp.MustCompile(`"([^"]+)"|“([^”]+)”`)
+
+// minQuoteWords is where a quote starts being a claim about wording rather
+// than a term in quotes, as in the "ejection seat".
+const minQuoteWords = 3
+
+// quotes are the phrases of minQuoteWords or more words the answer quotes.
+func quotes(text string) []string {
+	var out []string
+	for _, m := range quoteRE.FindAllStringSubmatch(text, -1) {
+		q := strings.TrimSpace(m[1] + m[2])
+		if len(strings.Fields(q)) >= minQuoteWords {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
+// quoted reports whether every part of q, split at an ellipsis, is in the
+// normalised source word for word. A closing full stop or comma may differ.
+func quoted(q, source string) bool {
+	for _, part := range ellipsis.Split(q, -1) {
+		part = strings.TrimRight(normalise(part), ".,;:!?")
+		if part != "" && !strings.Contains(source, part) {
+			return false
+		}
+	}
+	return true
+}
+
+var ellipsis = regexp.MustCompile(`\.\.\.|…`)
+
+// normalise lowercases text, collapses its whitespace and straightens curly
+// apostrophes, the differences a faithful quote may have from its source.
+func normalise(text string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(text, "’", "'")), " "))
 }
 
 // citations are the numbers the answer cited rather than measured: #843 is a
