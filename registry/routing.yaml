@@ -3,10 +3,10 @@
 # This is your single enum. Change a value here → every domain updates.
 # Domains and skills reference keys (e.g. SIMPLE), never tier numbers directly.
 #
-# Example: change SIMPLE from 8 to 7 → all DTO/schema tasks now go to Flash High
-# Example: change GRUNT from 10 to 9 → boilerplate now goes to Flash Low not Qwen
+# Example: change SIMPLE from 8 to 7 → short summaries and labels now go one level up
+# Example: change GRUNT from 10 to 9 → mechanical work now leaves the local model
 #
-# Keys map to tier numbers defined in models.yaml
+# Keys map to routing levels defined in models.yaml (1 = most capable)
 #
 # The router reads this file. A copy at $HYDRA_HOME/registry/routing.yaml wins
 # over the one in the binary, and must list every key below: a partial override
@@ -17,32 +17,32 @@ version: "1.0"
 
 routing_map:
 
-  # Pure mechanical work, local, free, slow, no accuracy needed
-  GRUNT:      10   # → Qwen2.5-Coder:7b (Ollama, local)
+  # Mechanical work: reformat, split, dedupe, fill a template. Local and free.
+  GRUNT:      10
 
-  # Trivial agy work, enums, constants, simple types
-  TRIVIAL:    9    # → Gemini 3.8 Flash (Low)
+  # Trivial work: fix a typo, pick a word, set a constant
+  TRIVIAL:    9
 
-  # Simple structured code, DTOs, schemas, interfaces
-  SIMPLE:     8    # → Gemini 3.8 Flash (Medium)
+  # Short summaries, one-field extraction, labels, simple code
+  SIMPLE:     8
 
-  # Standard patterns, controllers, handlers, basic CRUD
-  STANDARD:   7    # → Gemini 3.8 Flash (High)
+  # A reply or a page of writing, routine code
+  STANDARD:   7
 
-  # Moderate logic, services, repos, validators
-  MODERATE:   6    # → Gemini 3.1 Pro (Low)
+  # Several fields or steps at once: a structured extraction, a checked rewrite
+  MODERATE:   6
 
-  # Complex implementations, middleware, auth, ML pipelines
-  COMPLEX:    5    # → Gemini 3.1 Pro (High)
+  # Long documents, multi-step analysis, tricky code
+  COMPLEX:    5
 
-  # Hard cross-cutting, tradeoff review, non-trivial algorithms (also rubber duck for Claude)
-  HARD:       4    # → Gemini 2.0 Flash Thinking (disabled in models.yaml)
+  # Weighing trade-offs, non-trivial reasoning or algorithms, a second opinion
+  HARD:       4
 
-  # Very hard, multi-step reasoning, complex refactors
-  VERY_HARD:  3    # → Claude Sonnet 4.6 (Thinking)
+  # Very hard, long chains of reasoning, large rewrites or refactors
+  VERY_HARD:  3
 
-  # Expert level, architecture decisions, distributed systems
-  EXPERT:     2    # → Claude Opus 4.6 (Thinking)
+  # Strategy, hard reasoning, architecture
+  EXPERT:     2
 
-  # Core, handled directly by Claude Code orchestrator, never dispatched
-  CORE:       1    # → Claude Code
+  # The work you keep for your strongest model, never dispatched
+  CORE:       1

@@ -25,11 +25,18 @@ func writeOverride(t *testing.T, body string) string {
 	return home
 }
 
+// shipped is the routing_map in the shipped routing.yaml. The keys and numbers
+// are an API (--enum, --tier, hydra/<name>), so a comment edit must not move one.
+var shipped = map[string]int{
+	"GRUNT": 10, "TRIVIAL": 9, "SIMPLE": 8, "STANDARD": 7, "MODERATE": 6,
+	"COMPLEX": 5, "HARD": 4, "VERY_HARD": 3, "EXPERT": 2, "CORE": 1,
+}
+
 // allTen renders a complete routing_map, with overrides applied on top.
 func allTen(over map[string]int) string {
-	base := map[string]int{
-		"GRUNT": 10, "TRIVIAL": 9, "SIMPLE": 8, "STANDARD": 7, "MODERATE": 6,
-		"COMPLEX": 5, "HARD": 4, "VERY_HARD": 3, "EXPERT": 2, "CORE": 1,
+	base := make(map[string]int, len(shipped))
+	for k, v := range shipped {
+		base[k] = v
 	}
 	for k, v := range over {
 		base[k] = v
@@ -56,11 +63,27 @@ func TestEnumTiers_EmbeddedCopyIsUsable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embedded routing.yaml does not load: %v", err)
 	}
-	if got := tiers["SIMPLE"]; got != 8 {
-		t.Errorf("SIMPLE = %d, want 8 from the shipped routing.yaml", got)
+	for k, v := range shipped {
+		if tiers[k] != v {
+			t.Errorf("%s = %d, want %d from the shipped routing.yaml", k, tiers[k], v)
+		}
 	}
-	if len(tiers) != 10 {
-		t.Errorf("got %d enums, want the 10 routing.yaml declares", len(tiers))
+	if len(tiers) != len(shipped) {
+		t.Errorf("got %d enums, want the %d routing.yaml declares", len(tiers), len(shipped))
+	}
+}
+
+// A model pinned beside a level goes stale (HARD named a disabled one) and
+// reads as the only choice. Levels are described by the work, not a vendor.
+func TestRoutingYAML_NamesNoModelPerLevel(t *testing.T) {
+	raw, err := Read("", "routing.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, line := range strings.Split(string(raw), "\n") {
+		if strings.Contains(line, "→") && !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			t.Errorf("routing.yaml:%d pins a model to a level: %q", i+1, line)
+		}
 	}
 }
 
