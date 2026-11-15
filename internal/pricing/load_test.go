@@ -42,6 +42,7 @@ func stubOpenRouter(t *testing.T, models map[string]orPricing) *httptest.Server 
 func writeCacheFixture(t *testing.T, age time.Duration, models map[string]ModelPrice) {
 	t.Helper()
 	c := &priceCache{
+		Version:   cacheVersion,
 		FetchedAt: time.Now().UTC().Add(-age),
 		Source:    "fixture",
 		Models:    models,
@@ -297,7 +298,7 @@ func TestModelPriceAndTierPrice_ReportMissesAsMisses(t *testing.T) {
 func TestWriteCache_LeavesNoTempFile(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	c := &priceCache{FetchedAt: time.Now().UTC(), Source: "t", Models: map[string]ModelPrice{"m": {1, 2}}}
+	c := &priceCache{FetchedAt: time.Now().UTC(), Source: "t", Models: map[string]ModelPrice{"m": {InputPerMillion: 1, OutputPerMillion: 2}}}
 	if err := writeCache(c); err != nil {
 		t.Fatal(err)
 	}
@@ -365,4 +366,51 @@ func TestLoadFallbackTiers_OnDiskOverrideWinsAndCorruptIsAnError(t *testing.T) {
 		t.Errorf("loadFallbackTiers() = %v with unparsable YAML, want an error, "+
 			"an empty table silently prices everything at $0.00", tiers)
 	}
+}
+
+func TestOpenRouterFetch_ParsesCacheRates(t *testing.T) {
+	// Field names as the live /api/v1/models list sends them, read 2026-11-15.
+	stubOpenRouter(t, map[string]orPricing{
+		"cached/model": {Prompt: "0.000003", Completion: "0.000015",
+			InputCacheRead: "0.0000003", InputCacheWrite: "0.00000375"},
+		"plain/model": {Prompt: "0.000001", Completion: "0.000002"},
+	})
+	models, err := fetchFromOpenRouter(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := models["cached/model"]
+	if c.CacheReadPerMillion == nil || c.CacheWritePerMillion == nil {
+		t.Fatalf("cache rates missing: %+v", c)
+	}
+	if !near(*c.CacheReadPerMillion, 0.3) || !near(*c.CacheWritePerMillion, 3.75) {
+		t.Errorf("cache rates = %v/%v per 1M, want 0.3/3.75", *c.CacheReadPerMillion, *c.CacheWritePerMillion)
+	}
+	if p := models["plain/model"]; p.CacheReadPerMillion != nil || p.CacheWritePerMillion != nil {
+		t.Errorf("a model with no cache rates got some: %+v", p)
+	}
+}
+
+// A cache written before cacheVersion 1 has no version and no cache rates. It
+// must still price calls now, with the rates unknown, and be refreshed.
+func TestCache_OldFileLoadsWithoutCacheRates(t *testing.T) {
+	testutil.NewSandbox(t)
+	stubOpenRouter(t, map[string]orPricing{"fresh/model": {Prompt: "0.000001", Completion: "0.000002"}})
+	old := `{"fetched_at":"` + time.Now().UTC().Format(time.RFC3339) + `","source":"old",` +
+		`"models":{"old/model":{"input_per_mtok":3,"output_per_mtok":15}}}`
+	if err := os.MkdirAll(filepath.Dir(cachePath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cachePath(), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	p, ok := Load().ModelPrice("old/model")
+	if !ok || p.InputPerMillion != 3 {
+		t.Fatalf("old cache not used: %+v, %v", p, ok)
+	}
+	if p.CacheReadPerMillion != nil || p.CacheWritePerMillion != nil {
+		t.Errorf("old cache rates = %+v, want unknown", p)
+	}
+	drainBackgroundFetch(t, "fresh/model")
 }
