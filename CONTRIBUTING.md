@@ -301,6 +301,14 @@ It is `ci/benchdiff` routing `ci/benchdiff/suite.json` on the PR's base and
 head: the chosen head, tier, fallback depth and estimated cost per prompt, plus
 the SPRT outcome and whether its answer matches the expected one.
 
+The suite routes every kind of work in `internal/trust/kind.go`, each with
+and without `--kind`, and the comment counts changed prompts per kind. Some
+kind cells are seeded one point either side of the competence bar on the 95%
+lower bound, so a change to that gate moves a decision. Prompts with a `check`
+run `--check` (ground, match or cmd) on a scripted answer that passes or fails;
+a cmd check can only run `bench-check <want> {answer}`, a fake binary that
+passes when the two match.
+
 It needs no keys and no network. The environment is cleared, the CLI heads are
 fake binaries a dry run never executes, the local head is a fake Ollama on
 loopback, calibration is replayed from the suite, and the SPRT heads answer
