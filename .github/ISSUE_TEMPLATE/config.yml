@@ -3,3 +3,6 @@ contact_links:
   - name: Ask a question / start a discussion
     url: https://github.com/ankit373/hydra/discussions
     about: Use GitHub Discussions for questions, ideas, and general conversation.
+  - name: Report a security vulnerability
+    url: https://github.com/ankit373/hydra/security/advisories/new
+    about: Report it privately here, not in a public issue. See SECURITY.md.
