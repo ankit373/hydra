@@ -80,14 +80,16 @@ internal/trust/         ← Answer checking: calibration (LLR/D) + defect-cost +
                           a monotone correction of each source's stated probability, and an
                           accept threshold chosen on held-out runs. Both off below the floor.
 internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k + percolation κ (Molloy-Reed).
-internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection.
+internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection, over
+                          one resource key (file:, doc:<name>#<section>, record:<table>/<id>; a bare path is a file).
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
 internal/idle/          ← Compaction while a conversation is idle (#1475). Typed `State` with a ref back to
                           each source turn; `ExtractConstraints` copies rule lines byte for byte, no model.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
-                          needs (nil = every earlier one) and ready steps run together, at most 4;
+                          needs (nil = every earlier one) and ready steps run together, at most 4,
+                          except two that write the same a2a key (`--writes`) or graph-coupled files;
                           state saved before every step so a killed run resumes, plus a heartbeat file beside
                           the record: a status is only what the last writer knew, so a killed run
                           read as `running` for ever until `Observed()` resolved it against a live

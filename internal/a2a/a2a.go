@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -120,6 +122,7 @@ type Handoff struct {
 	Model       string   `json:"model,omitempty"`
 	Task        string   `json:"task"`
 	Files       []string `json:"files,omitempty"`
+	Resources   []string `json:"resources,omitempty"` // non-file writes as keys, see Key
 	Conventions string   `json:"conventions,omitempty"`
 	Context     string   `json:"context,omitempty"`
 	PriorOutput string   `json:"prior_output,omitempty"`
@@ -198,8 +201,8 @@ func (h *Handoff) PromptBlock(task string) string {
 }
 
 // ConflictsWith reports whether two handoffs are concurrent (neither
-// happened-before the other) AND touch at least one common file, the signature
-// of an unsynchronized edit collision.
+// happened-before the other) AND write at least one common file or resource,
+// the signature of an unsynchronized edit collision.
 func (h *Handoff) ConflictsWith(o *Handoff) bool {
 	if h == nil || o == nil {
 		return false
@@ -207,18 +210,50 @@ func (h *Handoff) ConflictsWith(o *Handoff) bool {
 	if h.Clock.Compare(o.Clock) != Concurrent {
 		return false
 	}
-	return overlaps(h.Files, o.Files)
+	return Overlap(h.keys(), o.keys())
 }
 
-func overlaps(a, b []string) bool {
-	set := make(map[string]bool, len(a))
-	for _, f := range a {
-		set[f] = true
+func (h *Handoff) keys() []string {
+	keys := make([]string, 0, len(h.Files)+len(h.Resources))
+	for _, f := range h.Files {
+		keys = append(keys, "file:"+f)
 	}
-	for _, f := range b {
-		if set[f] {
-			return true
+	return append(keys, h.Resources...)
+}
+
+var scheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]+:`)
+
+// Key is the one shape of a written resource: file:<path>, doc:<name>#<section>,
+// record:<table>/<id>, or any <scheme>:<value>. A bare path is a file. The
+// scheme needs two letters, so a Windows drive stays a path.
+func Key(s string) string {
+	if scheme.MatchString(s) {
+		return s
+	}
+	return "file:" + s
+}
+
+// Overlap reports whether two lists of resource keys share one. A whole
+// document overlaps each of its sections; two sections do not.
+func Overlap(a, b []string) bool {
+	for _, x := range a {
+		for _, y := range b {
+			if sameResource(Key(x), Key(y)) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func sameResource(x, y string) bool {
+	if x == y {
+		return true
+	}
+	if !strings.HasPrefix(x, "doc:") || !strings.HasPrefix(y, "doc:") {
+		return false
+	}
+	wx, sx, _ := strings.Cut(x, "#")
+	wy, sy, _ := strings.Cut(y, "#")
+	return wx == wy && (sx == "" || sy == "")
 }
