@@ -172,3 +172,40 @@ func TestBedrockStream_ToolUseAndReasoningAreNotTheAnswer(t *testing.T) {
 		t.Errorf("Output = %q, want only the text delta", resp.Output)
 	}
 }
+
+// Converse's inputTokens leaves out both cache counts, on either path.
+func TestBedrock_CacheTokensRead(t *testing.T) {
+	const usage = `{"inputTokens":40,"outputTokens":13,"cacheReadInputTokens":1500,"cacheWriteInputTokens":300}`
+	check := func(t *testing.T, resp *Response) {
+		t.Helper()
+		if resp.CacheReadTokens != 1500 || resp.CacheWriteTokens != 300 {
+			t.Errorf("cache read/write = %d/%d, want 1500/300", resp.CacheReadTokens, resp.CacheWriteTokens)
+		}
+		if resp.InputTokens != 1840 {
+			t.Errorf("InputTokens = %d, want 1840: inputTokens plus both cache counts", resp.InputTokens)
+		}
+	}
+
+	t.Run("stream", func(t *testing.T) {
+		newBedrockStub(t, [][]byte{
+			bedrockDelta("ok"),
+			encodeEventFrame(map[string]string{":message-type": "event", ":event-type": "metadata"},
+				[]byte(`{"usage":`+usage+`}`)),
+		})
+		resp, err := (&HTTPExecutor{}).ExecuteStream(context.Background(),
+			Request{Prompt: "p", Head: bedrockHead()}, func(string) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(t, resp)
+	})
+	t.Run("buffered", func(t *testing.T) {
+		bedrockBuffered(t, `{"stopReason":"end_turn","output":{"message":{"role":"assistant",`+
+			`"content":[{"text":"ok"}]}},"usage":`+usage+`}`)
+		resp, err := (&HTTPExecutor{}).Execute(context.Background(), Request{Prompt: "p", Head: bedrockHead()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(t, resp)
+	})
+}

@@ -248,11 +248,8 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 			Name  string          `json:"name"`
 			Input json.RawMessage `json:"input"`
 		} `json:"content"`
-		StopReason string `json:"stop_reason"`
-		Usage      struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
-		} `json:"usage"`
+		StopReason string         `json:"stop_reason"`
+		Usage      anthropicUsage `json:"usage"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
@@ -273,7 +270,9 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 
 	answer := httpResponse(req, joinTextBlocks(text),
 		firstNonEmpty(out.Model, model),
-		out.Usage.InputTokens, out.Usage.OutputTokens, start)
+		out.Usage.prompt(), out.Usage.OutputTokens, start)
+	answer.CacheReadTokens = out.Usage.CacheReadInputTokens
+	answer.CacheWriteTokens = out.Usage.CacheCreationInputTokens
 	answer.ToolCalls = calls
 	answer.FinishReason = anthropicFinish(out.StopReason)
 	return answer, nil
@@ -363,11 +362,8 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 			} `json:"content"`
 			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
-		UsageMetadata struct {
-			PromptTokenCount     int `json:"promptTokenCount"`
-			CandidatesTokenCount int `json:"candidatesTokenCount"`
-		} `json:"usageMetadata"`
-		ModelVersion string `json:"modelVersion"`
+		UsageMetadata geminiUsage `json:"usageMetadata"`
+		ModelVersion  string      `json:"modelVersion"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
@@ -379,6 +375,7 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 	text, calls := geminiParts(out.Candidates[0].Content.Parts)
 	answer := httpResponse(req, text, firstNonEmpty(out.ModelVersion, model),
 		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start)
+	answer.CacheReadTokens = out.UsageMetadata.CachedContentTokenCount
 	answer.ToolCalls = calls
 	answer.FinishReason = geminiFinish(out.Candidates[0].FinishReason, len(calls))
 	return answer, nil
@@ -634,11 +631,8 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 				Content []bedrockBlock `json:"content"`
 			} `json:"message"`
 		} `json:"output"`
-		StopReason string `json:"stopReason"`
-		Usage      struct {
-			InputTokens  int `json:"inputTokens"`
-			OutputTokens int `json:"outputTokens"`
-		} `json:"usage"`
+		StopReason string       `json:"stopReason"`
+		Usage      bedrockUsage `json:"usage"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
@@ -651,10 +645,25 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	answer := httpResponse(req, text, model, out.Usage.InputTokens, out.Usage.OutputTokens, start)
+	answer := httpResponse(req, text, model, out.Usage.prompt(), out.Usage.OutputTokens, start)
+	answer.CacheReadTokens = out.Usage.CacheReadInputTokens
+	answer.CacheWriteTokens = out.Usage.CacheWriteInputTokens
 	answer.ToolCalls = calls
 	answer.FinishReason = bedrockFinish(out.StopReason)
 	return answer, nil
+}
+
+// bedrockUsage is Converse's usage on both paths. Like Anthropic's, inputTokens
+// excludes the cached part, so prompt() adds it back.
+type bedrockUsage struct {
+	InputTokens           int `json:"inputTokens"`
+	OutputTokens          int `json:"outputTokens"`
+	CacheReadInputTokens  int `json:"cacheReadInputTokens"`
+	CacheWriteInputTokens int `json:"cacheWriteInputTokens"`
+}
+
+func (u bedrockUsage) prompt() int {
+	return u.InputTokens + u.CacheReadInputTokens + u.CacheWriteInputTokens
 }
 
 // bedrockURL addresses the Converse API, which is model-agnostic: one request
