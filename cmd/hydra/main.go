@@ -54,6 +54,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/recipe"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/rollup"
 	"github.com/ankit373/hydra/internal/runid"
@@ -1247,7 +1248,9 @@ func cmdDispatch() *cobra.Command {
 					PromptLength: len(prompt),
 					EnumTier:     enumTier,
 				})
+			rcp := recipe.Default(checks)
 			opts := dispatch.Options{
+				Recipe:         &rcp,
 				TierHint:       tierHint,
 				LocalOnly:      localOnly,
 				DryRun:         dryRun,
