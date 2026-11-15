@@ -181,6 +181,10 @@ type Options struct {
 	// candidate, and the answer is costed and logged but neither cached nor handed
 	// off. Nil keeps the first answer standing.
 	Escalate func(ctx context.Context, r *Result) (next bool, reason string)
+
+	// Retry builds the prompt a head asked after an escalation is sent, from the
+	// rejected answer and Escalate's reason. Nil resends prompt unchanged.
+	Retry func(prompt string, failed *Result, reason string) string
 }
 
 // Result is the outcome of a successful dispatch.
@@ -892,6 +896,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// last is the newest answer the Escalate hook passed over, which stands
 	// when no candidate is left to ask; the hook's owner chooses what to serve.
 	var last *Result
+	// What each head is sent, rebuilt by Retry once per rejected answer.
+	sentPrompt, sentParts := prompt, parts
 	// escalatedUSD is what the answers passed over cost; a further head is
 	// asked only within what they left of the ceiling.
 	var escalatedUSD float64
@@ -942,8 +948,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// re-parses the identical policy file from disk once per candidate.
 		decision, lerr := ledger.CheckAndRecordDispatch(ledger.Dispatch{
 			Agent: "hydra-dispatch", HeadID: h.ID, Resource: opts.Resource,
-			Content: prompt, Class: class,
-			Provenance: provenanceRecord(parts, h),
+			Content: sentPrompt, Class: class,
+			Provenance: provenanceRecord(sentParts, h),
 		})
 		refuse := func(code GateCode, detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
@@ -980,7 +986,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		if h.LocalOnly {
 			sink.Kind = egress.SinkLocal
 		}
-		if v := egress.Guard(parts, sink, strict); v.Decision != egress.Allow {
+		if v := egress.Guard(sentParts, sink, strict); v.Decision != egress.Allow {
 			refuse(GateEgress, "egress denied: "+v.Reason)
 			_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
 				Agent: "hydra-dispatch", Tool: h.ID, Resource: opts.Resource,
@@ -1040,7 +1046,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		if opts.MaxCostUSD > 0 {
-			estInputTokens := len(prompt) / 4
+			estInputTokens := len(sentPrompt) / 4
 			estCost := CallCost(d.pricing, h, estInputTokens, estInputTokens/2)
 			if limit := opts.MaxCostUSD - escalatedUSD; estCost > limit {
 				// Named only when the caller said where the ceiling came from.
@@ -1094,7 +1100,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			onDelta = func(d string) { emit(StreamDelta, d, "") }
 		}
 		resp, err := executor.Stream(ctx, exec, executor.Request{
-			Prompt:        prompt,
+			Prompt:        sentPrompt,
 			Head:          h,
 			MaxTokens:     opts.MaxTokens,
 			Temperature:   opts.Temperature,
@@ -1157,7 +1163,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		})
 		recordOutputFinding(r.OutputProvenance, h)
 		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
-		inRef, outRef := d.capturePayloads(prompt, opts, resp)
+		inRef, outRef := d.capturePayloads(sentPrompt, opts, resp)
 		d.captureRecall(span, prompt)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
@@ -1181,6 +1187,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			if next, reason := opts.Escalate(ctx, r); next {
 				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: "escalated: " + reason})
 				last, escalatedUSD, asked = r, escalatedUSD+r.CostUSD, append(asked, h)
+				// The rejected answer came from a head, so it is declared to the
+				// ledger and the egress gate like any other part.
+				if opts.Retry != nil {
+					sentPrompt = opts.Retry(prompt, r, reason)
+					sentParts = append(slices.Clip(parts), r.OutputProvenance, rules.ClassifyPart(egress.Part{
+						Content: reason, Source: egress.SourceHead, Origin: h.ID,
+					}))
+				}
 				continue
 			}
 		}
