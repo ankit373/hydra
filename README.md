@@ -857,6 +857,8 @@ hyctl dispatch --local "..."   # local models only, no API calls
 hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many models, judge best
 hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
 hyctl dispatch --check ground "..."     # check the answer against the context the prompt fenced
+hyctl dispatch --check match:labels=labels.txt "label this ticket: ..."   # the answer must be one of the labels
+hyctl dispatch --check 'cmd:check-jsonschema --schemafile invoice.json {file}' "pull the invoice fields as JSON"
 
 # Serve the router to anything that speaks OpenAI
 hyctl serve                             # OpenAI-compatible endpoint, loopback only
