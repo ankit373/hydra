@@ -20,12 +20,13 @@ import (
 // maxAnswerTokens bounds every arm's answer; the longest label is under 15 tokens.
 const maxAnswerTokens = 32
 
-// Registry is every suite at checkpoint A, by name. Each call builds a fresh one,
+// Registry is every suite, by name. Each call builds a fresh one,
 // since a suite learns its labels when it loads.
 func Registry() map[string]func() bench.Suite {
 	return map[string]func() bench.Suite{
 		"banking77": func() bench.Suite { return &banking77{labelSuite: labelSuite{name: "banking77"}} },
 		"clinc150":  func() bench.Suite { return &clinc150{labelSuite: labelSuite{name: "clinc150"}} },
+		"gsm8k":     func() bench.Suite { return gsm8k{} },
 	}
 }
 
