@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -105,26 +106,18 @@ func RunRlimitExec(argv []string) error {
 	// the same reasoning internal/executor's headEnv already applies to
 	// every credential a head does not need.
 	env := stripRlimitEnv(os.Environ())
-	run, err := prepareExec(target, argv, env)
+	run, err := prepareExec(target, argv, env, uint64(max(memMB, 0))*1024*1024)
 	if err != nil {
 		return fmt.Errorf("rlimit-exec: exec %q: %w", target, err)
 	}
 
-	// A Go process maps more than a small cap allows, so once the limit applies any
-	// new mapping is fatal. Everything that allocates is done above; GC stays off.
+	// The memory cap applies inside run, right before exec, and any new mapping after it is
+	// fatal. GC off and one P leave other threads no work that maps memory in that gap.
 	debug.SetGCPercent(-1)
+	runtime.GOMAXPROCS(1)
 
-	if memMB > 0 {
-		if err := setMemLimit(uint64(memMB) * 1024 * 1024); err != nil && !errors.Is(err, syscall.EPERM) {
-			// EPERM means an ambient limit (container, systemd unit) is
-			// already at or below what was asked: you cannot raise a
-			// hard limit without privilege, and an environment that
-			// refuses to raise it is, by construction, already at least
-			// this restrictive. Any other error is refused.
-			return fmt.Errorf("rlimit-exec: set memory limit: %w", err)
-		}
-	}
 	if cpuSec > 0 {
+		// EPERM: an ambient hard limit is already at or below this one.
 		limit := &syscall.Rlimit{Cur: uint64(cpuSec), Max: uint64(cpuSec)}
 		if err := syscall.Setrlimit(syscall.RLIMIT_CPU, limit); err != nil && !errors.Is(err, syscall.EPERM) {
 			return fmt.Errorf("rlimit-exec: set cpu limit: %w", err)
