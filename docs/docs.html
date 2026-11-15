@@ -88,7 +88,7 @@
 .sub p{margin:0;color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);max-width:76ch;}
 .sub > :not(.lbl) + *{margin-top:var(--hy-space-3);}
 .sub p b{color:var(--hy-color-text-default);font-weight:600;}
-.fx{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);font-size:var(--hy-font-size-md);background:color-mix(in srgb,var(--hy-color-accent-strong) 8%,transparent);padding:1px var(--hy-space-1);border-radius:5px;}
+.fx{overflow-wrap:anywhere;font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);font-size:var(--hy-font-size-md);background:color-mix(in srgb,var(--hy-color-accent-strong) 8%,transparent);padding:1px var(--hy-space-1);border-radius:5px;}
 pre{margin:var(--hy-space-2) 0 0;background:color-mix(in srgb,var(--hy-color-surface-raised) 70%,transparent);border:1px solid var(--hy-color-border-subtle);border-radius:11px;padding:var(--hy-space-3) var(--hy-space-4);
   overflow-x:auto;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);line-height:1.7;color:var(--hy-color-text-default);}
 pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-default);} pre .k{color:var(--hy-color-accent-secondary);} pre .s{color:var(--hy-color-status-success);}
@@ -192,6 +192,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 .ladder{width:100%;border-collapse:collapse;margin-top:var(--hy-space-3);font-size:var(--hy-font-size-md);display:block;overflow-x:auto;}
 .ladder th,.ladder td{text-align:left;padding:var(--hy-space-2) var(--hy-space-3);border-bottom:1px solid var(--hy-color-border-subtle);}
 .ladder th{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1px;text-transform:uppercase;color:var(--hy-color-text-subtle);font-weight:500;}
+.ladder td{overflow-wrap:anywhere;}
 .ladder td.k{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-secondary);}
 .ladder .sc{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);}
 
