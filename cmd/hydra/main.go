@@ -893,6 +893,7 @@ func cmdDispatch() *cobra.Command {
 		// trust / SPRT flags
 		confidence   float64
 		domain       string
+		kind         string
 		file         string
 		graphPath    string
 		irreversible bool
@@ -911,6 +912,17 @@ func cmdDispatch() *cobra.Command {
 			// (most expensive) head instead of being reported (#501).
 			if err := knownEnum(enumKey); err != nil {
 				return err
+			}
+			// Checked here for the same reason: a bad --kind must fail before routing.
+			if cmd.Flags().Changed("kind") {
+				if cmd.Flags().Changed("domain") {
+					return errors.New("--kind and --domain both name the routing cell; give one")
+				}
+				k, err := trust.ParseKind(kind)
+				if err != nil {
+					return err
+				}
+				domain = k
 			}
 			// A dispatch writes nothing to disk, so the workspace verifier it
 			// used to run judged the working tree and never saw the answer: the
@@ -963,7 +975,7 @@ func cmdDispatch() *cobra.Command {
 			// domain, so a --file run has to look up that same cell rather than
 			// "default", which nothing fills (#785). An explicit --domain always
 			// wins; this only supplies the one the writers would have used.
-			if file != "" && !cmd.Flags().Changed("domain") {
+			if file != "" && !cmd.Flags().Changed("domain") && !cmd.Flags().Changed("kind") {
 				if d := trust.DomainForFile(file); d != trust.DefaultDomain {
 					domain = d
 				}
@@ -1359,7 +1371,8 @@ func cmdDispatch() *cobra.Command {
 	// The real value, not a claim about it in the description: the flag defaulted
 	// to "" while --help promised "default", so the refusal quoted an empty
 	// domain and printed two commands ending in a bare `--domain ` (#732).
-	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain: ranks heads on what they got right at this kind of work, and keys --confidence")
+	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain: ranks heads on what they got right at this kind of work, and keys --confidence. Prefer --kind")
+	cmd.Flags().StringVar(&kind, "kind", "", "kind of work, <kind>[.<area>], routes and keys --confidence on that record: "+strings.Join(trust.Kinds, ", "))
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
