@@ -206,17 +206,21 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           of zero questions is a reading (#1110).
   policy.yaml           ← Execution policy in two sections: general settings for any kind
                           of work (cost, time, retries) and editing files (edit format,
-                          validators, worktrees). Three of its fields take effect, in both
+                          validators, worktrees). Five of its fields take effect, in both
                           `hyctl edit` and `hyctl parallel`: diff_size_cap_pct rolls an
                           over-large edit back, max_cost_usd refuses a head before it runs,
-                          max_wall_seconds deadlines the dispatch (#424, #769). All three are
-                          enforced from `internal/policy`'s caps.go, so a refusal reads the
-                          same whichever command hit it. max_cost_usd also reaches `hyctl
+                          max_wall_seconds deadlines the dispatch (#424, #769), and
+                          max_memory_mb / max_cpu_seconds cap a subprocess head through
+                          `internal/sandbox`. The first three are enforced from
+                          `internal/policy`'s caps.go, so a refusal reads the same
+                          whichever command hit it. max_cost_usd also reaches `hyctl
                           dispatch`, the command that actually spends the money, where it had
                           no ceiling at all and the denial-of-wallet guard had never once
                           fired; `--max-cost` overrides it, and `--max-cost 0` lifts it for one
-                          run (#838). The rest are declared and read by
-                          nothing. `hyctl security` reports which, derived rather than hardcoded.
+                          run (#838). The rest are declared and read by nothing. The
+                          `enforced:"true"` tag on FilePolicy marks the read fields, a test
+                          checks the tags against the callers, and `hyctl security` reports
+                          them from the tags.
   workspace.yaml        ← workspace roots, validators, and validator_env (extra variables a check may see).
 design/                 ← The one design-token source (DTCG) for the website, desktop app and TUI.
                           `cd design && npm ci && npm run build` regenerates docs/assets/tokens.css,

@@ -3,6 +3,7 @@
 package security
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -34,9 +35,8 @@ func findControl(t *testing.T, cs []Control, name string) Control {
 // two releases understating it. The expectation is changed on purpose, and the
 // caps it reports on are now enforced (#424).
 //
-// `limited`, not `active`: three of the twenty policy fields take effect. Both
-// edit commands enforce those three now (#769), so what remains limited is the
-// seventeen fields nothing reads, not which command they reach.
+// `limited`, not `active`: only the fields tagged enforced take effect, so what
+// remains limited is the fields nothing reads, not which command they reach.
 func TestControls_FilePolicyIsEnforcedButPartial(t *testing.T) {
 	testutil.NewSandbox(t)
 
@@ -63,7 +63,8 @@ func TestControls_FilePolicyIsEnforcedButPartial(t *testing.T) {
 		t.Errorf("Detail still says hyctl edit ignores the policy, which it no "+
 			"longer does: %s", c.Detail)
 	}
-	for _, cap := range enforcedCaps {
+	// max_memory_mb and max_cpu_seconds were left out of a hand-kept list.
+	for _, cap := range append(policy.EnforcedKeys(), "max_memory_mb", "max_cpu_seconds") {
 		if !strings.Contains(c.Detail, cap) {
 			t.Errorf("Detail does not name the enforced cap %q: %s", cap, c.Detail)
 		}
@@ -102,29 +103,16 @@ func TestControls_FilePolicyNamesAConditionThatCanNeverMatch(t *testing.T) {
 	}
 }
 
-// The hand-maintained half of this control is what drifted, so both halves are
-// guarded: every name in enforcedCaps must be a real policy.yaml key, and the
-// count it is compared against comes off the struct so a new FilePolicy field
-// cannot silently join the "enforced" side of the ratio.
-func TestEnforcedCaps_AreRealPolicyFields(t *testing.T) {
-	tags := map[string]bool{}
-	rt := reflect.TypeOf(policy.FilePolicy{})
-	for i := range rt.NumField() {
-		if tag := rt.Field(i).Tag.Get("yaml"); tag != "" {
-			tags[tag] = true
-		}
+// The ratio counts policy.yaml keys only, so MatchedRules (yaml:"-") is not a field.
+func TestControls_FilePolicyCountsYAMLKeys(t *testing.T) {
+	testutil.NewSandbox(t)
+	c := findControl(t, Controls(nil, PolicyAudit{}, ledger.ChainResult{}), "File-policy caps")
+	want := fmt.Sprintf("%d of %d policy fields", len(policy.EnforcedKeys()), len(policy.Keys()))
+	if !strings.Contains(c.Detail, want) {
+		t.Errorf("Detail = %q, want %q", c.Detail, want)
 	}
-	for _, cap := range enforcedCaps {
-		if !tags[cap] {
-			t.Errorf("enforcedCaps names %q, which is not a policy.FilePolicy yaml key", cap)
-		}
-	}
-	if policyFieldCount() != rt.NumField() {
-		t.Errorf("policyFieldCount() = %d, want %d", policyFieldCount(), rt.NumField())
-	}
-	if len(enforcedCaps) >= policyFieldCount() {
-		t.Errorf("enforcedCaps claims %d of %d fields; that would mean everything is enforced",
-			len(enforcedCaps), policyFieldCount())
+	if len(policy.Keys()) >= reflect.TypeFor[policy.FilePolicy]().NumField() {
+		t.Errorf("Keys() = %v, want only real policy.yaml keys", policy.Keys())
 	}
 }
 
