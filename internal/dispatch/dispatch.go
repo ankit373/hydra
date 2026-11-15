@@ -546,13 +546,19 @@ func (d *Dispatcher) CapturesPayloads() bool {
 	return d.cfg != nil && d.cfg.CapturePayloads
 }
 
-// EstimateCost is swarm.PricingReader's tier price, which swarm keeps until
-// #1242 routes it through CallCost; nothing in this package reads it.
+// EstimateCost is swarm.PricingReader's tier price for its pre-run estimates;
+// nothing in this package reads it.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	if d.pricing == nil {
 		return 0
 	}
 	return d.pricing.EstimateCost(tier, inputTokens, outputTokens)
+}
+
+// PriceCall is CallCost on this dispatcher's pricing, so a swarm attempt is
+// priced exactly as a dispatch of the same call.
+func (d *Dispatcher) PriceCall(h provider.Head, u pricing.Usage) float64 {
+	return CallCost(d.pricing, h, u)
 }
 
 // probeCacheTTL bounds how long a machine probe is reused across calls to New
@@ -1064,7 +1070,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		if opts.MaxCostUSD > 0 {
 			estInputTokens := len(sentPrompt) / 4
-			estCost := CallCost(d.pricing, h, estInputTokens, estInputTokens/2)
+			estCost := CallCost(d.pricing, h, pricing.Usage{In: estInputTokens, Out: estInputTokens / 2})
 			if limit := opts.MaxCostUSD - escalatedUSD; estCost > limit {
 				// Named only when the caller said where the ceiling came from.
 				// Defaulting to a source would mean printing "--max-cost" at an
@@ -1174,7 +1180,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		d.health.Pass(h.ID)
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Gates: gates, Response: resp,
 			Domain: domain, Scores: scores, Objective: opts.Objective, SpanID: span,
-			CostUSD: CallCost(d.pricing, h, resp.InputTokens, resp.OutputTokens)}
+			CostUSD: CallCost(d.pricing, h, usageOf(resp))}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
 		})
@@ -1802,7 +1808,7 @@ func headPrice(db *pricing.DB) rank.Price {
 		if !modelKnown && !tierKnown {
 			return 0, false
 		}
-		return CallCost(db, h, nominalTokens, nominalTokens/2), true
+		return CallCost(db, h, pricing.Usage{In: nominalTokens, Out: nominalTokens / 2}), true
 	}
 }
 
@@ -2086,11 +2092,17 @@ func appendJSONL(path string, entry map[string]any) error {
 
 // CallCost prices one call to h: by its model when pricing knows it, else by its
 // tier. The one derivation, so the price the router ordered on is the one logged.
-func CallCost(db *pricing.DB, h provider.Head, inputTokens, outputTokens int) float64 {
+func CallCost(db *pricing.DB, h provider.Head, u pricing.Usage) float64 {
 	if db == nil {
 		return 0
 	}
-	return db.CostForModel(h.Meta["model"], rank.UITier(h), inputTokens, outputTokens)
+	return db.CostForUsage(h.Meta["model"], rank.UITier(h), u)
+}
+
+// usageOf is what a response reports it used, cache reads and writes included.
+func usageOf(r *executor.Response) pricing.Usage {
+	return pricing.Usage{In: r.InputTokens, Out: r.OutputTokens,
+		CacheRead: r.CacheReadTokens, CacheWrite: r.CacheWriteTokens}
 }
 
 // dispatchMeta is the model-parameter side of a span: what was requested and

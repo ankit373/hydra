@@ -1123,7 +1123,9 @@ and keeps one `registry-drift` issue open while a model is gone or retiring, a p
 `hyctl pricing list [filter] [--json]` shows all known models.
 `DB.CostForUsage` prices one call from its `Usage`: uncached input, cache reads and cache writes
 each at their own rate. A cache rate nobody published is nil, and those tokens price at the input
-rate, never at a guessed discount. `CostForModel` is the no-cache case of it.
+rate, never at a guessed discount. `CostForModel` is the no-cache case of it. `dispatch.CallCost`
+prices every finished call from its response usage through it, and a swarm attempt through the same
+function (`Dispatcher.PriceCall`), so the two cannot disagree.
 
 ### Swarm dispatch
 ```

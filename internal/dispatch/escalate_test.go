@@ -86,9 +86,15 @@ func answeringHead(t *testing.T, id, answer string, capScore int) provider.Head 
 // pricedModel writes a fresh pricing cache naming one model, so Load reads it and fetches nothing.
 func pricedModel(t *testing.T, model string, inPerM, outPerM float64) *pricing.DB {
 	t.Helper()
+	return pricedModels(t, map[string]map[string]float64{
+		model: {"input_per_mtok": inPerM, "output_per_mtok": outPerM}})
+}
+
+// pricedModels writes a current pricing cache holding exactly these rates.
+func pricedModels(t *testing.T, models map[string]map[string]float64) *pricing.DB {
+	t.Helper()
 	raw, err := json.Marshal(map[string]any{
-		"fetched_at": time.Now().UTC(), "source": "test",
-		"models": map[string]any{model: map[string]float64{"input_per_mtok": inPerM, "output_per_mtok": outPerM}},
+		"version": 1, "fetched_at": time.Now().UTC(), "source": "test", "models": models,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -127,13 +133,13 @@ func TestCallCost(t *testing.T) {
 	db := pricedModel(t, "test/priced", 2, 4)
 	priced := provider.Head{ID: "p", CapScore: 90, Meta: map[string]string{"model": "test/priced"}}
 	tierOnly := provider.Head{ID: "q", CapScore: 90}
-	if got := CallCost(db, priced, 1_000_000, 1_000_000); got != 6 {
+	if got := CallCost(db, priced, pricing.Usage{In: 1_000_000, Out: 1_000_000}); got != 6 {
 		t.Errorf("model-priced call cost %v, want 6 from the model's own rates", got)
 	}
-	if got, want := CallCost(db, tierOnly, 1000, 500), db.EstimateCost(rank.UITier(tierOnly), 1000, 500); got != want {
+	if got, want := CallCost(db, tierOnly, pricing.Usage{In: 1000, Out: 500}), db.EstimateCost(rank.UITier(tierOnly), 1000, 500); got != want {
 		t.Errorf("a head naming no model cost %v, want its tier price %v", got, want)
 	}
-	if got := CallCost(nil, priced, 1000, 500); got != 0 {
+	if got := CallCost(nil, priced, pricing.Usage{In: 1000, Out: 500}); got != 0 {
 		t.Errorf("no pricing DB priced a call at %v, want 0", got)
 	}
 }
@@ -166,7 +172,7 @@ func TestOneCostValue_RowRunlogAndResultAgree(t *testing.T) {
 		}
 	}
 	row, _ := rows[0]["est_cost_usd"].(float64)
-	want := CallCost(d.pricing, h, 1000, 500)
+	want := CallCost(d.pricing, h, pricing.Usage{In: 1000, Out: 500})
 	if res.CostUSD != want || row != want || span != want || want == d.EstimateCost(rank.UITier(h), 1000, 500) {
 		t.Errorf("Result.CostUSD=%v, cost.jsonl est_cost_usd=%v, runlog CostUSD=%v: three numbers for one call (model price %v)",
 			res.CostUSD, row, span, want)

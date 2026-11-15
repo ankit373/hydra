@@ -11,17 +11,20 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/registry"
 )
 
-// PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
-// re-parse pricing.yaml itself.
+// PricingReader abstracts the cost lookup so swarm doesn't need to re-parse
+// pricing.yaml itself.
 type PricingReader interface {
 	// EstimateCost returns the estimated USD cost for the given tier + token counts.
 	EstimateCost(tier int, inputTokens, outputTokens int) float64
+	// PriceCall prices a finished call from its usage, as dispatch.CallCost does.
+	PriceCall(h provider.Head, u pricing.Usage) float64
 }
 
 // estimateFanoutCost estimates the total USD cost of firing every selected
@@ -67,7 +70,8 @@ func attemptCost(a Attempt, pr PricingReader) float64 {
 	if pr == nil || a.Status != StatusOK {
 		return 0
 	}
-	return round6(pr.EstimateCost(rank.UITier(a.Head), a.InputTokens, a.OutputTokens))
+	return round6(pr.PriceCall(a.Head, pricing.Usage{In: a.InputTokens, Out: a.OutputTokens,
+		CacheRead: a.CacheReadTokens, CacheWrite: a.CacheWriteTokens}))
 }
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
