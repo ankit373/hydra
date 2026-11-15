@@ -223,3 +223,29 @@ func TestBenchRun_ScoresAGSM8KArm(t *testing.T) {
 		t.Fatalf("items.jsonl:\n%s", rows)
 	}
 }
+
+// An extraction arm is graded field by field: only the item whose gold the answer matches passes.
+func TestBenchRun_ScoresAnExtractionArm(t *testing.T) {
+	files := []string{"validate_AddToPlaylist.json", "validate_BookRestaurant.json", "validate_GetWeather.json",
+		"validate_PlayMusic.json", "validate_RateBook.json", "validate_SearchCreativeWork.json", "validate_SearchScreeningEvent.json"}
+	answer := `{"city": "Oslo", "timeRange": "tomorrow"}`
+	args, exec, results := benchSuiteFixture(t, "snips", files, answer, "1.0")
+	out, _, err := run(t, args...)
+	if err != nil || exec.calls.Load() == 0 {
+		t.Fatalf("run: %v after %d calls\n%s", err, exec.calls.Load(), out)
+	}
+	dirs, _ := os.ReadDir(results)
+	if len(dirs) != 1 {
+		t.Fatalf("results = %v", dirs)
+	}
+	b, err := os.ReadFile(filepath.Join(results, dirs[0].Name(), "items.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Six test items, two arms: only GetWeather/0 (city Oslo, timeRange tomorrow) passes, on both arms.
+	rows := string(b)
+	if strings.Count(rows, `"passed":true`) != 2 || strings.Count(rows, `"decision":"accept"`) != 12 ||
+		!strings.Contains(rows, `"detail":"field \"artist\" is missing, gold \"Miles Davis\""`) {
+		t.Fatalf("items.jsonl:\n%s", rows)
+	}
+}

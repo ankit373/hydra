@@ -102,10 +102,8 @@ type fieldsOracle fieldsBody
 
 // Verify fails on the first broken field: not JSON, missing, wrong type, or not in the source.
 func (o fieldsOracle) Verify(_ context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
-	dec := json.NewDecoder(strings.NewReader(unfence(candidate)))
-	dec.UseNumber()
-	var got map[string]any
-	if err := dec.Decode(&got); err != nil || got == nil {
+	got, ok := DecodeObject(candidate)
+	if !ok {
 		return oracle.Verdict{Detail: "the answer is not a JSON object"}, nil
 	}
 	src := source{text: fold(o.Source), numbers: numbersIn(o.Source)}
@@ -129,6 +127,57 @@ func (o fieldsOracle) Verify(_ context.Context, candidate string, _ trust.Task) 
 	}
 	return oracle.Verdict{Passed: true}, nil
 }
+
+// DecodeObject reads an answer as one JSON object, from inside its first ``` block
+// if it has one, with numbers kept as written.
+func DecodeObject(answer string) (map[string]any, bool) {
+	dec := json.NewDecoder(strings.NewReader(unfence(answer)))
+	dec.UseNumber()
+	var got map[string]any
+	if err := dec.Decode(&got); err != nil || got == nil {
+		return nil, false
+	}
+	return got, true
+}
+
+// SameValue compares two field values the way the fields check reads them: numbers
+// by value, so "1,200" is 1200, text folded for case and spacing, lists item by item.
+func SameValue(a, b any) bool {
+	if la, ok := a.([]any); ok {
+		lb, ok := b.([]any)
+		return ok && slices.EqualFunc(la, lb, SameValue)
+	}
+	ta, tb := valueText(a), valueText(b)
+	if na, okA := number(ta); okA {
+		nb, okB := number(tb)
+		return okB && na == nb
+	}
+	return fold(ta) == fold(tb)
+}
+
+func valueText(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case json.Number:
+		return x.String()
+	case bool:
+		return strconv.FormatBool(x)
+	}
+	return fmt.Sprint(v)
+}
+
+// number reads s as one whole number with thousands commas allowed, nothing around it.
+func number(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	if !wholeNumber.MatchString(s) {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", ""), 64)
+	return f, err == nil
+}
+
+var wholeNumber = regexp.MustCompile(`^` + sourceNumber.String() + `$`)
 
 // unfence takes the inside of the first ``` block, if the answer has one.
 func unfence(s string) string {

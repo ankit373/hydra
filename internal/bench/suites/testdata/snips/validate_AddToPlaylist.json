@@ -1,0 +1,32 @@
+{
+ "AddToPlaylist": [
+  {
+   "data": [
+    {
+     "text": "add "
+    },
+    {
+     "text": "this track",
+     "entity": "music_item"
+    },
+    {
+     "text": " to "
+    },
+    {
+     "text": "my",
+     "entity": "playlist_owner"
+    },
+    {
+     "text": " "
+    },
+    {
+     "text": "Road Trip",
+     "entity": "playlist"
+    },
+    {
+     "text": " playlist"
+    }
+   ]
+  }
+ ]
+}

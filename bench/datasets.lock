@@ -41,3 +41,43 @@ licence_verified = "https://github.com/openai/grade-school-math/blob/3101c7d5072
 name = "test.jsonl"
 url = "https://raw.githubusercontent.com/openai/grade-school-math/3101c7d5072418e28b9008a6636bde82a006892c/grade_school_math/data/test.jsonl"
 sha256 = "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14"
+
+[snips]
+revision = "sonos/nlu-benchmark@b86ac7f1577868c42158d0dec77db50956046696"
+licence = "CC0-1.0"
+licence_verified = "https://github.com/sonos/nlu-benchmark/blob/b86ac7f1577868c42158d0dec77db50956046696/LICENSE, 2026-11-16"
+
+[[snips.file]]
+name = "validate_AddToPlaylist.json"
+url = "https://raw.githubusercontent.com/sonos/nlu-benchmark/b86ac7f1577868c42158d0dec77db50956046696/2017-06-custom-intent-engines/AddToPlaylist/validate_AddToPlaylist.json"
+sha256 = "14cc9ee49ae477b1452632a6e835498cf4c32da397b16967c82abb3e50403e83"
+
+[[snips.file]]
+name = "validate_BookRestaurant.json"
+url = "https://raw.githubusercontent.com/sonos/nlu-benchmark/b86ac7f1577868c42158d0dec77db50956046696/2017-06-custom-intent-engines/BookRestaurant/validate_BookRestaurant.json"
+sha256 = "4f7258ccc768b777b2eb8916532db9aa50dbd058ddf1ffb0dc59218963e7442a"
+
+[[snips.file]]
+name = "validate_GetWeather.json"
+url = "https://raw.githubusercontent.com/sonos/nlu-benchmark/b86ac7f1577868c42158d0dec77db50956046696/2017-06-custom-intent-engines/GetWeather/validate_GetWeather.json"
+sha256 = "60c095e193655d6ca92be220fed3926ca25e18cd70c85664145efe25d80993af"
+
+[[snips.file]]
+name = "validate_PlayMusic.json"
+url = "https://raw.githubusercontent.com/sonos/nlu-benchmark/b86ac7f1577868c42158d0dec77db50956046696/2017-06-custom-intent-engines/PlayMusic/validate_PlayMusic.json"
+sha256 = "922212775e26259d5bffeaf79b6048d070ca017d229df00b2cc9800f71c75d20"
+
+[[snips.file]]
+name = "validate_RateBook.json"
+url = "https://raw.githubusercontent.com/sonos/nlu-benchmark/b86ac7f1577868c42158d0dec77db50956046696/2017-06-custom-intent-engines/RateBook/validate_RateBook.json"
+sha256 = "c1f8b4114da0bb5e8afd78a8062766e18b2eabb0e717539598db01b09d04619b"
+
+[[snips.file]]
+name = "validate_SearchCreativeWork.json"
+url = "https://raw.githubusercontent.com/sonos/nlu-benchmark/b86ac7f1577868c42158d0dec77db50956046696/2017-06-custom-intent-engines/SearchCreativeWork/validate_SearchCreativeWork.json"
+sha256 = "8a5e830eddb185d3e4a9d27ded140a145d04766bdce0e58834676ede32d13e77"
+
+[[snips.file]]
+name = "validate_SearchScreeningEvent.json"
+url = "https://raw.githubusercontent.com/sonos/nlu-benchmark/b86ac7f1577868c42158d0dec77db50956046696/2017-06-custom-intent-engines/SearchScreeningEvent/validate_SearchScreeningEvent.json"
+sha256 = "81e1445713e03c7c3e615353c5f3fee05f369fe9834100b9b9735900a96b9498"
