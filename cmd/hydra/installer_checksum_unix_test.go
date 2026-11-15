@@ -18,8 +18,9 @@ import (
 )
 
 // shellTools are what install.sh and install-app.sh call, minus uname and
-// curl (faked) and the sha tools (added only when a case wants them).
-var shellTools = []string{"mktemp", "rm", "grep", "sed", "awk", "tar", "chmod", "mkdir", "mv", "cat", "cp", "find", "basename", "ln", "head"}
+// curl (faked) and the sha tools (added only when a case wants them). GNU tar
+// needs gzip on PATH to read .tar.gz.
+var shellTools = []string{"mktemp", "rm", "grep", "sed", "awk", "tar", "chmod", "mkdir", "mv", "cat", "cp", "find", "basename", "ln", "head", "gzip"}
 
 // scriptRun is one run of an installer against a local fake release.
 type scriptRun struct {
