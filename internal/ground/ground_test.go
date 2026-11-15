@@ -321,3 +321,58 @@ func TestNames_ReadsInitialsAndParticles(t *testing.T) {
 		t.Errorf("names = %q, want %q", got, want)
 	}
 }
+
+const speech = `The minister said the plan was "a fair deal for every   household" and
+called the critics “wrong on the numbers”. Later she added: "We will not move ... on this."`
+
+// Quote marks say the source said exactly this, so one changed word is a claim
+// the source does not support, even with no number or symbol in it.
+func TestCheck_FlagsAMisquote(t *testing.T) {
+	for _, answer := range []string{
+		`She called it "a fair deal for most households".`,
+		`She said the critics were “wrong about the numbers”.`,
+		`She said "We will not budge ... on this."`,
+	} {
+		v := Check(answer, prompt(speech))
+		if v.Grounded || len(v.Unsupported) != 1 || v.Unsupported[0].Kind != KindQuote {
+			t.Errorf("%q: grounded=%v unsupported=%+v, want one quote claim", answer, v.Grounded, v.Unsupported)
+		}
+	}
+}
+
+// Case, spacing, a line break, an ellipsis and a closing full stop are not
+// wording, and curly and straight quotes are the same marks.
+func TestCheck_QuoteIgnoresCaseAndSpacing(t *testing.T) {
+	for _, answer := range []string{
+		`She called the plan "A Fair Deal for every household."`,
+		`She said "a fair deal
+for every household" and called critics "wrong on the numbers".`,
+		`She said “We will not move ... on this.”`,
+	} {
+		if v := Check(answer, prompt(speech)); !v.Grounded || v.Claims == 0 {
+			t.Errorf("%q: grounded=%v claims=%d unsupported=%+v", answer, v.Grounded, v.Claims, v.Unsupported)
+		}
+	}
+}
+
+// Under three words a quote is a term set off, not a claim about wording, and
+// single quotes are skipped because apostrophes make them unpairable.
+func TestCheck_ShortQuoteIsNotAClaim(t *testing.T) {
+	v := Check(`She called it a "fair plan" and the 'best deal we have had'.`, prompt(speech))
+	if v.Claims != 0 {
+		t.Errorf("claims=%d unsupported=%+v, want none", v.Claims, v.Unsupported)
+	}
+}
+
+// In source code a comment quotes made-up speech and terms, so quotes are not
+// claims there; the numbers and symbols beside them still are.
+func TestCheck_QuotesInCodeAreNotClaims(t *testing.T) {
+	v := Check(`UITier says "the free floor is local" and returns 12.`, prompt(source))
+	if len(v.Unsupported) != 1 || v.Unsupported[0].Kind != KindNumber {
+		t.Errorf("unsupported = %+v, want only the number", v.Unsupported)
+	}
+	fenced := "Summarise this.\n\n" + util.WrapUntrusted("CONTEXT", "Run it:\n```\nmake test\n```")
+	if v := Check(`It says "run every test twice".`, fenced); v.Claims != 0 {
+		t.Errorf("a quote against a fenced code block was a claim: %+v", v.Unsupported)
+	}
+}
