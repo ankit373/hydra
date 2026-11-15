@@ -886,6 +886,7 @@ func cmdDispatch() *cobra.Command {
 		production   bool
 		verifyRun    bool
 		checks       []string
+		maxEsc       int
 	)
 
 	cmd := &cobra.Command{
@@ -939,6 +940,9 @@ func cmdDispatch() *cobra.Command {
 			answerChecks, err := parseChecks(checks, prompt)
 			if err != nil {
 				return err
+			}
+			if maxEsc < 0 {
+				return fmt.Errorf("--max-escalations must be 0 or more, got %d", maxEsc)
 			}
 			ctx := cmd.Context()
 
@@ -1274,8 +1278,16 @@ func cmdDispatch() *cobra.Command {
 			// Streamed on a terminal only. A pipe keeps the buffered rendering
 			// below byte for byte, so nothing that parses hyctl's output can be
 			// broken by an interactive nicety. --dry-run runs no head at all.
+			// Every --check judges inside dispatch, so a failed one can ask a stronger head.
+			if !cmd.Flags().Changed("max-escalations") {
+				maxEsc = policy.Escalations(fp)
+			}
+			esc := checkRule(&opts, answerChecks, maxEsc)
+
 			var sr *streamRenderer
-			if !dryRun && !noStream && isatty.IsTerminal(os.Stdout.Fd()) {
+			// A streamed answer cannot be taken back once a check rejects it.
+			streamable := opts.Retry == nil
+			if !dryRun && !noStream && streamable && isatty.IsTerminal(os.Stdout.Fd()) {
 				w, h := terminalSize()
 				sr = newStreamRenderer(stdout, runID, w, h, d.CapturesPayloads())
 				opts.OnStream = sr.Handle
@@ -1328,7 +1340,7 @@ func cmdDispatch() *cobra.Command {
 			// Every way the answer reaches the screen ends here, so a check runs on all of them.
 			finish := func() error {
 				printOutputWarning(result.OutputProvenance)
-				runChecks(ctx, answerChecks, result, prompt, enumKey, domain, runID)
+				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID)
 				return nil
 			}
 			if sr != nil && sr.Streamed() {
@@ -1389,7 +1401,9 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use --check, `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
 	cmd.Flags().StringArrayVar(&checks, "check", nil, "check the answer itself, repeatable: ground (every number and identifier appears in the prompt's fenced context), "+
-		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file})")
+		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file}). "+
+		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error")
+	cmd.Flags().IntVar(&maxEsc, "max-escalations", 1, "with --check, how many stronger heads a failed check may ask; default from policy.yaml max_retries and escalate_on_fail, 0 turns it off")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")

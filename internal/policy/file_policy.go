@@ -41,8 +41,8 @@ type FilePolicy struct {
 	ValidateStrict      bool     `yaml:"validate_strict"`
 	TestLoop            bool     `yaml:"test_loop"`
 	LintLoop            bool     `yaml:"lint_loop"`
-	MaxRetries          int      `yaml:"max_retries"`
-	EscalateOnFail      bool     `yaml:"escalate_on_fail"`
+	MaxRetries          int      `yaml:"max_retries" enforced:"true"`
+	EscalateOnFail      bool     `yaml:"escalate_on_fail" enforced:"true"`
 	RubberDuck          bool     `yaml:"rubber_duck"`
 	ConfidenceThreshold float64  `yaml:"confidence_threshold"`
 	DiffSizeCapPct      int      `yaml:"diff_size_cap_pct" enforced:"true"`

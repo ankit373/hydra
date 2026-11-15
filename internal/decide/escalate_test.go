@@ -95,6 +95,9 @@ func TestOnFail_RecordsEveryJudgedAnswer(t *testing.T) {
 		{Head: "strong", SpanID: "s2", Check: "verifier:cmd:a", Checked: true, Detail: "bad"},
 		{Head: "strong", SpanID: "s2", Check: "verifier:cmd:b", Checked: true, Passed: true},
 	}
+	if a := o.Answers(); len(a) != 2 || a[0].Head.ID != "cheap" || a[1].Head.ID != "strong" {
+		t.Errorf("answers = %+v, want both, in the order judged", a)
+	}
 	got := o.Verdicts()
 	if len(got) != len(want) {
 		t.Fatalf("got %d verdicts, want %d: %+v", len(got), len(want), got)
