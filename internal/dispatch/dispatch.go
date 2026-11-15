@@ -196,6 +196,10 @@ type Result struct {
 	// looks identical to routing there in the first place (#676).
 	Attempts []Attempt
 
+	// Gates is every head the router passed over before asking it, and the
+	// check it failed: dropped from the candidate list, or refused in the loop.
+	Gates []Gate
+
 	// OutputProvenance is Output classified, with the head that produced it.
 	// Hydra already treats a head's answer as untrusted data when the *next
 	// model* will read it (a2a fences PriorOutput), and as trusted instruction
@@ -243,6 +247,31 @@ type Attempt struct {
 	Tier   int
 	Reason string
 }
+
+// Gate is a head passed over before it was asked. Code is stable for anything
+// that reads it; Detail is the sentence a person sees and may change.
+type Gate struct {
+	Head   string
+	Code   GateCode
+	Detail string
+}
+
+// GateCode names the check a head failed.
+type GateCode string
+
+const (
+	GateNoExecutor  GateCode = "no_executor"
+	GateParked      GateCode = "parked"
+	GateNotLocal    GateCode = "not_local"
+	GateTier        GateCode = "tier"
+	GateTools       GateCode = "tools"
+	GateTemperature GateCode = "temperature"
+	GateEgress      GateCode = "egress"
+	GateLedgerDeny  GateCode = "ledger_deny"
+	GateLedgerAsk   GateCode = "ledger_ask"
+	GateLedgerError GateCode = "ledger_error"
+	GateCostCeiling GateCode = "cost_ceiling"
+)
 
 // ParkedError reports a task stopped before the executor ran because the
 // ledger policy asked for a human decision. It is not a failure: the task is
@@ -752,7 +781,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	}
 
 	domain := routingDomain(opts)
-	candidates := d.selectHeads(tier, localOnly, domain)
+	candidates, gates := d.gateHeads(tier, localOnly, domain)
 
 	// The reroute failed: the content is secret and nothing local can run it.
 	// Strict refuses; otherwise the payload leaves, and the user is told in
@@ -767,7 +796,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		log.Printf("warning: egress.strict is off: secret content (%s) is going to a head that leaves this machine",
 			strings.Join(secretOrigins, ", "))
 		localOnly, rerouted = action.LocalOnly || opts.LocalOnly, false
-		candidates = d.selectHeads(tier, localOnly, domain)
+		candidates, gates = d.gateHeads(tier, localOnly, domain)
 	}
 	if rerouted && len(candidates) > 0 {
 		log.Printf("secret content (%s), routing to a local head only",
@@ -783,7 +812,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		if err != nil {
 			return nil, err
 		}
-		candidates = []provider.Head{pinned}
+		candidates, gates = []provider.Head{pinned}, nil
 	}
 	if len(candidates) == 0 {
 		// Report the effective localOnly (policy may have forced it), not just
@@ -832,6 +861,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		r := &Result{
 			Head: candidates[0], Fallbacks: candidates[1:],
 			Domain: domain, Scores: scores, Requirement: requirement, Objective: opts.Objective,
+			Gates: gates,
 		}
 		if cached.Found {
 			// Named, not served: a dry run runs nothing, including the cache,
@@ -915,9 +945,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Content: prompt, Class: class,
 			Provenance: provenanceRecord(parts, h),
 		})
-		refuse := func(detail string) {
+		refuse := func(code GateCode, detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
 			attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: detail})
+			gates = append(gates, Gate{Head: h.ID, Code: code, Detail: detail})
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
 				SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
@@ -930,13 +961,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// answer, it is an agent loop that never terminates, with every round
 		// looking like the model simply declining to act.
 		if len(opts.Tools) > 0 && !executor.CanUseTools(h) {
-			refuse("cannot carry tool definitions")
+			refuse(GateTools, "cannot carry tool definitions")
 			continue
 		}
 		// Skipped like the tools case, never sent and failed: the provider would
 		// answer 400, and the breaker would park a healthy head over it.
 		if limit := executor.MaxTemperature(h); opts.Temperature != nil && *opts.Temperature > limit {
-			refuse(fmt.Sprintf("accepts a temperature of at most %g, not %g", limit, *opts.Temperature))
+			refuse(GateTemperature, fmt.Sprintf("accepts a temperature of at most %g, not %g", limit, *opts.Temperature))
 			tooWarm++
 			continue
 		}
@@ -950,7 +981,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			sink.Kind = egress.SinkLocal
 		}
 		if v := egress.Guard(parts, sink, strict); v.Decision != egress.Allow {
-			refuse("egress denied: " + v.Reason)
+			refuse(GateEgress, "egress denied: "+v.Reason)
 			_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
 				Agent: "hydra-dispatch", Tool: h.ID, Resource: opts.Resource,
 				Action: ledger.Exec, Decision: ledger.Deny, Reason: v.Reason,
@@ -965,7 +996,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// An escalation already holds a paid answer: it stops here rather than
 		// park that answer, or route around the question to a head that needs none.
 		if lerr == nil && decision == ledger.Ask && !approved && last != nil {
-			refuse("needs approval, so the escalation stops here")
+			refuse(GateLedgerAsk, "needs approval, so the escalation stops here")
 			break
 		}
 		switch {
@@ -973,7 +1004,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// Fails closed: a policy-check failure (unreadable policy file,
 			// ledger write failure) must deny, not let the candidate through
 			// just because the decision could not be computed.
-			refuse("ledger policy check failed: " + lerr.Error())
+			refuse(GateLedgerError, "ledger policy check failed: "+lerr.Error())
 			continue
 
 		// An Ask is not a denial, and must not fall through to the next
@@ -1005,7 +1036,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			return nil, &ParkedError{TaskID: taskID, Head: h.ID, Question: q.Question}
 
 		case !approved:
-			refuse("denied by ledger policy")
+			refuse(GateLedgerDeny, "denied by ledger policy")
 			continue
 		}
 		if opts.MaxCostUSD > 0 {
@@ -1028,8 +1059,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					Status: "denied", Detail: "exceeds cost ceiling",
 					Meta: map[string]any{"est_cost_usd": estCost, "limit_usd": limit},
 				})
-				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier,
-					Reason: fmt.Sprintf("estimated $%.4f exceeds the $%.4f ceiling", estCost, limit)})
+				reason := fmt.Sprintf("estimated $%.4f exceeds the $%.4f ceiling", estCost, limit)
+				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: reason})
+				gates = append(gates, Gate{Head: h.ID, Code: GateCostCeiling, Detail: reason})
 				// Shares the ledger's accountability trail with policy denials
 				// (Reason distinguishes them) so `hyctl security` has one place
 				// to find every kind of refused access, cost or policy.
@@ -1117,7 +1149,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		d.health.Pass(h.ID)
-		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp,
+		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Gates: gates, Response: resp,
 			Domain: domain, Scores: scores, Objective: opts.Objective, SpanID: span,
 			CostUSD: CallCost(d.pricing, h, resp.InputTokens, resp.OutputTokens)}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
@@ -1171,6 +1203,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	}
 
 	if last != nil {
+		last.Gates = gates
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
 			Head: last.Head.ID, Model: last.Response.Model, Tier: rank.UITier(last.Head), Status: "ok",
@@ -1592,68 +1625,74 @@ func (d *Dispatcher) provenance(prompt string, opts Options) ([]egress.Part, *eg
 // A hint that matches nothing returns no candidates; the caller reports that
 // rather than silently widening to every head.
 func (d *Dispatcher) selectHeads(tierHint string, localOnly bool, domain string) []provider.Head {
+	heads, _ := d.gateHeads(tierHint, localOnly, domain)
+	return heads
+}
+
+// gateHeads is selectHeads plus every head it dropped and the gate that dropped
+// it, so a route can say who was never tried, not only who was.
+func (d *Dispatcher) gateHeads(tierHint string, localOnly bool, domain string) ([]provider.Head, []Gate) {
 	now := time.Now()
-	filter := func(h provider.Head) bool {
-		if !executor.Supports(h) {
-			return false
-		}
-		// Dropped from the candidate list rather than tried and skipped: a
-		// head the breaker has parked must not be routed to at all (#688).
-		if _, parked := d.health.Blocked(h.ID, now); parked {
-			return false
-		}
-		if localOnly && !h.LocalOnly {
-			return false
-		}
-		return true
-	}
-
-	// No tier specified, use every live head, best score first.
-	if tierHint == "" {
-		var all []provider.Head
-		for _, h := range d.heads {
-			if filter(h) {
-				all = append(all, h)
-			}
-		}
-		return d.rerankFor(all, domain)
-	}
-
 	// Every hint that reaches here is a number: resolveTierHint turns a name
 	// into one through routing.yaml before the governor runs, so there is no
 	// second, name-shaped selection path to disagree with this one (#782).
-	want, err := strconv.Atoi(tierHint)
-	if err != nil {
-		return nil
+	want := 0
+	if tierHint != "" {
+		n, err := strconv.Atoi(tierHint)
+		if err != nil {
+			return nil, nil
+		}
+		want = n
 	}
 
-	var candidates []provider.Head
+	var live, candidates []provider.Head
+	var gates []Gate
 	for _, h := range d.heads {
+		if why := executor.Unroutable(h); why != "" {
+			gates = append(gates, Gate{Head: h.ID, Code: GateNoExecutor, Detail: why})
+			continue
+		}
+		// Dropped from the candidate list rather than tried and skipped: a
+		// head the breaker has parked must not be routed to at all (#688).
+		if why, parked := d.health.Blocked(h.ID, now); parked {
+			gates = append(gates, Gate{Head: h.ID, Code: GateParked, Detail: why})
+			continue
+		}
+		if localOnly && !h.LocalOnly {
+			gates = append(gates, Gate{Head: h.ID, Code: GateNotLocal, Detail: "leaves this machine, and the run is local only"})
+			continue
+		}
+		live = append(live, h)
+		if want == 0 {
+			continue
+		}
 		// d.heads is pre-sorted by CapScore (probe.Run → rank.ByCapScore),
 		// so "at or below the requested strength" yields the strongest
 		// eligible head first and weaker ones as the fallback chain.
-		if filter(h) && rank.UITier(h) >= want {
+		if rank.UITier(h) >= want {
 			candidates = append(candidates, h)
+		} else {
+			gates = append(gates, Gate{Head: h.ID, Code: GateTier, Detail: "stronger and dearer than the tier asked for"})
 		}
 	}
+	// No tier specified, use every live head, best score first.
+	if want == 0 {
+		return d.rerankFor(live, domain), gates
+	}
 	if len(candidates) > 0 {
-		return d.rerankFor(candidates, domain)
+		return d.rerankFor(candidates, domain), gates
 	}
 	// Nothing is that cheap. Degrade to the cheapest heads available,
 	// ascending capability, so the fallback is the least expensive option
 	// rather than the most. Silently escalating to the strongest head is
 	// what made tier routing worthless in the first place (#165).
-	for _, h := range d.heads {
-		if filter(h) {
-			candidates = append(candidates, h)
-		}
-	}
-	if len(candidates) > 0 {
-		slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
+	gates = slices.DeleteFunc(gates, func(g Gate) bool { return g.Code == GateTier })
+	if len(live) > 0 {
+		slices.Reverse(live) // pre-sorted strongest-first → cheapest-first
 		log.Printf("warning: no head at tier %d or cheaper, falling back to the cheapest available (%s)",
-			want, candidates[0].ID)
+			want, live[0].ID)
 	}
-	return candidates
+	return live, gates
 }
 
 // rerankFor reorders candidates onto the head measured best at this domain.
