@@ -82,6 +82,9 @@ func Run(ctx context.Context, w Workflow, r Router, save Saver) (Workflow, error
 	if err := checkNeeds(w.Steps); err != nil {
 		return w, fmt.Errorf("workflow %s: %w", w.ID, err)
 	}
+	if err := w.checkReads(); err != nil {
+		return w, fmt.Errorf("workflow %s: %w", w.ID, err)
+	}
 	if save == nil {
 		save = Save
 	}
@@ -186,6 +189,10 @@ func record(w *Workflow, f finished, save Saver) error {
 	}
 	s.Status = Done
 	s.Output = f.res.Output
+	if strings.TrimSpace(f.res.Output) != "" {
+		// Over the block cap the output stays whole in s.Output; only its block is refused.
+		_, _ = w.Put(BlockOutput, s.Title, f.res.Output)
+	}
 	s.Head = f.res.Head
 	s.Model = f.res.Model
 	s.Tier = f.res.Tier
@@ -197,8 +204,8 @@ func record(w *Workflow, f finished, save Saver) error {
 	return nil
 }
 
-// stepPrompt is step i's prompt with the output of every step it needs as
-// context. Without this a workflow is a list of unrelated prompts, and with
+// stepPrompt is step i's prompt with the output of every step it needs, then
+// the blocks it reads, as context. Without this a workflow is a list of unrelated prompts, and with
 // only the immediate predecessor a step could not read one two back (#1168).
 //
 // Each output is fenced, because a workflow exists to route a cheap head's step
@@ -211,7 +218,8 @@ func (w Workflow) stepPrompt(i int) string {
 			prior = append(prior, s)
 		}
 	}
-	if len(prior) == 0 {
+	reads := w.Steps[i].Reads
+	if len(prior) == 0 && len(reads) == 0 {
 		return w.Steps[i].Prompt
 	}
 	var b strings.Builder
@@ -219,6 +227,12 @@ func (w Workflow) stepPrompt(i int) string {
 	for _, p := range prior {
 		label := fmt.Sprintf("STEP %d OUTPUT (%s)", p.N, util.SafeTerminal(p.Title))
 		b.WriteString(util.WrapUntrusted(label, p.Output))
+		b.WriteString("\n\n")
+	}
+	for _, h := range reads {
+		blk := w.Blocks[h]
+		label := fmt.Sprintf("%s (%s)", strings.ToUpper(string(blk.Kind)), util.SafeTerminal(blk.Label))
+		b.WriteString(util.WrapUntrusted(label, blk.Text))
 		b.WriteString("\n\n")
 	}
 	b.WriteString(w.Steps[i].Prompt)
