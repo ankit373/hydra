@@ -886,6 +886,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		Kind: runlog.KindTaskStarted, TaskID: taskID, SpanID: taskSpan,
 		Detail: opts.Enum, Meta: objectiveMeta(opts),
 	})
+	// A pinned head was the whole list, so nothing was ranked to explain.
+	if opts.Head == "" {
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindRoute, TaskID: taskID, SpanID: taskSpan, Domain: domain,
+			Route: d.route(candidates, gates, scores, opts, requirement, actProb),
+		})
+	}
 
 	var lastErr error
 	var attempts []Attempt

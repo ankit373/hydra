@@ -83,6 +83,10 @@ const (
 	// why, which no existing log captures.
 	KindHeadSelected Kind = "head_selected"
 
+	// KindRoute is the order a dispatch tried its heads in and the evidence it
+	// ordered on, written once before the first attempt. See Route.
+	KindRoute Kind = "route"
+
 	KindDispatchStarted  Kind = "dispatch_started"
 	KindDispatchFinished Kind = "dispatch_finished"
 
@@ -204,6 +208,10 @@ type Event struct {
 	// events that carry the work itself.
 	Score *Score `json:"score,omitempty"`
 
+	// Route is set only on a KindRoute event. Typed rather than Meta, which is
+	// the field shed past MaxEventBytes.
+	Route *Route `json:"route,omitempty"`
+
 	// Ref points at bulk content held elsewhere (a path, a hash). Detail is a
 	// short human string. Neither may carry a diff or a full model response.
 	Ref    string `json:"ref,omitempty"`
@@ -213,6 +221,42 @@ type Event struct {
 	// an edit has no identity of its own, only a task it happened within
 	// (#434); conflating the two used to mint a phantom tree node per file.
 	File string `json:"file,omitempty"`
+}
+
+// MaxRouteCandidates caps a route's list, so its event stays far under
+// MaxEventBytes; Route.Omitted counts the rest.
+const MaxRouteCandidates = 20
+
+// Route is why a dispatch tried its heads in the order it did.
+type Route struct {
+	// Objective or Requirement is what ordered the candidates; both empty when
+	// a tier or the probe ranking did.
+	Objective   string  `json:"objective,omitempty"`
+	Requirement float64 `json:"requirement,omitempty"`
+
+	// FirstHead is the head tried first and FirstProb the chance the router
+	// picked it, the same pair the dispatch row's first_head and act_prob hold.
+	FirstHead string  `json:"first_head"`
+	FirstProb float64 `json:"first_prob"`
+	RunnerUp  string  `json:"runner_up,omitempty"`
+
+	// Candidates are in the order tried, then the heads dropped before any try.
+	Candidates []RouteCandidate `json:"candidates"`
+	Omitted    int              `json:"omitted,omitempty"`
+}
+
+// RouteCandidate is one head and what it was ranked on. Gate is "passed", or
+// the code of the check that dropped it.
+type RouteCandidate struct {
+	Head      string  `json:"head"`
+	Model     string  `json:"model,omitempty"`
+	Tier      int     `json:"tier,omitempty"`
+	Effective int     `json:"effective,omitempty"`
+	N         int     `json:"n,omitempty"`
+	InDomain  int     `json:"in_domain,omitempty"`
+	Clears    bool    `json:"clears,omitempty"`
+	CostUSD   float64 `json:"cost_usd,omitempty"`
+	Gate      string  `json:"gate"`
 }
 
 // NewSpanID mints a span id: 8 random bytes as hex, so exporting a trace

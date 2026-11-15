@@ -57,6 +57,9 @@ type Span struct {
 	// head actually reported.
 	Scores []runlog.Score `json:"scores,omitempty"`
 
+	// Route is the ranking the task's attempts were tried in, on its task span.
+	Route *runlog.Route `json:"route,omitempty"`
+
 	Depth    int     `json:"depth"`
 	Children []*Span `json:"children,omitempty"`
 }
@@ -250,6 +253,9 @@ func fold(s *Span, e runlog.Event) {
 	}
 	if e.Confidence != 0 {
 		s.Confidence = e.Confidence
+	}
+	if e.Route != nil {
+		s.Route = e.Route
 	}
 	for k, v := range e.Meta {
 		if s.Meta == nil {

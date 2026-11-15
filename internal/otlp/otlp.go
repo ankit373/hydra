@@ -88,19 +88,25 @@ type Value struct {
 	IntValue    *string  `json:"intValue,omitempty"` // string, per OTLP/JSON
 	DoubleValue *float64 `json:"doubleValue,omitempty"`
 	BoolValue   *bool    `json:"boolValue,omitempty"`
+	ArrayValue  *Array   `json:"arrayValue,omitempty"`
 }
 
-func str(k, v string) KeyValue {
-	return KeyValue{Key: k, Value: Value{StringValue: &v}}
+// Array is an OTLP ArrayValue. Its values share one type.
+type Array struct {
+	Values []Value `json:"values"`
 }
 
-func num(k string, v int64) KeyValue {
-	s := strconv.FormatInt(v, 10)
-	return KeyValue{Key: k, Value: Value{IntValue: &s}}
-}
-
+func str(k, v string) KeyValue       { return KeyValue{Key: k, Value: strValue(v)} }
+func num(k string, v int64) KeyValue { return KeyValue{Key: k, Value: numValue(v)} }
 func flt(k string, v float64) KeyValue {
 	return KeyValue{Key: k, Value: Value{DoubleValue: &v}}
+}
+
+func strValue(v string) Value { return Value{StringValue: &v} }
+
+func numValue(v int64) Value {
+	s := strconv.FormatInt(v, 10)
+	return Value{IntValue: &s}
 }
 
 // Build renders runs and dispatch rows as a single OTLP payload.
@@ -258,6 +264,7 @@ func spanForWaterfall(s *waterfall.Span, traceID string, emitted map[string]stri
 		attrs = append(attrs, str("hydra.payload.output_ref", s.OutputRef))
 	}
 	attrs = append(attrs, metaAttrs(s.Meta)...)
+	attrs = append(attrs, routeAttrs(s.Route)...)
 	attrs = append(attrs, spendAttrs(spendRow)...)
 
 	name := string(s.Kind)
@@ -317,6 +324,51 @@ func metaAttrs(meta map[string]any) []KeyValue {
 		}
 	}
 	return out
+}
+
+// routeAttrs carries the ranking as hydra.route.*, one array per candidate
+// field in the order tried, so a collector reads what the router view reads.
+func routeAttrs(r *runlog.Route) []KeyValue {
+	if r == nil {
+		return nil
+	}
+	attrs := []KeyValue{
+		str("hydra.route.first_head", r.FirstHead),
+		flt("hydra.route.first_prob", r.FirstProb),
+	}
+	if r.Objective != "" {
+		attrs = append(attrs, str("hydra.route.objective", r.Objective))
+	}
+	if r.Requirement > 0 {
+		attrs = append(attrs, flt("hydra.route.requirement", r.Requirement))
+	}
+	if r.RunnerUp != "" {
+		attrs = append(attrs, str("hydra.route.runner_up", r.RunnerUp))
+	}
+	if r.Omitted > 0 {
+		attrs = append(attrs, num("hydra.route.omitted", int64(r.Omitted)))
+	}
+	n := len(r.Candidates)
+	head, model, gate := make([]Value, n), make([]Value, n), make([]Value, n)
+	tier, eff, evidence, inDomain := make([]Value, n), make([]Value, n), make([]Value, n), make([]Value, n)
+	clears, cost := make([]Value, n), make([]Value, n)
+	for i, c := range r.Candidates {
+		head[i], model[i], gate[i] = strValue(c.Head), strValue(c.Model), strValue(c.Gate)
+		tier[i], eff[i] = numValue(int64(c.Tier)), numValue(int64(c.Effective))
+		evidence[i], inDomain[i] = numValue(int64(c.N)), numValue(int64(c.InDomain))
+		ok, usd := c.Clears, c.CostUSD
+		clears[i], cost[i] = Value{BoolValue: &ok}, Value{DoubleValue: &usd}
+	}
+	return append(attrs,
+		arr("hydra.route.candidate.head", head), arr("hydra.route.candidate.model", model),
+		arr("hydra.route.candidate.tier", tier), arr("hydra.route.candidate.effective", eff),
+		arr("hydra.route.candidate.n", evidence), arr("hydra.route.candidate.in_domain", inDomain),
+		arr("hydra.route.candidate.clears", clears), arr("hydra.route.candidate.cost_usd", cost),
+		arr("hydra.route.candidate.gate", gate))
+}
+
+func arr(k string, vs []Value) KeyValue {
+	return KeyValue{Key: k, Value: Value{ArrayValue: &Array{Values: vs}}}
 }
 
 // spendAttrs carries what only the cost log knows. A zero row contributes
