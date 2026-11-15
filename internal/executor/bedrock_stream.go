@@ -34,7 +34,7 @@ func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta O
 		return nil, fmt.Errorf("http exec %s: %w", req.Head.ID, err)
 	}
 
-	var inTok, outTok int
+	var usage bedrockUsage
 	var finish string
 	var tools toolCallStream
 
@@ -102,15 +102,12 @@ func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta O
 				finish = bedrockFinish(ev.StopReason)
 			case "metadata":
 				var ev struct {
-					Usage struct {
-						InputTokens  int `json:"inputTokens"`
-						OutputTokens int `json:"outputTokens"`
-					} `json:"usage"`
+					Usage bedrockUsage `json:"usage"`
 				}
 				if err := json.Unmarshal(f.Payload, &ev); err != nil {
 					return fmt.Errorf("decode metadata: %w", err)
 				}
-				inTok, outTok = ev.Usage.InputTokens, ev.Usage.OutputTokens
+				usage = ev.Usage
 			}
 			return nil
 		})
@@ -119,7 +116,9 @@ func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta O
 		return nil, err
 	}
 
-	answer := httpResponse(req, sink.output(), model, inTok, outTok, start)
+	answer := httpResponse(req, sink.output(), model, usage.prompt(), usage.OutputTokens, start)
+	answer.CacheReadTokens = usage.CacheReadInputTokens
+	answer.CacheWriteTokens = usage.CacheWriteInputTokens
 	answer.Truncated = sink.truncated()
 	answer.TTFT = sink.firstTokenAt()
 	answer.ToolCalls = tools.done()

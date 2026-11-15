@@ -236,3 +236,48 @@ func TestAnthropic_BothPathsResolveTheSameEndpoint(t *testing.T) {
 		t.Errorf("paths = %v, want both at /v1/messages", stub.paths)
 	}
 }
+
+// Anthropic's input_tokens leaves out both cache counts, so InputTokens adds
+// them back. message_delta repeats them cumulatively, as the API documents.
+func TestAnthropicStream_CacheReadAndWriteCounted(t *testing.T) {
+	newAnthropicStub(t, []string{
+		sse("message_start", `{"type":"message_start","message":{"model":"claude-test-1","usage":`+
+			`{"input_tokens":50,"cache_read_input_tokens":1800,"cache_creation_input_tokens":200,"output_tokens":1}}}`),
+		anthropicText("ok"),
+		sse("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":`+
+			`{"input_tokens":50,"cache_read_input_tokens":1800,"cache_creation_input_tokens":200,"output_tokens":64}}`),
+		anthropicClosed,
+	})
+
+	resp, err := (&HTTPExecutor{}).ExecuteStream(context.Background(),
+		Request{Prompt: "p", Head: anthropicHead()}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.CacheReadTokens != 1800 || resp.CacheWriteTokens != 200 {
+		t.Errorf("cache read/write = %d/%d, want 1800/200", resp.CacheReadTokens, resp.CacheWriteTokens)
+	}
+	if resp.InputTokens != 2050 || resp.OutputTokens != 64 {
+		t.Errorf("tokens = %d/%d, want 2050/64", resp.InputTokens, resp.OutputTokens)
+	}
+}
+
+func TestAnthropic_InputTokensIncludeCacheTokens(t *testing.T) {
+	srv, _ := serve(t, 200, `{"model":"claude-test-1","stop_reason":"end_turn",`+
+		`"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":50,`+
+		`"cache_read_input_tokens":1800,"cache_creation_input_tokens":200,"output_tokens":64}}`)
+	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	t.Setenv("ANTHROPIC_MODEL", "claude-test-1")
+
+	resp, err := (&HTTPExecutor{}).Execute(context.Background(), Request{Prompt: "p", Head: anthropicHead()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.InputTokens != 2050 {
+		t.Errorf("InputTokens = %d, want 2050: input_tokens plus both cache counts", resp.InputTokens)
+	}
+	if resp.CacheReadTokens != 1800 || resp.CacheWriteTokens != 200 {
+		t.Errorf("cache read/write = %d/%d, want 1800/200", resp.CacheReadTokens, resp.CacheWriteTokens)
+	}
+}

@@ -44,9 +44,17 @@ type anthropicEvent struct {
 	} `json:"error"`
 }
 
+// anthropicUsage backs both Anthropic paths. input_tokens excludes the cached
+// part, so prompt() adds it back to keep InputTokens the full prompt size.
 type anthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+}
+
+func (u anthropicUsage) prompt() int {
+	return u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
 }
 
 func (e *HTTPExecutor) streamAnthropic(ctx context.Context, req Request, onDelta OnDelta) (*Response, error) {
@@ -68,7 +76,7 @@ func (e *HTTPExecutor) streamAnthropic(ctx context.Context, req Request, onDelta
 	httpReq.Header.Set("Accept", "text/event-stream")
 
 	gotModel := model
-	var inTok, outTok int
+	var usage anthropicUsage
 	var finish string
 	var tools toolCallStream
 
@@ -83,7 +91,7 @@ func (e *HTTPExecutor) streamAnthropic(ctx context.Context, req Request, onDelta
 				return nil
 			}
 			gotModel = firstNonEmpty(ev.Message.Model, gotModel)
-			readAnthropicUsage(ev.Message.Usage, &inTok, &outTok)
+			readAnthropicUsage(ev.Message.Usage, &usage)
 		case "content_block_start":
 			// A tool call announces itself here, with an empty input.
 			if ev.ContentBlock == nil || ev.ContentBlock.Type != "tool_use" {
@@ -113,7 +121,7 @@ func (e *HTTPExecutor) streamAnthropic(ctx context.Context, req Request, onDelta
 				})
 			}
 		case "message_delta":
-			readAnthropicUsage(ev.Usage, &inTok, &outTok)
+			readAnthropicUsage(ev.Usage, &usage)
 			if ev.Delta != nil && ev.Delta.StopReason != "" {
 				finish = anthropicFinish(ev.Delta.StopReason)
 			}
@@ -131,7 +139,9 @@ func (e *HTTPExecutor) streamAnthropic(ctx context.Context, req Request, onDelta
 		return nil, err
 	}
 
-	answer := httpResponse(req, sink.output(), gotModel, inTok, outTok, start)
+	answer := httpResponse(req, sink.output(), gotModel, usage.prompt(), usage.OutputTokens, start)
+	answer.CacheReadTokens = usage.CacheReadInputTokens
+	answer.CacheWriteTokens = usage.CacheCreationInputTokens
 	answer.Truncated = sink.truncated()
 	answer.TTFT = sink.firstTokenAt()
 	answer.ToolCalls = tools.done()
@@ -139,18 +149,21 @@ func (e *HTTPExecutor) streamAnthropic(ctx context.Context, req Request, onDelta
 	return answer, nil
 }
 
-// readAnthropicUsage merges one event's counts into the pair. Each field is
-// taken only when reported: message_delta repeats the running output count and
-// carries no input count, so overwriting with a zero would throw away what
-// message_start already said.
-func readAnthropicUsage(u *anthropicUsage, in, out *int) {
+// readAnthropicUsage merges one event's counts into acc. Each field is taken
+// only when reported: message_delta may carry no input count, so overwriting
+// with a zero would throw away what message_start already said.
+func readAnthropicUsage(u *anthropicUsage, acc *anthropicUsage) {
 	if u == nil {
 		return
 	}
-	if u.InputTokens > 0 {
-		*in = u.InputTokens
-	}
-	if u.OutputTokens > 0 {
-		*out = u.OutputTokens
+	keepReported(&acc.InputTokens, u.InputTokens)
+	keepReported(&acc.OutputTokens, u.OutputTokens)
+	keepReported(&acc.CacheReadInputTokens, u.CacheReadInputTokens)
+	keepReported(&acc.CacheCreationInputTokens, u.CacheCreationInputTokens)
+}
+
+func keepReported(dst *int, v int) {
+	if v > 0 {
+		*dst = v
 	}
 }
