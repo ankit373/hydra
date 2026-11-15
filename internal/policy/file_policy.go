@@ -21,9 +21,6 @@ type Spec struct {
 	FileLines     int    `json:"file_lines"`
 	FileCount     int    `json:"file_count"`
 	FileExtension string `json:"file_extension"`
-	TaskType      string `json:"task_type"`
-	InPlaybook    bool   `json:"in_playbook"`
-	StageName     string `json:"stage_name"`
 	HasGit        bool   `json:"has_git"`
 	EnumTier      int    `json:"enum_tier"`
 	Workspace     string `json:"workspace"`
@@ -246,12 +243,6 @@ func specField(field string, spec Spec) interface{} {
 		return spec.FileCount
 	case "file_extension":
 		return spec.FileExtension
-	case "task_type":
-		return spec.TaskType
-	case "in_playbook":
-		return spec.InPlaybook
-	case "stage_name":
-		return spec.StageName
 	case "has_git":
 		return spec.HasGit
 	case "enum_tier":

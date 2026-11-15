@@ -162,11 +162,11 @@ func TestDecide_RuleMatchingByCondition(t *testing.T) {
 			Spec{FileExtension: "go"}, true},
 		{"extension mismatch", map[string]interface{}{"file_extension": "go"},
 			Spec{FileExtension: "ts"}, false},
-		{"task type match", map[string]interface{}{"task_type": "edit"},
-			Spec{TaskType: "edit"}, true},
+		{"workspace match", map[string]interface{}{"workspace": "hydra"},
+			Spec{Workspace: "hydra"}, true},
 		{"all conditions must hold", map[string]interface{}{
-			"file_extension": "go", "task_type": "edit"},
-			Spec{FileExtension: "go", TaskType: "review"}, false},
+			"file_extension": "go", "workspace": "hydra"},
+			Spec{FileExtension: "go", Workspace: "docs"}, false},
 		{"unknown key never matches", map[string]interface{}{"no_such_field": "x"},
 			Spec{}, false},
 	}
@@ -200,14 +200,14 @@ func TestDecide_LaterRulesOverrideEarlierOnes(t *testing.T) {
 }
 
 // The when-block operators are how an operator writes "only for big files" or
-// "only outside a playbook". Each has to mean what it says: a comparison that
+// "only outside this workspace". Each has to mean what it says: a comparison that
 // silently reads as equality would apply a rule to every file.
 func TestMatchCondition_EveryOperator(t *testing.T) {
 	spec := Spec{
 		File: "/repo/internal/a.go", FileLines: 500, FileCount: 3,
-		FileExtension: "go", TaskType: "edit", EnumTier: 6,
+		FileExtension: "go", EnumTier: 6,
 		Workspace: "hydra", Prompt: "add pagination", PromptLength: 14,
-		ContextPct: 40, HasGit: true, InPlaybook: false, StageName: "",
+		ContextPct: 0, HasGit: true,
 	}
 	cases := []struct {
 		key  string
@@ -218,12 +218,11 @@ func TestMatchCondition_EveryOperator(t *testing.T) {
 		{"file_extension", "go", true},
 		{"file_extension", "ts", false},
 		{"has_git", true, true},
-		{"in_playbook", false, true},
 
 		// explicit eq / ne
-		{"task_type_eq", "edit", true},
-		{"task_type_ne", "edit", false},
-		{"task_type_ne", "review", true},
+		{"workspace_eq", "hydra", true},
+		{"workspace_ne", "hydra", false},
+		{"workspace_ne", "docs", true},
 
 		// numeric comparisons
 		{"file_lines_gt", 100, true},
@@ -245,7 +244,7 @@ func TestMatchCondition_EveryOperator(t *testing.T) {
 		{"file_contains", "internal", true},
 
 		// present
-		{"stage_name_present", true, false},
+		{"context_pct_present", true, false},
 		{"workspace_present", true, true},
 
 		// in
