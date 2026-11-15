@@ -39,8 +39,8 @@
 #   max_cpu_seconds         int , cap a dispatched subprocess's CPU time (0 = unlimited).
 #                           Works on Linux and macOS; no rlimit equivalent on Windows (#738).
 #   ── Retries and escalation ───────────────────────────────────
-#   max_retries             int , retry count before escalating tier
-#   escalate_on_fail        bool, bump enum tier on failure (vs hard fail)
+#   max_retries             int , how many stronger heads a failed check may ask
+#   escalate_on_fail        bool, false means a failed check asks no stronger head
 #   confidence_threshold    float (0-1), escalate if model confidence below
 #   ── Observability ────────────────────────────────────────────
 #   track_tokens            bool, log token cost to logs/cost.jsonl

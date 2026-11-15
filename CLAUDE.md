@@ -91,6 +91,9 @@ internal/decide/        ← Routes one decision: the first source answers alone 
                           target, otherwise the SPRT asks on. Logs a `KindDecision` span per answer.
                           `Cascade` is the chat path's twin: a served class's answer is checked by its
                           `[[serve.verifiers]]` and a head measured in class to beat it asked, on the same rules.
+                          `OnFail` is the plain rule for the CLI paths (#1583): a check that ran and failed asks
+                          one stronger head, a check that could not run is "not checked" and never escalates.
+                          `policy.Escalations` reads its count from `max_retries` / `escalate_on_fail`.
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
