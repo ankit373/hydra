@@ -318,3 +318,29 @@ func TestSpecField_KnownAndUnknownFields(t *testing.T) {
 }
 
 func fmtV(v interface{}) string { return fmt.Sprintf("%v", v) }
+
+func TestEscalations_ReadsMaxRetriesAndEscalateOnFail(t *testing.T) {
+	testutil.NewSandbox(t)
+	e, err := LoadFilePolicy("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Escalations(e.Decide(Spec{File: "/x/y.go"})); got != 1 {
+		t.Errorf("shipped defaults allow %d escalations, want 1", got)
+	}
+	if got := Escalations(e.Decide(Spec{File: "/x/y.go", ContextPct: 80})); got != 0 {
+		t.Errorf("high_context_skip_rubber_duck sets max_retries 0, got %d escalations", got)
+	}
+	for _, tc := range []struct {
+		fp   FilePolicy
+		want int
+	}{
+		{FilePolicy{MaxRetries: 3, EscalateOnFail: true}, 3},
+		{FilePolicy{MaxRetries: 3, EscalateOnFail: false}, 0},
+		{FilePolicy{MaxRetries: -1, EscalateOnFail: true}, 0},
+	} {
+		if got := Escalations(tc.fp); got != tc.want {
+			t.Errorf("Escalations(%+v) = %d, want %d", tc.fp, got, tc.want)
+		}
+	}
+}
