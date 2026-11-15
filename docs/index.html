@@ -417,6 +417,9 @@ table.cmp td:first-child,table.cmp th[scope=row]{text-align:left;font-family:var
 .no{color:var(--hy-color-text-subtle);}
 .part{color:var(--hy-color-status-warning);font-size:var(--hy-font-size-xs);}
 table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:none;}
+/* The checks table carries prose in every cell, so it reads left-aligned in the text face. */
+table.cmp.checks td{text-align:left;font-family:var(--hy-font-family-text);color:var(--hy-color-text-muted);}
+table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
 /* These carry prose, not code: nine of them, up to 527 characters. As 12px mono
    with no cap they ran ~192 characters a line, and --faint is 3.26:1, under AA. */
 .cmp-note{font-size:var(--hy-font-size-md);line-height:1.75;color:var(--hy-color-text-muted);margin-top:var(--hy-space-4);max-width:62ch;}
@@ -726,6 +729,40 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
   <div style="text-align:center;margin-top:var(--hy-space-8);">
     <a class="btn btn-lg" href="/first-principles.html">Derive it yourself: six interactive proofs on the First Principles page →</a>
   </div>
+</section>
+
+<!-- ══ 3b · HOW IT CHECKS EACH KIND OF WORK ═══════════════════════════════ -->
+<section class="blk wrap reveal" id="checks">
+  <div class="klabel"><span>How it checks</span><b>each kind of work</b></div>
+  <h2 class="big">Every kind of work has <span class="grad">its own check</span>.</h2>
+  <p class="lede">Tests and lint are the check for code. A summary is checked against its source, extracted data against a schema, a label against the allowed set. The last column says what exists today.</p>
+
+  <div class="cmp-scroll-wrap">
+  <p class="cmp-swipe-hint">swipe to see every column →</p>
+  <div class="cmp-scroll scroll-x" tabindex="0" role="region" aria-label="How Hydra checks each kind of work">
+    <table class="cmp checks">
+      <thead>
+        <tr>
+          <th scope="col">Kind of work</th>
+          <th scope="col">Example</th>
+          <th scope="col">How Hydra checks it</th>
+          <th scope="col">What exists today</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Write</th><td>draft a reply, rewrite a paragraph</td><td>several models agree; a judge picks the best; you confirm the outcome</td><td>agreement (<code translate="no">--confidence</code>) and a judge (<code translate="no">--swarm-mode best</code>); outcomes via <code translate="no">hyctl trust outcome</code></td></tr>
+        <tr><th scope="row">Summarise</th><td>a report, a call transcript</td><td>every claim appears in the source</td><td><code translate="no">--check ground</code> or <code translate="no">hyctl oracle ground</code>, numbers, paths and identifiers only; not yet names or dates</td></tr>
+        <tr><th scope="row">Extract</th><td>invoice fields, contract terms to JSON</td><td>the output fits a schema, required fields are present</td><td>any command via <code translate="no">--check cmd:...</code> or <code translate="no">hyctl oracle verify --candidate</code></td></tr>
+        <tr><th scope="row">Classify</th><td>label tickets, route emails</td><td>the label is one of the allowed set; models agree</td><td><code translate="no">--check match:labels=&lt;file&gt;</code> and <code translate="no">match</code> verifiers in <code translate="no">hyctl serve</code>; agreement via <code translate="no">--confidence</code></td></tr>
+        <tr><th scope="row">Translate</th><td>release notes into German</td><td>models agree</td><td>agreement only; no dedicated check yet</td></tr>
+        <tr><th scope="row">Answer from documents</th><td>questions over files you give it</td><td>the answer is grounded in the given text</td><td><code translate="no">--check ground</code> or <code translate="no">hyctl oracle ground</code></td></tr>
+        <tr><th scope="row">Analyse</th><td>compare numbers, explain a trend</td><td>a script recomputes the figures</td><td>any command via <code translate="no">--check cmd:...</code> or <code translate="no">hyctl oracle verify</code></td></tr>
+        <tr><th scope="row">Code</th><td>edit, generate, review</td><td>tests, build, lint; a file many others depend on needs more confidence</td><td><code translate="no">hyctl edit</code>, <code translate="no">hyctl vet</code>, <code translate="no">hyctl graph blast</code>, <code translate="no">hyverify</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <p class="cmp-note"><code translate="no">--check</code> judges one answer. It does not combine with <code translate="no">--swarm</code> or <code translate="no">--confidence</code>, and each verdict goes to the eval corpus under the request's kind.</p>
 </section>
 
 <!-- ══ 4b · SECURITY ═══════════════════════════════════════════════════════ -->
