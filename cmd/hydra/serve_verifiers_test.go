@@ -117,8 +117,15 @@ func TestServeRouter_OnlyAVerifiedClassEscalates(t *testing.T) {
 // cascadeFixture is a sandboxed server whose LiteLLM stub answers each model
 // from answers, with calls counted per model, every head measured in class.
 type cascadeFixture struct {
-	mu    sync.Mutex
-	calls map[string]int
+	mu      sync.Mutex
+	calls   map[string]int
+	prompts map[string]string // the last user message each model was sent
+}
+
+func (f *cascadeFixture) prompt(model string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.prompts[model]
 }
 
 func (f *cascadeFixture) called(model string) int {
@@ -130,7 +137,42 @@ func (f *cascadeFixture) called(model string) int {
 func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured bool) (*cascadeFixture, serveRouter) {
 	t.Helper()
 	testutil.NewSandbox(t)
-	f := &cascadeFixture{calls: map[string]int{}}
+	f := litellmHeads(t, answers, cascadeTestClass)
+	if verifierMeasured {
+		cal, err := trust.New(trust.DefaultPath())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range 20 {
+			mustUpdate(t, cal, "verifier:match:t", true, i < 19)
+			mustUpdate(t, cal, "verifier:match:t", false, i == 19)
+		}
+	}
+
+	d, err := dispatch.New(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(d.Close)
+	verifiers, err := serveVerifiers([]config.ServeVerifier{{
+		Class: cascadeTestClass, Kind: "match", ID: "t",
+		Labels: labelsFile(t, "card_arrival\nlost_card\nother\n"),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f, serveRouter{d: d, objective: rank.Cost, verifiers: verifiers, confidence: 0.95, maxEscalations: 2, cal: shared}
+}
+
+// litellmHeads serves answers from a LiteLLM stub, one head per model, each
+// dearer and measured stronger in class than the one before it.
+func litellmHeads(t *testing.T, answers map[string]string, class string) *cascadeFixture {
+	t.Helper()
+	f := &cascadeFixture{calls: map[string]int{}, prompts: map[string]string{}}
 	// Sorted, so each next model is both dearer and measured stronger: the cost
 	// objective runs the first, and escalation climbs to the rest in order.
 	names := slices.Sorted(maps.Keys(answers))
@@ -145,11 +187,17 @@ func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured
 			return
 		}
 		var body struct {
-			Model string `json:"model"`
+			Model    string `json:"model"`
+			Messages []struct{ Role, Content string }
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
 		f.calls[body.Model]++
+		for _, m := range body.Messages {
+			if m.Role == "user" {
+				f.prompts[body.Model] = m.Content
+			}
+		}
 		f.mu.Unlock()
 		fmt.Fprintf(w, `{"model":%q,"choices":[{"message":{"role":"assistant","content":%q}}],"usage":{"prompt_tokens":10,"completion_tokens":2}}`,
 			body.Model, answers[body.Model])
@@ -178,40 +226,20 @@ func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured
 	}
 	// Out of 400, so every head clears the cost constraint's bar whatever it declares.
 	for i, m := range names {
-		recordN(t, cal, "litellm/"+m, []int{380, 390, 395, 400}[i], 400)
+		recordN(t, cal, "litellm/"+m, class, []int{380, 390, 395, 400}[i], 400)
 	}
-	if verifierMeasured {
-		for i := range 20 {
-			mustUpdate(t, cal, "verifier:match:t", true, i < 19)
-			mustUpdate(t, cal, "verifier:match:t", false, i == 19)
-		}
-	}
-
-	d, err := dispatch.New(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(d.Close)
-	verifiers, err := serveVerifiers([]config.ServeVerifier{{
-		Class: cascadeTestClass, Kind: "match", ID: "t",
-		Labels: labelsFile(t, "card_arrival\nlost_card\nother\n"),
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	shared, err := trust.New(trust.DefaultPath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return f, serveRouter{d: d, objective: rank.Cost, verifiers: verifiers, confidence: 0.95, maxEscalations: 2, cal: shared}
+	return f
 }
 
 // recordN spreads the misses evenly, so the record is one steady rate and not
 // a change the detector would cut.
-func recordN(t *testing.T, cal *trust.Calibrator, source string, correct, total int) {
+func recordN(t *testing.T, cal *trust.Calibrator, source, class string, correct, total int) {
 	t.Helper()
+	outcome := map[bool]trust.Outcome{true: trust.OutcomeCorrect, false: trust.OutcomeIncorrect}
 	for i := range total {
-		mustUpdate(t, cal, source, true, (i+1)*correct/total > i*correct/total)
+		if err := cal.Update(source, class, true, outcome[(i+1)*correct/total > i*correct/total]); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

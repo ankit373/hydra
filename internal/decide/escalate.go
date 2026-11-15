@@ -21,8 +21,9 @@ type OnFail struct {
 	// Max is how many stronger heads failed checks may ask; see policy.Escalations.
 	Max int
 
-	judged []Judged
-	asked  int
+	judged  []Judged
+	answers []*dispatch.Result
+	asked   int
 	// open is the answer last passed over, until a later answer is judged.
 	open *dispatch.Result
 }
@@ -41,6 +42,7 @@ type Judged struct {
 // Judge runs every check on r and matches dispatch.Options.Escalate.
 func (o *OnFail) Judge(ctx context.Context, r *dispatch.Result) (next bool, reason string) {
 	o.open = nil
+	o.answers = append(o.answers, r)
 	for _, c := range o.Checks {
 		v, err := c.Oracle.Verify(ctx, r.Output, trust.Task{Domain: r.Domain})
 		j := Judged{Head: r.Head.ID, SpanID: r.SpanID, Check: c.Source,
@@ -66,6 +68,9 @@ func (o *OnFail) Judge(ctx context.Context, r *dispatch.Result) (next bool, reas
 
 // Verdicts is every check's verdict on every answer judged, in order.
 func (o *OnFail) Verdicts() []Judged { return o.judged }
+
+// Answers is every answer judged, in order; the last is the one dispatch serves.
+func (o *OnFail) Answers() []*dispatch.Result { return o.answers }
 
 // Unasked says why a failed answer was served with nothing stronger after it,
 // "" when nothing is waiting on a stronger head.
