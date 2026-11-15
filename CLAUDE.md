@@ -97,7 +97,7 @@ internal/mcpregistry/   ← MCP server trust registry: sync official registry, s
                           known incidents. Tool-description drift and model-aimed text checks read a
                           saved tools/list at $HYDRA_HOME/mcp_tools/<server>.json, never a live server
                           (#1303). `hyctl mcp registry`.
-internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hyctl oracle`.
+internal/oracle/        ← Checks as calibrated evidence: any command (tests, a schema check), label match, predicates. `hyctl oracle`.
 internal/vet/           ← Review a diff: open-code-review resolves the files and rules, the router
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace
