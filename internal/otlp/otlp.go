@@ -320,7 +320,13 @@ func metaAttrs(meta map[string]any) []KeyValue {
 		case int64:
 			out = append(out, num("hydra.meta."+k, v))
 		default:
-			out = append(out, str("hydra.meta."+k, fmt.Sprint(v)))
+			// A nested value such as the recipe exports as JSON, which a collector can parse.
+			b, err := json.Marshal(v)
+			if err != nil {
+				out = append(out, str("hydra.meta."+k, fmt.Sprint(v)))
+				continue
+			}
+			out = append(out, str("hydra.meta."+k, string(b)))
 		}
 	}
 	return out

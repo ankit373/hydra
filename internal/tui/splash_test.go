@@ -3,6 +3,9 @@
 package tui
 
 import (
+	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -103,5 +106,25 @@ func TestChat_EmptyThreadShowsTheMark(t *testing.T) {
 	m.th().name = "add pagination"
 	if got := stripANSI(m.chatMain(m.th(), 70, 40)); strings.Contains(got, "●") {
 		t.Errorf("mark still drawn after the first task:\n%s", got)
+	}
+}
+
+// The starters are copy shared with the desktop app. Two lists drift, so the
+// desktop's STARTERS array is read from its source and compared.
+func TestEmptyChat_StartersMatchDesktop(t *testing.T) {
+	src, err := os.ReadFile("../../desktop/frontend/src/views/ChatView.tsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := regexp.MustCompile(`(?s)const STARTERS = \[(.*?)\]`).FindSubmatch(src)
+	if block == nil {
+		t.Fatal("no STARTERS array in ChatView.tsx")
+	}
+	var desktop []string
+	for _, m := range regexp.MustCompile(`'([^']*)'`).FindAllSubmatch(block[1], -1) {
+		desktop = append(desktop, string(m[1]))
+	}
+	if !slices.Equal(desktop, ckStarters) {
+		t.Errorf("starters drifted:\ndesktop %q\nterminal %q", desktop, ckStarters)
 	}
 }

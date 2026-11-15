@@ -36,6 +36,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/recipe"
 	"github.com/ankit373/hydra/internal/retrieve"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -81,6 +82,10 @@ type Options struct {
 	DryRun    bool   // print selected head without executing
 	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
 	Enum      string // enum key (e.g. "SIMPLE") for cost logging
+
+	// Recipe is what this dispatch runs, logged on the task span; nil is the
+	// one-call recipe with no checks. Its checks are run by the caller.
+	Recipe *recipe.Recipe
 
 	// Resource is the file (or other resource) this dispatch acts on, if any,
 	// e.g. the path editor.Edit is about to write. Passed to the ledger so a
@@ -678,6 +683,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	if err := ValidateTierHint(opts.TierHint); err != nil {
 		return nil, err
 	}
+	if opts.Recipe != nil {
+		if err := opts.Recipe.Validate(); err != nil {
+			return nil, err
+		}
+	}
 	// Written once per dispatch rather than per outcome. Breaker state is a
 	// cache of what was observed, so a lost update costs one retry, never work.
 	defer func() { _ = d.health.Flush() }()
@@ -888,7 +898,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// unrelated dispatch and no run had a tree at all (#864).
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID, SpanID: taskSpan,
-		Detail: opts.Enum, Meta: objectiveMeta(opts),
+		Detail: opts.Enum, Meta: taskMeta(opts),
 	})
 	// A pinned head was the whole list, so nothing was ranked to explain.
 	if opts.Head == "" {
@@ -1839,12 +1849,18 @@ func (d *Dispatcher) domainMeasurement(domain string) rank.Lookup {
 // the governor falls back to and whose cache threshold the objective route keeps.
 const ServedDefaultEnum = "STANDARD"
 
-// objectiveMeta names the objective that ordered a task, since its enum is empty.
-func objectiveMeta(opts Options) map[string]any {
-	if opts.Objective == "" {
-		return nil
+// taskMeta names the recipe a task runs, and the objective that ordered it,
+// since its enum is empty.
+func taskMeta(opts Options) map[string]any {
+	r := recipe.Default(nil)
+	if opts.Recipe != nil {
+		r = *opts.Recipe
 	}
-	return map[string]any{"objective": string(opts.Objective)}
+	meta := map[string]any{"recipe": r}
+	if opts.Objective != "" {
+		meta["objective"] = string(opts.Objective)
+	}
+	return meta
 }
 
 // routingDomain is the calibration domain a dispatch routes for: what the

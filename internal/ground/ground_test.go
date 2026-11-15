@@ -218,3 +218,48 @@ func TestCheck_OverlapIsReportedNotEnforced(t *testing.T) {
 		t.Error("low overlap alone failed an answer that invents nothing")
 	}
 }
+
+const minutes = "The board met on Tuesday, 3 March 2026, and agreed to meet again on April 14–15, 2026."
+
+// A meeting moved from 3 March to 13 March is a shifted date, and so is one
+// whose day reads as a lone short number that the number rule skips.
+func TestCheck_FlagsAnInventedDate(t *testing.T) {
+	for _, answer := range []string{
+		"The board met on 13 March 2026.",
+		"The board met on March 4.",
+		"The next meeting is on April 14–16, 2026.",
+	} {
+		v := Check(answer, prompt(minutes))
+		if v.Grounded || len(v.Unsupported) != 1 || v.Unsupported[0].Kind != KindDate {
+			t.Errorf("%q: grounded=%v unsupported=%+v, want one date claim", answer, v.Grounded, v.Unsupported)
+		}
+	}
+}
+
+// The same day written another way is the same claim. A source with a year
+// supports the date without one, but not a different year.
+func TestCheck_DateFormatsSupportEachOther(t *testing.T) {
+	for _, answer := range []string{
+		"The board met on March 3.",
+		"The board met on 3rd March.",
+		"The board met on 2026-03-03.",
+		"The board met on 03/03/2026.",
+		"The board met on Mar. 3, 2026, and meets next on 14-15 April 2026.",
+	} {
+		v := Check(answer, prompt(minutes))
+		if !v.Grounded || v.Claims == 0 {
+			t.Errorf("%q: grounded=%v claims=%d unsupported=%+v", answer, v.Grounded, v.Claims, v.Unsupported)
+		}
+	}
+	if v := Check("The board met on 3 March 2025.", prompt(minutes)); v.Grounded {
+		t.Error("a different year was supported by the month and day alone")
+	}
+}
+
+// "last Tuesday" names no day, and "may" is a verb, so neither is a claim.
+func TestCheck_RelativeDateIsNotAClaim(t *testing.T) {
+	v := Check("The board met last Tuesday and may 2 more times.", prompt(minutes))
+	if v.Claims != 0 {
+		t.Errorf("claims=%d unsupported=%+v, want none", v.Claims, v.Unsupported)
+	}
+}

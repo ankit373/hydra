@@ -41,10 +41,10 @@ func cmdOracleGround() *cobra.Command {
 		Long: `hyctl oracle ground verifies that an answer's claims appear in the context the
 head was given, and reports the result as calibrated evidence.
 
-It answers one narrow question: does the answer state a number, path, flag or
-symbol that appears nowhere in the prompt? That is extrinsic hallucination, a
-model contradicting ground truth sitting in its own context, and it is the part
-of the problem a check with no trained model can speak to.
+It answers one narrow question: does the answer state a number, date, path,
+flag or symbol that appears nowhere in the prompt? That is extrinsic
+hallucination, a model contradicting ground truth sitting in its own context,
+and it is the part of the problem a check with no trained model can speak to.
 
 It declines everything else. A prompt with no fenced context produces no verdict
 at all, and neither does an answer that states nothing checkable: "nothing to

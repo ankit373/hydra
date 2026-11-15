@@ -449,3 +449,22 @@ func manyGroupRows(n int) []cost.GroupRow {
 	}
 	return out
 }
+
+// On an empty chat a digit fills in that starter; after the first task, or
+// with text already typed, it is just a digit.
+func TestEmptyChat_DigitFillsStarter(t *testing.T) {
+	m := testCockpit()
+	m.view = ckViewChat
+	if m = typed(m, "2"); m.th().input != ckStarters[1] {
+		t.Errorf("2 on an empty chat filled %q, want %q", m.th().input, ckStarters[1])
+	}
+	m = press(m, "esc")
+	if m = typed(m, "add 3 retries"); m.th().input != "add 3 retries" {
+		t.Errorf("a digit mid-text did not type: %q", m.th().input)
+	}
+	m = press(m, "esc")
+	m.th().name = "a task ran"
+	if m = typed(m, "4"); m.th().input != "4" {
+		t.Errorf("a digit after the first task did not type: %q", m.th().input)
+	}
+}
