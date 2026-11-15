@@ -1088,7 +1088,7 @@ Chat has **modes**: what a task does (`shift+tab` cycles the basics, `m` opens t
 | **Careful** | Auto, but every file write needs a `y/n` confirm before it lands |
 | **Unattended** | Auto with no confirms and a hard $0.50 per-task cost cap, it stops visibly at the cap |
 
-Where a task runs is separate: `ctrl+o` overrides the **next** task's routing (auto / force routing level / local only / best of 3 / consensus check at 90-99.9%). After an edit, type `/diff` for the diff, `/undo` to restore the pre-task snapshot exactly (it asks y/n first), `/open` to open the file; the footer's trace id jumps into the activity view. These are typed commands, not bare letters, so a message starting with `x` or `a` is just text.
+Where a task runs is separate: `ctrl+o` overrides the **next** task's routing (auto / force routing level / local only / best of 3 / consensus check at 90-99.9%). After an edit, type `/diff` for the diff, `/undo` to restore the pre-task snapshot exactly (it asks y/n first), `/open` to open the file; the footer's trace id jumps into the activity view. These are typed commands, not bare letters, so a message starting with `x` or `a` is just text. The code panel beside the chat appears once a task streams a file or a diff; until then the chat takes the full width.
 
 Chat runs **parallel threads**: several tasks at once, safely:
 
