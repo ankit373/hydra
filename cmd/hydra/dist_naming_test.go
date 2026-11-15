@@ -397,6 +397,34 @@ func TestInstallers_AllFailClosedOnAnUnlistedArchive(t *testing.T) {
 	}
 }
 
+// An unreachable checksum file must stop every installer too; only an
+// explicit HYDRA_INSECURE=1 installs without a check.
+func TestInstallers_FailClosedWhenChecksumsAreUnreachable(t *testing.T) {
+	for _, c := range []struct {
+		file  string
+		fatal *regexp.Regexp
+	}{
+		{"install.sh", regexp.MustCompile(`\bdie\b "could not download checksums\.txt`)},
+		{"install-app.sh", regexp.MustCompile(`\bdie\b "no \.sha256 published`)},
+		{"install.ps1", regexp.MustCompile(`Stop-WithError "could not download checksums\.txt`)},
+		{filepath.Join("npm", "scripts", "postinstall.js"), regexp.MustCompile(`\bfail\(` + "`" + `could not download checksums\.txt`)},
+		{filepath.Join("pip", "hyctl", "__init__.py"), regexp.MustCompile(`_die\(f"could not download checksums\.txt`)},
+	} {
+		t.Run(c.file, func(t *testing.T) {
+			src := repoFile(t, strings.Split(c.file, string(filepath.Separator))...)
+			if !c.fatal.MatchString(src) {
+				t.Errorf("%s does not abort when the checksum file cannot be downloaded", c.file)
+			}
+			if strings.Contains(src, "skipping verification") {
+				t.Errorf("%s still has a path that skips verification", c.file)
+			}
+			if !strings.Contains(src, "HYDRA_INSECURE") {
+				t.Errorf("%s has no HYDRA_INSECURE opt-out", c.file)
+			}
+		})
+	}
+}
+
 // #233: the desktop bundle claimed Wails' default 1.0.0 forever, because
 // CFBundleShortVersionString is templated from wails.json's productVersion and
 // nothing ever set it. macOS compares CFBundleVersion to decide what is newer,
