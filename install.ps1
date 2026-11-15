@@ -11,6 +11,9 @@
   it downloads a .tar.gz unconditionally, while Windows archives are .zip, so
   it refuses to run here rather than handing a zip to tar (#264).
 
+  It refuses to install when checksums.txt cannot be fetched or checked.
+  Set $env:HYDRA_INSECURE = '1' to skip that check.
+
 .PARAMETER Version
   Pin a specific release, e.g. v1.2.0. Defaults to the latest.
   Also settable as $env:HYDRA_VERSION.
@@ -125,18 +128,17 @@ try {
     }
 
     # ── Verify ────────────────────────────────────────────────────────────────
-    # Same three-way policy as install.sh, npm and pip, and for the same reason:
-    #   unreachable checksums.txt  → warn and continue; a network blip should
-    #                                not brick an install
-    #   present but not listing us → FAIL CLOSED; the realistic cause is naming
-    #                                drift, and silently skipping verification
-    #                                for every user is #241
-    #   listed and mismatched      → FAIL
+    # Any check that cannot run stops the install, unless HYDRA_INSECURE=1.
+    # An unlisted archive is usually name drift (#241).
     $sums = $null
-    try {
-        $sums = (Invoke-WebRequest -Uri $SumsUrl -UseBasicParsing).Content
-    } catch {
-        Write-Warn "checksums.txt not published for $Tag, skipping verification"
+    if ($env:HYDRA_INSECURE -eq '1') {
+        Write-Warn "HYDRA_INSECURE=1, installing without checksum verification"
+    } else {
+        try {
+            $sums = (Invoke-WebRequest -Uri $SumsUrl -UseBasicParsing).Content
+        } catch {
+            Stop-WithError "could not download checksums.txt for $Tag, refusing to install unverified (HYDRA_INSECURE=1 skips this)"
+        }
     }
 
     if ($null -ne $sums) {

@@ -790,8 +790,10 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 irm https://raw.githubusercontent.com/ankit373/hydra/main/install.ps1 | iex
 ```
 Installs per-user to `%LOCALAPPDATA%\Programs\hyctl` and extends your user `PATH`, with
-no administrator rights needed. Both installers verify the download against the
-release's `checksums.txt` and refuse to install if it is listed and does not match.
+no administrator rights needed. Both installers, and the npm and pip packages, verify
+the download against the release's `checksums.txt`. They refuse to install if the
+file cannot be fetched, does not list the archive, or does not match, or if no sha256
+tool is found. `HYDRA_INSECURE=1` skips the check.
 Pin a version with `$env:HYDRA_VERSION` / `HYDRA_VERSION`, or change the directory
 with `$env:HYDRA_BIN` / `HYDRA_BIN`.
 

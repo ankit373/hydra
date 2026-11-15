@@ -15,6 +15,7 @@
 #   HYDRA_VERSION=v1.2.0     pin a specific release (default: latest)
 #   HYDRA_APP_DIR=/opt/hydra install directory (default: /Applications on macOS,
 #                            ~/.local/share/hydra elsewhere)
+#   HYDRA_INSECURE=1         install even when the checksum cannot be checked
 set -eu
 
 REPO="ankit373/hydra"
@@ -116,23 +117,22 @@ fi
 #
 # Each desktop asset carries its own .sha256 rather than appearing in the shared
 # checksums.txt, so this reads that file instead of grepping the combined one.
-if $DLO "$TMP/expected.sha256" "$SUM_URL" 2>/dev/null; then
+if [ "${HYDRA_INSECURE:-}" = "1" ]; then
+  warn "HYDRA_INSECURE=1, installing without checksum verification"
+else
+  $DLO "$TMP/expected.sha256" "$SUM_URL" 2>/dev/null \
+    || die "no .sha256 published for ${ARCHIVE}, refusing to install unverified (HYDRA_INSECURE=1 skips this)"
   if command -v sha256sum >/dev/null 2>&1; then
     SHA="$(sha256sum "$TMP/$ARCHIVE" | awk '{print $1}')"
   elif command -v shasum >/dev/null 2>&1; then
     SHA="$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')"
   else
-    SHA=""
-    warn "no sha256 tool found, skipping checksum verification"
+    die "no sha256sum or shasum found, refusing to install unverified (HYDRA_INSECURE=1 skips this)"
   fi
-  if [ "${SHA:-}" != "" ]; then
-    EXPECTED="$(awk '{print $1}' "$TMP/expected.sha256")"
-    [ "${EXPECTED:-}" != "" ] || die "published .sha256 for ${ARCHIVE} is empty"
-    [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch, refusing to install (expected ${EXPECTED}, got ${SHA})"
-    info "Checksum: verified"
-  fi
-else
-  warn "no .sha256 published for ${ARCHIVE}, skipping verification"
+  EXPECTED="$(awk '{print $1}' "$TMP/expected.sha256")"
+  [ "${EXPECTED:-}" != "" ] || die "published .sha256 for ${ARCHIVE} is empty"
+  [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch, refusing to install (expected ${EXPECTED}, got ${SHA})"
+  info "Checksum: verified"
 fi
 
 # ── Extract ────────────────────────────────────────────────────────────────────
