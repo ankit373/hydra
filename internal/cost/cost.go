@@ -65,6 +65,15 @@ type Row struct {
 	// must be distinguishable from "not recorded". See internal/ope.
 	ActProb  float64 `json:"act_prob"`
 	KeepProb float64 `json:"keep_prob"`
+
+	// The head ActProb belongs to, which a fallback makes differ from Head.
+	// FallbackStep is never omitted, so 0 means the first pick answered; a
+	// row written before these existed has FirstHead "".
+	FirstHead    string `json:"first_head,omitempty"`
+	FirstModel   string `json:"first_model,omitempty"`
+	FirstTier    int    `json:"first_tier,omitempty"`
+	FirstPool    string `json:"first_pool,omitempty"`
+	FallbackStep int    `json:"fallback_step"`
 }
 
 // Totals is an aggregate summary.

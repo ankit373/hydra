@@ -29,3 +29,32 @@ func TestRowCarriesPropensity(t *testing.T) {
 		}
 	}
 }
+
+// The first pick round-trips, and a row written before it existed loads with
+// FirstHead "" so a reader can tell it from a first pick that answered.
+func TestRowCarriesFirstPick(t *testing.T) {
+	in := Row{Head: "spare", ActProb: 0.9, FirstHead: "cheap", FirstModel: "m",
+		FirstTier: 4, FirstPool: "p", FallbackStep: 1}
+	b, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out Row
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out != in {
+		t.Fatalf("round trip changed the row:\n got %+v\nwant %+v", out, in)
+	}
+	if b, _ := json.Marshal(Row{}); !strings.Contains(string(b), `"fallback_step":0`) {
+		t.Errorf("zero Row omits fallback_step, so 0 cannot mean the first pick answered: %s", b)
+	}
+
+	var old Row
+	if err := json.Unmarshal([]byte(`{"head":"h","act_prob":0.9,"keep_prob":1}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.FirstHead != "" || old.FallbackStep != 0 || old.Head != "h" {
+		t.Errorf("old row loaded as %+v", old)
+	}
+}
