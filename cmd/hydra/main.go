@@ -407,6 +407,9 @@ func routingEvidence(r *dispatch.Result, h provider.Head) string {
 	// The in-domain count is what separates "measured here" from "measured
 	// somewhere else and borrowed", which is the whole reason to print it.
 	line := fmt.Sprintf("  → %d on %d judged, %d in %s", sc.Effective, sc.N, sc.InDomain, r.Domain)
+	if sc.Measured() {
+		line += fmt.Sprintf(", at least %d at %.0f%%", sc.Lower, rank.ClearLevel*100)
+	}
 	if r.Requirement > 0 {
 		line += fmt.Sprintf(", $%.5f, %s", sc.CostUSD, clearance(sc))
 	}
@@ -420,8 +423,8 @@ func clearance(sc rank.Score) string {
 	switch {
 	case sc.Clears:
 		return "clears"
-	case sc.InDomain >= rank.MinCommitments:
-		return "under the bar"
+	case sc.Measured():
+		return fmt.Sprintf("below the bar at %.0f%%", rank.ClearLevel*100)
 	}
 	return "too little in-domain evidence"
 }

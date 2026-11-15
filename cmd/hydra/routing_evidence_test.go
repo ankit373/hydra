@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -60,7 +61,7 @@ func TestClearance_SeparatesFallingShortFromNotBeingAsked(t *testing.T) {
 		want string
 	}{
 		{rank.Score{Clears: true, InDomain: 60}, "clears"},
-		{rank.Score{InDomain: rank.MinCommitments}, "under the bar"},
+		{rank.Score{InDomain: rank.MinCommitments}, "below the bar at 95%"},
 		{rank.Score{InDomain: rank.MinCommitments - 1}, "too little in-domain evidence"},
 	}
 	for _, c := range cases {
@@ -96,5 +97,26 @@ func TestRoutingEvidence_CostAndVerdictOnlyUnderAConstraint(t *testing.T) {
 	// A head the ranking never scored has nothing to explain.
 	if got := routingEvidence(&dispatch.Result{Requirement: 0.9}, head); got != "" {
 		t.Errorf("an unscored head printed %q", got)
+	}
+}
+
+// A head whose mean reaches the bar but whose 95% bound does not must say both
+// numbers, or a 91 that did not clear 90 reads as a bug.
+func TestRoutingEvidence_ShowsTheBoundBesideTheMean(t *testing.T) {
+	head := provider.Head{ID: "h", CapScore: 90}
+	m := rank.Measurement{Correct: 22, Total: 24, InDomainCorrect: 22, InDomainTotal: 24}
+	scores := rank.Scores([]provider.Head{head}, func(string) rank.Measurement { return m })
+	free := func(provider.Head) (float64, bool) { return 0, true }
+	_, scores = rank.Cheapest([]provider.Head{head}, scores, free, 0.9)
+	if sc := scores["h"]; sc.Effective < 90 || sc.Clears {
+		t.Fatalf("fixture wants a mean at the bar that does not clear, got %+v", sc)
+	}
+
+	got := routingEvidence(&dispatch.Result{Domain: "go", Requirement: 0.9, Scores: scores}, head)
+	want := fmt.Sprintf("91 on 24 judged, 24 in go, at least %d at 95%%", scores["h"].Lower)
+	for _, w := range []string{want, "below the bar at 95%"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("got %q, want it to carry %q", got, w)
+		}
 	}
 }

@@ -643,6 +643,9 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span 
       <div class="sub"><div class="lbl">How it works</div>
         <p>1 · classify → enum/routing level · 2 · <b>policy gate</b> (PII can block before any network call) · 3 · select highest-CapScore available model at/under routing level · 4 · execute · 5 · on failure fall down the chain to local Qwen · 6 · log tokens + cost. ~1.1µs of decision overhead.</p>
       </div>
+      <div class="sub"><div class="lbl">Good enough</div>
+        <p>Hydra counts a model as good enough at a task type only when it is still good enough after allowing for luck. A model that got 22 of 24 answers right may just have had a good run, and when several models are held to one bar, the one whose average clears it is often only the luckiest. So the bar is checked against the lowest rate the model&rsquo;s record supports at 95%, not against its average. 95% is the level <span class="fx">--confidence</span> uses by default. <span class="fx">--dry-run</span> prints both numbers, for example an average of 91 and at least 82 at 95%.</p>
+      </div>
       <div class="sub"><div class="lbl">Usage</div>
         <pre translate="no">hyctl dispatch <span class="s">"refactor auth to JWT refresh"</span>
 hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a User DTO"</span>
