@@ -1,0 +1,22 @@
+{
+ "GetWeather": [
+  {
+   "data": [
+    {
+     "text": "will it rain in "
+    },
+    {
+     "text": "Oslo",
+     "entity": "city"
+    },
+    {
+     "text": " "
+    },
+    {
+     "text": "tomorrow",
+     "entity": "timeRange"
+    }
+   ]
+  }
+ ]
+}

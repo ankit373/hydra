@@ -1,0 +1,29 @@
+{
+ "RateBook": [
+  {
+   "data": [
+    {
+     "text": "rate "
+    },
+    {
+     "text": "this novel",
+     "entity": "object_select"
+    },
+    {
+     "text": " "
+    },
+    {
+     "text": "4",
+     "entity": "rating_value"
+    },
+    {
+     "text": " out of "
+    },
+    {
+     "text": "6",
+     "entity": "best_rating"
+    }
+   ]
+  }
+ ]
+}

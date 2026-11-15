@@ -4,6 +4,7 @@ package checkgen
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -109,5 +110,33 @@ func TestFields_WriterFailuresAreErrors(t *testing.T) {
 	}
 	if _, err := (fieldsGen{}).Oracle(Spec{Body: []byte(`[`)}, Env{}); err == nil {
 		t.Error("a corrupt spec built an oracle")
+	}
+}
+
+func TestSameValue_NumbersByValueTextFoldedListsInOrder(t *testing.T) {
+	for _, tc := range []struct {
+		a, b any
+		want bool
+	}{
+		{"Lisbon", " lisbon ", true},
+		{"7 pm", "7  PM", true},
+		{"1,200", json.Number("1200"), true},
+		{"4", json.Number("4.0"), true},
+		{"4 people", json.Number("4"), false},
+		{"7 pm", "Lisbon", false},
+		{"true", true, true},
+		{[]any{"a", "b"}, []any{"A", "b"}, true},
+		{[]any{"a", "b"}, []any{"b", "a"}, false},
+		{[]any{"a"}, "a", false},
+	} {
+		if got := SameValue(tc.a, tc.b); got != tc.want {
+			t.Errorf("SameValue(%#v, %#v) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+	if _, ok := DecodeObject("```json\n{\"a\": 1}\n```"); !ok {
+		t.Error("a fenced object was not read")
+	}
+	if _, ok := DecodeObject(`["a"]`); ok {
+		t.Error("a list was read as an object")
 	}
 }
