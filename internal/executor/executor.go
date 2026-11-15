@@ -54,6 +54,11 @@ type Response struct {
 	Model        string
 	Truncated    bool // true when output exceeded the accumulator cap
 
+	// The prompt's cached part. Both are subsets of InputTokens, which stays the
+	// full prompt size so budgets and cost stay comparable across providers.
+	CacheReadTokens  int
+	CacheWriteTokens int
+
 	// TTFT is time to first token, measured by the streaming paths from the
 	// first delta that carries something. Zero means unknown, never instant,
 	// so a consumer must not average it in as a measured zero: a plain
