@@ -56,11 +56,13 @@ def _fetch(url: str) -> bytes:
 
 
 def _verify(archive: bytes, name: str) -> None:
+    if os.environ.get("HYDRA_INSECURE") == "1":
+        sys.stderr.write("hyctl: HYDRA_INSECURE=1, installing without checksum verification\n")
+        return
     try:
         sums = _fetch(f"{BASE}/checksums.txt").decode("utf-8")
-    except Exception:
-        sys.stderr.write("hyctl: checksums.txt unavailable, skipping verification\n")
-        return
+    except Exception as e:
+        _die(f"could not download checksums.txt ({e}), refusing to install unverified (HYDRA_INSECURE=1 skips this)")
     for line in sums.splitlines():
         if line.strip().endswith(name):
             expected = line.split()[0]

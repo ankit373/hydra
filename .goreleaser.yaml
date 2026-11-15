@@ -150,13 +150,13 @@ release:
     brew install hyctl
     brew upgrade hyctl        # upgrade
     ```
-    **Verify (after cosign enabled)**
-    ```bash
-    cosign verify-blob --signature checksums.txt.sig checksums.txt
-    ```
     **Verify SHA**
     ```bash
-    sha256sum --check checksums.txt
+    sha256sum --ignore-missing --check checksums.txt
+    ```
+    **Verify build provenance**
+    ```bash
+    gh attestation verify hydra_{{ .Version }}_<os>_<arch>.tar.gz --repo ankit373/hydra
     ```
 
   # Auto-detect pre-release from tag (e.g. v1.0.0-rc.1, v1.0.0-beta.1)

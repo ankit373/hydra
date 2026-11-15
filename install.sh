@@ -10,6 +10,7 @@
 # Environment overrides:
 #   HYDRA_VERSION=v1.2.0       pin a specific release (default: latest)
 #   HYDRA_BIN=/usr/local/bin   install directory (default: auto)
+#   HYDRA_INSECURE=1           install even when the checksum cannot be checked
 set -eu
 
 REPO="ankit373/hydra"
@@ -80,24 +81,23 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 echo "-> Downloading..."
 $DLO "$TMP/$ARCHIVE" "$URL" || die "download failed: $URL"
 
-# ── Verify checksum (skip only if no checksums.txt or no sha tool) ──────────────
-if $DLO "$TMP/checksums.txt" "$SUMS_URL" 2>/dev/null; then
+# ── Verify checksum (refuse if it cannot be checked, unless HYDRA_INSECURE=1) ──
+if [ "${HYDRA_INSECURE:-}" = "1" ]; then
+  warn "HYDRA_INSECURE=1, installing without checksum verification"
+else
+  $DLO "$TMP/checksums.txt" "$SUMS_URL" 2>/dev/null \
+    || die "could not download checksums.txt for ${TAG}, refusing to install unverified (HYDRA_INSECURE=1 skips this)"
   if command -v sha256sum >/dev/null 2>&1; then
     SHA="$(sha256sum "$TMP/$ARCHIVE" | awk '{print $1}')"
   elif command -v shasum >/dev/null 2>&1; then
     SHA="$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')"
   else
-    SHA=""
-    warn "no sha256 tool found, skipping checksum verification"
+    die "no sha256sum or shasum found, refusing to install unverified (HYDRA_INSECURE=1 skips this)"
   fi
-  if [ "${SHA:-}" != "" ]; then
-    EXPECTED="$(grep " ${ARCHIVE}\$" "$TMP/checksums.txt" | awk '{print $1}')"
-    [ "${EXPECTED:-}" != "" ] || die "checksum for ${ARCHIVE} not found in checksums.txt"
-    [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch, refusing to install (expected ${EXPECTED}, got ${SHA})"
-    info "Checksum: verified"
-  fi
-else
-  warn "checksums.txt not published for ${TAG}, skipping verification"
+  EXPECTED="$(grep " ${ARCHIVE}\$" "$TMP/checksums.txt" | awk '{print $1}')"
+  [ "${EXPECTED:-}" != "" ] || die "checksum for ${ARCHIVE} not found in checksums.txt"
+  [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch, refusing to install (expected ${EXPECTED}, got ${SHA})"
+  info "Checksum: verified"
 fi
 
 # ── Extract ────────────────────────────────────────────────────────────────────
