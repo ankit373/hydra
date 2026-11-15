@@ -26,26 +26,39 @@ func ApplyRunOutcome(cal *Calibrator, domain string, ledger []Evidence, actual O
 	if actual == OutcomeUnknown {
 		return 0, nil
 	}
-	if len(ledger) == 0 {
-		return 0, nil
-	}
-	// The leading answer can change as votes arrive, and each entry records the
-	// leader at its own moment, so the last entry always holds whichever answer
-	// the run ended on.
-	final := ledger[len(ledger)-1].Candidate
-
 	recorded := 0
-	for _, e := range ledger {
-		saidCorrect, ok := verdictOn(e, final)
-		if !ok {
-			continue
-		}
-		if err := cal.Update(e.Source, domain, saidCorrect, actual); err != nil {
+	for _, v := range VerdictsOnFinal(ledger) {
+		if err := cal.Update(v.Source, domain, v.SaidCorrect, actual); err != nil {
 			return recorded, err
 		}
 		recorded++
 	}
 	return recorded, nil
+}
+
+// SourceVerdict is one ledger entry re-expressed as a verdict on the answer
+// the run ended on.
+type SourceVerdict struct {
+	Source      string
+	SaidCorrect bool
+}
+
+// VerdictsOnFinal is every ledger entry that says something about the final
+// answer, in ledger order. Entries that say nothing about it are skipped.
+func VerdictsOnFinal(ledger []Evidence) []SourceVerdict {
+	if len(ledger) == 0 {
+		return nil
+	}
+	// The leading answer can change as votes arrive, and each entry records the
+	// leader at its own moment, so the last entry always holds the final one.
+	final := ledger[len(ledger)-1].Candidate
+	out := make([]SourceVerdict, 0, len(ledger))
+	for _, e := range ledger {
+		if saidCorrect, ok := verdictOn(e, final); ok {
+			out = append(out, SourceVerdict{Source: e.Source, SaidCorrect: saidCorrect})
+		}
+	}
+	return out
 }
 
 // verdictOn re-expresses one ledger entry as a verdict about final, the answer

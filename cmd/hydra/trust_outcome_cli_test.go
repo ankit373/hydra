@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
@@ -13,7 +14,13 @@ import (
 // Written through the real LogRun so the test reads what the CLI would.
 func seedTrustRun(t *testing.T, hash string, withHypotheses bool) {
 	t.Helper()
+	seedTrustRunOnSpan(t, hash, "", withHypotheses)
+}
+
+func seedTrustRunOnSpan(t *testing.T, hash, span string, withHypotheses bool) {
+	t.Helper()
 	r := trust.RunLog{
+		SpanID:     span,
 		TaskHash:   hash,
 		Domain:     "go",
 		TargetConf: 0.95,
@@ -176,5 +183,35 @@ func TestCLI_TrustCalibrationFlagsCellsWithNoNegativeVerdicts(t *testing.T) {
 	// power the router will not spend.
 	if !strings.Contains(out, "0.000 ·") {
 		t.Errorf("a one-sided cell still reports diagnostic power:\n%s", out)
+	}
+}
+
+// Ground truth from a trust outcome joins the answer's record, where the
+// models that voted in the run show up as checks beside it.
+func TestTrustOutcome_WritesTruth(t *testing.T) {
+	cliSandbox(t)
+	seedTrustRunOnSpan(t, "beef5678", "span-1", false)
+
+	if _, _, err := run(t, "trust", "outcome", "beef5678", "--outcome", "incorrect"); err != nil {
+		t.Fatalf("trust outcome: %v", err)
+	}
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	answers, _ = evalset.AddModelVotes(answers, runs)
+	if len(answers) != 1 || answers[0].Key != "span-1" {
+		t.Fatalf("answers = %+v, want one on span-1", answers)
+	}
+	a := answers[0]
+	if a.Truth == nil || a.Truth.Outcome != evalset.OutcomeIncorrect || a.Truth.Source != "trust outcome" {
+		t.Errorf("truth = %+v, want incorrect from trust outcome", a.Truth)
+	}
+	if len(a.Checks) != 3 {
+		t.Errorf("checks = %+v, want the three model votes", a.Checks)
 	}
 }
