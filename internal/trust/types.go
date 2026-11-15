@@ -31,6 +31,14 @@ func ParseOutcome(s string) Outcome {
 	}
 }
 
+// OutcomeFor is the outcome a check's pass or fail stands for.
+func OutcomeFor(passed bool) Outcome {
+	if passed {
+		return OutcomeCorrect
+	}
+	return OutcomeIncorrect
+}
+
 // Task describes the work whose wrong-answer cost the DefectModel prices.
 type Task struct {
 	Domain string

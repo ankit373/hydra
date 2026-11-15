@@ -501,10 +501,7 @@ func recordReviewOutcome(file, candidateHash string, correct bool) {
 	if err != nil {
 		return
 	}
-	outcome := trust.OutcomeIncorrect
-	if correct {
-		outcome = trust.OutcomeCorrect
-	}
+	outcome := trust.OutcomeFor(correct)
 	_ = cal.Update(headID, trust.DomainForFile(file), true, outcome)
 }
 
