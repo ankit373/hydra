@@ -2,7 +2,10 @@
 
 package trust
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // Commitments counts what a source's own answers did once something judged
 // them, pooled across every domain: total is how many times it backed an
@@ -48,4 +51,23 @@ func (c *Calibrator) CommitmentsIn(source, domain string) (correct, total int) {
 	}
 	tp, fp := conf.TP-laplacePrior, conf.FP-laplacePrior
 	return int(math.Round(tp)), int(math.Round(tp + fp))
+}
+
+// CommitmentsSince is CommitmentsIn counted from the cell's last detected
+// change, so a source that got worse is read on its recent record. The cell is
+// caught up to its domain's clock on a copy: a read never changes the state.
+func (c *Calibrator) CommitmentsSince(source, domain string) (correct, total int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	key := keyFor(source, domain)
+	conf := c.store[key]
+	if conf == nil {
+		return 0, 0
+	}
+	d := *conf.drift
+	d.Segments = slices.Clone(d.Segments)
+	d.Idle(int(c.steps[key.domain] - conf.seen))
+	passes, fails := d.Since()
+	return passes, passes + fails
 }

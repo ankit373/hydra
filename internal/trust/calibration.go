@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/drift"
 )
 
 // laplacePrior is the pseudo-count added to every confusion cell so a brand-new
@@ -41,10 +42,19 @@ func keyFor(source, domain string) calibKey {
 // specificity sp = TN/(TN+FP) = P(says incorrect | incorrect)
 type confusion struct {
 	TP, FP, TN, FN float64
+
+	// drift watches the said-correct verdicts, TP a pass and FP a fail, so the
+	// record since its last change can stand in for the whole history.
+	drift *drift.Detector
+	// seen is the domain step this cell was last caught up to; changed is when
+	// the current segment's change was found, zero when it has none.
+	seen    int64
+	changed time.Time
 }
 
 func newConfusion() *confusion {
-	return &confusion{TP: laplacePrior, FP: laplacePrior, TN: laplacePrior, FN: laplacePrior}
+	return &confusion{TP: laplacePrior, FP: laplacePrior, TN: laplacePrior, FN: laplacePrior,
+		drift: drift.New(laplacePrior, laplacePrior)}
 }
 
 func (c *confusion) se() float64 { return c.TP / (c.TP + c.FN) }
@@ -98,6 +108,9 @@ type Stat struct {
 type Calibrator struct {
 	mu    sync.RWMutex
 	store map[calibKey]*confusion
+	// steps counts each domain's judged answers: the clock a cell's detector is
+	// idled against while other sources are judged and it is not.
+	steps map[string]int64
 	path  string // "" disables persistence (used by tests)
 }
 
@@ -147,8 +160,8 @@ func (c *Calibrator) load() error {
 	}
 
 	var startOffset int64
-	if snap, offset, ok := loadSnapshot(snapshotPath(c.path), f, info.Size()); ok {
-		c.store = snap
+	if snap, steps, offset, ok := loadSnapshot(snapshotPath(c.path), f, info.Size()); ok {
+		c.store, c.steps = snap, steps
 		startOffset = offset
 	}
 	if startOffset > 0 {
@@ -174,18 +187,20 @@ func (c *Calibrator) load() error {
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			continue // skip malformed rows
 		}
-		c.apply(r.Source, r.Domain, r.SaidCorrect, Outcome(r.Outcome))
+		ts, _ := time.Parse(time.RFC3339, r.TS)
+		c.apply(r.Source, r.Domain, r.SaidCorrect, Outcome(r.Outcome), ts)
 		replayed++
 	}
 
 	if replayed >= snapshotThreshold {
-		_ = saveSnapshot(snapshotPath(c.path), c.store, startOffset+int64(len(delta)))
+		_ = saveSnapshot(snapshotPath(c.path), c.store, c.steps, startOffset+int64(len(delta)))
 	}
 	return nil
 }
 
 // apply folds one observation into the in-memory posterior (no persistence).
-func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outcome) {
+// ts is when it was judged, which dates a change it reveals.
+func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outcome, ts time.Time) {
 	if actual == OutcomeUnknown {
 		return
 	}
@@ -193,10 +208,30 @@ func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outco
 	// caller wrote it: `oracle verify` defaults --domain to "" where
 	// `dispatch` defaults it to "default", which is #785 in a writer (#888).
 	key := keyFor(source, domain)
+	if c.steps == nil {
+		c.steps = map[string]int64{}
+	}
+	c.steps[key.domain]++
+	step := c.steps[key.domain]
 	conf := c.store[key]
 	if conf == nil {
 		conf = newConfusion()
+		conf.seen = step - 1
 		c.store[key] = conf
+	}
+	// Only a said-correct verdict is a pass or fail; any other step is idle.
+	if gap := int(step - conf.seen - 1); saidCorrect {
+		conf.drift.Idle(gap)
+		conf.drift.Observe(actual == OutcomeCorrect)
+	} else {
+		conf.drift.Idle(gap + 1)
+	}
+	conf.seen = step
+	switch {
+	case conf.drift.Best == 0: // back on the cell's first segment: no change stands
+		conf.changed = time.Time{}
+	case conf.drift.Changed():
+		conf.changed = ts
 	}
 	switch {
 	case saidCorrect && actual == OutcomeCorrect:
@@ -217,15 +252,16 @@ func (c *Calibrator) Update(source, domain string, saidCorrect bool, actual Outc
 	if actual == OutcomeUnknown {
 		return nil
 	}
+	now := time.Now().UTC().Truncate(time.Second)
 	c.mu.Lock()
-	c.apply(source, domain, saidCorrect, actual)
+	c.apply(source, domain, saidCorrect, actual, now)
 	c.mu.Unlock()
 
 	if c.path == "" {
 		return nil
 	}
 	return c.append(record{
-		TS:          time.Now().UTC().Format(time.RFC3339),
+		TS:          now.Format(time.RFC3339),
 		Source:      source,
 		Domain:      domain,
 		SaidCorrect: saidCorrect,
