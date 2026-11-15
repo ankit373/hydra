@@ -358,35 +358,35 @@ go build -o hyctl ./cmd/hydra</pre>
       <div class="pane on" id="tui0">
         <div class="termwin">
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ chat</span></div>
-<pre translate="no"> <b>HYDRA</b>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
+<pre translate="no"> <b>HYDRA</b> [chat] agents  models  activity  usage  audit                    session <span class="tg">$0.0000</span> · context —
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
-CONTEXT BUDGET       <span class="tf">│</span> 15 models found by the scan.          <span class="tf">│</span> CODE · go
-<span class="tf">░░░░░░░░░░░░░░░</span>      <span class="tf">│</span>                                       <span class="tf">│</span>   1 // paginated users endpoint
-claude 0%            <span class="tf">│</span> Type a task and press <span class="ta">enter</span>. <span class="ta">shift+tab</span><span class="tf">│</span>   2 func (s *Server) ListUsers(w ht…
-                     <span class="tf">│</span> mode · <span class="ta">ctrl+t</span> thread · ? shortcuts ·  <span class="tf">│</span>   3     page := parsePage(r.URL.Que…
-MODELS               <span class="tf">│</span> :q quits.                             <span class="tf">│</span>   4     users, err := s.repo.Users(…
- <span class="tg">✓</span> Claude Code       <span class="tf">│</span> ❯ add pagination to the users endpoint<span class="tf">│</span>   5     if err != nil {
- <span class="tg">✓</span> Claude Opus 4.…   <span class="tf">│</span>   auto-routed · standard work → <span class="tv">T7</span>    <span class="tf">│</span>   6         http.Error(w, err.Error…
- <span class="tg">✓</span> OpenAI Codex      <span class="tf">│</span> qwen2.5-coder · single                <span class="tf">│</span>   7         return
- <span class="tg">✓</span> Claude Sonnet …   <span class="tf">│</span>   why code, standard scope, no PII    <span class="tf">│</span>   8     }
- <span class="tg">✓</span> Gemini 2.0 Fla…   <span class="tf">│</span>                                       <span class="tf">│</span>   9     json.NewEncoder(w).Encode(u…
- <span class="tg">✓</span> Antigravity       <span class="tf">│</span>   plan <span class="tg">✓</span> 3 steps · edit <span class="tg">✓</span> users.go    <span class="tf">│</span>  10 }
- <span class="tg">✓</span> …1 Pro (High)     <span class="tf">│</span> +24/−6 · tests <span class="tg">✓</span> go test ./...        <span class="tf">│</span>
- <span class="tg">✓</span> …1 Pro (Low)      <span class="tf">│</span>  /diff · /undo · /open                <span class="tf">│</span>
- <span class="tg">✓</span> …5 Flash (High)   <span class="tf">│</span>   <span class="tg">✓</span> done 3.2s · <span class="tg">$0.0041</span> est · trace   <span class="tf">│</span>
- <span class="tg">✓</span> …5 Flash (Medi…   <span class="tf">│</span> demo0000, <span class="ta">enter</span> opens the trace       <span class="tf">│</span>
- <span class="tg">✓</span> …5 Flash (Low)    <span class="tf">│</span>                                       <span class="tf">│</span>
- <span class="tg">✓</span> Qwen2.5-Coder:…   <span class="tf">│</span>                                       <span class="tf">│</span>
- <span class="tg">✓</span> qwen3:0.6b (Ol…   <span class="tf">│</span>                                       <span class="tf">│</span>
- <span class="tr">✗</span> Ollama            <span class="tf">│</span>                                       <span class="tf">│</span>
- <span class="tr">✗</span> nomic-embed-te…   <span class="tf">│</span>                                       <span class="tf">│</span>
-                     <span class="tf">│</span>                                       <span class="tf">│</span>
-MODE                 <span class="tf">│</span>                                       <span class="tf">│</span>
- ask                 <span class="tf">│</span>                                       <span class="tf">│</span>
-                     <span class="tf">│</span> <span class="tf">╭────────────────────────────────────╮│</span>
-                     <span class="tf">│</span> <span class="tf">│</span>  Ask <span class="tf">▾</span>  what do you need done?,    <span class="tf">││</span>
-                     <span class="tf">│</span> <span class="tf">│</span> <span class="ta">enter</span> runs it                      <span class="tf">││</span>
-                     <span class="tf">│</span> <span class="tf">╰────────────────────────────────────╯│</span>
+ [1]<span class="tg">✓</span> pull supplier… <span class="tf">│</span> 2<span class="tg">✓</span> add paginatio…
+CONTEXT BUDGET       <span class="tf">│</span> 14 models found by the scan.
+<span class="tf">░░░░░░░░░░░░░░░</span>      <span class="tf">│</span> Type a task and press <span class="ta">enter</span>. <span class="ta">shift+tab</span> mode · <span class="ta">ctrl+t</span> thread · ? shortcuts ·
+no data yet          <span class="tf">│</span> :q quits.
+                     <span class="tf">│</span> ❯ pull supplier, date and total from these 12 invoices
+MODELS               <span class="tf">│</span>   auto-routed · simple task → <span class="tv">T8</span> mistral-small · single
+ <span class="tg">✓</span> Claude Code       <span class="tf">│</span>   why extraction, small scope, no PII
+ <span class="tg">✓</span> Claude Opus 4.…   <span class="tf">│</span>   ▎ 12 rows as JSON, the first two:
+ <span class="tg">✓</span> OpenAI Codex      <span class="tf">│</span>   ▎ {"supplier": "Acme Ltd", "date": "2026-03-03", "total": 1240.00}
+ <span class="tg">✓</span> Claude Sonnet …   <span class="tf">│</span>   ▎ {"supplier": "Northwind", "date": "2026-03-05", "total": 312.50}
+ <span class="tg">✓</span> Antigravity       <span class="tf">│</span>   <span class="tg">✓</span> done 1.4s · <span class="tg">$0.0009</span> est · trace demo0001, <span class="ta">enter</span> opens the trace
+ <span class="tg">✓</span> …1 Pro (High)     <span class="tf">│</span>
+ <span class="tg">✓</span> …1 Pro (Low)      <span class="tf">│</span>
+ <span class="tg">✓</span> …8 Flash (High)   <span class="tf">│</span>
+ <span class="tg">✓</span> …8 Flash (Medi…   <span class="tf">│</span>
+ <span class="tg">✓</span> …8 Flash (Low)    <span class="tf">│</span>
+ <span class="tg">✓</span> Qwen2.5-Coder:…   <span class="tf">│</span>
+ <span class="tg">✓</span> qwen3:0.6b (Ol…   <span class="tf">│</span>
+ <span class="tr">✗</span> Ollama            <span class="tf">│</span>
+ <span class="tr">✗</span> nomic-embed-te…   <span class="tf">│</span>
+                     <span class="tf">│</span>
+MODE                 <span class="tf">│</span>
+ ask                 <span class="tf">│</span>
+                     <span class="tf">│</span>
+                     <span class="tf">│</span> <span class="tf">╭───────────────────────────────────────────────────────────────────────────╮</span>
+                     <span class="tf">│</span> <span class="tf">│</span>  Ask ▾  → thread 1 what do you need done?, <span class="ta">enter</span> runs it                  <span class="tf">│</span>
+                     <span class="tf">│</span> <span class="tf">╰───────────────────────────────────────────────────────────────────────────╯</span>
  <span class="ta">ctrl+t</span> thread  <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts         mode ask · route auto</pre>
         </div>
       </div>
