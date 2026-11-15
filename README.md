@@ -42,6 +42,8 @@ You probably have access to several models: hosted APIs (OpenAI, Anthropic, Gemi
 
 Code is one task type among several, with its own verifiers. Summaries, extraction, drafting and review all go through the same router.
 
+The kinds of work Hydra keeps a record for are `writing`, `summary`, `extraction`, `classification`, `translation`, `answer`, `analysis`, `agent` and `code`. Name one with `hyctl dispatch --kind summary "..."`, or add an area such as `--kind extraction.invoices`, and the request is ranked and logged under that kind.
+
 ```bash
 brew install ankit373/hydra/hyctl && hyctl init
 ```
@@ -848,6 +850,7 @@ hyctl models sync                       # import the OpenRouter catalog (provisi
 # Dispatch
 hyctl dispatch "..."           # route a prompt to the best model
 hyctl dispatch --dry-run "..." # preview routing without executing
+hyctl dispatch --kind summary "..."  # rank models on their record for this kind of work
 hyctl dispatch --local "..."   # local models only, no API calls
 hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many models, judge best
 hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
