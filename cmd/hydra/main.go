@@ -5068,10 +5068,9 @@ func cmdPricingList() *cobra.Command {
 			filter := strings.ToLower(strings.Join(args, " "))
 
 			type row struct {
-				Model            string  `json:"model"`
-				InputPerMillion  float64 `json:"input_per_mtok"`
-				OutputPerMillion float64 `json:"output_per_mtok"`
-				Source           string  `json:"source"` // "openrouter" or "tier"
+				Model string `json:"model"`
+				pricing.ModelPrice
+				Source string `json:"source"` // "openrouter" or "tier"
 			}
 			// Must start as [] not nil: JSON-encoded nil is `null`, and a script
 			// treating this as an array (docs/pricing.md's whole audience) breaks
@@ -5082,7 +5081,7 @@ func cmdPricingList() *cobra.Command {
 					continue
 				}
 				p, _ := db.ModelPrice(m)
-				rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion, "openrouter"})
+				rows = append(rows, row{m, p, "openrouter"})
 			}
 			// Tier pricing is what prices CLI-agent heads (claude-core,
 			// opus-thinking, …), they never appear in OpenRouter's catalog, so
@@ -5093,18 +5092,19 @@ func cmdPricingList() *cobra.Command {
 				if filter != "" && !strings.Contains(strings.ToLower(te.ID), filter) {
 					continue
 				}
-				rows = append(rows, row{te.ID, te.InputPerMillion, te.OutputPerMillion, "tier"})
+				rows = append(rows, row{te.ID, te.ModelPrice, "tier"})
 			}
 
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(rows)
 			}
 
-			fmt.Fprintf(stdout, "%-45s  %10s  %11s  %s\n", "Model", "In $/1M", "Out $/1M", "Source")
-			fmt.Fprintln(stdout, strings.Repeat("─", 82))
+			fmt.Fprintf(stdout, "%-45s  %10s  %11s  %11s  %11s  %s\n",
+				"Model", "In $/1M", "Out $/1M", "Read $/1M", "Write $/1M", "Source")
+			fmt.Fprintln(stdout, strings.Repeat("─", 108))
 			for _, r := range rows {
-				fmt.Fprintf(stdout, "%-45s  %10.4f  %11.4f  %s\n",
-					r.Model, r.InputPerMillion, r.OutputPerMillion, r.Source)
+				fmt.Fprintf(stdout, "%-45s  %10.4f  %11.4f  %11s  %11s  %s\n", r.Model, r.InputPerMillion,
+					r.OutputPerMillion, cacheRate(r.CacheReadPerMillion), cacheRate(r.CacheWritePerMillion), r.Source)
 			}
 			if len(rows) == 0 {
 				fmt.Fprintln(stdout, "(no models matched)")
@@ -5114,6 +5114,14 @@ func cmdPricingList() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
 	return cmd
+}
+
+// cacheRate prints a cache rate, or "-" when the model lists none.
+func cacheRate(r *float64) string {
+	if r == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.4f", *r)
 }
 
 // ── trust ───────────────────────────────────────────────────────────────────────

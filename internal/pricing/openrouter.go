@@ -34,8 +34,10 @@ type orModel struct {
 type orPricing struct {
 	// OpenRouter returns per-token cost as a decimal string, e.g. "0.000015".
 	// Free models return "0". Models with unknown pricing return "".
-	Prompt     string `json:"prompt"`
-	Completion string `json:"completion"`
+	Prompt          string `json:"prompt"`
+	Completion      string `json:"completion"`
+	InputCacheRead  string `json:"input_cache_read"`
+	InputCacheWrite string `json:"input_cache_write"`
 }
 
 type orResponse struct {
@@ -80,11 +82,24 @@ func fetchFromOpenRouter(ctx context.Context) (map[string]ModelPrice, error) {
 			continue
 		}
 		out[id] = ModelPrice{
-			InputPerMillion:  inp * 1_000_000,
-			OutputPerMillion: out_ * 1_000_000,
+			InputPerMillion:      inp * 1_000_000,
+			OutputPerMillion:     out_ * 1_000_000,
+			CacheReadPerMillion:  optionalPerMillion(m.Pricing.InputCacheRead),
+			CacheWritePerMillion: optionalPerMillion(m.Pricing.InputCacheWrite),
 		}
 	}
 	return out, nil
+}
+
+// optionalPerMillion converts a cache rate, nil when the model lists none, so an
+// absent rate reads as unknown rather than free.
+func optionalPerMillion(s string) *float64 {
+	f, err := parsePerToken(s)
+	if err != nil {
+		return nil
+	}
+	f *= 1_000_000
+	return &f
 }
 
 // parsePerToken converts an OpenRouter per-token price string to float64.

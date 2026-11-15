@@ -154,6 +154,8 @@ registry/               ← Routing data, compiled into the binary via `go:embed
   domains.yaml          ← Domain → enum key routing (references routing.yaml).
   pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
                           OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
+                          Optional `cache_read_per_million` / `cache_write_per_million` per tier,
+                          set only where the vendor publishes them.
   signals.yaml          ← Routing signals and rules. Named, typed facts about a dispatch
                           (PII detectors, injection marker, blast radius, keyword sets,
                           whether trust has evidence, what the verified corpus
@@ -1092,6 +1094,9 @@ and keeps one `registry-drift` issue open while a model is gone or retiring, a p
 `HYDRA_PRICING_TTL_HOURS` overrides the 24h TTL.
 `hyctl pricing refresh` forces a synchronous fetch.
 `hyctl pricing list [filter] [--json]` shows all known models.
+`DB.CostForUsage` prices one call from its `Usage`: uncached input, cache reads and cache writes
+each at their own rate. A cache rate nobody published is nil, and those tokens price at the input
+rate, never at a guessed discount. `CostForModel` is the no-cache case of it.
 
 ### Swarm dispatch
 ```

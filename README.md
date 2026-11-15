@@ -941,7 +941,7 @@ hyctl ask decline <task-id> "not prod"  # refuse it; nothing runs
 # Cost & pricing
 hyctl cost                              # spend summary (est. vs actual labeled)
 hyctl stats                             # rollup by model / routing level / day
-hyctl pricing list                      # live $/1M-token rates (OpenRouter + fallback)
+hyctl pricing list                      # live $/1M-token rates, cache read/write too (OpenRouter + fallback)
 
 # Calibration and verification
 hyctl trust calibration                 # per-source sensitivity / specificity / D

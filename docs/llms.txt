@@ -123,7 +123,7 @@ git clone https://github.com/ankit373/hydra && cd hydra && go build ./cmd/hydra
 
 **Free and open source, MIT License.** No subscription. Bring your own API keys.
 
-You pay the underlying model providers directly, at their own rates; local models via Ollama or llama.cpp cost $0. Hydra publishes no savings percentage: what it costs depends on your models and your work, and `hyctl stats` and `hyctl cost` report your own spend. Run `hyctl pricing list` for live rates.
+You pay the underlying model providers directly, at their own rates; local models via Ollama or llama.cpp cost $0. Hydra publishes no savings percentage: what it costs depends on your models and your work, and `hyctl stats` and `hyctl cost` report your own spend. Run `hyctl pricing list` for live rates, including cache read and write rates where the model lists them.
 
 ## Key Links
 

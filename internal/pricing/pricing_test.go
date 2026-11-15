@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -107,6 +108,74 @@ func TestDB_CostForModel_CaseInsensitive(t *testing.T) {
 	got := db.CostForModel("Anthropic/Claude-Opus-4", 1, 1_000_000, 0)
 	if got == 0 {
 		t.Fatal("case-insensitive lookup failed")
+	}
+}
+
+// ── DB.CostForUsage ───────────────────────────────────────────────────────────
+
+func rate(f float64) *float64 { return &f }
+
+func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
+
+// Anthropic-shaped rates: read 0.1x input, write 1.25x input.
+func cachedDB() *DB {
+	return &DB{
+		models: map[string]ModelPrice{
+			"cached/model": {InputPerMillion: 3, OutputPerMillion: 15,
+				CacheReadPerMillion: rate(0.3), CacheWritePerMillion: rate(3.75)},
+			"plain/model": {InputPerMillion: 3, OutputPerMillion: 15},
+		},
+		tiers: map[int]TierPrice{
+			1:  {InputPerMillion: 5, OutputPerMillion: 25, CacheReadPerMillion: rate(0.5)},
+			10: {},
+		},
+	}
+}
+
+func TestCostForUsage_NoCacheMatchesCostForModel(t *testing.T) {
+	db := cachedDB()
+	for _, m := range []string{"cached/model", "plain/model", "unlisted/model"} {
+		got := db.CostForUsage(m, 1, Usage{In: 1234, Out: 567})
+		if want := db.CostForModel(m, 1, 1234, 567); got != want {
+			t.Errorf("%s: CostForUsage = %v, CostForModel = %v", m, got, want)
+		}
+	}
+}
+
+// The issue's case: 900 of 1000 input tokens read from cache.
+func TestCostForUsage_CacheReadsAtReadRate(t *testing.T) {
+	db := cachedDB()
+	got := db.CostForUsage("cached/model", 1, Usage{In: 1000, CacheRead: 900})
+	want := round6((100*3.0 + 900*0.3) / 1_000_000)
+	if got != want {
+		t.Errorf("CostForUsage = %v, want %v (100 at $3, 900 at $0.30)", got, want)
+	}
+	// Tier rates from pricing.yaml take the same path.
+	got = db.CostForUsage("unlisted/model", 1, Usage{In: 1000, CacheRead: 900})
+	if want := round6((100*5.0 + 900*0.5) / 1_000_000); got != want {
+		t.Errorf("tier CostForUsage = %v, want %v", got, want)
+	}
+}
+
+func TestCostForUsage_CacheWritesAtWriteRate(t *testing.T) {
+	db := cachedDB()
+	got := db.CostForUsage("cached/model", 1, Usage{In: 1000, Out: 10, CacheRead: 200, CacheWrite: 700})
+	want := round6((100*3.0 + 200*0.3 + 700*3.75 + 10*15.0) / 1_000_000)
+	if got != want {
+		t.Errorf("CostForUsage = %v, want %v", got, want)
+	}
+}
+
+func TestCostForUsage_UnknownRateFallsBackToInput(t *testing.T) {
+	db := cachedDB()
+	u := Usage{In: 1000, Out: 10, CacheRead: 600, CacheWrite: 300}
+	if got, want := db.CostForUsage("plain/model", 1, u), db.CostForModel("plain/model", 1, 1000, 10); got != want {
+		t.Errorf("no cache rates: %v, want today's %v", got, want)
+	}
+	// Tier 1 lists a read rate but no write rate: writes price as input.
+	got := db.CostForUsage("unlisted/model", 1, u)
+	if want := round6((100*5.0 + 600*0.5 + 300*5.0 + 10*25.0) / 1_000_000); got != want {
+		t.Errorf("tier with a read rate only: %v, want %v", got, want)
 	}
 }
 
@@ -313,7 +382,7 @@ func TestCacheRoundtrip(t *testing.T) {
 	c := &priceCache{
 		FetchedAt: time.Now().UTC(),
 		Source:    "test",
-		Models:    map[string]ModelPrice{"test/model": {1.0, 2.0}},
+		Models:    map[string]ModelPrice{"test/model": {InputPerMillion: 1.0, OutputPerMillion: 2.0}},
 	}
 	if err := writeCache(c); err != nil {
 		t.Fatal(err)
@@ -355,7 +424,7 @@ func TestReadCache_EmptySentinel(t *testing.T) {
 }
 
 func TestCacheStale(t *testing.T) {
-	fresh := &priceCache{FetchedAt: time.Now()}
+	fresh := &priceCache{Version: cacheVersion, FetchedAt: time.Now()}
 	if isCacheStale(fresh) {
 		t.Fatal("fresh cache should not be stale")
 	}
