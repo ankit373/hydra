@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/ope"
 )
 
 // seedCostLog writes dispatch rows the way the router would, with propensities
@@ -260,5 +261,64 @@ func TestCLI_TraceExportWithAnEmptyLog(t *testing.T) {
 
 	if _, _, err := run(t, "trace", "export"); err == nil {
 		t.Fatal("export produced a payload for an empty log")
+	}
+}
+
+// A fallback answered, so the row's own head is not the action act_prob is for.
+func TestDecisionOf_UsesFirstPickWhenLogged(t *testing.T) {
+	r := cost.Row{
+		Enum: "STANDARD", Domain: "summarise", Head: "big", Model: "big-m", Tier: 3,
+		Executor: "openai", Pool: "api",
+		FirstHead: "small", FirstModel: "small-m", FirstTier: 8, FirstPool: "local", FallbackStep: 1,
+	}
+	got := decisionOf(r)
+	want := ope.Decision{Enum: "STANDARD", Domain: "summarise", Head: "small", Model: "small-m", Tier: 8, Pool: "local"}
+	if got != want {
+		t.Errorf("decisionOf = %+v, want %+v", got, want)
+	}
+	r.FallbackStep = 0
+	if got := decisionOf(r); got.Executor != "openai" || got.Head != "small" {
+		t.Errorf("first pick answered, so its executor is known: %+v", got)
+	}
+}
+
+func TestDecisionOf_FallsBackForOldRows(t *testing.T) {
+	r := cost.Row{Enum: "STANDARD", Head: "big", Model: "big-m", Tier: 3, Executor: "openai", Pool: "api"}
+	want := ope.Decision{Enum: "STANDARD", Head: "big", Model: "big-m", Tier: 3, Executor: "openai", Pool: "api"}
+	if got := decisionOf(r); got != want {
+		t.Errorf("decisionOf = %+v, want %+v", got, want)
+	}
+}
+
+// Rows from before first-pick logging may name a fallback as the action, which
+// the report has to say rather than fold silently into the estimate.
+func TestCLI_TraceEvaluateCountsRowsWithoutFirstPick(t *testing.T) {
+	cliSandbox(t)
+	rows := exploredRows(3000)
+	for i := range rows[:1000] {
+		rows[i].FirstHead, rows[i].FirstTier = "h", rows[i].Tier
+	}
+	seedCostLog(t, rows)
+
+	out, _, err := run(t, "trace", "evaluate", "--policy", "tier:8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "2000 of 3000 rows predate first-pick logging") {
+		t.Errorf("output does not count the old rows:\n%s", out)
+	}
+
+	out, _, err = run(t, "trace", "evaluate", "--policy", "tier:8", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Without *int `json:"rows_without_first_pick"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Without == nil || *got.Without != 2000 {
+		t.Errorf("rows_without_first_pick = %v, want 2000:\n%s", got.Without, out)
 	}
 }

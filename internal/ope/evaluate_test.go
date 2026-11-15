@@ -183,6 +183,55 @@ func TestEvaluate_PassRateRecoversKnownValue(t *testing.T) {
 	}
 }
 
+// A cheap head that fails over on long tasks ties the answering head to the
+// task, so only the first pick is an action the logged probability is for.
+func TestEvaluate_FirstPickRecoversValueUnderTaskDependentFallback(t *testing.T) {
+	const eps = 0.2
+	cost := []float64{0.01, 0.05, 0.12}
+	// "Always the cheap head" pays the next head's price on the half of tasks
+	// that are long.
+	truth := 0.5*cost[0] + 0.5*cost[1]
+	logged := func(a int) float64 {
+		if a == 0 {
+			return 1 - eps + eps/3
+		}
+		return eps / 3
+	}
+	rng := rand.New(rand.NewPCG(41, 43))
+	var onFirst, onAnswering []CounterfactualSample
+	for i := 0; i < 5000; i++ {
+		first := 0
+		if rng.Float64() < eps {
+			first = rng.IntN(3)
+		}
+		answered := first
+		if first == 0 && rng.Float64() < 0.5 {
+			answered = 1
+		}
+		onFirst = append(onFirst, CounterfactualSample{
+			Value: cost[answered], LoggedProb: logged(first), TargetProb: boolVal(first == 0)})
+		onAnswering = append(onAnswering, CounterfactualSample{
+			Value: cost[answered], LoggedProb: logged(first), TargetProb: boolVal(answered == 0)})
+	}
+
+	est, err := Evaluate(onFirst, Options{Seed: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if est.Lo > truth || est.Hi < truth {
+		t.Errorf("on the first pick: interval [%.4f, %.4f] excludes the true %.4f", est.Lo, est.Hi, truth)
+	}
+	// The contrast: asking about the answering head drops every long task.
+	biased, err := Evaluate(onAnswering, Options{Seed: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if biased.Lo <= truth && biased.Hi >= truth {
+		t.Errorf("on the answering head: interval [%.4f, %.4f] still covers %.4f, so this test cannot fail",
+			biased.Lo, biased.Hi, truth)
+	}
+}
+
 // ESS is the honest count. Equal weights make it the row count; one dominant
 // weight collapses it toward one.
 func TestEffectiveSampleSize(t *testing.T) {

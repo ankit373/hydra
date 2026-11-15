@@ -1683,8 +1683,10 @@ holding ~30 KB of events can occupy 240 KB.`,
 		Long: `hyctl trace evaluate estimates the cost of a routing policy you did not run,
 from the dispatches you did.
 
-Every dispatch row records the probability the router assigned to the head it
-chose. Weighting each row by the ratio of what a candidate policy would have
+Every dispatch row records the probability the router assigned to its first
+pick. The action is that first pick, and the outcome is whatever the fallback
+chain then produced, so a head that failed over is not mistaken for a choice.
+Weighting each row by the ratio of what a candidate policy would have
 done to what the router actually did recovers that policy's average cost
 without running it.
 
@@ -1704,9 +1706,19 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 				return fmt.Errorf("no dispatches in the cost log, nothing to evaluate")
 			}
 
+			decisions := make([]ope.Decision, 0, len(rows))
 			tiers := make([]int, 0, len(rows))
+			withDomain, withoutFirst := 0, 0
 			for _, r := range rows {
-				tiers = append(tiers, r.Tier)
+				d := decisionOf(r)
+				decisions = append(decisions, d)
+				tiers = append(tiers, d.Tier)
+				if r.Domain != "" {
+					withDomain++
+				}
+				if r.FirstHead == "" {
+					withoutFirst++
+				}
 			}
 			tierSet := ope.TiersIn(tiers)
 			// Only the constraint policy needs the live machine, so a broken
@@ -1725,15 +1737,11 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 			}
 
 			samples := make([]ope.CounterfactualSample, 0, len(rows))
-			for _, r := range rows {
+			for i, r := range rows {
 				samples = append(samples, ope.CounterfactualSample{
 					Value:      r.EstCostUSD,
 					LoggedProb: r.ActProb,
-					TargetProb: policy.Would(ope.Decision{
-						Enum: r.Enum, Tier: r.Tier, Model: r.Model,
-						Executor: r.Executor, Pool: r.Pool,
-						Head: r.Head, Domain: r.Domain,
-					}),
+					TargetProb: policy.Would(decisions[i]),
 				})
 			}
 			est, evalErr := ope.Evaluate(samples, ope.Options{Level: level, ClipAt: clipAt})
@@ -1743,12 +1751,6 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 			// elsewhere" and "these rows cannot say" look identical in the
 			// total and have different remedies.
 			_, constrained := policy.(ope.Constraint)
-			withDomain := 0
-			for _, r := range rows {
-				if r.Domain != "" {
-					withDomain++
-				}
-			}
 
 			// The logged policy's own average, for comparison. Self-normalised
 			// over the same rows so the two numbers are computed the same way.
@@ -1774,6 +1776,7 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 				if constrained {
 					out["rows_with_domain"] = withDomain
 				}
+				out["rows_without_first_pick"] = withoutFirst
 				raw, _ := json.MarshalIndent(out, "", "  ")
 				fmt.Fprintln(stdout, string(raw))
 				return nil
@@ -1783,6 +1786,10 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 			fmt.Fprintf(stdout, "  Log      %d dispatches across tiers %v\n", len(rows), ope.SortedTiers(tierSet))
 			if constrained {
 				fmt.Fprintf(stdout, "  Domain   %d of %d rows record one; the rest cannot be evaluated\n", withDomain, len(rows))
+			}
+			if withoutFirst > 0 {
+				fmt.Fprintf(stdout, "  First    %d of %d rows predate first-pick logging; their action may be a fallback\n",
+					withoutFirst, len(rows))
 			}
 			if loggedErr == nil {
 				fmt.Fprintf(stdout, "  Actual   $%.5f per dispatch under the policy that ran\n", logged)
@@ -2064,6 +2071,26 @@ func postOTLP(endpoint string, body []byte, spans int) error {
 	}
 	fmt.Fprintf(stdout, "  %d span%s exported to %s\n", spans, plural(spans), endpoint)
 	return nil
+}
+
+// decisionOf is the action a row's act_prob belongs to: the first pick when
+// logged, else the answering head, which older rows name in its place.
+func decisionOf(r cost.Row) ope.Decision {
+	d := ope.Decision{
+		Enum: r.Enum, Tier: r.Tier, Model: r.Model,
+		Executor: r.Executor, Pool: r.Pool,
+		Head: r.Head, Domain: r.Domain,
+	}
+	if r.FirstHead == "" {
+		return d
+	}
+	d.Head, d.Model, d.Tier, d.Pool = r.FirstHead, r.FirstModel, r.FirstTier, r.FirstPool
+	// The executor is the answering head's, so it describes the first pick only
+	// when that head answered.
+	if r.FallbackStep > 0 {
+		d.Executor = ""
+	}
+	return d
 }
 
 // rowsWithinDays keeps rows whose timestamp is inside the window. A row whose
