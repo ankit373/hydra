@@ -1,10 +1,11 @@
 # Hydra Execution Policy
 # ─────────────────────────────────────────────────────────────────────────────
-# Declarative rules that map task characteristics → execution strategy.
+# Declarative rules that map what a task looks like to how it runs.
 #
-# dispatch/decide.sh evaluates rules in order, starting from `defaults` and
-# merging each matching rule's `apply` block on top. Later rules override
-# earlier ones, order matters.
+# internal/policy reads this file for `hyctl dispatch`, `hyctl edit`,
+# `hyctl parallel`, `hyctl workflow` and `hyctl serve`. It starts from
+# `defaults` and merges each matching rule's `apply` block on top. Later rules
+# override earlier ones, so order matters.
 #
 # Match operators (suffix on the field name in `when`):
 #   *_eq        exact equal       file_extension_eq: ts
@@ -26,29 +27,10 @@
 # real value for both. A misspelled or non-numeric field name matches nothing
 # rather than everything, so `enum_teir_lte: 3` is inert, not universal (#848).
 #
-# Output flags (consumed by edit.sh / parallel.sh / future tools):
+# Settings a rule can apply.
 #
-#   ── Edit format ──────────────────────────────────────────────
-#   edit_mode               rewrite | sr_blocks | udiff | agentic
-#   ── Isolation ────────────────────────────────────────────────
-#   atomic                  bool, group rollback on any failure
-#   use_worktree            bool, run in isolated git worktree
-#   ── Commits ──────────────────────────────────────────────────
-#   auto_commit             bool, drop a git commit per approved edit
-#   ── Observability ────────────────────────────────────────────
-#   track_tokens            bool, log token cost to logs/cost.jsonl
-#   ── Validation ───────────────────────────────────────────────
-#   validators              list, [syntax, tsc, lint, test, test_impact]
-#   validate_strict         bool, fail on any validator output (vs warn)
-#   test_loop               bool, re-dispatch with errors until tests pass
-#   lint_loop               bool, re-dispatch with errors until linter clean
-#   ── Routing/retries ──────────────────────────────────────────
-#   max_retries             int , retry count before escalating tier
-#   escalate_on_fail        bool, bump enum tier on failure (vs hard fail)
-#   rubber_duck             bool, post-edit review by a different tier
-#   confidence_threshold    float (0-1), escalate if model confidence below
-#   ── Safety caps ──────────────────────────────────────────────
-#   diff_size_cap_pct       int , reject edits changing > N% of file
+#   ══ General: any kind of work ═══════════════════════════════
+#   ── Cost and time ────────────────────────────────────────────
 #   max_cost_usd            float, abort task if accumulated spend > N
 #   max_wall_seconds        int , abort task if wall time > N
 #   max_memory_mb           int , cap a dispatched subprocess's address space (0 = unlimited).
@@ -56,10 +38,34 @@
 #                           (verified, not merely unenforced), so this is a no-op on Darwin.
 #   max_cpu_seconds         int , cap a dispatched subprocess's CPU time (0 = unlimited).
 #                           Works on Linux and macOS; no rlimit equivalent on Windows (#738).
+#   ── Retries and escalation ───────────────────────────────────
+#   max_retries             int , retry count before escalating tier
+#   escalate_on_fail        bool, bump enum tier on failure (vs hard fail)
+#   confidence_threshold    float (0-1), escalate if model confidence below
+#   ── Observability ────────────────────────────────────────────
+#   track_tokens            bool, log token cost to logs/cost.jsonl
+#   ── Context ──────────────────────────────────────────────────
+#   prompt_cache            bool, enable Anthropic prompt caching (SDK tiers)
+#
+#   ══ Editing files: hyctl edit and hyctl parallel ════════════
+#   ── Edit format ──────────────────────────────────────────────
+#   edit_mode               rewrite | sr_blocks | udiff | agentic
+#   ── Isolation ────────────────────────────────────────────────
+#   atomic                  bool, group rollback on any failure
+#   use_worktree            bool, run in isolated git worktree
+#   ── Commits ──────────────────────────────────────────────────
+#   auto_commit             bool, drop a git commit per approved edit
+#   ── Validation ───────────────────────────────────────────────
+#   validators              list, [syntax, tsc, lint, test, test_impact]
+#   validate_strict         bool, fail on any validator output (vs warn)
+#   test_loop               bool, re-dispatch with errors until tests pass
+#   lint_loop               bool, re-dispatch with errors until linter clean
+#   rubber_duck             bool, post-edit review by a different tier
+#   ── Safety caps ──────────────────────────────────────────────
+#   diff_size_cap_pct       int , reject edits changing > N% of file
 #   ── Context ──────────────────────────────────────────────────
 #   use_repo_map            bool, inject compressed repo summary in prompt
 #   dedup_file_reads        bool, replace duplicate file reads with marker
-#   prompt_cache            bool, enable Anthropic prompt caching (SDK tiers)
 #   ── Mode hints ───────────────────────────────────────────────
 #   defensive               bool, read more context before editing (risky tasks)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +74,23 @@ version: "1.0"
 
 # ── Defaults applied first; rules override ───────────────────────────────────
 defaults:
+
+  # ══ General: any kind of work ══
+  # Cost and time
+  max_cost_usd: 0.0          # 0 = unlimited; set in rules per scenario
+  max_wall_seconds: 600
+  max_memory_mb: 0           # 0 = unlimited; Linux only, see header note
+  max_cpu_seconds: 0         # 0 = unlimited; Linux + macOS, not Windows
+  # Retries and escalation
+  max_retries: 1
+  escalate_on_fail: true
+  confidence_threshold: 0.0
+  # Observability
+  track_tokens: true
+  # Context
+  prompt_cache: true         # always on (no-op until SDK tier ships)
+
+  # ══ Editing files ══
   # Edit format
   edit_mode: rewrite
   # Isolation
@@ -75,28 +98,17 @@ defaults:
   use_worktree: false
   # Commits
   auto_commit: false
-  # Observability
-  track_tokens: true
   # Validation
   validators: []
   validate_strict: false
   test_loop: false
   lint_loop: false
-  # Routing/retries
-  max_retries: 1
-  escalate_on_fail: true
   rubber_duck: false
-  confidence_threshold: 0.0
   # Safety caps
   diff_size_cap_pct: 90
-  max_cost_usd: 0.0          # 0 = unlimited; set in rules per scenario
-  max_wall_seconds: 600
-  max_memory_mb: 0           # 0 = unlimited; Linux only, see header note
-  max_cpu_seconds: 0         # 0 = unlimited; Linux + macOS, not Windows
   # Context
   use_repo_map: false
   dedup_file_reads: true     # cheap free win; always on by default
-  prompt_cache: true         # always on (no-op until SDK tier ships)
   # Mode hints
   defensive: false
 
