@@ -7,6 +7,7 @@ package checkgen
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -80,6 +81,20 @@ func (s Spec) Check() string {
 type Env struct {
 	Ask     func(ctx context.Context, gen GenInfo, prompt string) (string, error)
 	Decider func(gen GenInfo) oracle.Decider
+}
+
+// errNoModel is an oracle that needed a model and got none: Run reports it as not checked.
+var errNoModel = errors.New("checkgen: no model to ask at check time")
+
+// decider is env's Decider for gen, or errNoModel.
+func (e Env) decider(gen GenInfo) (oracle.Decider, error) {
+	if e.Decider == nil {
+		return nil, errNoModel
+	}
+	if d := e.Decider(gen); d != nil {
+		return d, nil
+	}
+	return nil, errNoModel
 }
 
 // Generator writes the checks of one spec kind and turns them into oracles.

@@ -117,7 +117,10 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           answers a yes/no predicate with one head: a decision head's probabilities, or a chat head's
                           strict yes or no. Classification gets a labels check: the set the request lists, with any
                           label the writer invented dropped. Extraction gets a fields check: valid JSON, required fields,
-                          types, and values found in the fenced source, all without a model. Nothing calls it yet.
+                          types, and values found in the fenced source, all without a model. Answers, summaries and
+                          analysis get two claims checks, one sentence at a time (40 at most, past that not checked):
+                          gen:claims-ground with `ground.Check`, gen:claims-judge with one yes/no question per sentence.
+                          Nothing calls it yet.
 internal/vet/           ← Review a diff: open-code-review resolves the files and rules, the router
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace
