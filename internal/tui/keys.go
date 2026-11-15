@@ -110,6 +110,7 @@ var ckKeymap = []ckBinding{
 	{"esc", "cancel the running task · discard a plan · clear the input", "CHAT", nil},
 	{"y/n", "approve / refuse a pending plan or file write", "CHAT", nil},
 	{"/diff /undo /open", "after an edit: diff · undo (asks y/n) · open in $EDITOR", "CHAT", nil},
+	{"1-4", "fill in a starter task (empty chat, before the first task)", "CHAT", nil},
 	{"e", "expand the collapsed output of a head that gave up (empty input)", "CHAT", nil},
 	{"/ask /edit /plan /auto…", "set the mode by name (/architect /careful /unattended too)", "CHAT", nil},
 	{":chat :agents :models :activity :usage :audit", "jump · :q quit", "CHAT", nil},
