@@ -1319,6 +1319,8 @@ hydra/
 │   ├── ledger/                  # Local MCP accountability ledger + policy gate
 │   ├── oracle/                  # Verification oracles (tests/compile/lint) as calibrated evidence
 │   ├── optimal/ · entropy/      # Optimal parallel-agent count · context signal density
+│   ├── idle/                    # Typed state for a conversation compacted while idle;
+│   │                            #   rules copied word for word, each entry refs its turn
 │   ├── build/ · update/         # Version stamping + startup update check
 │   └── tui/                     # Bubbletea cockpit + init wizard
 ├── desktop/                     # Desktop app (own Go module): Wails v2 + React/TS
