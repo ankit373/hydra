@@ -356,10 +356,7 @@ func recordValidationOutcome(headID, domain string, passed bool) {
 	if err != nil {
 		return
 	}
-	outcome := trust.OutcomeIncorrect
-	if passed {
-		outcome = trust.OutcomeCorrect
-	}
+	outcome := trust.OutcomeFor(passed)
 	_ = cal.Update(headID, domain, true, outcome)
 }
 
