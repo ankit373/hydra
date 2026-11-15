@@ -3,8 +3,10 @@
 package main
 
 import (
+	"path"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -159,5 +161,30 @@ func TestDocs_TopbarNavTargetsExist(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Error("the header links nowhere on the home page; Get started (/#start) is gone")
+	}
+}
+
+// The README is short and links out to the site for everything else (#1796),
+// so a link to a page or anchor that is not there sends a reader nowhere.
+func TestReadme_SiteLinksResolve(t *testing.T) {
+	readme := repoFile(t, "README.md")
+	rx := regexp.MustCompile(`https://hydra\.uvansa\.com/([\w./-]*?)(?:#([\w-]+))?\)`)
+	links := rx.FindAllStringSubmatch(readme, -1)
+	if len(links) == 0 {
+		t.Fatal("README links nowhere on the site; this guard has stopped guarding")
+	}
+	for _, m := range links {
+		page := m[1]
+		// GitHub Pages serves docs.html at /docs too.
+		switch {
+		case page == "" || strings.HasSuffix(page, "/"):
+			page += "index.html"
+		case !strings.Contains(path.Base(page), "."):
+			page += ".html"
+		}
+		src := repoFile(t, append([]string{"docs"}, strings.Split(page, "/")...)...)
+		if m[2] != "" && !strings.Contains(src, `id="`+m[2]+`"`) {
+			t.Errorf("README links %s#%s, which has no such id", page, m[2])
+		}
 	}
 }
