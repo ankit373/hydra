@@ -19,7 +19,7 @@ import (
 )
 
 // SpecKinds are the shapes a generated check can take, one per generator.
-var SpecKinds = []string{"labels", "fields", "claims", "rubric", "tests"}
+var SpecKinds = []string{"labels", "fields", "roundtrip", "claims", "rubric", "tests"}
 
 // Task is what a generator reads: the request, its kind-of-work key, and the
 // writer PickGenerator chose, with Ask bound to that head.
@@ -132,15 +132,25 @@ func Register(work string, g Generator) error {
 	return nil
 }
 
-// For returns the generators for a kind-of-work key, <kind> or <kind>.<area>.
+// OnRequest is a generator that runs only when named, such as a paid check:
+// For leaves it out, and Named finds it.
+type OnRequest interface {
+	OnlyWhenNamed() bool
+}
+
+// For returns the generators that run by default for a kind-of-work key, <kind> or <kind>.<area>.
 func For(key string) []Generator {
 	work, _, _ := strings.Cut(key, ".")
 	registry.RLock()
 	defer registry.RUnlock()
-	return slices.Clone(registry.byWork[work])
+	return slices.DeleteFunc(slices.Clone(registry.byWork[work]), func(g Generator) bool {
+		o, ok := g.(OnRequest)
+		return ok && o.OnlyWhenNamed()
+	})
 }
 
-func generatorOf(kind string) (Generator, bool) {
+// Named returns the generator that owns a spec kind, whether or not it runs by default.
+func Named(kind string) (Generator, bool) {
 	registry.RLock()
 	defer registry.RUnlock()
 	g, ok := registry.byKind[kind]

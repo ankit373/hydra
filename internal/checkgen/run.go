@@ -62,7 +62,7 @@ func Run(ctx context.Context, specs []Spec, answer string, answering provider.He
 }
 
 func verify(ctx context.Context, s Spec, answer, domain string, env Env) (oracle.Verdict, error) {
-	g, ok := generatorOf(s.Kind)
+	g, ok := Named(s.Kind)
 	if !ok {
 		return oracle.Verdict{}, fmt.Errorf("checkgen: no generator for spec kind %q", s.Kind)
 	}
