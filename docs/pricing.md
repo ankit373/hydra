@@ -27,7 +27,7 @@ Hydra itself is free. The underlying models charge per token:
 | Gemini 3.8 Flash | $0.075-0.825/M tokens | $0.63-4.13/M tokens | Google, via Antigravity |
 | Qwen3 (local) | $0 | $0 | Ollama, runs locally |
 
-Example rates only, OpenRouter list prices as of 2026-11-12. Run `hyctl pricing list` for live rates for every model, fetched from OpenRouter.
+Example rates only, OpenRouter list prices as of 2026-11-12. Run `hyctl pricing list` for live rates for every model, fetched from OpenRouter. Where a model lists cache rates, `hyctl pricing list` shows them too: Anthropic, for example, charges 0.1x input for a cache read and 1.25x for a 5 minute cache write. A model that lists none prices cached tokens at its input rate.
 
 Hydra publishes no savings percentage. What you spend depends on which models you have and what you ask them; `hyctl cost` and `hyctl stats` report your own spend.
 

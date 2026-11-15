@@ -13,27 +13,37 @@ import (
 	"time"
 )
 
-// ModelPrice holds per-million-token rates for one model.
+// ModelPrice holds per-million-token rates for one model. A nil cache rate is
+// unknown, not free: those tokens are priced at the input rate.
 type ModelPrice struct {
-	InputPerMillion  float64 `json:"input_per_mtok"`
-	OutputPerMillion float64 `json:"output_per_mtok"`
+	InputPerMillion      float64  `json:"input_per_mtok"`
+	OutputPerMillion     float64  `json:"output_per_mtok"`
+	CacheReadPerMillion  *float64 `json:"cache_read_per_mtok,omitempty"`
+	CacheWritePerMillion *float64 `json:"cache_write_per_mtok,omitempty"`
 }
 
 // TierPrice holds per-million-token rates for one tier (from pricing.yaml).
 type TierPrice struct {
-	ID               string  `yaml:"id"`
-	InputPerMillion  float64 `yaml:"input_per_million"`
-	OutputPerMillion float64 `yaml:"output_per_million"`
+	ID                   string   `yaml:"id"`
+	InputPerMillion      float64  `yaml:"input_per_million"`
+	OutputPerMillion     float64  `yaml:"output_per_million"`
+	CacheReadPerMillion  *float64 `yaml:"cache_read_per_million"`
+	CacheWritePerMillion *float64 `yaml:"cache_write_per_million"`
+}
+
+// Usage is one call's token counts. In is the whole prompt, cached tokens
+// included; CacheRead and CacheWrite say how much of it was read or written.
+type Usage struct {
+	In, Out, CacheRead, CacheWrite int
 }
 
 // TierEntry is one tier's fallback pricing, identified by its registry id
 // (e.g. "claude-core") rather than a tier number, the form callers that
 // merge it alongside OpenRouter model rows want.
 type TierEntry struct {
-	Tier             int
-	ID               string
-	InputPerMillion  float64
-	OutputPerMillion float64
+	Tier int
+	ID   string
+	ModelPrice
 }
 
 // DB is the live pricing store. Load it once at startup with Load().
@@ -107,13 +117,19 @@ func Refresh() (int, error) {
 	return len(cache.Models), nil
 }
 
-// CostForModel returns the estimated USD cost for a specific model name.
-// Falls back to tier-based pricing if the model is not in the OpenRouter data.
+// CostForModel prices a call with no cache usage. See CostForUsage.
 func (db *DB) CostForModel(modelName string, tier, inputTokens, outputTokens int) float64 {
-	if p, ok := db.models[strings.ToLower(modelName)]; ok {
-		return round6(cost(p.InputPerMillion, p.OutputPerMillion, inputTokens, outputTokens))
+	return db.CostForUsage(modelName, tier, Usage{In: inputTokens, Out: outputTokens})
+}
+
+// CostForUsage returns the USD cost of one call, cache reads and writes at
+// their own rates. Falls back to tier pricing when OpenRouter lacks the model.
+func (db *DB) CostForUsage(modelName string, tier int, u Usage) float64 {
+	p, ok := db.models[strings.ToLower(modelName)]
+	if !ok {
+		p = db.tierRates(tier)
 	}
-	return db.EstimateCost(tier, inputTokens, outputTokens)
+	return round6(p.cost(u))
 }
 
 // EstimateCost returns the estimated USD cost using tier-based pricing.
@@ -121,13 +137,17 @@ func (db *DB) CostForModel(modelName string, tier, inputTokens, outputTokens int
 // Returns 0 if neither the requested tier nor tier 10 exist in pricing.yaml,
 // callers should treat 0 as "pricing unavailable" not "free".
 func (db *DB) EstimateCost(tier, inputTokens, outputTokens int) float64 {
+	return round6(db.tierRates(tier).cost(Usage{In: inputTokens, Out: outputTokens}))
+}
+
+// tierRates is a tier's price, or tier 10's when pricing.yaml lacks the tier.
+// With tier 10 missing too (broken install) every rate is zero.
+func (db *DB) tierRates(tier int) ModelPrice {
 	tp, ok := db.tiers[tier]
 	if !ok {
-		// Requested tier not in pricing.yaml, fall back to tier 10 (local/cheapest).
-		// If tier 10 is also missing (broken install), zero is returned.
 		tp = db.tiers[10]
 	}
-	return round6(cost(tp.InputPerMillion, tp.OutputPerMillion, inputTokens, outputTokens))
+	return tp.rates()
 }
 
 // FetchedAt is when the model prices this DB holds were fetched, read once at Load
@@ -172,16 +192,39 @@ func (db *DB) TierEntries() []TierEntry {
 		if tp.ID == "" {
 			continue
 		}
-		out = append(out, TierEntry{Tier: tier, ID: tp.ID,
-			InputPerMillion: tp.InputPerMillion, OutputPerMillion: tp.OutputPerMillion})
+		out = append(out, TierEntry{Tier: tier, ID: tp.ID, ModelPrice: tp.rates()})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Tier < out[j].Tier })
 	return out
 }
 
+func (tp TierPrice) rates() ModelPrice {
+	return ModelPrice{tp.InputPerMillion, tp.OutputPerMillion, tp.CacheReadPerMillion, tp.CacheWritePerMillion}
+}
+
+// cost prices uncached input at the input rate and each cache count at its own
+// rate, or at the input rate when that rate is unknown.
+func (p ModelPrice) cost(u Usage) float64 {
+	// Never negative, even if a provider's In ever leaves its cache counts out.
+	uncached := max(u.In-u.CacheRead-u.CacheWrite, 0)
+	return cost(p.InputPerMillion, p.OutputPerMillion, uncached, u.Out) +
+		perMillion(u.CacheRead, orInput(p.CacheReadPerMillion, p.InputPerMillion)) +
+		perMillion(u.CacheWrite, orInput(p.CacheWritePerMillion, p.InputPerMillion))
+}
+
+func orInput(rate *float64, input float64) float64 {
+	if rate == nil {
+		return input
+	}
+	return *rate
+}
+
+func perMillion(tokens int, rate float64) float64 {
+	return float64(tokens) / 1_000_000 * rate
+}
+
 func cost(inputPerM, outputPerM float64, inputTokens, outputTokens int) float64 {
-	return float64(inputTokens)/1_000_000*inputPerM +
-		float64(outputTokens)/1_000_000*outputPerM
+	return perMillion(inputTokens, inputPerM) + perMillion(outputTokens, outputPerM)
 }
 
 func round6(f float64) float64 {

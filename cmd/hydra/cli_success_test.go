@@ -787,6 +787,39 @@ func TestCLI_PricingList_FilterAndJSON(t *testing.T) {
 	}
 }
 
+// Cache rates show when known and read "-" when not, never as $0.
+func TestCLI_PricingList_ShowsCacheRatesWhenKnown(t *testing.T) {
+	populated(t)
+
+	out, _, err := run(t, "pricing", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if jerr := json.Unmarshal([]byte(out), &rows); jerr != nil {
+		t.Fatal(jerr)
+	}
+	byID := map[string]map[string]any{}
+	for _, r := range rows {
+		byID[r["model"].(string)] = r
+	}
+	if r := byID["claude-core"]; r["cache_read_per_mtok"] != 0.5 || r["cache_write_per_mtok"] != 6.25 {
+		t.Errorf("claude-core cache rates = %v/%v, want 0.5/6.25 from pricing.yaml",
+			r["cache_read_per_mtok"], r["cache_write_per_mtok"])
+	}
+	if _, ok := byID["qwen-grunt"]["cache_read_per_mtok"]; ok {
+		t.Error("qwen-grunt lists no cache rate, yet the JSON has one")
+	}
+
+	table, _, err := run(t, "pricing", "list", "claude-core")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(table, "Read $/1M") || !strings.Contains(table, "0.5000") {
+		t.Errorf("table does not show the cache read rate:\n%s", table)
+	}
+}
+
 // ── models sync ───────────────────────────────────────────────────────────────
 
 // `hyctl models sync` imports the OpenRouter catalogue. With no network it must

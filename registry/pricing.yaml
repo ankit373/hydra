@@ -9,6 +9,10 @@
 # the cost dashboard surfaces what an equivalent direct-API run would have
 # cost, useful for future tier-shift decisions.
 #
+# `cache_read_per_million` / `cache_write_per_million` are optional. Set them
+# only where the vendor publishes a rate; when unset, cached tokens price at
+# the input rate. Claude rates are Anthropic's list (5 minute cache writes).
+#
 # `estimate_factor` for executors without real token counts:
 #   token_count ≈ char_count / estimate_factor
 # Defaults to 4 (Anthropic + most providers).
@@ -28,18 +32,24 @@ tiers:
     id: claude-core
     input_per_million: 5.00      # Opus equivalent retail
     output_per_million: 25.00
+    cache_read_per_million: 0.50
+    cache_write_per_million: 6.25
     notes: "Orchestrator, direct Anthropic billing"
 
   2:  # Opus Thinking via agy
     id: opus-thinking
     input_per_million: 5.00
     output_per_million: 25.00
+    cache_read_per_million: 0.50
+    cache_write_per_million: 6.25
     notes: "Antigravity proxies Anthropic, track retail equivalent"
 
   3:  # Sonnet Thinking via agy
     id: sonnet-thinking
     input_per_million: 3.00
     output_per_million: 15.00
+    cache_read_per_million: 0.30
+    cache_write_per_million: 3.75
 
   4:  # Gemini 2.0 Flash Thinking via agy (disabled in models.yaml)
     id: flash-thinking

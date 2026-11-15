@@ -21,8 +21,13 @@ const defaultCacheTTLHours = 24
 // but contains no model entries. Distinct from os.ErrNotExist.
 var errEmptyCache = errors.New("pricing cache is empty")
 
+// cacheVersion 1 added cache read and write rates. An older file still loads,
+// with those rates unknown, and is refreshed as if stale.
+const cacheVersion = 1
+
 // priceCache is the on-disk JSON structure.
 type priceCache struct {
+	Version   int                   `json:"version"`
 	FetchedAt time.Time             `json:"fetched_at"`
 	Source    string                `json:"source"`
 	Models    map[string]ModelPrice `json:"models"`
@@ -58,9 +63,10 @@ func readCache() (*priceCache, error) {
 	return &c, nil
 }
 
-// isCacheStale returns true when the cache is older than the TTL.
+// isCacheStale returns true when the cache is older than the TTL or than
+// cacheVersion.
 func isCacheStale(c *priceCache) bool {
-	return time.Since(c.FetchedAt) > cacheTTL()
+	return c.Version < cacheVersion || time.Since(c.FetchedAt) > cacheTTL()
 }
 
 // fetchAndSave fetches from OpenRouter and writes the result to the cache file.
@@ -74,6 +80,7 @@ func fetchAndSave() (*priceCache, error) {
 	}
 
 	c := &priceCache{
+		Version:   cacheVersion,
 		FetchedAt: time.Now().UTC(),
 		Source:    "openrouter",
 		Models:    models,
