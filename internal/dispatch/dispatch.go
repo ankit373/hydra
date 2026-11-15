@@ -913,6 +913,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// last is the newest answer the Escalate hook passed over, which stands
 	// when no candidate is left to ask; the hook's owner chooses what to serve.
 	var last *Result
+	var lastReason string
 	// What each head is sent, rebuilt by Retry once per rejected answer.
 	sentPrompt, sentParts := prompt, parts
 	// escalatedUSD is what the answers passed over cost; a further head is
@@ -950,7 +951,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			SpanID: span, ParentSpanID: taskSpan,
 			Head: h.ID, Model: h.Name, Tier: tier,
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
-			Meta:   map[string]any{"attempt": i + 1, "candidates": len(candidates)},
+			Meta:   attemptMeta(i, len(candidates), last, lastReason),
 		})
 		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
 		// let any other verdict through, which stopped being safe the moment
@@ -1203,7 +1204,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		if opts.Escalate != nil {
 			if next, reason := opts.Escalate(ctx, r); next {
 				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: "escalated: " + reason})
-				last, escalatedUSD, asked = r, escalatedUSD+r.CostUSD, append(asked, h)
+				last, lastReason, escalatedUSD, asked = r, reason, escalatedUSD+r.CostUSD, append(asked, h)
+				// Scored on its own span, so the trace shows why the next attempt exists.
+				_ = rl.Append(runlog.Event{
+					Kind: runlog.KindScore, TaskID: taskID, SpanID: span, ParentSpanID: taskSpan,
+					Head: h.ID, Model: h.Name,
+					Score: &runlog.Score{Name: "check", Value: 0, Source: "escalation", Comment: reason},
+				})
 				// The rejected answer came from a head, so it is declared to the
 				// ledger and the egress gate like any other part.
 				if opts.Retry != nil {
@@ -1259,6 +1266,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		lastErr = overCeiling{lastErr}
 	}
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
+}
+
+// attemptMeta is a head_selected event's Meta; past a rejected answer it names
+// that answer's span and why, so the two attempts read as one decision.
+func attemptMeta(i, n int, rejected *Result, reason string) map[string]any {
+	m := map[string]any{"attempt": i + 1, "candidates": n}
+	if rejected != nil {
+		m["escalated_from"], m["reason"] = rejected.SpanID, reason
+	}
+	return m
 }
 
 // ErrOverCostCeiling marks a dispatch that sent nothing and whose ceiling

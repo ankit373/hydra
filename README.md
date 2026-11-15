@@ -974,6 +974,7 @@ hyctl serve                             # OpenAI-compatible endpoint, loopback o
 #   `hydra` takes --enum (STANDARD); --objective quality|cost or X-Hydra-Objective opts into routing by objective.
 #   a class with [[serve.verifiers]] in config.toml (class, kind = "match", id, then a labels file or a pattern)
 #   has each buffered answer on an objective route (opt-in) checked, and escalates to a model measured better in that class, at most --max-escalations (2).
+#   in hyctl trace view the rejected answer is scored check=0 with the reason, and the next attempt reads "escalated from <span>".
 #   streams as server-sent events, and passes tool calls through on every dialect it speaks.
 hyctl serve --task-class classification.banking77   # class for requests that send no X-Hydra-Task-Class
 #   X-Hydra-Task-Class routes on that class (and enables temperature); X-Hydra-Max-Cost-USD only lowers the ceiling.
