@@ -704,3 +704,30 @@ func TestRouteKey_SaysHowARowWasRouted(t *testing.T) {
 			summary, tail)
 	}
 }
+
+func TestRow_CacheFieldsRoundTrip(t *testing.T) {
+	path := fixture(t, row(t, Row{TS: "2026-11-15T10:00:00Z", Model: "m", PromptTokens: 1000,
+		CacheReadTokens: 900, CacheWriteTokens: 50}))
+	rows, err := LoadRows(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].CacheReadTokens != 900 || rows[0].CacheWriteTokens != 50 {
+		t.Fatalf("rows = %+v, want 900 read and 50 written", rows)
+	}
+	// Zero is omitted, so a row with no cache usage looks like one written before.
+	if strings.Contains(row(t, Row{Model: "m"}), "cache_") {
+		t.Error("a row with no cache usage serialises cache fields")
+	}
+}
+
+func TestRow_OldRowWithoutCacheFieldsStillParses(t *testing.T) {
+	path := fixture(t, `{"ts":"2026-09-01T10:00:00Z","model":"m","prompt_tokens":1200,"response_tokens":340,"est_cost_usd":0.0182}`)
+	rows, err := LoadRows(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].PromptTokens != 1200 || rows[0].CacheReadTokens != 0 || rows[0].CacheWriteTokens != 0 {
+		t.Fatalf("old row = %+v, want it parsed with no cache counts", rows)
+	}
+}

@@ -50,6 +50,11 @@ type Row struct {
 	ResponseTokens int64   `json:"response_tokens"`
 	EstCostUSD     float64 `json:"est_cost_usd"`
 
+	// Cache reads and writes within PromptTokens, so a model's hit share needs
+	// no scan of cost.jsonl.
+	CacheReadTokens  int64 `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int64 `json:"cache_write_tokens,omitempty"`
+
 	// Latency is a mergeable sketch rather than a mean: an average latency
 	// answers no question anyone asks, and keeping raw values to compute p99
 	// is what this package exists to avoid.
@@ -83,6 +88,8 @@ func Build(rows []cost.Row) []Row {
 		a.Calls++
 		a.PromptTokens += int64(r.PromptTokens)
 		a.ResponseTokens += int64(r.ResponseTokens)
+		a.CacheReadTokens += int64(r.CacheReadTokens)
+		a.CacheWriteTokens += int64(r.CacheWriteTokens)
 		a.EstCostUSD += r.EstCostUSD
 		a.Latency.Add(float64(r.WallMS))
 		a.ActProbSum += r.ActProb
@@ -126,6 +133,8 @@ func Merge(a, b []Row) ([]Row, error) {
 			cur.Calls += r.Calls
 			cur.PromptTokens += r.PromptTokens
 			cur.ResponseTokens += r.ResponseTokens
+			cur.CacheReadTokens += r.CacheReadTokens
+			cur.CacheWriteTokens += r.CacheWriteTokens
 			cur.EstCostUSD += r.EstCostUSD
 			cur.ActProbSum += r.ActProbSum
 			cur.KeepProbSum += r.KeepProbSum

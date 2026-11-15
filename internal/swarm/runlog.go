@@ -91,21 +91,23 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 			// Keyed by head id, which is also how dispatch keys its own events,
 			// so a head's selection, execution, and attempt collapse into one
 			// node rather than three.
-			Agent:        a.Head.ID,
-			Parent:       swarmAgent,
-			SpanID:       attemptSpan(taskID, swarmAgent, a.Head.ID),
-			ParentSpanID: rootSpan,
-			Head:         a.Head.ID,
-			Model:        a.Head.Name,
-			Tier:         rank.UITier(a.Head),
-			Status:       string(a.Status),
-			TS:           stamp(a.FinishedAt),
-			CostUSD:      a.EstCostUSD,
-			DurationMS:   a.Duration.Milliseconds(),
-			InputTokens:  a.InputTokens,
-			OutputTokens: a.OutputTokens,
-			Detail:       detail,
-			Meta:         attemptMeta(a),
+			Agent:            a.Head.ID,
+			Parent:           swarmAgent,
+			SpanID:           attemptSpan(taskID, swarmAgent, a.Head.ID),
+			ParentSpanID:     rootSpan,
+			Head:             a.Head.ID,
+			Model:            a.Head.Name,
+			Tier:             rank.UITier(a.Head),
+			Status:           string(a.Status),
+			TS:               stamp(a.FinishedAt),
+			CostUSD:          a.EstCostUSD,
+			DurationMS:       a.Duration.Milliseconds(),
+			InputTokens:      a.InputTokens,
+			OutputTokens:     a.OutputTokens,
+			CacheReadTokens:  a.CacheReadTokens,
+			CacheWriteTokens: a.CacheWriteTokens,
+			Detail:           detail,
+			Meta:             attemptMeta(a),
 		}
 		if a.Status != StatusOK {
 			e.Level = runlog.LevelError
@@ -169,6 +171,8 @@ func logSamples(ledger []trust.Evidence, attempts []Attempt, opts Options) {
 			e.DurationMS = a.Duration.Milliseconds()
 			e.InputTokens = a.InputTokens
 			e.OutputTokens = a.OutputTokens
+			e.CacheReadTokens = a.CacheReadTokens
+			e.CacheWriteTokens = a.CacheWriteTokens
 		}
 		_ = rl.Append(e)
 	}

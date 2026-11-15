@@ -183,6 +183,9 @@ type Event struct {
 	// cannot say which of several attempts spent them.
 	InputTokens  int `json:"in_tok,omitempty"`
 	OutputTokens int `json:"out_tok,omitempty"`
+	// Parts of InputTokens read from or written to the provider's cache.
+	CacheReadTokens  int `json:"cache_rd_tok,omitempty"`
+	CacheWriteTokens int `json:"cache_wr_tok,omitempty"`
 
 	// TTFTMs is time to first token. Only some executors can report it
 	// (Ollama's prompt-eval duration); zero means unknown, not instant.
