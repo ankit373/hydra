@@ -47,6 +47,8 @@ type Verdict struct {
 	Check         string `json:"check"`
 	Passed        bool   `json:"passed"`
 	Detail        string `json:"detail,omitempty"`
+	// GenFamily is the family that wrote a generated check, set only on those.
+	GenFamily string `json:"gen_family,omitempty"`
 }
 
 // Truth is ground truth about an answer that arrives after its checks ran.
