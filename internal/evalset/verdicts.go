@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -234,4 +235,56 @@ func (a Answer) passed() bool {
 		}
 	}
 	return true
+}
+
+// AddModelVotes adds each ensemble run's votes, read from the trust log, as
+// model:<source> checks ahead of the answer's own, since the vote came first.
+// Runs with no span predate #1144 and cannot join; they are skipped and counted.
+func AddModelVotes(answers []Answer, runs []trust.RunLog) ([]Answer, int) {
+	idx := make(map[string]int, len(answers))
+	for i, a := range answers {
+		if a.bySpan {
+			idx[a.Key] = i
+		}
+	}
+	// Newest run per span, the same choice trust.FindRunBySpan makes.
+	latest := map[string]int{}
+	var order []string
+	skipped := 0
+	for i, r := range runs {
+		if r.SpanID == "" {
+			skipped++
+			continue
+		}
+		if _, seen := latest[r.SpanID]; !seen {
+			order = append(order, r.SpanID)
+		}
+		latest[r.SpanID] = i
+	}
+	for _, span := range order {
+		r := runs[latest[span]]
+		votes := trust.VerdictsOnFinal(r.Ledger)
+		if len(votes) == 0 {
+			continue
+		}
+		i, ok := idx[span]
+		if !ok {
+			i = len(answers)
+			idx[span] = i
+			answers = append(answers, Answer{Key: span, bySpan: true})
+		}
+		a := &answers[i]
+		checks := make([]Verdict, 0, len(votes)+len(a.Checks))
+		for _, v := range votes {
+			checks = append(checks, Verdict{
+				V: verdictSchema, TS: r.TS, SpanID: span, Domain: r.Domain,
+				Check: "model:" + v.Source, Passed: v.SaidCorrect,
+			})
+		}
+		a.Checks = append(checks, a.Checks...)
+		if a.Domain == "" {
+			a.Domain = r.Domain
+		}
+	}
+	return answers, skipped
 }

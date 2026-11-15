@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 func verdictsPath(t *testing.T) string {
@@ -186,5 +188,51 @@ func TestAddVerdict_RefusesLinesThatCannotJoin(t *testing.T) {
 	}
 	if _, err := os.Stat(p); !os.IsNotExist(err) {
 		t.Fatalf("refused lines still created the log: %v", err)
+	}
+}
+
+// Two models agreeing is a check too. A vote for a superseded answer is a
+// fail on the final one, and a dissent from a superseded answer says nothing.
+func TestAddModelVotes_AddsVotesFromRunLedger(t *testing.T) {
+	p := verdictsPath(t)
+	mustVerdict(t, p, Verdict{SpanID: "s1", Check: "grounding", Passed: true})
+	answers, err := Joint(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs := []trust.RunLog{{SpanID: "s1", Domain: "support", Ledger: []trust.Evidence{
+		{Source: "a", Agreed: true, Candidate: "refund"},
+		{Source: "b", Agreed: false, Candidate: "refund"},
+		{Source: "c", Agreed: true, Candidate: "escalate"},
+		{Source: "d", Agreed: true, Candidate: "escalate"},
+	}}}
+
+	got, skipped := AddModelVotes(answers, runs)
+	if skipped != 0 || len(got) != 1 {
+		t.Fatalf("answers = %+v, skipped = %d", got, skipped)
+	}
+	var seen []string
+	for _, c := range got[0].Checks {
+		seen = append(seen, fmt.Sprintf("%s=%v", c.Check, c.Passed))
+	}
+	want := "[model:a=false model:c=true model:d=true grounding=true]"
+	if fmt.Sprint(seen) != want {
+		t.Fatalf("checks = %v, want %s", seen, want)
+	}
+	if got[0].Domain != "support" {
+		t.Errorf("domain = %q, want the run's", got[0].Domain)
+	}
+}
+
+func TestAddModelVotes_SkipsRunsWithoutSpan(t *testing.T) {
+	ledger := []trust.Evidence{{Source: "a", Agreed: true, Candidate: "x"}}
+	runs := []trust.RunLog{{Ledger: ledger}, {SpanID: "s2", Ledger: ledger}, {Ledger: ledger}}
+
+	got, skipped := AddModelVotes(nil, runs)
+	if skipped != 2 {
+		t.Errorf("skipped = %d, want 2", skipped)
+	}
+	if len(got) != 1 || got[0].Key != "s2" || len(got[0].Checks) != 1 {
+		t.Fatalf("answers = %+v, want only the span-keyed run", got)
 	}
 }
