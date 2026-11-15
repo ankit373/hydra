@@ -234,3 +234,50 @@ func goFiles(t *testing.T, root string) []string {
 	sort.Strings(out)
 	return out
 }
+
+// TestMeasureProse measures the check on news and meeting minutes rather than
+// code: false alarms on faithful summaries, and catches per kind of swapped detail.
+//
+//	go test ./internal/ground -tags groundbench -run TestMeasureProse -v
+func TestMeasureProse(t *testing.T) {
+	type tally struct {
+		n, noClaims, flagged int
+		kinds                map[Kind]int
+	}
+	sets := map[string]*tally{}
+	for _, p := range loadProse(t) {
+		for _, a := range p.Answers {
+			set := a.Swap
+			if a.Grounded {
+				set = "grounded"
+			}
+			if sets[set] == nil {
+				sets[set] = &tally{kinds: map[Kind]int{}}
+			}
+			s := sets[set]
+			s.n++
+			v := Check(a.Answer, prompt(p.Context))
+			switch {
+			case v.Claims == 0:
+				s.noClaims++ // no verdict: neither a false alarm nor a catch
+			case !v.Grounded:
+				s.flagged++
+				for _, u := range v.Unsupported {
+					s.kinds[u.Kind]++
+				}
+			}
+		}
+	}
+	keys := make([]string, 0, len(sets))
+	for k := range sets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	fmt.Printf("\n  %-10s %5s %10s %8s %7s  %s\n", "set", "n", "no claims", "flagged", "rate", "flagged spans by kind")
+	for _, k := range keys {
+		s := sets[k]
+		fmt.Printf("  %-10s %5d %10d %8d %6.1f%%  %v\n", k, s.n, s.noClaims, s.flagged,
+			100*float64(s.flagged)/float64(s.n), s.kinds)
+	}
+	fmt.Println("\n  grounded: flagged is a false alarm. a swap: flagged is a catch, and no claims is a miss.")
+}
