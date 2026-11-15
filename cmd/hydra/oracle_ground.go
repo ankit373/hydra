@@ -17,6 +17,12 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
+// Exit codes of `hyctl oracle ground`, the same as hyverify's.
+const (
+	groundUnsupported = 1
+	groundNotChecked  = 2
+)
+
 // cmdOracleGround checks an answer against the context its prompt carried.
 //
 // Deliberately a command rather than something every dispatch runs. A verdict
@@ -44,8 +50,9 @@ It declines everything else. A prompt with no fenced context produces no verdict
 at all, and neither does an answer that states nothing checkable: "nothing to
 check" and "checked and fine" are different facts and only one is evidence.
 
-Never blocks and never rewrites. The verdict is evidence; what to do about it is
-the caller's decision.`,
+Never rewrites. The exit code is the verdict, so a script can gate on it:
+0 grounded, 1 unsupported, 2 not checked. A failed run (a missing file, a bad
+flag) also exits 1.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if promptFile == "" || candidateFile == "" {
 				return errors.New("both --prompt and --candidate are required")
@@ -71,18 +78,20 @@ the caller's decision.`,
 			v, verr := o.Verify(cmd.Context(), string(candidateRaw), trust.Task{Domain: domain})
 			src := o.Key()
 
-			// Not an error the command fails on: "there was nothing to check"
-			// is the honest answer to the question that was asked, and exiting
-			// non-zero would make a caller treat it as a failed check.
+			// Its own code, as hyverify's: 0 would read "not checked" as a pass
+			// and 1 as a failed check, and it is neither.
 			if errors.Is(verr, ground.ErrNoContext) || errors.Is(verr, ground.ErrNoClaims) {
 				if jsonOut {
-					return printJSON(map[string]any{
+					if err := printJSON(map[string]any{
 						"source": src, "checked": false, "reason": verr.Error(),
 						"verdict": o.Last,
-					})
+					}); err != nil {
+						return err
+					}
+				} else {
+					printNotChecked(src, verr)
 				}
-				printNotChecked(src, verr)
-				return nil
+				return exitStatus(groundNotChecked)
 			}
 			if verr != nil {
 				return verr
@@ -122,10 +131,15 @@ the caller's decision.`,
 				} else {
 					out["insufficient_evidence"] = why
 				}
-				return printJSON(out)
+				if err := printJSON(out); err != nil {
+					return err
+				}
+			} else {
+				printGrounding(src, o.Last, v, measured, why, llr)
 			}
-
-			printGrounding(src, o.Last, v, measured, why, llr)
+			if !v.Passed {
+				return exitStatus(groundUnsupported) // the same code as `oracle verify` on FAIL
+			}
 			return nil
 		},
 	}
