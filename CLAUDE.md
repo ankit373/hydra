@@ -113,7 +113,7 @@ internal/stats/         ← Pure maths, one implementation each: seeded paired b
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/embed/         ← Vectors from an embedding model already on the machine. No new dependency.
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.
-internal/rollup/        ← Per-day aggregates of cost.jsonl (calls, tokens, spend, latency sketch).
+internal/rollup/        ← Per-day aggregates of cost.jsonl (calls, tokens, cache reads/writes, spend, latency sketch).
 internal/evalset/       ← Oracle-verified labelled examples. Outside logs/, exempt from retention. `hyctl eval`.
                           verdicts.jsonl beside it: every check's verdict on an answer, keyed by
                           span or candidate hash, plus later ground truth. `Joint` folds it per answer.

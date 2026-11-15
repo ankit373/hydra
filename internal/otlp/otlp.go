@@ -233,6 +233,7 @@ func spanForWaterfall(s *waterfall.Span, traceID string, emitted map[string]stri
 	if s.OutputTokens > 0 {
 		attrs = append(attrs, num("gen_ai.usage.output_tokens", int64(s.OutputTokens)))
 	}
+	attrs = append(attrs, cacheAttrs(s.CacheReadTokens, s.CacheWriteTokens)...)
 	// Zero means the provider never reported it, not instant, so it is absent
 	// rather than exported as a measured zero.
 	if s.TTFTMs > 0 {
@@ -360,6 +361,19 @@ func firstPickAttrs(r cost.Row) []KeyValue {
 	}
 }
 
+// cacheAttrs uses the OTel GenAI names, under which both counts are part of
+// input_tokens, as they are here. Zero is absent: none were reported.
+func cacheAttrs(read, write int) []KeyValue {
+	var out []KeyValue
+	if read > 0 {
+		out = append(out, num("gen_ai.usage.cache_read.input_tokens", int64(read)))
+	}
+	if write > 0 {
+		out = append(out, num("gen_ai.usage.cache_creation.input_tokens", int64(write)))
+	}
+	return out
+}
+
 func spanFor(r cost.Row) (Span, error) {
 	start, err := time.Parse(time.RFC3339, r.TS)
 	if err != nil {
@@ -404,6 +418,7 @@ func spanFor(r cost.Row) (Span, error) {
 		flt("hydra.routing.keep_prob", r.KeepProb),
 	}
 	attrs = append(attrs, firstPickAttrs(r)...)
+	attrs = append(attrs, cacheAttrs(r.CacheReadTokens, r.CacheWriteTokens)...)
 	if r.SwarmMode != "" {
 		attrs = append(attrs, str("hydra.swarm.mode", r.SwarmMode),
 			KeyValue{Key: "hydra.swarm.winner", Value: Value{BoolValue: &r.SwarmWinner}})

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ankit373/hydra/internal/runlog"
 )
 
 // readCostRows redirects config.Dir() at a temp HOME, runs fn, and returns every
@@ -147,5 +149,42 @@ func TestLogAttempts_ModeLabelIsCallerSupplied(t *testing.T) {
 		if rows[0]["swarm_mode"] != string(mode) {
 			t.Errorf("swarm_mode = %v, want %q", rows[0]["swarm_mode"], mode)
 		}
+	}
+}
+
+// An attempt's cache counts reach its cost row and its run-log span, the same
+// fields the dispatch path writes.
+func TestLogAttempts_WritesCacheTokens(t *testing.T) {
+	cached := costAttempt("a", StatusOK, 1)
+	cached.CacheReadTokens, cached.CacheWriteTokens = 80, 10
+	attempts := []Attempt{cached, costAttempt("b", StatusOK, 0)}
+
+	rows := readCostRows(t, func() {
+		logAttempts(attempts, ModeBest, Options{}, "summarise this report")
+		logRunEvents(attempts, ModeBest, Options{RunID: "run-cache", TaskID: "task-cache"})
+	})
+	byHead := map[any]map[string]any{}
+	for _, r := range rows {
+		byHead[r["head"]] = r
+	}
+	if r := byHead["a"]; r["cache_read_tokens"] != float64(80) || r["cache_write_tokens"] != float64(10) {
+		t.Errorf("cached attempt row = %v, want 80 read and 10 written", r)
+	}
+	if _, ok := byHead["b"]["cache_read_tokens"]; ok {
+		t.Error("an attempt with no cache usage wrote cache_read_tokens")
+	}
+
+	events, err := runlog.Load("run-cache")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var span *runlog.Event
+	for i := range events {
+		if events[i].Kind == runlog.KindAttempt && events[i].Head == "a" {
+			span = &events[i]
+		}
+	}
+	if span == nil || span.CacheReadTokens != 80 || span.CacheWriteTokens != 10 {
+		t.Errorf("attempt span = %+v, want 80 read and 10 written", span)
 	}
 }

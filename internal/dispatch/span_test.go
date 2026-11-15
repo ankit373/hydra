@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
@@ -26,8 +27,13 @@ const spanChatBody = `{"model":"gpt-test","choices":[{"message":{"content":"hell
 // rather than only the select-then-fail one.
 func servingHead(t *testing.T) provider.Head {
 	t.Helper()
+	return servingHeadWith(t, spanChatBody)
+}
+
+func servingHeadWith(t *testing.T, body string) provider.Head {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(spanChatBody))
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 	return provider.Head{
@@ -176,5 +182,52 @@ func TestDispatch_FailedCandidateIsLoggedAtErrorLevel(t *testing.T) {
 	}
 	if !sawError {
 		t.Fatal("no error event: the fallback chain advanced with nothing recording why")
+	}
+}
+
+// A cache hit the provider reported must reach the span, the cost row and
+// dispatch.jsonl, or nothing downstream can price or count it.
+func TestLogDispatch_WritesCacheTokens(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	body := `{"model":"gpt-test","choices":[{"message":{"content":"hi"}}],
+  "usage":{"prompt_tokens":1000,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":900}}}`
+	d := &Dispatcher{
+		cfg: &config.Config{}, heads: []provider.Head{servingHeadWith(t, body)},
+		policy: policy.New(policy.DefaultRules(false)), pricing: pricing.Load(),
+	}
+	if _, err := d.Dispatch(context.Background(), "hello", Options{RunID: "run-cache", TaskID: "task-cache"}); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := runlog.Load("run-cache")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var finished *runlog.Event
+	for i := range events {
+		if events[i].Kind == runlog.KindDispatchFinished {
+			finished = &events[i]
+		}
+	}
+	if finished == nil || finished.CacheReadTokens != 900 || finished.CacheWriteTokens != 0 {
+		t.Fatalf("span cache tokens = %+v, want 900 read, 0 written", finished)
+	}
+
+	rows, err := cost.LoadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].CacheReadTokens != 900 || rows[0].PromptTokens != 1000 {
+		t.Fatalf("cost rows = %+v, want one with 900 of 1000 prompt tokens read from cache", rows)
+	}
+	disp := readLog(t, home, "dispatch.jsonl")
+	if len(disp) != 1 || disp[0]["cache_read_tokens"] != float64(900) {
+		t.Fatalf("dispatch.jsonl = %v, want cache_read_tokens 900", disp)
+	}
+	if _, ok := disp[0]["cache_write_tokens"]; ok {
+		t.Error("dispatch.jsonl carries cache_write_tokens for a call that wrote none")
 	}
 }

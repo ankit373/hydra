@@ -41,10 +41,12 @@ type Span struct {
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	TTFTMs     int64 `json:"ttft_ms,omitempty"`
 
-	InputTokens  int     `json:"input_tokens,omitempty"`
-	OutputTokens int     `json:"output_tokens,omitempty"`
-	CostUSD      float64 `json:"cost_usd,omitempty"`
-	Confidence   float64 `json:"confidence,omitempty"`
+	InputTokens      int     `json:"input_tokens,omitempty"`
+	OutputTokens     int     `json:"output_tokens,omitempty"`
+	CacheReadTokens  int     `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int     `json:"cache_write_tokens,omitempty"`
+	CostUSD          float64 `json:"cost_usd,omitempty"`
+	Confidence       float64 `json:"confidence,omitempty"`
 
 	InputRef  string         `json:"input_ref,omitempty"`
 	OutputRef string         `json:"output_ref,omitempty"`
@@ -236,6 +238,12 @@ func fold(s *Span, e runlog.Event) {
 	}
 	if e.OutputTokens != 0 {
 		s.OutputTokens = e.OutputTokens
+	}
+	if e.CacheReadTokens != 0 {
+		s.CacheReadTokens = e.CacheReadTokens
+	}
+	if e.CacheWriteTokens != 0 {
+		s.CacheWriteTokens = e.CacheWriteTokens
 	}
 	if e.CostUSD != 0 {
 		s.CostUSD = e.CostUSD

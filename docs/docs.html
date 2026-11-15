@@ -775,7 +775,7 @@ hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server qua
     <!-- ══ COST / STATS / PRICING / MODELS ══ -->
     <section class="doc" id="cost">
       <h2><span class="cmd">hyctl cost</span> <span class="tagline">spend, honestly labeled</span></h2>
-      <p class="sum">Reads <span class="fx">cost.jsonl</span>; <span class="fx">tokens_source</span> marks real-vs-estimated, <span class="fx">cost_source</span> is always <i>estimated</i>.</p>
+      <p class="sum">Reads <span class="fx">cost.jsonl</span>; <span class="fx">tokens_source</span> marks real-vs-estimated, <span class="fx">cost_source</span> is always <i>estimated</i>. <span class="fx">cache_read_tokens</span> and <span class="fx">cache_write_tokens</span> appear when the provider reported cache use.</p>
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl cost</pre></div>
     </section>
     <section class="doc" id="stats">
