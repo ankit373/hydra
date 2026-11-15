@@ -428,7 +428,7 @@ hyctl workflow list ; hyctl workflow show <id> ; hyctl workflow resume <id>
 # finding and 4 when no file was reviewed at all, since reviewing nothing is not a pass.
 hyctl vet                                  # staged + unstaged + untracked
 hyctl vet --from main --to HEAD ; hyctl vet --commit <sha>
-hyctl vet --confidence 0.8                 # as many Heads per file as its blast radius warrants
+hyctl vet --confidence 0.8                 # as many models per file as its blast radius warrants
 hyctl vet --dry-run                        # what would be reviewed, nothing dispatched
 hyctl vet --local --json                   # local Heads only, machine-readable
 
