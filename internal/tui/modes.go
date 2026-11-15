@@ -54,15 +54,15 @@ var ckModes = []ckModeDef{
 		desc: "auto with no confirms, hard $0.50 cost cap per task, stops visibly at it"},
 }
 
-// ckModeDef looks a mode up by name; an unknown name reads as auto so a stale
-// saved mode can never wedge the chat.
+// ckModeDef looks a mode up by name; an unknown name reads as ask, the mode
+// that never writes, so a stale saved mode lands on the safe one.
 func ckModeByName(name string) ckModeDef {
 	for _, d := range ckModes {
 		if d.name == name {
 			return d
 		}
 	}
-	return ckModeByName("auto")
+	return ckModeByName("ask")
 }
 
 // ckNextBasicMode is the shift+tab cycle: ask → edit → plan → auto → ask.

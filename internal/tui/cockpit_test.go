@@ -67,7 +67,7 @@ func testRun(id, status, task string) ckRun {
 // without touching the machine.
 func testCockpit() Cockpit {
 	m := Cockpit{
-		mode:         "auto",
+		mode:         "ask",
 		heads:        testHeads(),
 		collapsed:    map[string]bool{},
 		auditIgnored: map[string]bool{},
@@ -402,5 +402,18 @@ func TestCkClaudePct_AbsentIsUnknownNotZero(t *testing.T) {
 	writeState(`{"other":1}`)
 	if _, _, ok := ckClaudePct(); ok {
 		t.Error("state.json without claude_pct read as known")
+	}
+}
+
+// A fresh cockpit opens in Ask: a summary or a reply must not start in a mode
+// that plans, edits and runs the workspace tests.
+func TestCockpit_StartsInAsk(t *testing.T) {
+	cockpitHome(t, "")
+	m := NewCockpit()
+	if m.mode != "ask" {
+		t.Errorf("fresh cockpit mode = %q, want ask", m.mode)
+	}
+	if got := stripANSI(m.chatMain(m.th(), 60, 20)); !strings.Contains(got, "Ask ▾") {
+		t.Errorf("the input chip does not read Ask:\n%s", got)
 	}
 }

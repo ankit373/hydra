@@ -102,7 +102,7 @@ func TestStatusBar_FactsAndFlash(t *testing.T) {
 	m := testCockpit()
 	m.view = ckViewChat
 	got := stripANSI(m.statusBar())
-	if !strings.Contains(got, "mode auto") || !strings.Contains(got, "route auto") {
+	if !strings.Contains(got, "mode ask") || !strings.Contains(got, "route auto") {
 		t.Errorf("chat facts missing: %q", got)
 	}
 	m.override = ckOverride{kind: 'C', conf: 0.95}

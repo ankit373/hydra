@@ -382,12 +382,12 @@ MODELS               <span class="tf">│</span> :q quits.                      
  <span class="tr">✗</span> nomic-embed-te…   <span class="tf">│</span>                                       <span class="tf">│</span>
                      <span class="tf">│</span>                                       <span class="tf">│</span>
 MODE                 <span class="tf">│</span>                                       <span class="tf">│</span>
- auto                <span class="tf">│</span>                                       <span class="tf">│</span>
+ ask                 <span class="tf">│</span>                                       <span class="tf">│</span>
                      <span class="tf">│</span> <span class="tf">╭────────────────────────────────────╮│</span>
-                     <span class="tf">│</span> <span class="tf">│</span>  Auto <span class="tf">▾</span>  what do you need done?,   <span class="tf">││</span>
+                     <span class="tf">│</span> <span class="tf">│</span>  Ask <span class="tf">▾</span>  what do you need done?,    <span class="tf">││</span>
                      <span class="tf">│</span> <span class="tf">│</span> <span class="ta">enter</span> runs it                      <span class="tf">││</span>
                      <span class="tf">│</span> <span class="tf">╰────────────────────────────────────╯│</span>
- <span class="ta">ctrl+t</span> thread  <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts        mode auto · route auto</pre>
+ <span class="ta">ctrl+t</span> thread  <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts         mode ask · route auto</pre>
         </div>
       </div>
 
@@ -464,7 +464,7 @@ MODE                 <span class="tf">│</span>                                
       </div>
 
       <div class="sub"><div class="lbl">How it works</div>
-        <p><b>Chat</b> executes: the route line names the routing level, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each model at its routing level, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
+        <p><b>Chat</b> executes: the route line names the routing level, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes: Ask, the default, which answers and never writes, then Edit, Plan and Auto (plan → edit → run your tests → fix → repeat), and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each model at its routing level, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
       </div>
       <div class="sub"><div class="lbl">Streaming</div>
         <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow model and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
