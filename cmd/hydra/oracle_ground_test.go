@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/ground"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
@@ -190,5 +192,60 @@ func TestOracleGround_RequiresBothInputs(t *testing.T) {
 	}
 	if _, _, err := run(t, "oracle", "ground", "--candidate", a); err == nil {
 		t.Error("ran with no prompt")
+	}
+}
+
+// Without a span the answer is still keyed, by its text's hash, so a later
+// check on the same text can join it.
+func TestOracleGround_WritesAVerdictKeyedByCandidate(t *testing.T) {
+	testutil.NewSandbox(t)
+	answer := "UITier puts a LocalOnly head at tier 10, the free floor."
+	p, a := writeGroundFiles(t, answer)
+
+	if _, _, err := run(t, "oracle", "ground", "--prompt", p, "--candidate", a, "--domain", "docs"); err != nil {
+		t.Fatal(err)
+	}
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil || len(answers) != 1 || len(answers[0].Checks) != 1 {
+		t.Fatalf("verdict log = %+v, err=%v; want one answer with one check", answers, err)
+	}
+	c := answers[0].Checks[0]
+	if c.CandidateHash != evalset.Hash(answer) || c.Check != ground.DefaultSource || !c.Passed || c.Domain != "docs" {
+		t.Errorf("verdict = %+v", c)
+	}
+}
+
+// Two different checks on one span are one answer, in the order they ran.
+func TestTwoChecksOnOneSpanFoldToOneAnswer(t *testing.T) {
+	cliSandbox(t)
+	const runID = "20260908T060000Z-7777777777777777"
+	_, okSpan := seedRun(t, runID)
+	p, a := writeGroundFiles(t, "UITier puts a LocalOnly head at tier 12.")
+
+	if _, _, err := run(t, "oracle", "ground", "--prompt", p, "--candidate", a,
+		"--run", runID, "--span", okSpan[:8]); err != nil {
+		t.Fatal(err)
+	}
+	score := cmdTraceScore()
+	score.SetArgs([]string{runID, "--span", okSpan, "--name", "review", "--value", "1"})
+	captureStdout(t, func() {
+		if err := score.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	answers, err := evalset.Joint(evalset.VerdictsPath())
+	if err != nil || len(answers) != 1 {
+		t.Fatalf("verdict log = %+v, err=%v; want one answer", answers, err)
+	}
+	got := answers[0]
+	if got.Key != okSpan || len(got.Checks) != 2 {
+		t.Fatalf("answer = %+v, want two checks on %s", got, okSpan)
+	}
+	if got.Checks[0].Check != ground.DefaultSource || got.Checks[0].Passed {
+		t.Errorf("first check = %+v, want a failed grounding", got.Checks[0])
+	}
+	if got.Checks[1].Check != "human" || !got.Checks[1].Passed {
+		t.Errorf("second check = %+v, want a passing human verdict", got.Checks[1])
 	}
 }
