@@ -81,7 +81,7 @@ the caller's decision.`,
 						"verdict": o.Last,
 					})
 				}
-				printNotGrounded(src, verr)
+				printNotChecked(src, verr)
 				return nil
 			}
 			if verr != nil {
@@ -100,7 +100,7 @@ the caller's decision.`,
 
 			var spanEv runlog.Event
 			if scoreSpan != "" {
-				ev, err := scoreGrounding(scoreRun, scoreSpan, src, v.Passed, v.Detail)
+				ev, err := scoreVerdict(scoreRun, scoreSpan, "grounding", src, v.Passed, v.Detail)
 				if err != nil {
 					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("span score: "+err.Error()))
 				} else {
@@ -140,8 +140,8 @@ the caller's decision.`,
 	return cmd
 }
 
-// printNotGrounded says the check had nothing to judge. Never a pass.
-func printNotGrounded(src string, reason error) {
+// printNotChecked says the check had nothing to judge or could not run. Never a pass.
+func printNotChecked(src string, reason error) {
 	fmt.Fprintf(stdout, "\n  %s  %s\n", warnStyle.Render("NOT CHECKED"), dimStyle.Render(src))
 	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(reason.Error()))
 }
@@ -168,9 +168,9 @@ func printGrounding(src string, last ground.Verdict, v oracle.Verdict, measured 
 		"; train it with `hyctl oracle ground --record` once you know whether the answer was right"))
 }
 
-// scoreGrounding attaches the verdict to the span that produced the answer, so
-// a failing check is visible in `hyctl trace view` beside the work it judges.
-func scoreGrounding(runID, spanID, source string, passed bool, detail string) (runlog.Event, error) {
+// scoreVerdict attaches a verdict to the span that produced the answer, so a
+// failing check is visible in `hyctl trace view` beside the work it judges.
+func scoreVerdict(runID, spanID, name, source string, passed bool, detail string) (runlog.Event, error) {
 	ev, err := loadSpan(runID, spanID)
 	if err != nil {
 		return ev, err
@@ -180,7 +180,7 @@ func scoreGrounding(runID, spanID, source string, passed bool, detail string) (r
 		val = 1
 	}
 	return ev, runlog.AppendScore(ev.RunID, ev.SpanID, runlog.Score{
-		Name: "grounding", Value: val, Comment: detail, Source: source,
+		Name: name, Value: val, Comment: detail, Source: source,
 	})
 }
 

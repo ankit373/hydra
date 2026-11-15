@@ -938,19 +938,19 @@ func cmdDispatch() *cobra.Command {
 			if verifyRun {
 				return errors.New("--verify cannot judge a dispatch: the answer is never written to " +
 					"disk, so the verifier checks the repository as it already was.\n" +
-					"  To check the answer itself: `hyctl dispatch --check <" +
-					strings.Join(dispatchChecks, "|") + ">`.\n" +
+					"  To check the answer itself: `hyctl dispatch --check <check>`, one of " +
+					strings.Join(dispatchChecks, ", ") + ".\n" +
 					"  To verify an answer, apply it: " +
 					"`hyctl edit --file <path> --enum <enum> --prompt \"<instruction>\"` " +
 					"validates the file it just wrote.\n" +
 					"  To verify one you have applied yourself: " +
 					"`hyctl oracle verify --candidate <file> -- <command>`")
 			}
-			if err := parseChecks(checks); err != nil {
+			prompt := strings.Join(args, " ")
+			answerChecks, err := parseChecks(checks, prompt)
+			if err != nil {
 				return err
 			}
-
-			prompt := strings.Join(args, " ")
 			ctx := cmd.Context()
 
 			// One invocation is one run with one logical task, whichever path
@@ -1332,7 +1332,7 @@ func cmdDispatch() *cobra.Command {
 			// Every way the answer reaches the screen ends here, so a check runs on all of them.
 			finish := func() error {
 				printOutputWarning(result.OutputProvenance)
-				runChecks(ctx, checks, prompt, result.Output, domain, runID, result.SpanID)
+				runChecks(ctx, answerChecks, result.Output, domain, runID, result.SpanID)
 				return nil
 			}
 			if sr != nil && sr.Streamed() {
@@ -1392,7 +1392,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&kind, "kind", "", "kind of work, <kind>[.<area>], routes and keys --confidence on that record: "+strings.Join(trust.Kinds, ", "))
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use --check, `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
-	cmd.Flags().StringArrayVar(&checks, "check", nil, "check the answer itself, repeatable: ground (every number and identifier in the answer appears in the prompt's fenced context)")
+	cmd.Flags().StringArrayVar(&checks, "check", nil, "check the answer itself, repeatable: ground (every number and identifier appears in the prompt's fenced context), "+
+		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file})")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")
