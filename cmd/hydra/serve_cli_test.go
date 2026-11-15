@@ -632,14 +632,14 @@ func TestServeRouter_NoClassRoutesAsBefore(t *testing.T) {
 }
 
 // G7b. The client's header may lower the operator's ceiling and never raise
-// it, and a request without the header keeps the no-ceiling it had before E1.
+// it, and a request without the header is held to the policy's.
 func TestServeRouter_MaxCostOnlyLowersTheCeiling(t *testing.T) {
 	for _, tc := range []struct {
 		policy, header, want float64
 		from                 string
 	}{
 		{0, 0, 0, ""},
-		{0.05, 0, 0, ""},
+		{0.05, 0, 0.05, "policy.yaml max_cost_usd"},
 		{0, 0.25, 0.25, serve.MaxCostHeader},
 		{0.05, 0.25, 0.05, "policy.yaml max_cost_usd"},
 		{0.05, 0.01, 0.01, serve.MaxCostHeader},

@@ -230,16 +230,16 @@ func isServedDefault(rt serve.Route, enum string) bool {
 }
 
 // requestCeiling is the lower of the client's and the policy's, read per request
-// so a policy edit applies without a restart. A request that set none keeps
-// the no-ceiling it had before E1, so the header can only lower.
+// so a policy edit applies without a restart. The header can only lower it.
 func requestCeiling(client float64) (float64, string) {
-	if client <= 0 {
-		return 0, ""
-	}
-	if policyUSD, from := servePolicyCeiling(); policyUSD > 0 && policyUSD < client {
+	policyUSD, from := servePolicyCeiling()
+	switch {
+	case policyUSD > 0 && (client <= 0 || policyUSD < client):
 		return policyUSD, from
+	case client > 0:
+		return client, serve.MaxCostHeader
 	}
-	return client, serve.MaxCostHeader
+	return 0, ""
 }
 
 // streamEvents adapts the router's events to the endpoint's, and is nil when
@@ -384,8 +384,9 @@ func cmdServe() *cobra.Command {
 		taskClass, obj    string
 		localOnly         bool
 		confidence        float64
-		heads             []string
+		heads, origins    []string
 		maxEscalations    int
+		maxInFlight, rate int
 	)
 
 	cmd := &cobra.Command{
@@ -413,7 +414,12 @@ func cmdServe() *cobra.Command {
 			"appending the next head's answer to it would compose a reply no head ever gave.\n\n" +
 			"Binds 127.0.0.1. Any other address needs --token, because this endpoint spends\n" +
 			"money and reads your code, and `hyctl security` reports exactly this risk about\n" +
-			"other people's model servers.",
+			"other people's model servers.\n\n" +
+			"Every request must name the bound address as its Host. One that carries an Origin\n" +
+			"header is refused unless --allow-origin lists it, and a POST must be\n" +
+			"Content-Type: application/json. policy.yaml max_cost_usd caps every request;\n" +
+			"X-Hydra-Max-Cost-USD can only lower it. Over --max-inflight or --rate, a request\n" +
+			"gets 429 with Retry-After.",
 		Example: "  hyctl serve\n" +
 			"  hyctl serve --enum SIMPLE --local\n" +
 			"  hyctl serve --addr 0.0.0.0:8788 --token \"$HYDRA_SERVE_TOKEN\"\n" +
@@ -444,6 +450,9 @@ func cmdServe() *cobra.Command {
 
 			if maxEscalations < 0 {
 				return fmt.Errorf("--max-escalations must be 0 or more, got %d", maxEscalations)
+			}
+			if maxInFlight < 0 || rate < 0 {
+				return fmt.Errorf("--max-inflight and --rate must be 0 or more, got %d and %d", maxInFlight, rate)
 			}
 
 			d, err := dispatch.New(ctx)
@@ -481,7 +490,8 @@ func cmdServe() *cobra.Command {
 				verifiers: verifiers, confidence: confidence, maxEscalations: maxEscalations, cal: cal,
 			}
 			printServeBanner(stdout, ln.Addr().String(), defaultRouting(enum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
-			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
+			return serve.Serve(ctx, ln, serve.Handler(r, decider, token),
+				serve.AllowHost(addr), serve.AllowOrigins(origins...), serve.Limit(maxInFlight, rate))
 		},
 	}
 
@@ -497,6 +507,9 @@ func cmdServe() *cobra.Command {
 		"--heads \"\" clears it). Embedding models stay available to the cache and recall, listed or not; "+
 		"decision sources are not heads it can name, so with a list set /v1/decisions has none")
 	f.IntVar(&maxEscalations, "max-escalations", 2, "most further heads a verified class's request may be escalated to")
+	f.StringSliceVar(&origins, "allow-origin", nil, "browser origins allowed to call this server, e.g. http://localhost:3000")
+	f.IntVar(&maxInFlight, "max-inflight", serve.DefaultMaxInFlight, "most requests answered at once (0 for no cap)")
+	f.IntVar(&rate, "rate", serve.DefaultPerMinute, "most requests per minute (0 for no cap)")
 	return cmd
 }
 
