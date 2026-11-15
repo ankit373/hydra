@@ -5288,17 +5288,34 @@ func cmdTrustCalibration() *cobra.Command {
 				fmt.Fprintln(stdout, "\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
 				return nil
 			}
-			fmt.Fprintf(stdout, "\n  %-28s %-16s %6s %6s %7s %7s %8s\n", "Source", "Domain", "n", "neg", "se", "sp", "D(nats)")
-			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 87))
-			mute := 0
+			fmt.Fprintf(stdout, "\n  %-28s %-16s %6s %6s %7s %7s %8s   %11s %s\n",
+				"Source", "Domain", "n", "neg", "se", "sp", "D(nats)", "since", "changed")
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 110))
+			mute, recent := 0, 0
+			weekAgo := time.Now().AddDate(0, 0, -7)
 			for _, s := range stats {
 				mark := ""
 				if !s.Discriminating {
 					mute++
 					mark = " ·"
 				}
-				fmt.Fprintf(stdout, "  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f%s\n",
-					s.Source, truncLabel(s.Domain, 16), s.N, s.Neg, s.Se, s.Sp, s.D, mark)
+				changed := ""
+				if !s.Changed.IsZero() {
+					changed = s.Changed.Local().Format(time.DateOnly)
+					if s.Changed.After(weekAgo) {
+						recent++
+					}
+				}
+				// The mark stays beside D, the number it explains.
+				fmt.Fprintf(stdout, "  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f%-2s %11s %s\n",
+					s.Source, truncLabel(s.Domain, 16), s.N, s.Neg, s.Se, s.Sp, s.D, mark,
+					fmt.Sprintf("%d/%d", s.SinceCorrect, s.SinceTotal), changed)
+			}
+			if recent > 0 {
+				fmt.Fprintf(stdout, "\n  %s\n", warnStyle.Render(fmt.Sprintf(
+					"%d of %d cells changed in the last 7 days. since is the record after the change: "+
+						"of the answers a source backed, how many were right.",
+					recent, len(stats))))
 			}
 			// A source that has only ever answered one way has not discriminated,
 			// so it carries no information whatever its accuracy and its LLR is 0.
