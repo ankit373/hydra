@@ -3,10 +3,11 @@
 // Package ground checks an answer against the context the dispatch was given.
 //
 // Not a hallucination detector. It answers one narrow question with high
-// precision: does the answer state a number, date, path, flag or symbol that
-// appears nowhere in what the model was handed? That is extrinsic hallucination,
-// where a model contradicts ground truth sitting in its own context, and it is
-// the only part of the problem a check with no trained model can speak to.
+// precision: does the answer state a number, date, name, path, flag or symbol
+// that appears nowhere in what the model was handed? That is extrinsic
+// hallucination, where a model contradicts ground truth sitting in its own
+// context, and it is the only part of the problem a check with no trained model
+// can speak to.
 //
 // Everything else it declines to judge. With no fenced context there is no
 // verdict at all, because "nothing to check against" and "checked and fine"
@@ -35,6 +36,8 @@ const (
 	KindSymbol Kind = "symbol"
 	// KindDate is a written calendar date, compared in a canonical form.
 	KindDate Kind = "date"
+	// KindName is a proper name of two or more words: a person, a company.
+	KindName Kind = "name"
 )
 
 // Claim is one span of the answer that had to appear in the context.
@@ -125,6 +128,17 @@ func Check(answer, prompt string) Verdict {
 	answerDates, rest := dates(answer)
 	for _, d := range answerDates {
 		claim(d.text, fmt.Sprint(d.days), KindDate, d.supportedBy(supported))
+	}
+
+	pw := lowerWords(prompt)
+	source := make(map[string]bool, len(pw))
+	for _, w := range pw {
+		source[w] = true
+	}
+	promptWords := " " + strings.Join(pw, " ") + " "
+	for _, n := range names(rest, lowercaseUse(prompt, answer), source) {
+		words := lowerWords(n)
+		claim(n, "name:"+strings.Join(words, " "), KindName, nameSupported(words, promptWords))
 	}
 
 	cited := citations(rest)
@@ -262,6 +276,132 @@ func dateKey(year, month, day string) (string, bool) {
 		return fmt.Sprintf("date:%02d-%02d", mo, dd), true
 	}
 	return fmt.Sprintf("date:%s-%02d-%02d", year, mo, dd), true
+}
+
+// names returns the proper names in text: runs of two or more capitalised
+// words, one of them never used in lowercase, so Task Manager is ordinary words
+// and Priya Raman is a name. A sentence's first word joins only when it is not
+// ordinary and the source has it, so "Then Raman" is not a name. Scripts with
+// no capitals (CJK, Arabic, Devanagari) give no signal and never form one.
+func names(text string, ordinary, source map[string]bool) []string {
+	var out, run, parts []string
+	var full int  // words in run that are more than an initial
+	var rare bool // a word in run that is never used in lowercase
+	flush := func() {
+		if full >= 2 && rare {
+			out = append(out, strings.Join(run, " "))
+		}
+		run, parts, full, rare = nil, nil, 0, false
+	}
+	sentenceStart := true
+	for _, field := range strings.Fields(text) {
+		if strings.IndexAny(field, opening) == 0 {
+			flush()
+		}
+		core, end := nameWord(field)
+		low := strings.ToLower(core)
+		initial := len(core) == 1 && core[0] >= 'A' && core[0] <= 'Z' && end == "."
+		switch {
+		case initial && !sentenceStart:
+			run = append(run, core+".")
+		case isNameWord(core) && !(sentenceStart && (ordinary[low] || !source[low])):
+			run, parts = append(append(run, parts...), core), nil
+			full, rare = full+1, rare || !ordinary[low]
+		case nameParts[core] && full > 0:
+			parts = append(parts, core)
+		default:
+			flush()
+		}
+		if initial {
+			continue // Jerome H. Powell: the dot ends neither the name nor the sentence
+		}
+		sentenceStart = strings.ContainsAny(end, ".!?")
+		if end != "" {
+			flush()
+		}
+	}
+	flush()
+	return out
+}
+
+// nameParts are the lowercase words that sit inside a name, as in Mike van der Hoorn.
+var nameParts = map[string]bool{"al": true, "bin": true, "da": true, "de": true, "del": true,
+	"der": true, "di": true, "du": true, "la": true, "le": true, "van": true, "von": true}
+
+const opening = "\"“‘(["
+
+// nameWord splits a field into the word and what ends it. A possessive ends a
+// name, so "Spencer's," is ("Spencer", "'s,").
+func nameWord(field string) (core, end string) {
+	core = strings.TrimLeft(field, opening)
+	word := strings.TrimRight(core, ".,;:!?)]\"”’")
+	for _, s := range []string{"'s", "’s", "'"} {
+		if w, ok := strings.CutSuffix(word, s); ok {
+			word = w
+			break
+		}
+	}
+	return word, core[len(word):]
+}
+
+// nameSupported wants the last two words of a name together in the prompt and
+// the rest anywhere in it, so a reworded title still matches: "Home Affairs
+// Minister Tony Burke" for "Tony Burke, Minister for Home Affairs".
+func nameSupported(words []string, promptWords string) bool {
+	if !strings.Contains(promptWords, " "+strings.Join(words[len(words)-2:], " ")+" ") {
+		return false
+	}
+	for _, w := range words[:len(words)-2] {
+		if !strings.Contains(promptWords, " "+w+" ") {
+			return false
+		}
+	}
+	return true
+}
+
+// isNameWord is a Latin word with a leading capital and a lowercase letter
+// after it, so Spencer and O'Donnell are, and PII and the are not.
+func isNameWord(w string) bool {
+	var lower bool
+	for i, r := range w {
+		switch {
+		case unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r):
+			return false
+		case i == 0 && !unicode.IsUpper(r):
+			return false
+		case unicode.IsLower(r):
+			lower = true
+		case !unicode.IsLetter(r) && r != '\'' && r != '’' && r != '-':
+			return false
+		}
+	}
+	return lower
+}
+
+// lowerWords is text as lowercase words without their punctuation, for
+// matching a name case-insensitively and across line breaks.
+func lowerWords(text string) []string {
+	fields := strings.Fields(text)
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if core, _ := nameWord(f); core != "" {
+			out = append(out, strings.ToLower(core))
+		}
+	}
+	return out
+}
+
+// lowercaseUse is every word the texts write starting in lowercase, lowercased.
+func lowercaseUse(texts ...string) map[string]bool {
+	out := map[string]bool{}
+	for _, text := range texts {
+		for _, f := range strings.Fields(text) {
+			if core, _ := nameWord(f); core != "" && unicode.IsLower([]rune(core)[0]) {
+				out[strings.ToLower(core)] = true
+			}
+		}
+	}
+	return out
 }
 
 // citations are the numbers the answer cited rather than measured: #843 is a
