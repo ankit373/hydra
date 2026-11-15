@@ -6,7 +6,7 @@ any file whose hash differs. What is committed is derived: `bench/splits/<suite>
 (`id  split  rank  label`), generated once by `go generate ./internal/bench/suites`, and
 `bench/configs/smoke.ids`, the first 100 test ids by rank per suite.
 
-Both suites have been public since 2019–2020 and are **likely in pre-training data**.
+Every suite has been public since 2019–2021 and is **likely in pre-training data**.
 Paired differences against the frontier arm are the claim; absolute rates are context.
 
 ## Banking77
@@ -39,6 +39,24 @@ Paired differences against the frontier arm are the claim; absolute rates are co
 | Ids | `<key>/<index>`, e.g. `oos_test/0999` |
 | Citation | Larson et al., *An Evaluation Dataset for Intent Classification and Out-of-Scope Prediction*, EMNLP 2019 |
 
+## GSM8K
+
+| | |
+|---|---|
+| Source | https://github.com/openai/grade-school-math (`grade_school_math/data/test.jsonl`) |
+| Revision | `3101c7d5072418e28b9008a6636bde82a006892c` |
+| `test.jsonl` | `3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14` |
+| Same data as | Hugging Face `openai/gsm8k` at `740312add88f781978c0658806c59bc2815b9866`, `main/test-00000-of-00001.parquet` (sha256 `ee7b8da9…4e4f59`): the same 1,319 question and answer pairs in the same order, checked 2026-11-15. The JSONL is pinned because reading it needs no Parquet dependency |
+| Licence | MIT, **verified**: LICENSE at the pinned commit, 2026-11-15 |
+| Items | test only: **1,319**. Train is not pinned, since no arm trains |
+| Gold | the number after `####` in the reference answer, with commas dropped, and whole values printed without a decimal point (`1,300` is `1300`) |
+| Split | 410 calibration · 909 test · **0 excluded** |
+| Ids | `test/0000`–`test/1318`: the 0-based line in `test.jsonl` |
+| Class | `answer.gsm8k` |
+| Grade | the answer's `#### <number>` line, or its last number when there is none (the rule the pilot used); no number at all is a format fail |
+| Checks | `GSM8KFormatCheck` (the answer ends in a `####` line) and `GSM8KArithmeticCheck` (every `<<expression=result>>` note recomputes; no notes is a fail). Both are free and run on the answer text alone. The prompt asks for both, with no worked examples |
+| Citation | Cobbe et al., *Training Verifiers to Solve Math Word Problems*, 2021 |
+
 ## Duplicates and excluded items
 
 Copies of one utterance are found under the split key below, which ignores case,
@@ -49,6 +67,7 @@ differ are label noise no arm can score, so every copy is `excluded`.
 |---|---|---|
 | Banking77 | 62 (124) | 2 (4) |
 | CLINC150 | 92 (188) | 4 (9) |
+| GSM8K | 0 | 0 |
 
 | Suite | Utterances | Labels | Ids |
 |---|---|---|---|
@@ -66,8 +85,9 @@ differ are label noise no arm can score, so every copy is `excluded`.
   other non-letter, non-digit (punctuation, symbols, any Unicode space) into a break, and
   collapses whitespace, so "what's my balance?" and "whats my balance" share a split. It is
   a leakage key, not the grader's label normaliser, which must keep `-` significant. The
-  only non-ASCII in either suite is `£`, `€`, `’`, a no-break space and `…`, so NFC adds
-  nothing here, and the key needs no new dependency.
+  only non-ASCII in Banking77 and CLINC150 is `£`, `€`, `’`, a no-break space and `…`, and
+  GSM8K adds `¾`, curly quotes and dashes. NFC changes none of them, so the key needs no new
+  dependency.
 - `hyctl bench run` recomputes every row's split, rank and label from the data and refuses
   a TSV that disagrees.
 - **Rank**: `sha256("rank\0" ‖ suite ‖ "\0" ‖ id)`, first 8 bytes. A tier takes the first

@@ -42,14 +42,20 @@ func (b *benchAnswer) Execute(_ context.Context, req executor.Request) (*executo
 // splits, a lock pinning it, and a config over two OpenRouter arms; every seam is faked.
 func benchFixture(t *testing.T, maxUSD string) (args []string, exec *benchAnswer, results string) {
 	t.Helper()
+	return benchSuiteFixture(t, "banking77", []string{"categories.json", "train.csv", "test.csv"}, "card_arrival", maxUSD)
+}
+
+// benchSuiteFixture is benchFixture for any suite with testdata, every call answered with answer.
+func benchSuiteFixture(t *testing.T, suite string, files []string, answer, maxUSD string) (args []string, exec *benchAnswer, results string) {
+	t.Helper()
 	sb := testutil.NewSandbox(t)
 	sb.SetKey(t, "OPENROUTER_API_KEY", "test-key")
-	src := "../../internal/bench/suites/testdata/banking77"
+	src := "../../internal/bench/suites/testdata/" + suite
 	root := t.TempDir()
-	data := bench.DataDir(root, "banking77")
+	data := bench.DataDir(root, suite)
 	os.MkdirAll(data, 0o755)
 	ds := bench.Dataset{Revision: "fixture@1", LicenceVerified: "fixture"}
-	for _, n := range []string{"categories.json", "train.csv", "test.csv"} {
+	for _, n := range files {
 		b, err := os.ReadFile(filepath.Join(src, n))
 		if err != nil {
 			t.Fatal(err)
@@ -59,19 +65,19 @@ func benchFixture(t *testing.T, maxUSD string) (args []string, exec *benchAnswer
 		ds.Files = append(ds.Files, bench.LockEntry{Name: n, URL: "http://fixture/" + n, SHA256: hex.EncodeToString(s[:])})
 	}
 	benchDir := t.TempDir()
-	if _, err := suites.GenerateSplits(map[string]bench.Dataset{"banking77": ds}, root, benchDir); err != nil {
+	if _, err := suites.GenerateSplits(map[string]bench.Dataset{suite: ds}, root, benchDir); err != nil {
 		t.Fatal(err)
 	}
 	var lock strings.Builder
-	fmt.Fprintf(&lock, "[banking77]\nrevision = %q\nlicence = \"x\"\nlicence_verified = \"fixture, 2026-11-05\"\n", ds.Revision)
+	fmt.Fprintf(&lock, "[%s]\nrevision = %q\nlicence = \"x\"\nlicence_verified = \"fixture, 2026-11-05\"\n", suite, ds.Revision)
 	for _, f := range ds.Files {
-		fmt.Fprintf(&lock, "[[banking77.file]]\nname = %q\nurl = %q\nsha256 = %q\n", f.Name, f.URL, f.SHA256)
+		fmt.Fprintf(&lock, "[[%s.file]]\nname = %q\nurl = %q\nsha256 = %q\n", suite, f.Name, f.URL, f.SHA256)
 	}
 	lockPath := filepath.Join(benchDir, "datasets.lock")
 	os.WriteFile(lockPath, []byte(lock.String()), 0o644)
 	cfg := `tier = "fixture"
 track = "core"
-suites = ["banking77"]
+suites = ["` + suite + `"]
 n_test = 10
 seed = 1
 max_usd = ` + maxUSD + `
@@ -91,7 +97,7 @@ cheapest = "bedrock:amazon.nova-micro-v1:0"
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
 	t.Setenv("AWS_REGION", "us-east-1")
 
-	exec = &benchAnswer{answer: "card_arrival"}
+	exec = &benchAnswer{answer: answer}
 	swap(t, &benchExec, func(provider.Head) executor.Executor { return exec })
 	swap(t, &benchPrices, func() (bench.PriceLookup, time.Time) {
 		return func(k string) (pricing.ModelPrice, bool) {
@@ -193,4 +199,27 @@ func (e estimating) Execute(ctx context.Context, req executor.Request) (*executo
 		r.TokensEstimated = true
 	}
 	return r, err
+}
+
+// A GSM8K arm is scored on the final number, like any other suite's arm.
+func TestBenchRun_ScoresAGSM8KArm(t *testing.T) {
+	args, exec, results := benchSuiteFixture(t, "gsm8k", []string{"test.jsonl"}, "3*12=<<3*12=36>>36\n#### 36", "1.0")
+	out, _, err := run(t, args...)
+	if err != nil || exec.calls.Load() == 0 {
+		t.Fatalf("run: %v after %d calls\n%s", err, exec.calls.Load(), out)
+	}
+	dirs, _ := os.ReadDir(results)
+	if len(dirs) != 1 {
+		t.Fatalf("results = %v", dirs)
+	}
+	b, err := os.ReadFile(filepath.Join(results, dirs[0].Name(), "items.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Three test items, two arms: only test/0 (gold 36) passes, on both arms.
+	rows := string(b)
+	if strings.Count(rows, `"passed":true`) != 2 || strings.Count(rows, `"decision":"accept"`) != 6 ||
+		!strings.Contains(rows, `"detail":"answered 36, gold 1300"`) {
+		t.Fatalf("items.jsonl:\n%s", rows)
+	}
 }
