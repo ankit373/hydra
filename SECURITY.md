@@ -12,7 +12,8 @@ Hydra follows a rolling-release model on `main`. Only the latest commit receives
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Please report security issues by emailing **security@hydra-ai.dev** (or open a [GitHub private security advisory](https://github.com/ankit373/hydra/security/advisories/new)).
+Report it privately through GitHub: [open a draft security advisory](https://github.com/ankit373/hydra/security/advisories/new).
+Only you and the maintainer can see it. You need a GitHub account. There is no security email address.
 
 Include:
 - A description of the vulnerability and its potential impact
@@ -29,13 +30,13 @@ We will credit reporters in the release notes unless you prefer to remain anonym
 Hydra is a **local CLI tool**, it runs on your machine, reads your filesystem, and calls external AI APIs on your behalf. Keep this in mind:
 
 - **API keys**: Hydra reads credentials from environment variables or tool-managed config files (`~/.gemini/antigravity-cli/settings.json`). **Never commit API keys to any repository.**
-- **Prompt injection**: Prompts dispatched to lower-tier models may include untrusted content (e.g., file contents). Outputs are treated as text, not executable, but always review AI-generated code before applying it.
-- **Local file access**: `dispatch/scope.sh` enforces workspace boundaries. Do not override `HYDRA_HOME` or `HYDRA_DATA` to point at sensitive system directories.
-- **Logs**: `logs/` contains task histories and model outputs. These are excluded from the repository via `.gitignore` but may contain sensitive context, treat them accordingly.
+- **Prompt injection**: Prompts sent to models may include untrusted content, such as file contents. Hydra can write a model's edits to files in the workspace and run the configured validators on the result. Review what a model changed before you rely on it.
+- **Local file access**: `internal/workspace` checks every path Hydra edits and refuses one outside its workspace. Workspaces are listed in `registry/workspace.yaml`. Do not point `HYDRA_HOME` at a sensitive system directory.
+- **Logs**: `$HYDRA_HOME/logs` (default `~/.hydra/logs`) holds run logs and model outputs. They stay on your machine but may contain sensitive context, so treat them accordingly.
 
 ## Security Best Practices for Contributors
 
 - Never log, print, or commit API keys, tokens, passwords, or personal data.
-- Use `$HOME` and `$HYDRA_DATA` for all user-owned paths, never hardcode `/Users/<name>/`.
+- Resolve Hydra state paths through `config.Dir()` (`$HYDRA_HOME`, default `~/.hydra`), never hardcode `/Users/<name>/`.
 - Validate all external inputs before passing them to shell commands. Prefer `printf '%s'` quoting over bare variable interpolation.
 - Run `shellcheck` on any new or modified `.sh` file before submitting a PR.
