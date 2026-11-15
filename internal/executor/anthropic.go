@@ -30,6 +30,8 @@ type anthropicBlock struct {
 	// tool_result
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	Content   string `json:"content,omitempty"`
+
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
 }
 
 // anthropicTool is a function definition. input_schema is required, so a tool
@@ -38,7 +40,17 @@ type anthropicTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"input_schema"`
+
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
 }
+
+// cacheControl marks the end of a prefix Anthropic should cache. Ephemeral is
+// the 5 minute cache; the 1 hour one costs more to write and is not used.
+type cacheControl struct {
+	Type string `json:"type"`
+}
+
+var ephemeral = &cacheControl{Type: "ephemeral"}
 
 var emptySchema = json.RawMessage(`{"type":"object","properties":{}}`)
 

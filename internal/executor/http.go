@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -303,6 +304,9 @@ func anthropicBody(req Request, model string, stream bool) (map[string]interface
 	}
 	if system != "" {
 		body["system"] = system
+		if req.PromptCache {
+			body["system"] = []anthropicBlock{{Type: "text", Text: system, CacheControl: ephemeral}}
+		}
 	}
 	if len(req.Tools) > 0 {
 		choice, send, err := anthropicToolChoice(req.ToolChoice)
@@ -310,7 +314,13 @@ func anthropicBody(req Request, model string, stream bool) (map[string]interface
 			return nil, err
 		}
 		if send {
-			body["tools"] = anthropicTools(req.Tools)
+			tools := anthropicTools(req.Tools)
+			if req.PromptCache {
+				// Tools come first in the cached prefix, so caller order must not split it.
+				slices.SortStableFunc(tools, func(a, b anthropicTool) int { return strings.Compare(a.Name, b.Name) })
+				tools[len(tools)-1].CacheControl = ephemeral
+			}
+			body["tools"] = tools
 			if choice != nil {
 				body["tool_choice"] = choice
 			}
