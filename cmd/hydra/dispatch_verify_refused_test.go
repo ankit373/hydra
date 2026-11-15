@@ -21,7 +21,7 @@ func TestDispatch_VerifyIsRefused(t *testing.T) {
 	msg := err.Error()
 	// The refusal has to say what to use instead, or it is a dead end for
 	// someone following the old documented flow.
-	for _, want := range []string{"never written to disk", "hyctl edit", "hyctl oracle verify"} {
+	for _, want := range []string{"never written to disk", "--check", "hyctl edit", "hyctl oracle verify"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("refusal does not mention %q:\n%s", want, msg)
 		}

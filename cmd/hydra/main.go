@@ -902,6 +902,7 @@ func cmdDispatch() *cobra.Command {
 		irreversible bool
 		production   bool
 		verifyRun    bool
+		checks       []string
 	)
 
 	cmd := &cobra.Command{
@@ -935,13 +936,18 @@ func cmdDispatch() *cobra.Command {
 			// Refused here, before anything routes, so nobody pays for a run
 			// whose verdict would mean nothing.
 			if verifyRun {
-				return fmt.Errorf("--verify cannot judge a dispatch: the answer is never written to " +
+				return errors.New("--verify cannot judge a dispatch: the answer is never written to " +
 					"disk, so the verifier checks the repository as it already was.\n" +
+					"  To check the answer itself: `hyctl dispatch --check <" +
+					strings.Join(dispatchChecks, "|") + ">`.\n" +
 					"  To verify an answer, apply it: " +
 					"`hyctl edit --file <path> --enum <enum> --prompt \"<instruction>\"` " +
 					"validates the file it just wrote.\n" +
 					"  To verify one you have applied yourself: " +
 					"`hyctl oracle verify --candidate <file> -- <command>`")
+			}
+			if err := parseChecks(checks); err != nil {
+				return err
 			}
 
 			prompt := strings.Join(args, " ")
@@ -1101,6 +1107,11 @@ func cmdDispatch() *cobra.Command {
 				if derived > effectiveConf {
 					effectiveConf = derived
 				}
+			}
+			// A check judges one answer and scores its span; an ensemble has neither yet.
+			if len(checks) > 0 && (effectiveConf > 0 || doSwarm) {
+				return errors.New("--check judges a single dispatch's answer; it does not combine " +
+					"with --swarm or a confidence run (--confidence, --file, --irreversible, --production, or PII in the prompt)")
 			}
 			// --dry-run must mean "spend nothing" in every mode. It was read only
 			// by the single-dispatch path far below, which neither ensemble
@@ -1318,10 +1329,15 @@ func cmdDispatch() *cobra.Command {
 			// The answer is already on screen, delta by delta, so reprinting
 			// Output would show it twice. Only the numbers are still missing,
 			// since they do not exist until the call returns.
+			// Every way the answer reaches the screen ends here, so a check runs on all of them.
+			finish := func() error {
+				printOutputWarning(result.OutputProvenance)
+				runChecks(ctx, checks, prompt, result.Output, domain, runID, result.SpanID)
+				return nil
+			}
 			if sr != nil && sr.Streamed() {
 				sr.Finish(result.InputTokens, result.OutputTokens, result.Duration, result.TTFT)
-				printOutputWarning(result.OutputProvenance)
-				return nil
+				return finish()
 			}
 			if sr != nil {
 				sr.Stop()
@@ -1331,8 +1347,7 @@ func cmdDispatch() *cobra.Command {
 			// printing the usual line would claim a head just ran.
 			if result.Cache != nil {
 				printCacheHit(result)
-				printOutputWarning(result.OutputProvenance)
-				return nil
+				return finish()
 			}
 
 			fmt.Fprintln(stdout)
@@ -1346,8 +1361,7 @@ func cmdDispatch() *cobra.Command {
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, result.Output)
 			fmt.Fprintln(stdout)
-			printOutputWarning(result.OutputProvenance)
-			return nil
+			return finish()
 		},
 	}
 
@@ -1377,7 +1391,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain: ranks heads on what they got right at this kind of work, and keys --confidence. Prefer --kind")
 	cmd.Flags().StringVar(&kind, "kind", "", "kind of work, <kind>[.<area>], routes and keys --confidence on that record: "+strings.Join(trust.Kinds, ", "))
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
-	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
+	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use --check, `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
+	cmd.Flags().StringArrayVar(&checks, "check", nil, "check the answer itself, repeatable: ground (every number and identifier in the answer appears in the prompt's fenced context)")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")
