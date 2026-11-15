@@ -55,10 +55,29 @@ type openAIChatResponse struct {
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-	} `json:"usage"`
+	Usage openAIUsage `json:"usage"`
+}
+
+// openAIUsage is the usage block on a buffered reply and a stream's final
+// chunk. OpenAI nests the cache hit in prompt_tokens_details; DeepSeek puts
+// it at the top level. Both count it inside prompt_tokens.
+type openAIUsage struct {
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	PromptTokensDetails struct {
+		CachedTokens *int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
+	PromptCacheHitTokens *int `json:"prompt_cache_hit_tokens"`
+}
+
+func (u openAIUsage) cacheRead() int {
+	if u.PromptTokensDetails.CachedTokens != nil {
+		return *u.PromptTokensDetails.CachedTokens
+	}
+	if u.PromptCacheHitTokens != nil {
+		return *u.PromptCacheHitTokens
+	}
+	return 0
 }
 
 type openAICompatConfig struct {
@@ -174,6 +193,7 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 	answer := httpResponse(req, cr.Choices[0].Message.Content,
 		firstNonEmpty(cr.Model, cfg.Model),
 		cr.Usage.PromptTokens, cr.Usage.CompletionTokens, start)
+	answer.CacheReadTokens = cr.Usage.cacheRead()
 	// An answer that only asks for tools carries no text at all, so these are
 	// what say it replied rather than said nothing.
 	answer.ToolCalls = cr.Choices[0].Message.ToolCalls
@@ -571,9 +591,11 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return httpResponse(req, out.Choices[0].Message.Content,
+	answer := httpResponse(req, out.Choices[0].Message.Content,
 		firstNonEmpty(out.Model, azureDeployment()),
-		out.Usage.PromptTokens, out.Usage.CompletionTokens, start), nil
+		out.Usage.PromptTokens, out.Usage.CompletionTokens, start)
+	answer.CacheReadTokens = out.Usage.cacheRead()
+	return answer, nil
 }
 
 func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
