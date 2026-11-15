@@ -5374,6 +5374,13 @@ func cmdTrustOutcome() *cobra.Command {
 				}
 				if r.SpanID != "" {
 					_ = trust.MarkApplied(trust.AppliedPath(), r.SpanID)
+					truth := evalset.Truth{SpanID: r.SpanID, Outcome: evalset.OutcomeIncorrect, Source: "trust outcome"}
+					if o == trust.OutcomeCorrect {
+						truth.Outcome = evalset.OutcomeCorrect
+					}
+					if tErr := evalset.AddTruth(evalset.VerdictsPath(), truth); tErr != nil {
+						fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("verdict log: "+tErr.Error()))
+					}
 				}
 				fmt.Fprintf(stdout, "\n  run %s  ·  domain %s  ·  outcome %s\n", r.TaskHash, r.Domain, outcome)
 				fmt.Fprintf(stdout, "  recorded %d of %d ledger entries\n\n", n, len(r.Ledger))
