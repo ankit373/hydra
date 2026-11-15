@@ -1459,3 +1459,26 @@ func TestCkFellBackNote(t *testing.T) {
 		t.Errorf("note = %q, want it to count the other attempts", got)
 	}
 }
+
+// Ask on a prompt naming a real file says once that it will not write, and
+// where the mode that does lives; a prompt naming no file gets no hint.
+func TestBeginTask_AskWithFileHintsAuto(t *testing.T) {
+	testutil.NewSandbox(t)
+	stubExec(t)
+	ckDispatchStage = stubAnswer("ok", 0)
+	rel, _ := namedFile(t, "package main\n")
+	const hint = "Ask never writes files, shift+tab to Auto to change it"
+
+	m, _ := enter(typed(chatFixture("ask"), "rename old to new in "+rel))
+	if got := stripANSI(strings.Join(m.th().log, "\n")); strings.Count(got, hint) != 1 {
+		t.Errorf("want the Auto hint once:\n%s", got)
+	}
+	m, _ = enter(typed(chatFixture("ask"), "summarise this thread"))
+	if got := stripANSI(strings.Join(m.th().log, "\n")); strings.Contains(got, hint) {
+		t.Errorf("hint shown with no file named:\n%s", got)
+	}
+	m, _ = enter(typed(chatFixture("edit"), "rename old to new in "+rel))
+	if got := stripANSI(strings.Join(m.th().log, "\n")); strings.Contains(got, hint) {
+		t.Errorf("hint shown outside Ask:\n%s", got)
+	}
+}

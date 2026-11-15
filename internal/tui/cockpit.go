@@ -186,7 +186,7 @@ func NewCockpit() Cockpit {
 	metrics := ckLoadMetrics(pr)
 
 	m := Cockpit{
-		mode:         "auto",
+		mode:         "ask",
 		claudePct:    pct,
 		pctKnown:     known,
 		pctHist:      hist,
