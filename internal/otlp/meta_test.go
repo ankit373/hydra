@@ -40,9 +40,18 @@ func TestMetaAttrs_MapsEachTypeToItsOwnAnyValue(t *testing.T) {
 			t.Errorf("%s is not an intValue; a number rendered as a string cannot be queried", k)
 		}
 	}
-	// A type with no AnyValue must still export, as its printed form.
-	if v := got["hydra.meta.weird"].StringValue; v == nil || *v == "" {
-		t.Errorf("a meta value of an unmapped type exported as %v, want its printed form", v)
+	// A type with no AnyValue must still export, as JSON a collector can parse.
+	if v := got["hydra.meta.weird"].StringValue; v == nil || *v != `["a","b"]` {
+		t.Errorf("a meta value of an unmapped type exported as %v, want its JSON", v)
+	}
+}
+
+// The recipe reads back from the run log as a map. Go's printed form of a map
+// is not something a collector can query.
+func TestMetaAttrs_NestedValueExportsAsJSON(t *testing.T) {
+	kv := metaAttrs(map[string]any{"recipe": map[string]any{"name": "single", "samples": float64(1)}})
+	if v := kv[0].Value.StringValue; v == nil || *v != `{"name":"single","samples":1}` {
+		t.Errorf("hydra.meta.recipe = %v, want the recipe as JSON", v)
 	}
 }
 

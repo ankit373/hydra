@@ -164,7 +164,7 @@ func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 	if !strings.Contains(joined, "auto-routed") || !strings.Contains(joined, "single") {
 		t.Errorf("no route line before execution:\n%s", joined)
 	}
-	if !strings.Contains(joined, "why question, standard scope, no PII") {
+	if !strings.Contains(joined, "why not sure what kind, standard scope, no PII") {
 		t.Errorf("no plain-words why clause:\n%s", joined)
 	}
 
@@ -1385,11 +1385,32 @@ func TestCkClassWordsAndWhy(t *testing.T) {
 		}
 	}
 	tk := ckTask{file: "x.go", mode: ckModeByName("auto"), pii: true}
-	if got := ckWhyWords(tk, "COMPLEX"); got != "code edit, complex scope, PII detected" {
+	if got := ckWhyWords(tk, "COMPLEX"); got != "code, complex scope, PII detected" {
 		t.Errorf("why = %q", got)
 	}
-	if got := ckWhyWords(ckTask{mode: ckModeByName("ask"), file: "x.go"}, "SIMPLE"); got != "question, small scope, no PII" {
+	if got := ckWhyWords(ckTask{mode: ckModeByName("ask"), file: "x.go"}, "SIMPLE"); got != "not sure what kind, small scope, no PII" {
 		t.Errorf("ask-mode why = %q", got)
+	}
+}
+
+// The route line names the kind from trust.Kinds: a file edit is code, a
+// named kind is that kind, and anything else says it is not sure.
+func TestCkWhyWords_NamesTheKindOfWork(t *testing.T) {
+	ask, auto := ckModeByName("ask"), ckModeByName("auto")
+	for _, tt := range []struct {
+		task ckTask
+		want string
+	}{
+		{ckTask{mode: auto, file: "x.go", kind: "summary"}, "code"},
+		{ckTask{mode: ask, kind: "summary"}, "summary"},
+		{ckTask{mode: ask, kind: "extraction"}, "extraction"},
+		{ckTask{mode: ask}, "not sure what kind"},
+		{ckTask{mode: ask, kind: "question"}, "not sure what kind"},
+	} {
+		if got, _, _ := strings.Cut(ckWhyWords(tt.task, "SIMPLE"), ","); got != tt.want {
+			t.Errorf("kind %q file %q mode %s: why starts %q, want %q",
+				tt.task.kind, tt.task.file, tt.task.mode.name, got, tt.want)
+		}
 	}
 }
 

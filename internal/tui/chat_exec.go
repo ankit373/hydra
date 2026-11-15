@@ -60,6 +60,7 @@ type ckTask struct {
 	mode        ckModeDef
 	file        string // absolute path being edited, inside the worktree when isolated
 	rel         string // repo-relative display path; "" when outside the repo
+	kind        string // the kind of work the caller named, from trust.Kinds; "" when none
 	root        string // editor scope-root override: the thread's worktree dir
 	dir         string // verify working directory; "" = the process CWD
 	threadID    int    // the owning thread, tea.Cmd results route back by this

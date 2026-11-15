@@ -19,9 +19,18 @@ import (
 
 var ckFileRe = regexp.MustCompile(`[\w/]+\.(go|ts|js|py|rs|java)`)
 
+// ckStarters are the empty chat's openers, one per kind of work. A copy of the
+// desktop's STARTERS (ChatView.tsx); TestEmptyChat_StartersMatchDesktop keeps them equal.
+var ckStarters = []string{
+	"Summarise the arguments for and against a four-day work week",
+	`Extract the supplier, date and total: "Invoice 4471, Acme Ltd, 3 March, $1,240"`,
+	"Draft a polite reply declining a meeting invitation",
+	"Review the staged diff",
+}
+
 // chatKey handles keys while the chat view is active. Typing always wins on a
-// non-empty input; ?, m and e fire only from an empty one and never change a
-// file. Pending states are modal.
+// non-empty input; ?, m, e and a starter's digit fire only from an empty one and
+// never change a file. Pending states are modal.
 func (m Cockpit) chatKey(msg ckKey) (tea.Model, tea.Cmd) {
 	t := m.th()
 	switch {
@@ -69,6 +78,12 @@ func (m Cockpit) chatKey(msg ckKey) (tea.Model, tea.Cmd) {
 				return m, nil
 			case 'm':
 				return m.openModePicker(), nil
+			case '1', '2', '3', '4':
+				// Only while the starters are on screen; later a digit is text.
+				if t.name == "" {
+					t.input = ckStarters[rs[0]-'1']
+					return m, nil
+				}
 			case 'e':
 				// The TUI has no click hit-testing, so expanding a collapsed
 				// partial is a key. Falls through to typing when there is
@@ -406,12 +421,19 @@ func (m Cockpit) chatMain(t *ckThread, w, h int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// ckWithMark puts the mark above a thread that has run nothing yet, when the
-// pane has room for it and the whole greeting. Gone with the first task.
+// ckWithMark puts the mark and the starters around a thread that has run
+// nothing yet; the mark only when the pane has room. Both go with the first task.
 func ckWithMark(t *ckThread, w, logH int) []string {
 	log := t.displayLog()
+	if t.name != "" {
+		return log
+	}
+	log = append(log[:len(log):len(log)], "")
+	for i, s := range ckStarters {
+		log = append(log, ckDimS.Render(truncate(fmt.Sprintf("%d %s", i+1, s), w)))
+	}
 	mark := strings.Split(Mark(), "\n")
-	if t.name != "" || w < markWidth+1 || len(ckLogLines(log, w, ckLogEntryCap))+len(mark)+1 > logH {
+	if w < markWidth+1 || len(ckLogLines(log, w, ckLogEntryCap))+len(mark)+1 > logH {
 		return log
 	}
 	out := make([]string, 0, len(mark)+1+len(log))
