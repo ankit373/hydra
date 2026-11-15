@@ -1069,7 +1069,7 @@ Six views, cycled with `tab` (or jump with `1-6`); `?` opens the shortcut glossa
 
 | View | What it shows |
 |---|---|
-| **chat** | Type a task and it **executes**: a route line first (class → routing level → model · strategy · plain-words why, with a `local-only (pii)` badge and change impact when they apply), then the real answer or edit. `esc` cancels mid-run; failures link to their trace; session cost accrues in the header |
+| **chat** | Type a task and it **executes**: a route line first (class → routing level → model · strategy · plain-words why that names the kind of work from the fixed list, or says it is not sure, with a `local-only (pii)` badge and change impact when they apply), then the real answer or edit. `esc` cancels mid-run; failures link to their trace; session cost accrues in the header |
 | **agents** | Live runs and today's finished ones, `enter` opens a run's trace |
 | **models** | Every scanned model nested under its provider/server, with per-model detail: routing level, capability, p50 latency, requests/cost today, calibration scorecard. A down server grays its models; embedding-only models say `embeddings only, never routed` |
 | **activity** | Today's runs with a full trace per run: routed → policy → request → stream → edits → done, fallbacks included |

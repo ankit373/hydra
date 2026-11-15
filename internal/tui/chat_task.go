@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // ckTierEnum inverts dispatch's enum→tier table for the editor path, which
@@ -346,11 +348,15 @@ func ckClassWords(enum string) string {
 	}
 }
 
-// ckWhyWords is the route line's plain-words reasoning clause.
+// ckWhyWords is the route line's plain-words reasoning clause. The kind comes
+// from trust.Kinds, never from the prompt's words, and is not guessed.
 func ckWhyWords(t ckTask, enum string) string {
-	kind := "question"
-	if t.file != "" && t.mode.name != "ask" {
-		kind = "code edit"
+	kind := "not sure what kind"
+	switch {
+	case t.file != "" && t.mode.name != "ask":
+		kind = "code"
+	case slices.Contains(trust.Kinds, t.kind):
+		kind = t.kind
 	}
 	scope := map[string]string{
 		"CORE": "critical", "COMPLEX": "complex", "MODERATE": "moderate",
