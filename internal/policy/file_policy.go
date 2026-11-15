@@ -124,6 +124,15 @@ func defaultFilePolicy() FilePolicy {
 	}
 }
 
+// Escalations is how many stronger heads a failed check may ask: none when
+// escalate_on_fail is off, else max_retries.
+func Escalations(fp FilePolicy) int {
+	if !fp.EscalateOnFail {
+		return 0
+	}
+	return max(fp.MaxRetries, 0)
+}
+
 // matchWhen returns true if all conditions in the when block match spec.
 func matchWhen(when map[string]interface{}, spec Spec) bool {
 	if len(when) == 0 {

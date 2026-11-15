@@ -17,12 +17,13 @@ const cascadeClass = "classification.test"
 
 // verdicts answers Verify from a fixed verdict, or fails to run at all.
 type verdicts struct {
-	pass bool
-	err  error
+	pass   bool
+	err    error
+	detail string
 }
 
 func (v verdicts) Verify(context.Context, string, trust.Task) (oracle.Verdict, error) {
-	return oracle.Verdict{Passed: v.pass}, v.err
+	return oracle.Verdict{Passed: v.pass, Detail: v.detail}, v.err
 }
 
 // measuredVerifier is calibrated in cascadeClass with both verdict directions,
