@@ -4,25 +4,25 @@ Reviews output from one model family using a DIFFERENT model family.
 This catches blind spots that same-family models share.
 
 ## When to Use
-- After tiers 2-3 (agy Claude) produce output → review with tier 4 (Flash Thinking)
-- After tier 1 (Claude Code) produces output → review with tier 4 (Flash Thinking)
-- After tiers 7-10 produce output → review with tier 8 (Flash Med), quick sanity only
+- After tiers 2-3 produce output → review with tier 4, from a different model family
+- After tier 1 (the orchestrator) produces output → review with tier 4
+- After tiers 7-10 produce output → review with tier 8, quick sanity only
 - SKIP if claude_pct ≥ 75 (preserve tokens)
 
 ## Review Prompt Template
 ```
-You are a code reviewer with a fresh perspective. The following was produced by a different AI model.
+You are a reviewer with a fresh perspective. The following was produced by a different AI model.
 Find issues the original model may have missed due to shared training biases.
 
 Focus on:
-1. Logic errors or edge cases
-2. Security vulnerabilities
-3. Performance problems
+1. Factual or logic errors, missed edge cases
+2. Security or privacy problems
+3. Anything that does not answer the task as asked
 4. Better approaches the author didn't consider
 5. Unnecessary complexity
-6. Missing error handling at system boundaries
+6. Missing error handling at system boundaries (for code)
 
-CODE/OUTPUT TO REVIEW:
+OUTPUT TO REVIEW:
 <output from previous tier>
 
 TASK THAT PRODUCED IT:
@@ -36,7 +36,7 @@ RESPOND WITH:
 
 ## Dispatch
 ```bash
-dispatch/route.sh --tier 4 --prompt "<review prompt above>"
+hyctl dispatch --tier 4 "<review prompt above>"
 ```
 
 ## Acting on Results
