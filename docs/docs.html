@@ -30,7 +30,7 @@
     "image": "https://hydra.uvansa.com/logo.png",
     "url": "https://hydra.uvansa.com/docs.html",
     "datePublished": "2026-07-25",
-    "dateModified": "2026-07-25",
+    "dateModified": "2026-11-16",
     "author": { "@type": "Person", "name": "Ankit Jha", "url": "https://github.com/ankit373" },
     "publisher": { "@type": "Organization", "name": "Hydra", "url": "https://hydra.uvansa.com/" }
   }
@@ -86,8 +86,9 @@
 .sub{margin:var(--hy-space-4) 0 0;}
 .sub .lbl{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-accent-default);margin-bottom:var(--hy-space-2);}
 .sub p{margin:0;color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);max-width:76ch;}
+.sub > :not(.lbl) + *{margin-top:var(--hy-space-3);}
 .sub p b{color:var(--hy-color-text-default);font-weight:600;}
-.fx{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);font-size:var(--hy-font-size-md);background:color-mix(in srgb,var(--hy-color-accent-strong) 8%,transparent);padding:1px var(--hy-space-1);border-radius:5px;}
+.fx{overflow-wrap:anywhere;font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);font-size:var(--hy-font-size-md);background:color-mix(in srgb,var(--hy-color-accent-strong) 8%,transparent);padding:1px var(--hy-space-1);border-radius:5px;}
 pre{margin:var(--hy-space-2) 0 0;background:color-mix(in srgb,var(--hy-color-surface-raised) 70%,transparent);border:1px solid var(--hy-color-border-subtle);border-radius:11px;padding:var(--hy-space-3) var(--hy-space-4);
   overflow-x:auto;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);line-height:1.7;color:var(--hy-color-text-default);}
 pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-default);} pre .k{color:var(--hy-color-accent-secondary);} pre .s{color:var(--hy-color-status-success);}
@@ -191,6 +192,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 .ladder{width:100%;border-collapse:collapse;margin-top:var(--hy-space-3);font-size:var(--hy-font-size-md);display:block;overflow-x:auto;}
 .ladder th,.ladder td{text-align:left;padding:var(--hy-space-2) var(--hy-space-3);border-bottom:1px solid var(--hy-color-border-subtle);}
 .ladder th{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1px;text-transform:uppercase;color:var(--hy-color-text-subtle);font-weight:500;}
+.ladder td{overflow-wrap:anywhere;}
 .ladder td.k{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-secondary);}
 .ladder .sc{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);}
 
@@ -237,6 +239,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 
       <div class="grp" data-grp>Surfaces</div>
       <a href="#cli">The CLI</a>
+      <a href="#commands">Command reference</a>
       <a href="#tui">The TUI cockpit</a>
       <a href="#app">The desktop app</a>
 
@@ -258,6 +261,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
       <a href="#edit"><code translate="no">hyctl edit</code></a>
       <a href="#review"><code translate="no">hyctl review</code></a>
       <a href="#parallel"><code translate="no">hyctl parallel</code></a>
+      <a href="#serve"><code translate="no">hyctl serve</code></a>
 
       <div class="grp" data-grp>Verification &amp; graph</div>
       <a href="#trust"><code translate="no">hyctl trust</code></a>
@@ -269,17 +273,22 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
       <a href="#mcp"><code translate="no">hyctl mcp</code></a>
       <a href="#mcp-registry"><code translate="no">mcp registry</code></a>
       <a href="#oracle"><code translate="no">hyctl oracle</code></a>
+      <a href="#security"><code translate="no">hyctl security</code></a>
 
       <div class="grp" data-grp>Cost &amp; registry</div>
       <a href="#cost"><code translate="no">hyctl cost</code></a>
       <a href="#stats"><code translate="no">hyctl stats</code></a>
       <a href="#pricing"><code translate="no">hyctl pricing</code></a>
       <a href="#models"><code translate="no">hyctl models</code></a>
+      <a href="#add-model">Adding a model</a>
 
       <div class="grp" data-grp>Concepts</div>
+      <a href="#config">Configuration</a>
       <a href="#tiers">Routing levels &amp; CapScore</a>
       <a href="#governor">Budget governor</a>
       <a href="#policy">PII / local-only</a>
+      <a href="#egress">Egress gate</a>
+      <a href="#least-privilege">Least-privilege agents</a>
       <a href="#a2a">A2A handoffs</a>
       <a href="#math">The math</a>
       <div class="empty" id="noresults">No matches.</div>
@@ -321,12 +330,22 @@ npm install -g hyctl
 <span class="c"># pip</span>
 pip install hyctl
 
-<span class="c"># Standalone installer</span>
+<span class="c"># Standalone installer, macOS and Linux</span>
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
+
+<span class="c"># Standalone installer, Windows (PowerShell)</span>
+irm https://raw.githubusercontent.com/ankit373/hydra/main/install.ps1 | iex
 
 <span class="c"># From source (Go 1.26+)</span>
 git clone https://github.com/ankit373/hydra.git &amp;&amp; cd hydra
 go build -o hyctl ./cmd/hydra</pre>
+      </div>
+      <div class="sub"><div class="lbl">Checksums</div>
+        <p>Both installers, and the npm and pip packages, check the download against the release's <span class="fx">checksums.txt</span>. They refuse to install if that file cannot be fetched, does not list the archive, or does not match, or if no sha256 tool is found. <span class="fx">HYDRA_INSECURE=1</span> skips the check. Pin a version with <span class="fx">HYDRA_VERSION</span> and change the directory with <span class="fx">HYDRA_BIN</span> (<span class="fx">$env:</span> on PowerShell). On Windows the script installs per user to <span class="fx">%LOCALAPPDATA%\Programs\hyctl</span> and adds it to your user <span class="fx">PATH</span>, with no administrator rights. Prebuilt archives are on the <a href="https://github.com/ankit373/hydra/releases">releases page</a>.</p>
+      </div>
+      <div class="sub"><div class="lbl">Platforms</div>
+        <p>Every release builds <span class="fx">hyctl</span> for macOS, Linux and Windows, each on x86-64 and ARM64. The <a href="https://github.com/ankit373/hydra#platform-support">README's platform table</a> is checked against the build matrix by a test. Windows has no Homebrew, so use npm, pip, <span class="fx">install.ps1</span> or the archive.</p>
+        <p>Not to be confused with the unrelated <span class="fx">hydra</span> and <span class="fx">hydra-cli</span> npm packages, or homebrew-core's <span class="fx">hydra</span> (a password cracker). This project's CLI is <span class="fx">hyctl</span>.</p>
       </div>
     </section>
 
@@ -341,6 +360,132 @@ go build -o hyctl ./cmd/hydra</pre>
   <span class="td">Fallback:</span>  <span class="tc">openrouter</span>   <span class="tf">score 76  ← if primary rate-limits</span>
   <span class="td">Local:</span>     <span class="tg">ollama/qwen3</span> <span class="tf">← always available, $0</span>
   <span class="tg">✔</span> <span class="td">chain resolved · nothing dispatched (dry-run)</span></pre>
+      </div>
+    </section>
+
+    <!-- ══ COMMAND REFERENCE ══ -->
+    <section class="doc" id="commands">
+      <h2>Command reference <span class="tagline">every command on one page</span></h2>
+      <p class="sum">Every <span class="fx">hyctl</span> command, grouped by what it is for. The sections below explain the main ones in depth. <span class="fx">hyctl &lt;command&gt; --help</span> lists every flag.</p>
+      <div class="sub"><div class="lbl">All commands</div>
+        <pre translate="no"><span class="c"># Discovery &amp; state</span>
+hyctl init                              <span class="c"># first-run wizard</span>
+hyctl probe                             <span class="c"># scan and display all available models</span>
+hyctl status                            <span class="c"># live state: models that can run, budget bars, burn-rate risk</span>
+hyctl tui                               <span class="c"># interactive cockpit, six views, ? for shortcuts</span>
+hyctl version                           <span class="c"># version, commit, build info</span>
+hyctl upgrade                           <span class="c"># self-update, checksum-verified (curl installs only; brew installs: brew upgrade hyctl)</span>
+
+<span class="c"># Model registry (add a new model at runtime: no rebuild)</span>
+hyctl models list                       <span class="c"># known models, marked with what can actually route now</span>
+hyctl models add kimi-k3 --provider moonshot --cap-score 85   <span class="c"># record a score (not a model it can run)</span>
+hyctl models remove kimi-k3             <span class="c"># remove one of your additions</span>
+hyctl models sync                       <span class="c"># import the OpenRouter catalog (provisional scores)</span>
+
+<span class="c"># Dispatch</span>
+hyctl dispatch "..."           <span class="c"># route a prompt to the best model</span>
+hyctl dispatch --dry-run "..." <span class="c"># preview routing without executing</span>
+hyctl dispatch --kind summary "..."  <span class="c"># rank models on their record for this kind of work</span>
+hyctl dispatch --local "..."   <span class="c"># local models only, no API calls</span>
+hyctl dispatch --swarm --swarm-mode best "..."   <span class="c"># fan out to many models, judge best</span>
+hyctl dispatch --confidence 0.95 "..."  <span class="c"># SPRT: sample until this P(correct) is reached</span>
+hyctl dispatch --check ground "..."     <span class="c"># check the answer against the context the prompt fenced</span>
+hyctl dispatch --check match:labels=labels.txt "label this ticket: ..."   <span class="c"># the answer must be one of the labels</span>
+hyctl dispatch --check 'cmd:check-jsonschema --schemafile invoice.json {file}' "pull the invoice fields as JSON"
+
+<span class="c"># Serve the router to anything that speaks OpenAI</span>
+hyctl serve                             <span class="c"># OpenAI-compatible endpoint, loopback only</span>
+hyctl serve --task-class classification.banking77   <span class="c"># class for requests that send no X-Hydra-Task-Class</span>
+curl -s http://127.0.0.1:8787/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"hydra","messages":[{"role":"user","content":"summarise this ticket: ..."}]}'
+
+<span class="c"># Tasks waiting on you</span>
+<span class="c"># A ledger policy can answer ask instead of allow or deny. Dispatch then stops</span>
+<span class="c"># before running anything and parks the task until you answer it.</span>
+hyctl ask list                          <span class="c"># what is waiting, and what it wants to know</span>
+hyctl ask answer &lt;task-id&gt; "go ahead"   <span class="c"># answer it and run the task</span>
+hyctl ask decline &lt;task-id&gt; "not prod"  <span class="c"># refuse it; nothing runs</span>
+
+<span class="c"># Cost &amp; pricing</span>
+hyctl cost                              <span class="c"># spend summary (est. vs actual labeled)</span>
+hyctl stats                             <span class="c"># rollup by model / routing level / day</span>
+hyctl pricing list                      <span class="c"># live $/1M-token rates, cache read/write too (OpenRouter + fallback)</span>
+
+<span class="c"># Calibration and verification</span>
+hyctl trust calibration                 <span class="c"># per-source sensitivity / specificity / D</span>
+hyctl trust record ...                  <span class="c"># feed one source's outcome to train calibration</span>
+hyctl trust outcome &lt;task_hash&gt; ...     <span class="c"># train every voter in a past run from its verified answer</span>
+hyctl trust defect ...                  <span class="c"># modeled cost of shipping a wrong answer</span>
+hyctl trust stats                       <span class="c"># samples saved, achieved vs target confidence</span>
+hyctl trust explain &lt;task_hash&gt;         <span class="c"># the LLR ledger for a past SPRT run</span>
+hyctl trust reliability                 <span class="c"># when it says 90%, is it right 90% of the time</span>
+hyctl trust joint                       <span class="c"># how often two checks pass the same wrong answer</span>
+hyctl edit --file /abs/path/f.go --enum SIMPLE --prompt "..."  <span class="c"># apply, then validate what was written: the verdict that counts</span>
+hyctl trust benchmark                   <span class="c"># measured SPRT numbers (samples saved, accuracy)</span>
+hyctl graph blast &lt;file&gt;                <span class="c"># a file's blast radius + the confidence it demands</span>
+hyctl graph parallel &lt;files...&gt;         <span class="c"># optimal number of parallel agents (Law 4)</span>
+hyctl context entropy &lt;file|-&gt;          <span class="c"># signal density + useful tokens + compact hint</span>
+
+<span class="c"># Verification &amp; accountability</span>
+hyctl oracle verify go test ./... --source verifier:go-test  <span class="c"># verifier as evidence + its LLR</span>
+hyctl oracle ground --prompt prompt.txt --candidate summary.txt  <span class="c"># every number, date and identifier is in the source</span>
+hyctl eval stats                        <span class="c"># the verified corpus: size and pass rate by task type</span>
+<span class="c"># Filled by edit, parallel, oracle verify --candidate, hyverify and dispatch --check</span>
+hyctl eval readiness                    <span class="c"># per enum, whether the corpus can yet fit a routing choice</span>
+hyctl eval list --failed                <span class="c"># the examples the oracle rejected</span>
+hyctl eval training                     <span class="c"># vectors per embedding model, whether a classifier could be fitted</span>
+hyctl eval classify                     <span class="c"># does similarity to past work predict whether an enum passes</span>
+<span class="c"># A rule can then route on it: corpus.known / corpus.pass_rate / corpus.support in</span>
+<span class="c"># registry/signals.yaml, derived only when a rule names one. Alongside them,</span>
+<span class="c"># signals that need no model at all: language.script and (where the script</span>
+<span class="c"># decides it) language.code, structure.questions / .list_items / .code_fences /</span>
+<span class="c"># .ordered_steps, conversation.turns / .tool_loop, and context.prompt_tokens.</span>
+
+<span class="c"># The standalone verifier: fill the corpus with no router and no Hydra config.</span>
+<span class="c"># Ships in the same archive as hyctl, and reads no ~/.hydra at all.</span>
+hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum MODERATE
+hyverify --candidate out.go --task "..." -- go test ./...   <span class="c"># name the judge yourself</span>
+hyverify --candidate x.go --task "..." --embed-model nomic-embed-text  <span class="c"># so it trains a classifier</span>
+hyverify --candidate x.go --env PLAYWRIGHT_BROWSERS_PATH -- npx playwright test  <span class="c"># extra vars the judge may see</span>
+hyverify --version                                          <span class="c"># which build wrote a corpus row</span>
+hyctl mcp check &lt;tool&gt; --agent A --resource R --action write  <span class="c"># 0 allow, 3 deny, 4 ask</span>
+hyctl mcp check &lt;tool&gt; --content "$DATA" --action network      <span class="c"># PII auto-classified; policy can deny egress</span>
+hyctl mcp check &lt;tool&gt; --params '{"amount":500}'               <span class="c"># bind a hash of the params to the decision</span>
+hyctl mcp verify &lt;tool&gt; --resource R --params '{"amount":500}' <span class="c"># prove executed params == approved params</span>
+hyctl mcp verify-chain                  <span class="c"># confirm the ledger's hash chain hasn't been tampered with</span>
+hyctl mcp log --denied                  <span class="c"># what was withheld: denied and ask alike</span>
+hyctl mcp report                        <span class="c"># allowed/denied/ask by agent and tool</span>
+hyctl mcp registry sync                 <span class="c"># pull the official MCP registry into a local cache</span>
+hyctl mcp registry scan                 <span class="c"># list MCP servers installed on this machine (identity only)</span>
+hyctl mcp registry audit                <span class="c"># resolve + score installed servers, advance lifecycle state</span>
+hyctl mcp registry export --out DIR     <span class="c"># static index.html/index.json of audited servers</span>
+hyctl mcp registry backtest             <span class="c"># validate scoring against known real incidents</span>
+hyctl mcp registry list                 <span class="c"># audited servers by trust score</span>
+hyctl mcp registry clear &lt;server&gt;       <span class="c"># recover a server quarantined in error</span>
+hyctl security                          <span class="c"># what the agents did, and can the record be trusted</span>
+hyctl security --why                    <span class="c"># the full programme: register, coverage, policy, exposure</span>
+hyctl security trifecta                 <span class="c"># private data + untrusted content + egress: which dispatches had all three</span>
+hyctl security --advisories             <span class="c"># ask OSV about the local model server versions found</span>
+hyctl security --attest                 <span class="c"># checkable attestation: posture + evidence + digest</span>
+
+<span class="c"># Editing &amp; batch</span>
+hyctl edit --file ... --enum ... --prompt "..."  <span class="c"># scoped, validated, rollback-safe file edit</span>
+hyctl review ...                        <span class="c"># code review / approve / reject / QA</span>
+hyctl parallel ...                      <span class="c"># fan independent tasks across models</span>
+hyctl workflow run --step A --step B    <span class="c"># multi-step task, each step routed on its own</span>
+hyctl workflow run --step A --needs "" --step B --needs 1 --step C --needs 1   <span class="c"># B and C run together after A</span>
+hyctl workflow run --dry-run ...        <span class="c"># each step's routing chain and ceiling, nothing run</span>
+hyctl workflow run --local --max-cost 0.05 ...   <span class="c"># per-step caps, on top of policy.yaml's</span>
+hyctl workflow resume &lt;id&gt;              <span class="c"># continue a killed workflow from where it stopped</span>
+hyctl workflow show &lt;id&gt;                <span class="c"># each step's model, routing level, cost and output</span>
+
+<span class="c"># Reviewing a diff</span>
+hyctl vet                               <span class="c"># review the working diff, each file routed to its own model</span>
+hyctl vet --confidence 0.9              <span class="c"># sample each file with as many models as its blast radius warrants</span>
+hyctl vet --json                        <span class="c"># exits 3 on a blocking finding, so a script can gate on it</span></pre>
+      </div>
+      <div class="sub"><div class="lbl">The eval corpus stays on your machine</div>
+        <p>The corpus behind <span class="fx">hyctl eval</span> is the one thing Hydra keeps word for word and for good, because it is the only data a router can be improved against. It is your own prompts, documents and code, so it stays in <span class="fx">~/.hydra/evalset/</span>, nothing that prunes logs can reach it, and there is no upload path. A test enforces that: no Hydra package that can reach the corpus imports anything able to open a socket or run a program, and the third-party packages it rests on are pinned by name, so a new dependency is a decision rather than a side effect.</p>
       </div>
     </section>
 
@@ -470,6 +615,42 @@ MODE                 <span class="tf">│</span>
         <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow model and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
         <p>When a model gives up part-way through, its partial output <b>collapses to one dim line</b> naming the model and the reason, so it cannot be mistaken for the answer, and <span class="fx">e</span> expands it again. The text is kept, not re-fetched. Only plain routing streams: a swarm has several models answering at once and consensus picks by judge after N replies, so neither has a single stream to show.</p>
       </div>
+      <div class="sub" id="tui-modes"><div class="lbl">Modes</div>
+        <p>A mode sets what a task does. <span class="fx">shift+tab</span> cycles the basic ones and <span class="fx">m</span> opens the full picker.</p>
+        <table class="ladder">
+          <thead><tr><th>Mode</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="k">Ask</td><td>The default. Answers only and never writes files. <span class="fx">shift+tab</span> reaches Auto when a task should change one.</td></tr>
+            <tr><td class="k">Edit</td><td>A direct change when the prompt names an existing file (validated, rollback-safe, snapshotted). Otherwise it answers and says so.</td></tr>
+            <tr><td class="k">Plan</td><td>Drafts numbered steps on a low-cost routing level and waits. <span class="fx">enter</span> or <span class="fx">y</span> runs them, <span class="fx">esc</span> discards them.</td></tr>
+            <tr><td class="k">Auto</td><td>Plan, edit, then check: runs <span class="fx">go test ./...</span> (or your <span class="fx">workspace.yaml</span> validator) through the oracle, feeds failures back for up to 2 fixes, and shows a proof strip: <span class="fx">plan ✓ · edit ✓ file +A/−R · tests ✓/✗</span>.</td></tr>
+            <tr><td class="k">Architect</td><td>Auto, but plans on a strong routing level and does the work on a low-cost one.</td></tr>
+            <tr><td class="k">Careful</td><td>Auto, but every file write needs a <span class="fx">y/n</span> before it lands.</td></tr>
+            <tr><td class="k">Unattended</td><td>Auto with no confirms and a hard $0.50 cost cap per task. It stops, visibly, at the cap.</td></tr>
+          </tbody>
+        </table>
+        <p>Where a task runs is separate: <span class="fx">ctrl+o</span> overrides the <b>next</b> task's routing (auto, force a routing level, local only, best of 3, or a consensus check at 90-99.9%). After an edit, <span class="fx">/diff</span> shows the diff, <span class="fx">/undo</span> restores the snapshot taken before the task (it asks first), and <span class="fx">/open</span> opens the file. These are typed commands, not bare letters, so a message that starts with <span class="fx">x</span> or <span class="fx">a</span> is just text. The code panel appears once a task streams a file or a diff; until then the chat takes the full width.</p>
+      </div>
+      <div class="sub" id="tui-threads"><div class="lbl">Parallel threads</div>
+        <p>Chat runs several tasks at once.</p>
+        <table class="ladder">
+          <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="k">ctrl+t</td><td>New thread. A chip strip under the header shows each one: <span class="fx">⠸</span> running, <span class="fx">●</span> needs you, <span class="fx">✓</span> done, <span class="fx">◱</span> queued.</td></tr>
+            <tr><td class="k">alt+1-9</td><td>Jump to that thread. <span class="fx">ctrl+←/→</span> cycles them, and the input bar names its target (<span class="fx">→ thread 2</span>).</td></tr>
+            <tr><td class="k">ctrl+\</td><td>Split: pin a second thread beside the active one (needs 100 columns or more). Each side scrolls on its own.</td></tr>
+            <tr><td class="k">ctrl+b</td><td>Send the thread to the <b>agents</b> view. It keeps running and pings chat when it finishes or needs you.</td></tr>
+            <tr><td class="k">ctrl+g</td><td>Jump to the next thread that needs input (a plan waiting, a confirm, a failure).</td></tr>
+            <tr><td class="k">/apply, /undo</td><td>Apply an isolated thread's worktree back to your tree, or discard it (asks first, since it deletes the thread's edits).</td></tr>
+            <tr><td class="k">ctrl+s</td><td>Select mode: hand the mouse back to the terminal so you can select and copy text. Press again for wheel scrolling.</td></tr>
+          </tbody>
+        </table>
+        <p><b>Isolation.</b> Read-only work shares your checkout. Each thread that can edit gets its own git worktree (<span class="fx">~/.hydra/worktrees/tN-…</span>, branch <span class="fx">hydra/task-tN-…</span>) cut from your repo. <span class="fx">/apply</span> merges it back with plain git: a clean apply stages the diff, a divergence leaves normal conflict markers and keeps the branch, and <b>unsaved</b> edits of your own to a file the thread touched block the merge before it starts, so nothing half-lands. Two threads editing the same (or graph-coupled) files never race: the second queues (<span class="fx">◱ queued behind 1 · both touch &lt;path&gt;</span>) and starts when the first is applied or discarded. Outside a git repo the TUI says so and runs edits one at a time, in place. Worktrees left by a crash are listed at startup and never deleted for you.</p>
+        <p>Terminal notes: <span class="fx">alt+1-9</span> needs the option key to send ESC (iTerm2: "Esc+"; Terminal.app: "Use Option as Meta key"), and <span class="fx">ctrl+b</span> is tmux's default prefix, so rebind tmux or press <span class="fx">ctrl+b ctrl+b</span>.</p>
+      </div>
+      <div class="sub"><div class="lbl">What you see is measured</div>
+        <p>Every figure comes from the machine's real logs. One that cannot be computed shows <span class="fx">—</span>, never an invented number. Lists, overlays and the audit view all scroll (<span class="fx">j/k</span>, arrows, page keys, mouse wheel). Colours follow light and dark terminals (force one with <span class="fx">HYDRA_THEME=light|dark</span>), body text uses your terminal's own foreground, and under <span class="fx">NO_COLOR</span> the active tab still reads <span class="fx">[chat]</span>. Log output from background work goes to <span class="fx">~/.hydra/logs/tui.log</span> while the TUI owns the screen.</p>
+      </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
         <pre translate="no">hyctl tui
 <span class="c"># tab cycles views · shift+tab modes · ctrl+o routing · e expands a</span>
@@ -538,10 +719,23 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
           </div>
         </div>
       </div>
-      <div class="sub"><div class="lbl">Get it</div><pre translate="no"><span class="c"># Download from the releases page:</span>
+      <div class="sub"><div class="lbl">What is in it</div>
+        <p><b>Chat</b> comes first: ask for work, and each reply says which model answered, at which routing level, and what it cost, with the run's timeline told as it happens. The reply grows as the model writes it. When the router falls back, the abandoned partial fades to one line naming the model and why it stopped, and opens to show what it had written. The model picker groups models by <b>token pool</b>, so it shows when a choice spends a quota another model shares (Opus and Sonnet draw from the same one). A pane beside the thread shows the active model, this run's confidence, each model's measured accuracy, and the files the run changed.</p>
+        <p>Four more views sit behind the icon rail. <b>Models</b> lists every model this machine can route to, grouped by token pool, each marked with whether anything can drive it right now and why not, and the accuracy it has earned, never a score without its outcome count. <b>Activity</b> lists every request, grouped by who has to act: waiting on you, running, failed, done. <b>Usage</b> shows spend, the remaining context budget, and how many models a consensus check actually asked. <b>Audit</b> shows what the agents did and whether the record can be trusted, OWASP LLM Top-10 coverage, the guardrail rules in force, and a safety verdict for every MCP server on this machine. Opening a request from Activity leads to <b>Session</b>: its timeline, a graph when it fanned out, and a <b>Code</b> tab whose diff marks what changed within a line and lets you keep or undo the change on disk. A rule that answers <span class="fx">ask</span> parks the task, and the question appears in the chat, answerable there.</p>
+      </div>
+      <div class="sub"><div class="lbl">No terminal needed</div>
+        <p>The app runs Hydra in-process, so it needs no separate <span class="fx">hyctl</span>. On first launch it asks you to connect a model: paste an API key for any single-key provider Hydra knows, or start a local model server, and it then answers a sample question. Keys go to the macOS Keychain or Windows Credential Manager (elsewhere, or with <span class="fx">HYDRA_KEYSTORE=file</span>, a <span class="fx">0600</span> file under <span class="fx">~/.hydra</span>). Only their last four characters are ever shown, and <b>Settings → AI providers</b> adds, tests (one tiny request) and removes them. <span class="fx">hyctl</span> reads the same stored keys at startup, and an exported variable still wins. A stored key never enters the process environment, so no subprocess inherits it: a CLI agent such as Claude Code keeps its own login, and a test suite Hydra runs does not see the key.</p>
+      </div>
+      <div class="sub"><div class="lbl">Get it</div><pre translate="no"><span class="c"># macOS and Linux: resolves the newest release, checks its .sha256 and installs it</span>
+curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh
+<span class="c"># HYDRA_VERSION pins a release; HYDRA_APP_DIR changes where it lands</span>
+
+<span class="c"># Or download from the releases page:</span>
 hydra-desktop_&lt;version&gt;_darwin_universal.zip   <span class="c"># macOS, Intel + Apple Silicon</span>
-hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows</span>
-hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux</span>
+hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows x86-64</span>
+hydra-desktop_&lt;version&gt;_windows_arm64.zip      <span class="c"># Windows ARM64</span>
+hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux x86-64</span>
+hydra-desktop_&lt;version&gt;_linux_arm64.tar.gz     <span class="c"># Linux ARM64</span>
 
 <span class="c"># Every artifact ships a .sha256 beside it. Verify before you run:</span>
 shasum -a 256 -c hydra-desktop_&lt;version&gt;_darwin_universal.zip.sha256   <span class="c"># macOS</span>
@@ -553,8 +747,9 @@ $f = "hydra-desktop_&lt;version&gt;_windows_amd64.zip"
 
 <span class="c"># Or build it yourself:</span>
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
-cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/Hydra.app</span></pre></div>
-      <div class="callout"><b>The builds are not code-signed yet</b>, so the published <span class="fx">.sha256</span> is the only integrity check available, worth the one command above. The first launch also takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer, right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn, <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
+cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/Hydra.app</span></pre>
+        <p><span class="fx">desktop/</span> is a separate Go module on purpose: Wails takes the root module from 25 requires to 50, and <span class="fx">hyctl</span> ships through brew, npm, pip and curl and never links a webview.</p></div>
+      <div class="callout"><b>The builds are not code-signed yet</b>, so the published <span class="fx">.sha256</span> is the only integrity check available, worth the one command above. The first launch also takes one extra step. <b>macOS:</b> macOS says it cannot check Hydra. Choose <b>Done</b>, open <b>System Settings</b> → <b>Privacy &amp; Security</b>, scroll to <b>Security</b> and click <b>Open Anyway</b>, once. A "damaged" message means the download was altered: download it again and unzip it in Finder. (<span class="fx">xattr -dr com.apple.quarantine Hydra.app</span> does the same from a terminal.) <b>Windows:</b> SmartScreen may warn, <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
       <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers, Usage totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
     </section>
 
@@ -613,6 +808,16 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span 
         <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Li</span>LiteLLM</div><div class="meta">port 4000 · <span class="tier">per-model</span></div><div class="desc">One entry per model the proxy fronts. Local only where the upstream itself is local, so a proxy forwarding to OpenAI is never priced or governed as local.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Lc</span>llama.cpp</div><div class="meta">port 8080 · <span class="tier">simple-local</span></div><div class="desc">One entry per loaded model, and the server is identified by its own <span class="fx">build_info</span> rather than assumed from the port, so an unrelated service on 8080 is never offered to the router.</div></div>
       </div>
+      <div class="sub" id="hardware"><div class="lbl">Picked for your memory</div>
+        <p>With Ollama installed, <span class="fx">hyctl init</span> recommends a model for the memory you actually have free, not your total RAM. It reads 7 days of memory history and uses the 75th-percentile free reading, so the advice fits how the machine runs under normal load rather than one lucky moment.</p>
+        <pre translate="no">  Detected: Apple Silicon · 32GB total · 18.4GB free for models
+  Based on 14 samples over 6 days · typical free: 17.8GB avg, 16.2GB p75
+
+  ✓ Qwen2.5-Coder 32B   32B   uses ~20GB · 0.4GB left (very tight)
+  ✓ Qwen3 14B           14B   uses ~10GB · 6.2GB left free
+  ✓ Qwen3 8B             8B   uses ~6GB  · 10.2GB left free  ← recommended</pre>
+        <p>When memory is too tight for any local model, it says so and lists CLI agents with free tiers instead.</p>
+      </div>
     </section>
 
     <!-- ══ INIT ══ -->
@@ -625,7 +830,39 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span 
     <section class="doc" id="probe">
       <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every model</span></h2>
       <p class="sum">Runs the three discovery channels concurrently and lists every model with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same model: it differs in accuracy, VRAM and tokens/sec. <code translate="no">--json</code> also carries the model's architectural context ceiling, which is what caps the window the budget governor holds a local model to.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl probe</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">$ hyctl probe
+
+  Heads discovered (6)                           2.1s
+
+  › claude              Claude Code         score:95  cli    ✓ ready
+    codex               OpenAI Codex        score:88  cli    ✓ ready
+    openai              OpenAI (API)        score:88  env    ✓ key found
+    ollama/qwen3:8b     Qwen3 8B            score:66  port   ✓ running
+    ollama/phi4-mini    Phi-4 Mini          score:64  port   ✓ running
+    anthropic           Anthropic (API)     score:95  env    ✓ key found</pre></div>
+      <div class="sub"><div class="lbl">The score is earned</div>
+        <p>Each model is listed under the score it was <b>ranked</b> on: the catalogue's number, updated by what that model has actually got right on this machine, from the same record <span class="fx">hyctl trust calibration</span> reports. A model that keeps being wrong sinks below one the catalogue rates higher, and the table then says what it was adjusted from and on how many judged answers:</p>
+        <pre translate="no">  Head                        Quant     Score  Declared      Src    Provider
+  Qwen2.5-Coder:7b (Ollama)   Q4_K_M    38     66 (n=30)     port   local</pre>
+        <p>Below twenty judged answers nothing moves, so a fresh install ranks exactly as before. There is no per-quantization penalty table: a 2-bit model is outranked once it has been measured, never because a fixed number said so.</p>
+        <p>A request that knows its task type ranks on what each model got right at <b>that kind of work</b>, so a model strong at one and weak at another is not routed as though it were one model:</p>
+        <pre translate="no">$ hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--enum</span> EXPERT <span class="fl">--domain</span> ts <span class="s">"add pagination"</span>
+  Primary  →  Claude Sonnet 4.6 (Thinking)  (score 88, registry)  → 93 on 40 judged, 40 in ts
+
+$ hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--enum</span> EXPERT <span class="fl">--domain</span> rust <span class="s">"add pagination"</span>
+  Primary  →  OpenAI Codex  (score 88, cli)  → 92 on 40 judged, 0 in rust</pre>
+        <p><span class="fx">--kind</span> names the task type for any work, and <span class="fx">--file foo.go</span> derives it for code. Evidence from a model's other task types still counts, since a model thin in one should borrow from its own record rather than be judged on three runs, but only up to a bound. The <span class="fx">0 in rust</span> above is that borrowing, said plainly.</p>
+      </div>
+      <div class="sub"><div class="lbl">Where it looks</div>
+        <table class="ladder">
+          <thead><tr><th>Channel</th><th>What it finds</th></tr></thead>
+          <tbody>
+            <tr><td class="k">PATH scan</td><td>13+ CLI tools: Claude Code, Codex, Cursor, Kiro, Windsurf, Gemini, Copilot, Cody, Amp, Continue, and the Ollama binary.</td></tr>
+            <tr><td class="k">Port scan</td><td>Ollama (11434), LM Studio (1234), LiteLLM (4000), llama.cpp (8080). It asks each server and lists every installed model. Move one with <span class="fx">OLLAMA_HOST</span>, <span class="fx">HYDRA_LMSTUDIO_HOST</span>, <span class="fx">LITELLM_PROXY_URL</span> or <span class="fx">LLAMA_ARG_HOST</span>/<span class="fx">LLAMA_ARG_PORT</span>.</td></tr>
+            <tr><td class="k">Env vars</td><td>14 API providers: Anthropic, OpenAI, Google, xAI, Groq, Together, Fireworks, Mistral, DeepSeek, Bedrock, Azure, Perplexity, Cohere, Replicate.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="doc" id="status">
@@ -648,13 +885,16 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span 
       </div>
       <div class="sub"><div class="lbl">Usage</div>
         <pre translate="no">hyctl dispatch <span class="s">"refactor auth to JWT refresh"</span>
-hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a User DTO"</span>
-hyctl dispatch <span class="fl">--dry-run</span> <span class="s">"add pagination"</span>
-hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests"</span></pre>
+hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="fl">--kind</span> summary <span class="s">"summarise this call transcript: ..."</span>
+hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--kind</span> extraction <span class="s">"pull the invoice number, date and total as JSON"</span>
+hyctl dispatch <span class="fl">--local</span> <span class="fl">--kind</span> classification <span class="s">"label this ticket as billing, bug or how-to: ..."</span></pre>
       </div>
       <div class="sub"><div class="lbl">Streaming</div>
         <p>On a terminal the answer is drawn <b>as it arrives</b>: a spinner covers the wait before the first token, then tokens append, then the token counts, elapsed time and measured <b>TTFT</b> print as a footer, since none of those numbers exist until the call returns. Measured on a local 7B: 435 deltas spread over 9.9s of a 10.0s call, where before there was nothing on screen for the whole ten seconds.</p>
         <p>Piped output <b>never streams</b> and is byte-identical to before, so scripts are unaffected; <span class="fx">--no-stream</span> asks for the same buffered rendering on a terminal. When a model fails part-way through, its partial is <b>collapsed off the screen</b> and replaced by one line naming the model and the reason, because a partial left on screen reads as part of the answer. Nothing is erased once it has scrolled past the top of the window.</p>
+        <p>Seven executor paths stream natively: the OpenAI-compatible wire shape (and Azure, which shares it), Anthropic, Gemini, Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI. Replicate does not, because its prediction API polls. A model that cannot stream is not a second code path: it delivers its whole output as one piece, so each surface is written once and the two kinds cannot drift apart. A collapsed partial reads like this, and the trace command is offered only when payload capture is on, since without it the span stores no text:</p>
+        <pre translate="no">⤺ abandoned  openrouter/gpt after ~212 chars: 429 rate limited
+    hyctl trace view run-7f2a <span class="fl">--span</span> 9c1d4e02</pre>
         <p>A fan-out has no single stream to show, so <span class="fx">--swarm</span> and <span class="fx">--confidence</span> draw a <b>live panel</b> instead: every model that was selected, with its state, elapsed time, tokens and the cost as it accrues. A confidence run adds the running log-odds against the threshold it has to cross, so an ensemble that stops after two models says why it stopped. The panel is erased when the run ends, and the result printed after it is unchanged.</p>
       </div>
       <div class="sub"><div class="lbl">Key flags</div>
@@ -668,17 +908,40 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
 
     <section class="doc" id="swarm">
       <h2><span class="cmd">dispatch --swarm</span> <span class="tagline">fan out, keep the best</span></h2>
-      <p class="sum"><b>race</b> (first success), <b>best</b> (LLM judge), or <b>all</b> (ranked by CapScore), with a pre-flight cost guard.</p>
+      <p class="sum">Send one prompt to several models at once and keep the best answer: <b>race</b> (first success wins), <b>best</b> (an LLM judge picks), or <b>all</b> (every answer, ranked by CapScore), with a cost check before anything runs.</p>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre translate="no">hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> best <span class="s">"implement a rate limiter"</span>
-  <span class="fl">--swarm-max-heads</span> 5  <span class="fl">--swarm-max-cost</span> 0.05  <span class="fl">--swarm-judge-tier</span> 1</pre></div>
+        <pre translate="no">hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> race <span class="s">"translate these release notes into German: ..."</span>
+hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> best <span class="s">"implement a rate limiter"</span>
+  <span class="fl">--swarm-max-heads</span> 5  <span class="fl">--swarm-max-cost</span> 0.05  <span class="fl">--swarm-judge-tier</span> 1
+hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> all <span class="fl">--swarm-heads</span> id1,id2 <span class="s">"draft three subject lines for this email"</span></pre></div>
     </section>
 
     <section class="doc" id="confidence">
       <h2><span class="cmd">dispatch --confidence</span> <span class="tagline">route to a P(correct)</span></h2>
       <p class="sum">Sample models <b>adaptively</b> until a target confidence is reached, then stop.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>An <b>SPRT</b> accumulates the calibrated log-likelihood ratio across votes and stops at the boundary implied by your target. <span class="fx">--file</span> raises the bar by blast radius.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
+      <div class="sub"><div class="lbl">How it works</div><p>Instead of always asking a fixed number of models, an <b>SPRT</b> (sequential probability ratio test) asks them one at a time, in most-evidence-per-dollar order, adds up the calibrated log-likelihood ratio of their votes, and stops as soon as it crosses the boundary your target implies. <span class="fx">--file</span> raises the bar by blast radius.</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"does this contract let either side cancel early? quote the clause"</span>
+hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
+      <div class="sub"><div class="lbl">Calibration comes first</div>
+        <p>An uncalibrated source has sensitivity = specificity = 0.5, so its vote adds <span class="fx">ln(0.5/0.5) = 0</span> however firmly it agrees. With no calibrated source for the task type the estimate cannot move, so Hydra refuses the run rather than ask every model and arrive back at 50%, and tells you what does carry evidence:</p>
+        <pre translate="no">$ hyctl dispatch <span class="fl">--confidence</span> 0.9 <span class="fl">--kind</span> writing.support <span class="s">"draft a reply to this refund request: ..."</span>
+Error: no head this run would sample has been scored in domain "writing.support", so
+--confidence would sample every head, move the estimate nowhere and hand back 50%.
+A source only carries evidence once its verdicts have been scored against outcomes.
+
+  Other domains with evidence: trust-bench-v2
+  Record an outcome:     hyctl trust record --source &lt;head-id&gt; --domain writing.support --said-correct --outcome correct</pre>
+        <p>When some source has scored the task type but this run would not ask it, the error names that source instead. The two cases need different fixes. Each model and check earns a measured sensitivity, specificity and <b>diagnostic power D</b>: a coin-flip source (D≈0) adds nothing, and a proven one lets a single vote go a long way.</p>
+        <p>Recording only your own answers is not enough. A model that produced an answer always "said correct", which leaves specificity unmeasured, so a single vote stays under <span class="fx">ln 2 = 0.693</span> nats against the <span class="fx">2.944</span> a 95% target needs. The models that disagreed are what fix it: <span class="fx">hyctl trust outcome</span> replays a past run's ledger once its answer is known, so a model that dissented from an answer that turned out wrong earns the true negative specificity comes from.</p>
+        <p>Every confidence run ends by printing its <span class="fx">task_hash</span> and the <span class="fx">hyctl trust explain</span> command for it. <span class="fx">hyctl trust stats</span> says outright when achieved confidence never left the 50% prior, which means the runs paid for models without learning anything.</p>
+      </div>
+      <div class="sub" id="blast-radius"><div class="lbl">For code: a higher bar on risky files</div>
+        <p>Point Hydra at a dependency graph (<span class="fx">graph.json</span> from <a href="https://github.com/safishamsi/graphify">Graphify</a> or any tree-sitter indexer) and the bar scales with how much code an edit could break. A fix to a file everything imports needs far more certainty than a fix to a leaf helper:</p>
+        <pre translate="no">hyctl graph blast internal/auth/token.go        <span class="c"># 3 transitive dependents → demands 96.7%</span>
+hyctl dispatch <span class="fl">--confidence</span> 0.90 <span class="fl">--file</span> internal/auth/token.go <span class="s">"rotate the signing key"</span>
+<span class="c">#   graph: blast radius 3.00 → demands confidence ≥ 96.7%  (raises the 0.90 floor)</span></pre>
+        <p>In synthetic benchmarks this cuts model calls by about 49% on easy tasks and 24% on a mixed workload at 98% accuracy or better, while asking <i>more</i> models than a fixed swarm on hard tasks, which a fixed-size ensemble cannot do.</p>
+      </div>
       <a class="more" href="/first-principles.html#sprt">See the SPRT walk derived →</a>
     </section>
 
@@ -699,14 +962,44 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       <a class="more" href="#graph-parallel">graph parallel →</a>
     </section>
 
+    <section class="doc" id="serve">
+      <h2><span class="cmd">hyctl serve</span> <span class="tagline">the router behind an OpenAI endpoint</span></h2>
+      <p class="sum">Runs the router as an OpenAI-compatible endpoint on loopback, so any tool that speaks OpenAI can use it. The <span class="fx">model</span> field is the routing instruction: <span class="fx">hydra</span>, <span class="fx">hydra/hard</span>, <span class="fx">hydra/t4</span>, or a model id.</p>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre translate="no">hyctl serve                                          <span class="c"># loopback only</span>
+hyctl serve <span class="fl">--task-class</span> classification.banking77   <span class="c"># class for requests that send no X-Hydra-Task-Class</span>
+curl -s http://127.0.0.1:8787/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"hydra","messages":[{"role":"user","content":"summarise this ticket: ..."}]}'</pre>
+      </div>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p>It streams as server-sent events and passes tool calls through on every dialect it speaks. <span class="fx">X-Hydra-Task-Class</span> routes on that class (and turns on temperature), and <span class="fx">X-Hydra-Max-Cost-USD</span> can only lower the ceiling. policy.yaml's <span class="fx">max_cost_usd</span> caps every request, with or without that header.</p>
+        <p>A class with <span class="fx">[[serve.verifiers]]</span> in <span class="fx">config.toml</span> (class, <span class="fx">kind = "match"</span>, id, then a labels file or a pattern) has each buffered answer on an objective route checked, and escalates to a model measured better in that class, at most <span class="fx">--max-escalations</span> times (default 2).</p>
+        <p>Requests must name the bound address as Host (<span class="fx">127.0.0.1</span>, <span class="fx">localhost</span> or <span class="fx">[::1]</span> on a loopback bind), carry no Origin unless <span class="fx">--allow-origin</span> lists it, and POST with <span class="fx">Content-Type: application/json</span>. Over <span class="fx">--max-inflight</span> (8) or <span class="fx">--rate</span> (120 a minute) a request gets 429 with Retry-After, which SDKs retry.</p>
+      </div>
+      <div class="sub" id="serve-objective"><div class="lbl">Routing objective</div>
+        <p>A <span class="fx">model: "hydra"</span> request routes as <span class="fx">--enum</span> (<span class="fx">STANDARD</span> by default). Routing by objective is opt-in:</p>
+        <table class="ladder">
+          <thead><tr><th>Objective</th><th>Tries first</th><th>How to choose it</th></tr></thead>
+          <tbody>
+            <tr><td class="k">quality</td><td>the model measured strongest in the task class (often the priciest)</td><td><span class="fx">hyctl serve --objective quality</span>, or <span class="fx">X-Hydra-Objective: quality</span> per request</td></tr>
+            <tr><td class="k">cost</td><td>the lowest-cost model measured competent</td><td><span class="fx">hyctl serve --objective cost</span>, or <span class="fx">X-Hydra-Objective: cost</span></td></tr>
+          </tbody>
+        </table>
+        <p>A routed answer echoes <span class="fx">X-Hydra-Objective</span> and <span class="fx">X-Hydra-P-Pass-Basis</span> (<span class="fx">measured</span>, <span class="fx">borrowed</span> or <span class="fx">catalogue_prior</span>). Under quota pressure the governor routes it as <span class="fx">STANDARD</span>.</p>
+        <p><b>Deprecated: the implicit default.</b> In v2.0.0 <span class="fx">quality</span> becomes the default for <span class="fx">hydra</span>. Until then, a <span class="fx">hydra</span> request naming no objective, on a server started with neither <span class="fx">--enum</span> nor <span class="fx">--objective</span>, still routes as <span class="fx">STANDARD</span> but gets <span class="fx">Deprecation: @1794441600</span> (RFC 9745) and a <span class="fx">Link</span> to this section, and the server prints one warning per start (<span class="fx">HYDRA_NO_DEPRECATION_WARNINGS=1</span> silences it). To keep today's route after v2.0.0, send <span class="fx">model: "hydra/standard"</span> or start the server with <span class="fx">--enum STANDARD</span>. To opt in now, use <span class="fx">--objective</span> or the header. policy.yaml's <span class="fx">max_cost_usd</span> caps what <span class="fx">quality</span> may spend.</p>
+      </div>
+    </section>
+
     <!-- ══ TRUST / GRAPH / CONTEXT ══ -->
     <section class="doc" id="trust">
       <h2><span class="cmd">hyctl trust</span> <span class="tagline">calibration and verification</span></h2>
       <p class="sum">Builds and inspects the calibration behind <span class="fx">--confidence</span>. Each source earns a measured reliability from real outcomes.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>A Beta-Bernoulli posterior over sensitivity/specificity → a per-vote LLR and a <b>diagnostic power D</b> (KL divergence, nats). A coin-flip source has D≈0 and is ignored. The defect-cost model prices a wrong answer and sets the required confidence.</p><p>Each source&rsquo;s record in each kind of work is also watched for a change: when a model or a check gets worse, the table shows when that was found and its record since. A model nobody is calling is not assumed broken for ever; while others are judged on the same kind of work its old record slowly stops counting, so a fixed model starts again on a fresh record.</p></div>
+      <div class="sub"><div class="lbl">How it works</div><p>A Beta-Bernoulli posterior over sensitivity/specificity → a per-vote LLR and a <b>diagnostic power D</b> (KL divergence, nats). A coin-flip source has D≈0 and is ignored. The defect-cost model prices a wrong answer and sets the required confidence.</p><p>Each source&rsquo;s record in each kind of work is also watched for a change: when a model or a check gets worse, the table shows when that was found and its record since. A short run of misses at a steady rate is not called a change, and one called by mistake is taken back once the source is right again. A model nobody is calling is not assumed broken for ever; while others are judged on the same kind of work its old record slowly stops counting, so a fixed model starts again on a fresh record.</p></div>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre translate="no">hyctl trust calibration      <span class="c"># per-source se / sp / D, changed, since</span>
 hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct  <span class="c"># a model ID from `hyctl probe`</span>
+hyctl trust outcome &lt;task_hash&gt; <span class="fl">--outcome</span> incorrect   <span class="c"># train every source that voted in a run</span>
+hyctl trust reliability      <span class="c"># is the stated confidence honest? Brier / ECE / diagram</span>
 hyctl trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
 hyctl trust stats   <span class="c"># samples saved vs fixed-N</span>
 hyctl trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>
@@ -748,8 +1041,37 @@ cat notes.md | hyctl context entropy -</pre></div>
       <p class="sum">A local, append-only ledger that records, and can <b>gate</b>: what every agent touches.</p>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre translate="no">hyctl mcp check &lt;tool&gt; <span class="fl">--agent</span> A <span class="fl">--resource</span> R <span class="fl">--action</span> write
-hyctl mcp log <span class="fl">--denied</span>     <span class="c"># what got blocked</span>
-hyctl mcp report          <span class="c"># allowed / denied by agent &amp; tool</span></pre></div>
+hyctl mcp check &lt;tool&gt; <span class="fl">--content</span> "$DATA" <span class="fl">--action</span> network      <span class="c"># PII auto-classified; policy can deny egress</span>
+hyctl mcp check &lt;tool&gt; <span class="fl">--params</span> '{"amount":500}'               <span class="c"># bind a hash of the params to the decision</span>
+hyctl mcp verify &lt;tool&gt; <span class="fl">--resource</span> R <span class="fl">--params</span> '{"amount":500}' <span class="c"># prove executed params == approved params</span>
+hyctl mcp verify-chain    <span class="c"># confirm the ledger's hash chain is intact</span>
+hyctl mcp log <span class="fl">--denied</span>     <span class="c"># what was withheld: denied and ask alike</span>
+hyctl mcp report          <span class="c"># allowed / denied / ask by agent &amp; tool</span></pre></div>
+      <div class="sub" id="access-policy"><div class="lbl">Scope the agents</div>
+        <p>What an agent may <i>reach</i> is the access policy at <span class="fx">~/.hydra/mcp_policy.json</span>. Hydra ships no scoping rules there on purpose: which agent may write where is a decision about your own files, and a blanket deny gets uninstalled rather than tuned. <span class="fx">hyctl security</span> tells you who is running unscoped:</p>
+        <pre translate="no">  Least privilege   3 agent(s) unscoped
+    no policy rule names these agents, so they run under the default while
+    changing state: hydra-swarm (720 state-changing), hydra-dispatch (127)</pre>
+        <p>A rule narrows by agent, resource, action, or any mix. The first match wins, so put specific rules above general ones:</p>
+        <pre translate="no">{
+  "default": "allow",
+  "rules": [
+    {"agent": "hydra-swarm", "resource": "registry/**", "action": "write",
+     "decision": "deny", "framework": "owasp:llm03"},
+    {"agent": "hydra-swarm", "resource": "**/*_test.go", "action": "write",
+     "decision": "ask"},
+    {"classification": "mcp-quarantined", "decision": "deny"}
+  ]
+}</pre>
+        <p><span class="fx">deny</span> refuses and records it. <span class="fx">ask</span> parks the task under <span class="fx">hyctl ask</span>, which is the right verdict when you want a person in the loop rather than a refusal: dispatch stops before anything runs and never falls through to a lower-cost model. <span class="fx">hyctl mcp check</span> exits 3 on a deny and 4 on an ask, so a script can tell a refusal from a question, and 0 only ever means allowed. Check that a rule fires before you trust it, then read back what the policy is doing:</p>
+        <pre translate="no">hyctl mcp check fs <span class="fl">--agent</span> hydra-swarm <span class="fl">--resource</span> registry/routing.yaml <span class="fl">--action</span> write
+hyctl security <span class="fl">--why</span>     <span class="c"># hits per rule, rules that never matched, rules that cannot be reached</span>
+
+hyctl ask list                          <span class="c"># what is waiting, and what it wants to know</span>
+hyctl ask answer &lt;task-id&gt; "go ahead"   <span class="c"># answer it and run the task</span>
+hyctl ask decline &lt;task-id&gt; "not prod"  <span class="c"># refuse it; nothing runs</span></pre>
+        <p>A rule that has never matched is reported as such, and one an earlier rule always shadows is reported as unreachable, so a policy that reads strict and does nothing shows up as exactly that.</p>
+      </div>
     </section>
 
     <section class="doc" id="mcp-registry">
@@ -764,6 +1086,7 @@ hyctl mcp registry backtest         <span class="c"># validate scoring against k
 hyctl mcp registry list             <span class="c"># audited servers by safety score</span>
 hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server quarantined in error</span></pre></div>
       <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance), automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out, <code translate="no">clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's status (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest, the direct fix for the <code translate="no">postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code translate="no">scan</code> never reads env-var or secret values from client configs, only server identity.</p>
+      <p class="sum">A server can keep its version and rewrite what its tools say, so each tool's name, description and input schema is hashed too, and any change sends it back to provisional, with the before and after printed by <code translate="no">audit</code>. Descriptions are also checked for text written for the model rather than the user (directions about other tools, requests to read files or send data, hidden characters, padding), each reported with its exact span and never quarantining on its own. Both need the server's <code translate="no">tools/list</code> result saved at <span class="fx">$HYDRA_HOME/mcp_tools/&lt;server&gt;.json</span>: <code translate="no">audit</code> never starts a server to ask, and says "not checked" for any server without one.</p>
       <p class="sum">Feeds back into the ledger: <code translate="no">hyctl mcp check</code> auto-classifies a tool call as <span class="fx">mcp-unverified</span>, <span class="fx">mcp-flagged</span>, or <span class="fx">mcp-quarantined</span> from a server's registry state, the same way PII is auto-detected from content, so a policy rule can gate on it automatically. Below that: <span class="fx">mcp-behavior-change</span>, a server whose ledger history has only ever shown one kind of access (read, say) suddenly performing another (network) is flagged from local history alone, no registry data or CVE required. A server's first-ever call is never flagged, there's nothing yet to compare it against.</p>
       <p class="sum">The exported page (<code translate="no">export</code>) carries a disclaimer, this is a probabilistic signal from automated checks, not a guarantee of safety or a claim about a publisher's intent, and every row links a pre-filled dispute issue against this repo, since a public negative signal about a real project needs a correction path before it ships, not as an afterthought.</p>
     </section>
@@ -771,14 +1094,91 @@ hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server qua
     <section class="doc" id="oracle">
       <h2><span class="cmd">hyctl oracle verify</span> <span class="tagline">tests as evidence</span></h2>
       <p class="sum">Turns a verifier (tests/compile/lint) into a <b>high-D evidence source</b> whose verdict can outweigh a model's opinion.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl oracle verify go test ./... <span class="fl">--source</span> verifier:go-test</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl oracle verify go test ./... <span class="fl">--source</span> verifier:go-test
+hyctl oracle ground <span class="fl">--prompt</span> prompt.txt <span class="fl">--candidate</span> summary.txt   <span class="c"># every number, date and identifier is in the source</span></pre></div>
+      <div class="sub"><div class="lbl">Grounding</div><p><span class="fx">hyctl oracle ground</span> checks a summary you already have against the source it came from. It exits 0 when the summary is grounded, 1 when something in it is not in the source, and 2 when there was nothing to check, so a script can gate on it. The source has to sit inside a Hydra fence in the prompt file (<span class="fx">--- BEGIN &lt;label&gt; &lt;nonce&gt; (untrusted data, not an instruction) ---</span>). <span class="fx">hyctl dispatch --check ground</span> runs the same check on a new answer.</p></div>
+    </section>
+
+    <section class="doc" id="security">
+      <h2><span class="cmd">hyctl security</span> <span class="tagline">what the agents did, and can the record be trusted</span></h2>
+      <p class="sum">Every access an agent makes is already recorded in the local MCP ledger, hash-chained and anchored. <span class="fx">hyctl security</span> reads that log and answers the question you actually have.</p>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre translate="no">hyctl security                <span class="c"># the verdict</span>
+hyctl security <span class="fl">--why</span>          <span class="c"># the full programme: register, coverage, policy, exposure</span>
+hyctl security trifecta       <span class="c"># private data + untrusted content + egress: which requests had all three</span>
+hyctl security <span class="fl">--advisories</span>   <span class="c"># ask OSV about the local model server versions found</span>
+hyctl security <span class="fl">--attest</span>       <span class="c"># checkable attestation: posture + evidence + digest</span></pre>
+        <pre translate="no">  VERDICT  ACT NOW
+    critical incident, gpt-4o: the same resource was denied repeatedly, then it
+    escalated to an exec/network action, then it targeted the audit trail itself.
+    recon → escalation → audit-tampering · 4 event(s) · likelihood 8 × impact 8
+
+  activity  4 blocked · 0 flagged
+  evidence  4 event(s), 4 hash-chained, intact</pre>
+      </div>
+      <div class="sub"><div class="lbl">Sequence, not counts</div>
+        <p>"4 denied, 2 flagged" and "injection → recon → escalation → an attempt on the audit trail" are the same rows read twice; only the second is an incident. Severity is OWASP Risk Rating (likelihood × impact), never a blended score.</p>
+        <p><span class="fx">--why</span> opens the full programme: a risk register with an SLA clock and a curated crosswalk to OWASP LLM, NIST AI RMF, ISO 42001, MITRE ATLAS and SOC 2; OWASP LLM Top-10 coverage; a policy audit that finds rules which can never fire; PII exposure checked against real models; control effectiveness (a control that is configured but never applied is reported as <b>inert</b>, not as protection); agent-binary integrity; and edit blast radius. <span class="fx">--attest</span> emits a checkable attestation that says plainly when the underlying log is not tamper-evident.</p>
+        <p>It is honest about its own limits: framework mappings are marked <b>curated</b>, not measured; defect cost is <b>per occurrence, not per year</b>; a file the dependency graph does not index is <b>unknown</b>, never "low risk"; and the attestation is <b>unsigned</b>, because Hydra has no key management.</p>
+      </div>
+      <div class="sub"><div class="lbl">Local model servers</div>
+        <p>Hydra sends real work to the local servers it finds, so their setup is part of its own posture. Two checks say so rather than assume it:</p>
+        <pre translate="no">Local server exposure      1 exposed
+  ollama 0.9.9 (http://localhost:11435) answers on 192.168.1.15. That address is not
+  loopback, so the server is serving more than this machine, and neither Ollama nor
+  vLLM requires authentication by default
+
+Local server advisories    9 unfixed upstream
+  no upgrade answers these, so the mitigation is not reaching them: CVE-2024-12055,
+  CVE-2024-8063, CVE-2025-0312, and 6 more</pre>
+        <p>Ollama ships with no authentication and prints no warning when bound to <span class="fx">0.0.0.0</span>, and a model server reachable from the network is the one thing that breaks local-first outright. The probe compares the identity endpoint discovery already uses, between loopback and this machine's own addresses, so nothing goes on the wire and an unrelated listener on the same port is not mistaken for the model server.</p>
+        <p><span class="fx">--advisories</span> asks OSV about the versions found. It is off by default because it is the only part of the report that leaves the machine. Advisories <b>with</b> a fix are kept apart from those <b>without</b> one: upgrading answers the first and cannot answer the second, and a fully current Ollama carries nine of the second kind. Both checks say what a negative result does not prove: a firewall that drops the probe looks the same as a server that is not listening, and a lookup that failed is unchecked, not clean.</p>
+      </div>
+      <div class="sub"><div class="lbl">Its own state directory</div>
+        <pre translate="no">State directory reach      3 readable by others
+  /Users/you/.hydra is 0755; /Users/you/.hydra/logs is 0755 ... The files themselves
+  are not readable, so this leaks the listing rather than the contents</pre>
+        <p>Writable is the finding, because <span class="fx">head_binaries.json</span> is the record that says no model binary changed and <span class="fx">mcp_ledger.jsonl.chainhash</span> is the anchor that says nothing was removed from the ledger, and both are plain files. Readable is reported apart and more quietly. <span class="fx">hyctl security</span> never changes a permission: it is a read.</p>
+      </div>
+      <div class="sub"><div class="lbl">The boundary</div>
+        <p>A CLI agent (claude, agy, codex, cursor) is itself an agent, with its own file and network access, in a process Hydra does not control. Everything scored here is what Hydra <i>sends and records</i>; what such an agent reads and sends on its own is outside it. Only a local-only run keeps the whole task on this machine. The default view says so in words, because no coverage percentage can.</p>
+      </div>
+      <div class="sub"><div class="lbl">OWASP, two lists</div>
+        <p>Scored against the <b>2026</b> edition of the OWASP LLM Top 10 (<span class="fx">OWASP-GenAI-LLM-Top-10-2026-v1.0</span>, published 4 August 2026). Seven of the ten moved: Excessive Agency rose from 06 to 03, Improper Output Handling fell from 05 to 10, and System Prompt Leakage was replaced by the broader LLM08 Hidden Context Exposure. Category IDs carry their edition in <span class="fx">--json</span>, <span class="fx">--csv</span> and every saved score, and gap age is never computed across two editions, so a build that changes edition resets every gap age to zero once, by design.</p>
+        <p>The LLM Top 10 covers what a model <i>says</i>. The <a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">OWASP Top 10 for Agentic Applications</a> (ASI01-ASI10) covers what a system <i>does</i>, and a router with fallback chains, fan-out, tool access and memory across runs is squarely the second. Both are scored side by side:</p>
+        <pre translate="no">  OWASP Agentic Top-10 coverage  50%  (5/10, 4 partial)
+    ASI01  Agent Goal Hijack                partial
+    ASI02  Tool Misuse and Exploitation     configured
+    ASI03  Identity and Privilege Abuse     enforced
+    ASI04  Agentic Supply Chain             configured
+    ASI05  Unexpected Code Execution        partial
+    ASI06  Memory and Context Poisoning     partial
+    ASI07  Insecure Inter-Agent Communicat… partial
+    ASI08  Cascading Failures               gap
+    ASI09  Human-Agent Trust Exploitation   configured
+    ASI10  Rogue Agents                     configured</pre>
+        <p>Every status is read from live state. <span class="fx">ASI02</span> follows the policy default, so a fail-open policy reports <span class="fx">partial</span> and an absent one <span class="fx">gap</span>. <span class="fx">ASI08</span> reports <span class="fx">gap</span> without a <span class="fx">graph.json</span>, because blast radius you cannot compute is not blast radius you have bounded. <span class="fx">ASI10</span> drops to <span class="fx">gap</span> the moment the ledger chain breaks. And <span class="fx">partial</span> never counts toward the percentage.</p>
+      </div>
     </section>
 
     <!-- ══ COST / STATS / PRICING / MODELS ══ -->
     <section class="doc" id="cost">
       <h2><span class="cmd">hyctl cost</span> <span class="tagline">spend, honestly labeled</span></h2>
       <p class="sum">Reads <span class="fx">cost.jsonl</span>; <span class="fx">tokens_source</span> marks real-vs-estimated, <span class="fx">cost_source</span> is always <i>estimated</i>. <span class="fx">cache_read_tokens</span> and <span class="fx">cache_write_tokens</span> appear when the provider reported cache use, and those tokens are priced at the model's cache rates where it lists them. A cache column shows once any row has them.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl cost</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">$ hyctl cost
+
+  Cost, last 30 days
+
+  Model                 Dispatches   Tokens       Est. Cost
+  claude                12           48,200        $0.72
+  openai                4            12,100        $0.18
+  ollama/qwen3:8b       89           341,000       $0.00  (local, free)
+  ─────────────────────────────────────────────────────────
+  Total                 105          401,300       $0.90</pre></div>
+      <div class="sub"><div class="lbl">What each row holds</div>
+        <p>Every request is logged to <span class="fx">~/.hydra/cost.jsonl</span> with the model, routing level, token counts, estimated cost and fallback chain. <span class="fx">tokens_source</span> says whether the provider reported real usage or Hydra estimated it, and <span class="fx">cost_source</span> is always <span class="fx">estimated</span> (price × tokens, never a billed figure). A row without the cache fields reported no cache use. Cached tokens are priced at the model&rsquo;s cache read and write rates where it lists them, and at the input rate where it does not, so a cache hit costs less only by a rate someone published. The cache column in <span class="fx">hyctl cost</span> shows tokens read and their share of input.</p>
+        <p>Each row also carries <span class="fx">act_prob</span> (the probability the router picked its first choice, named in <span class="fx">first_head</span>, which a fallback can make differ from the model that answered) and <span class="fx">keep_prob</span> (the probability the row was kept), so a sampled log can still be read without bias. Averaging a log sampled unevenly understates rates badly enough to reverse which model looks better. <span class="fx">hyctl stats --latency</span> gives p50/p90/p99 per model from mergeable sketches accurate to within 1%, so percentiles survive after the raw rows are gone.</p>
+      </div>
     </section>
     <section class="doc" id="stats">
       <h2><span class="cmd">hyctl stats</span> <span class="tagline">rollup</span></h2>
@@ -797,10 +1197,67 @@ hyctl pricing refresh</pre></div>
       <div class="sub"><div class="lbl">Usage</div>
         <pre translate="no">hyctl models list
 hyctl models add kimi-k3 <span class="fl">--provider</span> moonshot <span class="fl">--cap-score</span> 85
-hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre></div>
+hyctl models remove kimi-k3
+hyctl models sync   <span class="c"># import the OpenRouter catalog</span>
+hyctl models pull hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF   <span class="c"># fetch weights into the local server</span></pre></div>
+      <div class="sub" id="models-pull"><div class="lbl">Get a model without leaving hyctl</div>
+        <pre translate="no">$ hyctl models pull hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+  pulling 74a4da8c9fdb  491.4 MB / 491.4 MB (100%)
+  ✓ pulled hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+    routable as ollama/hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF:latest</pre>
+        <p>The ref is whatever your local server resolves: an Ollama library name (<span class="fx">qwen3:8b</span>) or a <b>HuggingFace GGUF repo</b>. The model id is read back from the server rather than guessed, because Ollama renames a HuggingFace ref. A model bigger than your machine can run is refused from the size the server reports on the first chunk, seconds in rather than an hour later:</p>
+        <pre translate="no">$ hyctl models pull hf.co/unsloth/Llama-3.3-70B-Instruct-GGUF
+Error: model is larger than this machine can run: 42.5 GB to download against 3.0 GB usable.
+  Pick a smaller quantization (Q4_K_M rather than Q8_0 or F16), or pass --force if this
+  machine has more headroom than it reports</pre>
+        <p>This is the only command that downloads weights, and nothing does it as a side effect of anything else.</p>
+      </div>
+    </section>
+
+    <section class="doc" id="add-model">
+      <h2>Adding a model <span class="tagline">at runtime, or as a built-in</span></h2>
+      <p class="sum"><b>At runtime, no rebuild.</b> Add any model to your local registry and Hydra picks it up on the next <span class="fx">probe</span> or <span class="fx">dispatch</span>. Additions live in an overlay at <span class="fx">~/.hydra/models.json</span> and merge over the built-ins.</p>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre translate="no">hyctl models add kimi-k3 <span class="fl">--name</span> "Kimi K3" <span class="fl">--provider</span> moonshot <span class="fl">--cap-score</span> 85
+hyctl models list                 <span class="c"># confirm it shows up, tagged "user"</span>
+hyctl models remove kimi-k3       <span class="c"># built-ins can be overridden, not removed</span></pre>
+        <p>This records a score; it does not make a model Hydra can run. A model is routable when discovery finds something that can drive it.</p>
+      </div>
+      <div class="sub"><div class="lbl">Ship it as a built-in</div>
+        <p>Built-in defaults live in <a href="https://github.com/ankit373/hydra/blob/main/internal/capabilities/data.json"><span class="fx">internal/capabilities/data.json</span></a>. To contribute one, add a JSON entry, no Go code needed:</p>
+        <pre translate="no">{
+  "id": "your-model-id",
+  "name": "Your Model Name",
+  "provider": "your-provider",
+  "capScore": 82
+}</pre>
+        <p>For Ollama models, add a family pattern instead:</p>
+        <pre translate="no">{
+  "id": "family-prefix",
+  "name": "Model Family Name",
+  "provider": "ollama",
+  "capScore": 70,
+  "ollamaFamily": true
+}</pre>
+      </div>
     </section>
 
     <!-- ══ CONCEPTS ══ -->
+    <section class="doc" id="config">
+      <h2>Configuration <span class="tagline">one file, written for you</span></h2>
+      <p class="sum"><span class="fx">~/.hydra/config.toml</span> is written by <span class="fx">hyctl init</span> and safe to edit by hand.</p>
+      <div class="sub"><div class="lbl">Example</div>
+        <pre translate="no">cortex = "claude"
+skills = ["code-gen", "review", "benchmark"]
+
+[policies.pii]
+action  = "local-only"</pre>
+      </div>
+      <div class="sub"><div class="lbl">Where each setting is explained</div>
+        <p>Routing level names: <a href="#tier-names">Routing levels</a>. Routing between individual OpenRouter models (<span class="fx">[openrouter]</span>): <a href="#providers">API providers</a>. The default objective and checks for <span class="fx">hyctl serve</span> (<span class="fx">[[serve.verifiers]]</span>): <a href="#serve-objective">hyctl serve</a>. Turning the secret-file floor off (<span class="fx">[egress]</span>): <a href="#egress">Egress gate</a>. The rule files under <span class="fx">registry/</span> are built into the binary, and a copy at <span class="fx">$HYDRA_HOME/registry/&lt;file&gt;</span> overrides one without a rebuild.</p>
+      </div>
+    </section>
+
     <section class="doc" id="tiers">
       <h2>Routing levels &amp; CapScore <span class="tagline">how routing decides</span></h2>
       <p class="sum">Every model gets a <b>CapScore</b> (0-100); tasks route through named routing levels by score. Lower routing level number = stronger.</p>
@@ -814,6 +1271,23 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
           <tr><td class="k">local</td><td class="sc">50-59</td><td>Llama 3.2 3B, Phi-4 Mini</td></tr>
         </tbody>
       </table>
+      <div class="sub"><div class="lbl">Fallback chain</div>
+        <p><span class="fx">--enum</span> or <span class="fx">--tier</span> pins a request to a level. If a model is unavailable, Hydra moves down the chain on its own. <span class="fx">--dry-run</span> shows the whole chain before anything runs:</p>
+        <pre translate="no">hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--kind</span> extraction <span class="s">"pull the invoice number, date and total from this email as JSON"</span>
+<span class="c">#   Primary  →  Claude Code  (score 95, cli)</span>
+<span class="c">#   Fallback chain:</span>
+<span class="c">#     1. Claude Opus 4.6 (Thinking)   score 92  registry</span>
+<span class="c">#     2. OpenAI Codex                 score 88  cli</span>
+<span class="c">#     ...</span>
+<span class="c">#     10. Qwen2.5-Coder:7b (Ollama)   score 66  port</span></pre>
+      </div>
+      <div class="sub" id="tier-names"><div class="lbl">Level names are enum names</div>
+        <p><span class="fx">--tier</span> takes a number from 1 to 10 or a name, and a name is the lowercase of a routing enum: <span class="fx">--tier simple</span>, <span class="fx">--enum SIMPLE</span> and <span class="fx">--tier 8</span> are one instruction. <span class="fx">--tier local</span> is the one alias, an old name for <span class="fx">grunt</span>, the free local floor. Retune any of them in <span class="fx">routing_map</span> in <span class="fx">registry/routing.yaml</span> (or a copy at <span class="fx">$HYDRA_HOME/registry/routing.yaml</span>) and both flags follow. That holds on a fan-out too: <span class="fx">--enum SIMPLE --swarm</span> fans out over SIMPLE's models, not the top five by capability.</p>
+        <pre translate="no">hyctl status            <span class="c"># every name, the routing level it resolves to, and what serves it</span>
+hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--tier</span> simple <span class="s">"summarise this paragraph"</span>
+hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--swarm</span> <span class="fl">--enum</span> SIMPLE <span class="s">"summarise this paragraph"</span>   <span class="c"># the same models</span></pre>
+        <p>Older configs carry a <span class="fx">[[tiers]]</span> block that assigned models to those names by CapScore band. It is ignored, not rejected: the bands were a second routing table that disagreed with the enum about what each name meant. Re-run <span class="fx">hyctl init</span> to drop it.</p>
+      </div>
     </section>
 
     <section class="doc" id="governor">
@@ -835,7 +1309,72 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     <section class="doc" id="policy">
       <h2>PII / local-only <span class="tagline">enforced, not conventional</span></h2>
       <p class="sum">With local-only policy on, any prompt containing sensitive data is <b>blocked from leaving your machine</b> at the dispatch layer, before any network call.</p>
-      <div class="sub"><div class="lbl">Detected</div><p>SSNs, credit cards, emails, API keys/tokens, IPs, private-key material → re-routed to a local model.</p></div>
+      <div class="sub"><div class="lbl">Detected</div><p>Social Security numbers, credit cards, phone numbers, IBANs, email addresses, API keys and tokens, IP addresses and private-key material. Turn it on in <span class="fx">hyctl init</span>, and a matching prompt goes to a local model:</p>
+        <pre translate="no">$ hyctl dispatch <span class="s">"process payment for card 4111-1111-1111-1111"</span>
+
+  Policy violation: prompt contains PII (credit card pattern)
+  Action: routing to local-only head
+
+  Dispatching → ollama/qwen3:8b  [local, no API call made]</pre></div>
+      <div class="sub"><div class="lbl">What this is not</div>
+        <p>Detection is a denylist over the prompt text, so it can only stop what somebody wrote a pattern for. That is why the <a href="#egress">egress gate</a> classifies by path instead, and why <span class="fx">hyctl security</span> withholds its coverage score while the access policy still defaults to allow.</p>
+        <p>Coverage is measured, not claimed. Against the <a href="https://github.com/microsoft/presidio-research">presidio-research</a> synthetic set, some detector fires on 18.7% of the 1,387 texts that carry PII: 100% of emails, SSNs and IBANs, 93% of cards and IP addresses, and 69% of phone numbers. The gap is names, street addresses and organisations, 1,509 spans with no pattern to write, which is what a trained NER model is for. Phone numbers are recognised by a country code, a bracketed area code, the 3-3-4 grouping or a leading trunk zero; a bare run of digits is refused for the same reason nine bare digits are not read as an SSN. Re-run the figures with <span class="fx">go test ./internal/policy -run TestPII_Recall -v</span>.</p>
+        <p><span class="fx">hyctl policy ner --head &lt;id&gt;</span> measures whether a model can read the half no pattern reaches. It asks 470 labelled texts and reports recall and false positives apart, because each alone is easy to pass. On one machine a 7B scored 0.87 recall at 0.00 false positives, while a 0.5B scored 0.86 recall and said yes to <b>94%</b> of the negatives. Both are judged on the 95% interval, so a model is eligible only when the sample is large enough to say so. Decoding is pinned greedy, and an answer that is neither yes nor no is counted apart, never read as a no. <b>Nothing routes on this yet</b>, by design: it is the measurement that would earn it.</p>
+      </div>
+    </section>
+
+    <section class="doc" id="egress">
+      <h2>Egress gate <span class="tagline">secrets by where they live</span></h2>
+      <p class="sum">The egress gate classifies a file by <b>where it is</b>, not what is inside it, so a whole category is closed whether or not the contents look like anything.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <pre translate="no">$ hyctl edit <span class="fl">--file</span> "$PWD/deploy/.env" <span class="fl">--enum</span> SIMPLE <span class="fl">--prompt</span> <span class="s">"rotate the database password"</span>
+
+  🔒 secret content (deploy/.env), routing to a local head only
+  Dispatching → ollama/qwen3:8b  [local, nothing left this machine]</pre>
+        <p>With no local model running, the default refuses rather than fall back to one that reaches the network:</p>
+        <pre translate="no">no dispatchable heads: content classified secret (deploy/.env) and no local head
+is routable. Start one (`ollama serve`), or set egress.strict = false in
+config.toml to allow it out</pre>
+        <p>The rules live in <span class="fx">registry/sensitivity.yaml</span>, built into the binary and overridable at <span class="fx">$HYDRA_HOME/registry/sensitivity.yaml</span>. They cover env files, private keys, cloud and cluster credentials, tfstate, SSH and package-manager config, and <span class="fx">~/.hydra</span> itself, with an <span class="fx">allow</span> list so a committed <span class="fx">.env.example</span> is not treated as a secret. Turn the floor off with:</p>
+        <pre translate="no">[egress]
+  strict = false   <span class="c"># default true; a config with no [egress] section is strict</span></pre>
+      </div>
+      <div class="sub"><div class="lbl">What it guarantees</div>
+        <p>No file matching a rule reaches a model that leaves the machine, errors deny rather than allow, and a payload that declares no origin is refused, so a new code path that forgets the gate breaks loudly instead of leaking quietly. Every decision is recorded in the ledger with the rule that made it.</p>
+        <p><b>Where the boundary is.</b> CLI agents have their own file access. Hydra guarantees what <i>it</i> sends; it cannot control what <span class="fx">agy</span> or <span class="fx">codex</span> decides to read once handed a task. The guarantee is total only when the work runs on a local model, which is exactly what the gate reroutes to.</p>
+      </div>
+      <div class="sub"><div class="lbl">The lethal trifecta</div>
+        <p>Every request writes where its payload came from to the ledger: what it was built from, how it classified, and whether the model it reached leaves the machine. <span class="fx">hyctl security trifecta</span> reads that:</p>
+        <pre translate="no">  LETHAL TRIFECTA  2 dispatch(es) had all three legs and were not stopped
+  over 7 dispatch(es) with recorded provenance
+
+  private data         4 dispatch(es), read local files or environment
+      deploy/.env                                  2
+      internal/auth/token.go                       2
+  untrusted content    4 dispatch(es), ingested content Hydra did not author
+      head                                         4
+  external comms       6 dispatch(es), reached a head that leaves the machine
+      openai/gpt-5                                 5</pre>
+        <p>Any one of the three is fine; all three at once is what turns a poisoned input into a data leak with no software bug involved. The headline is <b>exposure</b>, not presence: a trifecta the gate refused is reported as contained, because a dashboard that flags a working control teaches people to ignore it.</p>
+      </div>
+    </section>
+
+    <section class="doc" id="least-privilege">
+      <h2>Least-privilege agents <span class="tagline">each subprocess gets only its own key</span></h2>
+      <p class="sum">An agent subprocess gets a base set of variables (PATH, HOME, locale, proxy), <b>its own provider's credential</b> and its own tool configuration. Nothing else crosses, so a CLI agent no longer holds your cloud keys, every other provider's API key and <span class="fx">SSH_AUTH_SOCK</span> for the length of a call.</p>
+      <div class="sub"><div class="lbl">Models</div>
+        <p>The allowlist cannot be complete, since every CLI agent reads its own settings and they change. If a model needs a variable Hydra does not know about:</p>
+        <pre translate="no">export HYDRA_HEAD_ENV=SOME_AGENT_TOKEN,SOME_OTHER_VAR</pre>
+        <p>Model subprocesses are also bounded, so a grandchild holding the pipe open cannot hang a call on a process that already exited. Local model weights are fingerprinted by digest alongside agent binaries, so a swapped model behind a familiar name is caught the same way a replaced agent binary is, which matters because Ollama pulls unsigned weights from a public registry.</p>
+      </div>
+      <div class="sub"><div class="lbl">Validators and checks</div>
+        <p>Validators, oracles, <span class="fx">--check cmd:</span> and <span class="fx">hyverify</span> run files a model may have just written, so they get the same base set plus toolchain paths (<span class="fx">GOPATH</span>, <span class="fx">GOCACHE</span>, <span class="fx">GOFLAGS</span>, <span class="fx">NODE_PATH</span>, <span class="fx">npm_config_cache</span>, <span class="fx">VIRTUAL_ENV</span>, <span class="fx">CARGO_HOME</span>, <span class="fx">JAVA_HOME</span> and a few more) and no credential at all. If a check needs another variable, name it in <span class="fx">workspace.yaml</span>:</p>
+        <pre translate="no">validator_env: [PLAYWRIGHT_BROWSERS_PATH, DATABASE_URL_TEST]</pre>
+        <p>A name that looks like a credential (it contains <span class="fx">KEY</span>, <span class="fx">TOKEN</span>, <span class="fx">SECRET</span>, <span class="fx">PASSWORD</span>, <span class="fx">CREDENTIAL</span> or <span class="fx">AUTH</span>, or starts with <span class="fx">AWS_</span>, <span class="fx">AZURE_</span>, <span class="fx">ARM_</span>, <span class="fx">GOOGLE_</span>, <span class="fx">GCP_</span>, <span class="fx">GCLOUD_</span> or <span class="fx">CLOUDSDK_</span>) is refused, and <span class="fx">hyctl security</span> lists it. <span class="fx">hyverify --env NAME,NAME</span> does the same for one run.</p>
+      </div>
+      <div class="sub"><div class="lbl">Not included</div>
+        <p>These commands still run with your file and network access. Go's <span class="fx">os/exec</span> has no per-child resource limits, and faking them through a shell would re-split the arguments, which <span class="fx">internal/oracle</span> avoids on purpose. Real containment needs a platform sandbox (<span class="fx">sandbox-exec</span>, bubblewrap or landlock), and none of them works the same on macOS, Linux and Windows, so it is tracked separately. What an agent may <i>reach</i> is set by the <a href="#access-policy">access policy</a>.</p>
+      </div>
     </section>
 
     <section class="doc" id="a2a">

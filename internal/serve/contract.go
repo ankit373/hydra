@@ -34,7 +34,7 @@ const (
 	// deprecatedSince is 2026-11-12T00:00:00Z, as RFC 9745's @epoch.
 	deprecatedSince = "@1794441600"
 	// deprecationLink is RFC 9745's rel="deprecation" pointer to what changes.
-	deprecationLink = `<https://github.com/ankit373/hydra#routing-objective-for-hyctl-serve>; rel="deprecation"; type="text/html"`
+	deprecationLink = `<https://hydra.uvansa.com/docs.html#serve-objective>; rel="deprecation"; type="text/html"`
 )
 
 // Deprecator is an optional Router extension. Deprecated reports that a
