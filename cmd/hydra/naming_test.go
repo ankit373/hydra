@@ -97,3 +97,25 @@ func TestTapFormulaDesc_MatchesRootHelp(t *testing.T) {
 		t.Errorf("formula desc %q differs from root help %q", m[1], want)
 	}
 }
+
+// The skills and AGENTS.md are instructions a model follows, so a script they
+// name that was removed (dispatch/route.sh, #86) sends it to a dead command.
+func TestAgentInstructions_NeverNameAScriptThatDoesNotExist(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("..", "..", "skills", "*.md"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no skills found (%v), the guard would silently pass", err)
+	}
+	files = append(files, filepath.Join("..", "..", "AGENTS.md"))
+	script := regexp.MustCompile(`[\w./-]+\.sh\b`)
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range script.FindAllString(string(src), -1) {
+			if _, err := os.Stat(filepath.Join("..", "..", name)); err != nil {
+				t.Errorf("%s names %s, which is not in the repository", f, name)
+			}
+		}
+	}
+}

@@ -1,48 +1,51 @@
 # /delegate, Master Routing Skill
 
-Invoked when Claude Code needs to delegate a task to the right model tier.
+Invoked when the orchestrator needs to hand a task to the right routing level.
 
 ## Steps
 
 1. **Identify domain** from the task description. Cross-reference `registry/domains.yaml` aliases.
 2. **Identify task type** within that domain. Match against `task_routing` keys.
-3. **Resolve enum key** → open `registry/routing.yaml`, read `routing_map.<KEY>` for tier number.
-4. **Check system state**: run `dispatch/route.sh --status`. Apply preservation rules if needed.
-5. **Build context**: collect relevant files, types, conventions into a context block or file.
-6. **Dispatch**: `dispatch/route.sh --enum <KEY> --prompt "<task>" [--context <file>]`
-7. **Review output**: validate correctness. Escalate if quality fails.
-8. **Apply**: write output to disk. Log what tier handled it.
+3. **Resolve enum key**: `registry/routing.yaml` maps `routing_map.<KEY>` to a routing level.
+4. **Check system state**: run `hyctl status`. Apply preservation rules if needed.
+5. **Build context**: collect the files, examples, glossary or conventions the task needs.
+6. **Dispatch**: `hyctl dispatch --enum <KEY> [--kind <kind>] [--system "<context>"] "<task>"`.
+   Add `--dry-run` first to see which model it picks and the fallback chain.
+7. **Review output**: check it does what was asked. Escalate if quality fails.
+8. **Apply**: use or write the output. Note which routing level handled it.
 
 ## Decision Shortcuts
 
 | Task contains | Domain | Likely enum |
 |--------------|--------|-------------|
-| "DTO", "schema", "interface", "type" | backend/frontend | SIMPLE |
-| "controller", "handler", "endpoint", "route" | backend | STANDARD |
-| "service", "repository", "use case" | backend | MODERATE |
-| "middleware", "guard", "auth", "interceptor" | backend | COMPLEX |
-| "component" (simple) | frontend | SIMPLE |
-| "component" (complex, stateful) | frontend | MODERATE |
-| "test", "spec", "unit test" | qa_testing | SIMPLE |
-| "e2e", "integration test" | qa_testing | MODERATE |
-| "Dockerfile", "CI", "pipeline" | devops_sre | STANDARD |
-| "k8s", "kubernetes", "helm" | devops_sre | MODERATE |
-| "architecture", "design", "ADR" | any | EXPERT |
-| "boilerplate", "scaffold", "stub", "empty" | any | GRUNT |
-| "strategy", "roadmap", "vision" | product/cxo | EXPERT |
-| "core business logic", "critical path" | any | CORE |
+| "tag", "dedupe", "reformat", "fill the template" | any | GRUNT |
+| "FAQ", "how do I", "reset my password" | support | SIMPLE |
+| "refund", "billing dispute", "complaint" | support | STANDARD |
+| "summarise", "abstract", "TL;DR" | research | SIMPLE |
+| "extract", "pull the fields", "invoice total" | finance_ops / legal_contracts | GRUNT |
+| "label", "classify", "qualify this lead" | sales / support | SIMPLE |
+| "translate", "localise" (UI strings) | translation | SIMPLE |
+| "translate" (contract, terms) | translation | EXPERT |
+| "what is the notice period", clause question | legal_contracts | SIMPLE |
+| "review this contract", "risks in this agreement" | legal_contracts | EXPERT |
+| "blog post", "outreach email", "job post" | marketing_content / sales / hr | STANDARD |
+| "unit test", "DTO", "schema" | qa_testing / backend | SIMPLE |
+| "endpoint", "handler", "Dockerfile" | backend / devops_sre | STANDARD |
+| "auth middleware", "e2e suite" | backend / qa_testing | COMPLEX |
+| "architecture", "strategy", "positioning" | any | EXPERT |
+| "the one call you cannot get wrong" | any | CORE |
 
 ## Context Injection Template
 ```
 CONVENTIONS:
-<paste relevant types, base classes, naming patterns>
+<style guide, glossary, tone, types or naming patterns that apply>
 
-FILES IN SCOPE:
-<list of @file references or inline snippets>
+MATERIAL IN SCOPE:
+<the ticket, document, data or files the task is about>
 
 TASK:
 <specific task, be precise>
 
 OUTPUT FORMAT:
-TypeScript only. No markdown fences. Match existing style.
+Match the format the task asks for. No preamble.
 ```
