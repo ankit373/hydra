@@ -5,6 +5,8 @@ package serve
 import (
 	"errors"
 	"net/http"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -51,5 +53,21 @@ func TestChat_DeprecationHeaderOnlyOnTheImplicitDefault(t *testing.T) {
 		if !strings.Contains(link, `rel="deprecation"`) || !strings.Contains(link, "<https://") {
 			t.Errorf("%s: Link %q, want a rel=\"deprecation\" URL", tc.name, link)
 		}
+	}
+}
+
+// The Link must land on the section that explains the change; the README
+// anchor it used to name was moved to the docs site (#1796).
+func TestDeprecationLink_AnchorExistsOnTheDocsPage(t *testing.T) {
+	m := regexp.MustCompile(`<https://hydra\.uvansa\.com/([a-z-]+\.html)#([a-z-]+)>`).FindStringSubmatch(deprecationLink)
+	if m == nil {
+		t.Fatalf("Link %q does not point at a hydra.uvansa.com page anchor", deprecationLink)
+	}
+	page, err := os.ReadFile("../../docs/" + m[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), `id="`+m[2]+`"`) {
+		t.Errorf("docs/%s has no id=%q, so the deprecation Link lands nowhere", m[1], m[2])
 	}
 }

@@ -107,7 +107,7 @@ func TestSkipIntro_IsNotBuriedUnderTheTopbar(t *testing.T) {
 // link that silently does nothing, which is exactly how the skip-intro bug
 // presented even though its target did exist.
 func TestDocs_EveryInPageAnchorResolves(t *testing.T) {
-	for _, page := range []string{"index.html"} {
+	for _, page := range []string{"index.html", "docs.html", "first-principles.html"} {
 		src := repoFile(t, "docs", page)
 
 		ids := map[string]bool{}
@@ -119,7 +119,8 @@ func TestDocs_EveryInPageAnchorResolves(t *testing.T) {
 		}
 
 		seen := map[string]bool{}
-		for _, m := range regexp.MustCompile(`\bhref="#([^"]*)"`).FindAllStringSubmatch(src, -1) {
+		// Plain fragments only: a script that builds href="#'+id+'" is not markup.
+		for _, m := range regexp.MustCompile(`\bhref="#([\w-]*)"`).FindAllStringSubmatch(src, -1) {
 			frag := m[1]
 			// href="#" is a deliberate no-op placeholder, not a broken link.
 			if frag == "" || seen[frag] {
