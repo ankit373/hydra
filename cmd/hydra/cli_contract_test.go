@@ -471,3 +471,18 @@ func stripANSICodes(s string) string {
 	}
 	return b.String()
 }
+
+// The oracle checks plain text answers too, so its help must not read as a
+// tests/compile/lint tool (#1488).
+func TestCLI_OracleHelpNamesChecksForTextAnswers(t *testing.T) {
+	cliSandbox(t)
+	for _, args := range [][]string{{"oracle", "--help"}, {"oracle", "verify", "--help"}} {
+		_, out, err := run(t, args...)
+		if err != nil {
+			t.Fatalf("hyctl %s: %v", strings.Join(args, " "), err)
+		}
+		if !strings.Contains(out, "schema check") || strings.Contains(out, "tests/compile/lint") {
+			t.Errorf("hyctl %s does not name a check for text answers:\n%s", strings.Join(args, " "), out)
+		}
+	}
+}
