@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -88,6 +89,8 @@ type Totals struct {
 	ResponseTokens int     `json:"response_tokens"`
 	EstCostUSD     float64 `json:"est_cost_usd"`
 	WallSeconds    int64   `json:"wall_seconds"`
+
+	CacheReadTokens int `json:"cache_read_tokens,omitempty"`
 }
 
 // GroupRow is one row in a by-X breakdown.
@@ -98,6 +101,8 @@ type GroupRow struct {
 	ResponseTokens int     `json:"response_tokens"`
 	EstCostUSD     float64 `json:"est_cost_usd"`
 	WallMS         int64   `json:"wall_ms"`
+
+	CacheReadTokens int `json:"cache_read_tokens,omitempty"`
 }
 
 // SummaryResult is the output of Summary().
@@ -487,11 +492,22 @@ func RenderTable(title string, rows []GroupRow) {
 	fmt.Println()
 	fmt.Printf("  %s\n", title)
 	fmt.Println("  ─────────────────────────────────────────────────────────────")
-	fmt.Printf("  %-18s %6s %10s %10s %10s %8s\n", "key", "calls", "tok_in", "tok_out", "$", "wall_s")
+	// The cache column shows only when some row read from a cache, so a log
+	// with none renders exactly as before.
+	cached := slices.ContainsFunc(rows, func(r GroupRow) bool { return r.CacheReadTokens > 0 })
+	fmt.Printf("  %-18s %6s %10s %10s %10s %8s", "key", "calls", "tok_in", "tok_out", "$", "wall_s")
+	if cached {
+		fmt.Printf(" %18s", "cache")
+	}
+	fmt.Println()
 	for _, r := range rows {
-		fmt.Printf("  %-18s %6d %10d %10d %10.6f %8d\n",
+		fmt.Printf("  %-18s %6d %10d %10d %10.6f %8d",
 			r.Key, r.Calls, r.PromptTokens, r.ResponseTokens,
 			r.EstCostUSD, r.WallMS/1000)
+		if cached {
+			fmt.Printf(" %18s", cacheShare(r.CacheReadTokens, r.PromptTokens))
+		}
+		fmt.Println()
 	}
 	fmt.Println()
 }
@@ -690,6 +706,7 @@ func aggregate(rows []Row) Totals {
 	for _, r := range rows {
 		t.PromptTokens += r.PromptTokens
 		t.ResponseTokens += r.ResponseTokens
+		t.CacheReadTokens += r.CacheReadTokens
 		t.EstCostUSD += r.EstCostUSD
 		totalWallMS += r.WallMS
 	}
@@ -716,6 +733,7 @@ func groupBy(rows []Row, key func(Row) string) []GroupRow {
 		g.Calls++
 		g.PromptTokens += r.PromptTokens
 		g.ResponseTokens += r.ResponseTokens
+		g.CacheReadTokens += r.CacheReadTokens
 		g.EstCostUSD += r.EstCostUSD
 		g.WallMS += r.WallMS
 	}
@@ -739,6 +757,15 @@ func groupBy(rows []Row, key func(Row) string) []GroupRow {
 func renderTotals(t Totals, indent string) {
 	fmt.Printf("%scalls          %d\n", indent, t.Calls)
 	fmt.Printf("%stokens in/out  %d / %d\n", indent, t.PromptTokens, t.ResponseTokens)
+	if t.CacheReadTokens > 0 {
+		fmt.Printf("%scache reads    %s\n", indent, cacheShare(t.CacheReadTokens, t.PromptTokens))
+	}
 	fmt.Printf("%sest cost       $%.6f\n", indent, t.EstCostUSD)
 	fmt.Printf("%swall time      %ds\n", indent, t.WallSeconds)
+}
+
+// cacheShare is tokens read from cache and their share of input, e.g. "900 (90%)".
+// Only called with read > 0, and read is part of input, so input is never 0.
+func cacheShare(read, input int) string {
+	return fmt.Sprintf("%d (%.0f%%)", read, float64(read)*100/float64(input))
 }

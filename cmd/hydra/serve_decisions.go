@@ -76,6 +76,6 @@ func servePolicyCeiling() (float64, string) {
 // decisionPrice estimates one call from the input's size; decision sources bill input only.
 func decisionPrice(db *pricing.DB) func(provider.Head, decision.Request) float64 {
 	return func(h provider.Head, r decision.Request) float64 {
-		return dispatch.CallCost(db, h, executor.EstimateTokens(r.Input), 0)
+		return dispatch.CallCost(db, h, pricing.Usage{In: executor.EstimateTokens(r.Input)})
 	}
 }

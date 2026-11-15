@@ -1237,3 +1237,38 @@ func TestCLI_ReviewReject_RestoresTheFile(t *testing.T) {
 		t.Error("reject left the backup behind")
 	}
 }
+
+// The cache column appears once any row read from a cache, and not before.
+func TestCostCLI_ShowsCacheColumnWhenPresent(t *testing.T) {
+	populated(t)
+	plain, _, err := run(t, "cost", "all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plain, "cache") {
+		t.Errorf("a log with no cache reads shows a cache column:\n%s", plain)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, "logs/cost.jsonl", `{"ts":"`+now+`","tier":3,"model":"anthropic/claude-sonnet-4.5",`+
+		`"prompt_tokens":1000,"response_tokens":10,"cache_read_tokens":900,"est_cost_usd":0.0005}`+"\n")
+	table, _, err := run(t, "cost", "all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(table, "cache") || !strings.Contains(table, "900 (90%)") {
+		t.Errorf("cost all does not show 900 tokens read, 90%% of input:\n%s", table)
+	}
+	summary, _, err := run(t, "cost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(summary, "cache reads    900 (90%)") {
+		t.Errorf("cost summary has no cache line:\n%s", summary)
+	}
+	var js []map[string]any
+	out, _, err := run(t, "cost", "all", "--json")
+	if err != nil || json.Unmarshal([]byte(out), &js) != nil || len(js) != 1 || js[0]["cache_read_tokens"] != float64(900) {
+		t.Errorf("cost all --json = %s (%v), want cache_read_tokens 900", out, err)
+	}
+}

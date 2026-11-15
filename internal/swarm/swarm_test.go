@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -132,6 +133,8 @@ func TestCompositeJudge_BothFail(t *testing.T) {
 type fakePricing struct{ per float64 }
 
 func (f fakePricing) EstimateCost(_ int, _, _ int) float64 { return f.per }
+
+func (f fakePricing) PriceCall(provider.Head, pricing.Usage) float64 { return f.per }
 
 func TestPreflightCost(t *testing.T) {
 	heads := []provider.Head{registryHead("a", "A", 90), registryHead("b", "B", 80), registryHead("c", "C", 70)}
@@ -543,5 +546,29 @@ func TestPlanRunRunSPRT_RejectBadA2AFileIdentically(t *testing.T) {
 		t.Error("RunSPRT accepted a nonexistent --a2a file")
 	} else if !strings.Contains(err.Error(), bad) {
 		t.Errorf("RunSPRT error = %v, want it to name the offending path", err)
+	}
+}
+
+// usagePricing records what it was asked to price.
+type usagePricing struct{ got *pricing.Usage }
+
+func (usagePricing) EstimateCost(_, _, _ int) float64 { return 0 }
+
+func (u usagePricing) PriceCall(_ provider.Head, got pricing.Usage) float64 {
+	*u.got = got
+	return 0.01
+}
+
+// An attempt is priced from its whole usage, cache counts included, through
+// the same PriceCall a dispatch uses, so the two cannot disagree.
+func TestAttemptCost_UsesCacheUsage(t *testing.T) {
+	a := Attempt{Head: registryHead("a", "A", 90), Status: StatusOK,
+		InputTokens: 1000, OutputTokens: 50, CacheReadTokens: 900, CacheWriteTokens: 40}
+	var got pricing.Usage
+	if c := attemptCost(a, usagePricing{&got}); c != 0.01 {
+		t.Errorf("attemptCost = %v, want PriceCall's 0.01", c)
+	}
+	if want := (pricing.Usage{In: 1000, Out: 50, CacheRead: 900, CacheWrite: 40}); got != want {
+		t.Errorf("priced usage %+v, want %+v", got, want)
 	}
 }
