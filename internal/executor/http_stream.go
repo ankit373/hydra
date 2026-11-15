@@ -33,10 +33,7 @@ type openAIChatChunk struct {
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-	} `json:"usage"`
+	Usage *openAIUsage `json:"usage"`
 }
 
 // ExecuteStream streams the OpenAI-compatible and Azure paths, which share a
@@ -113,7 +110,7 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	}
 
 	var gotModel, finish string
-	var inTok, outTok int
+	var inTok, outTok, cacheRead int
 	var tools toolCallStream
 	var recovered []ToolCall
 	hold := newTextCallHold(req.Tools)
@@ -128,6 +125,7 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 		}
 		if chunk.Usage != nil {
 			inTok, outTok = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens
+			cacheRead = chunk.Usage.cacheRead()
 		}
 		for _, c := range chunk.Choices {
 			hold.write(c.Delta.Content, sink)
@@ -157,6 +155,7 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	// counts. httpResponse estimates them, the same way the buffered dialects
 	// do, so the two cannot disagree about what a call with no usage cost.
 	answer := httpResponse(req, sink.output(), firstNonEmpty(gotModel, model), inTok, outTok, start)
+	answer.CacheReadTokens = cacheRead
 	answer.Truncated = sink.truncated()
 	answer.TTFT = sink.firstTokenAt()
 	answer.ToolCalls = tools.done()

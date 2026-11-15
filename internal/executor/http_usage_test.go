@@ -140,3 +140,56 @@ func TestExecute_AServerThatReportsNoUsageIsNotFree(t *testing.T) {
 		t.Errorf("output = %q", got.Output)
 	}
 }
+
+// executeCompat answers one buffered call with body, the way a real server would.
+func executeCompat(t *testing.T, body string) *Response {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, body)
+	}))
+	defer srv.Close()
+
+	req := Request{Prompt: "a prompt", Head: compatHead(t, srv.URL)}
+	got, err := (&HTTPExecutor{client: srv.Client()}).Execute(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+// OpenAI's shape, recorded from a cache hit: the hit sits inside prompt_tokens.
+func TestOpenAICompatible_CachedTokensRead(t *testing.T) {
+	got := executeCompat(t, `{"model":"stub-1","choices":[{"message":{"content":"ok"}}],`+
+		`"usage":{"prompt_tokens":2006,"completion_tokens":300,`+
+		`"prompt_tokens_details":{"cached_tokens":1920,"audio_tokens":0}}}`)
+	if got.CacheReadTokens != 1920 {
+		t.Errorf("CacheReadTokens = %d, want 1920", got.CacheReadTokens)
+	}
+	if got.InputTokens != 2006 {
+		t.Errorf("InputTokens = %d, want the full prompt 2006", got.InputTokens)
+	}
+	if got.CacheWriteTokens != 0 {
+		t.Errorf("CacheWriteTokens = %d, want 0", got.CacheWriteTokens)
+	}
+}
+
+// DeepSeek's prompt_tokens is hit + miss, so it already is the full prompt.
+func TestDeepSeek_PromptCacheHitTokensRead(t *testing.T) {
+	got := executeCompat(t, `{"model":"stub-1","choices":[{"message":{"content":"ok"}}],`+
+		`"usage":{"prompt_tokens":1200,"completion_tokens":40,`+
+		`"prompt_cache_hit_tokens":1024,"prompt_cache_miss_tokens":176}}`)
+	if got.CacheReadTokens != 1024 {
+		t.Errorf("CacheReadTokens = %d, want 1024", got.CacheReadTokens)
+	}
+	if got.InputTokens != 1200 {
+		t.Errorf("InputTokens = %d, want 1200", got.InputTokens)
+	}
+}
+
+func TestOpenAICompatible_NoCacheFieldsMeansZero(t *testing.T) {
+	got := executeCompat(t, `{"model":"stub-1","choices":[{"message":{"content":"ok"}}],`+
+		`"usage":{"prompt_tokens":31,"completion_tokens":64}}`)
+	if got.CacheReadTokens != 0 || got.CacheWriteTokens != 0 {
+		t.Errorf("cache %d/%d from a reply that reported none", got.CacheReadTokens, got.CacheWriteTokens)
+	}
+}

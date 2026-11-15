@@ -112,6 +112,9 @@ func TestHTTPStream_DeliversDeltasAndKeepsRealUsage(t *testing.T) {
 	if resp.TokensEstimated {
 		t.Error("reported counts are labelled estimated")
 	}
+	if resp.CacheReadTokens != 0 {
+		t.Errorf("CacheReadTokens = %d from a stream that reported no cache", resp.CacheReadTokens)
+	}
 	if resp.Model != "stub-1" {
 		t.Errorf("Model %q, want the model the chunks named", resp.Model)
 	}
@@ -165,5 +168,25 @@ func TestHTTPStream_IgnoresKeepAlivesAndNonDataLines(t *testing.T) {
 	}
 	if len(got) != 1 {
 		t.Errorf("got %d deltas, want 1: a keep-alive fired a delta", len(got))
+	}
+}
+
+func TestStream_CachedTokensFromFinalUsageChunk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"model\":\"stub-1\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"model\":\"stub-1\",\"choices\":[],\"usage\":{\"prompt_tokens\":2006,"+
+			"\"completion_tokens\":3,\"prompt_tokens_details\":{\"cached_tokens\":1920}}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	resp, err := (&HTTPExecutor{}).ExecuteStream(context.Background(),
+		Request{Prompt: "p", Head: compatHead(t, srv.URL)}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.CacheReadTokens != 1920 || resp.InputTokens != 2006 {
+		t.Errorf("cache read %d of %d, want 1920 of 2006", resp.CacheReadTokens, resp.InputTokens)
 	}
 }
