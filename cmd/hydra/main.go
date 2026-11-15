@@ -126,7 +126,7 @@ func main() {
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "hyctl",
-		Short: "Multi-model AI orchestration, one Cortex, many Heads",
+		Short: "Send each AI task to the model best suited to it, and check the answer",
 		// `hyctl --version` used to answer "unknown flag" even though a version
 		// subcommand existed. It is the near-universal convention, so people
 		// type it first. Same text as the subcommand, from one function.

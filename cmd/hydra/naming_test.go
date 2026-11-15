@@ -84,3 +84,16 @@ func TestUserFacingText_RuntimeErrorsDoNotDumpUsage(t *testing.T) {
 		t.Errorf("a runtime error dumped the flags block:\n%s", cobraOut)
 	}
 }
+
+// The tap formula's desc is typed into the script by hand, so it drifted from
+// `hyctl --help` once already. brew search shows it, so it must say the same.
+func TestTapFormulaDesc_MatchesRootHelp(t *testing.T) {
+	m := regexp.MustCompile(`(?m)^\s*desc "([^"]*)"$`).
+		FindStringSubmatch(repoFile(t, "scripts", "update-tap-formula.sh"))
+	if m == nil {
+		t.Fatal("scripts/update-tap-formula.sh has no desc line")
+	}
+	if want := rootCmd().Short; m[1] != want {
+		t.Errorf("formula desc %q differs from root help %q", m[1], want)
+	}
+}
