@@ -39,16 +39,18 @@ type GenInfo struct {
 }
 
 // Spec is one generated check. Body is its kind's JSON; ID hashes the rest.
+// Variant lets one kind log more than one named verdict, e.g. rubric-code and rubric-judge.
 type Spec struct {
 	ID        string          `json:"id"`
 	Kind      string          `json:"kind"`
+	Variant   string          `json:"variant,omitempty"`
 	Body      json.RawMessage `json:"body"`
 	TaskHash  string          `json:"task_hash,omitempty"`
 	Generator GenInfo         `json:"generator"`
 }
 
 // NewSpec builds a Spec, so every generator derives the task hash and ID one way.
-func NewSpec(kind string, body any, task Task, gen GenInfo) (Spec, error) {
+func NewSpec(kind, variant string, body any, task Task, gen GenInfo) (Spec, error) {
 	if !slices.Contains(SpecKinds, kind) {
 		return Spec{}, fmt.Errorf("checkgen: unknown spec kind %q", kind)
 	}
@@ -56,7 +58,7 @@ func NewSpec(kind string, body any, task Task, gen GenInfo) (Spec, error) {
 	if err != nil {
 		return Spec{}, fmt.Errorf("checkgen: %s body: %w", kind, err)
 	}
-	s := Spec{Kind: kind, Body: raw, TaskHash: evalset.TaskHashFor(task.Text), Generator: gen}
+	s := Spec{Kind: kind, Variant: variant, Body: raw, TaskHash: evalset.TaskHashFor(task.Text), Generator: gen}
 	id, err := json.Marshal(s)
 	if err != nil {
 		return Spec{}, err
@@ -65,11 +67,26 @@ func NewSpec(kind string, body any, task Task, gen GenInfo) (Spec, error) {
 	return s, nil
 }
 
+// Check is the id a spec's verdicts are logged under: gen:<kind>, or gen:<kind>-<variant>.
+func (s Spec) Check() string {
+	if s.Variant == "" {
+		return "gen:" + s.Kind
+	}
+	return "gen:" + s.Kind + "-" + s.Variant
+}
+
+// Env is what an oracle may ask at check time, bound by the caller to the head
+// a spec's GenInfo names. A nil field means no model can be reached.
+type Env struct {
+	Ask     func(ctx context.Context, gen GenInfo, prompt string) (string, error)
+	Decider func(gen GenInfo) oracle.Decider
+}
+
 // Generator writes the checks of one spec kind and turns them into oracles.
 type Generator interface {
 	Kind() string
 	Generate(ctx context.Context, task Task) ([]Spec, error)
-	Oracle(spec Spec) (oracle.Oracle, error)
+	Oracle(spec Spec, env Env) (oracle.Oracle, error)
 }
 
 var registry = struct {

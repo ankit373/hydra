@@ -32,7 +32,7 @@ func fieldsCheck(t *testing.T, req, answer string) (bool, string) {
 	if err != nil || len(specs) != 1 {
 		t.Fatalf("specs = %v, err = %v", specs, err)
 	}
-	o, err := fieldsGen{}.Oracle(specs[0])
+	o, err := fieldsGen{}.Oracle(specs[0], Env{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestFields_WriterFailuresAreErrors(t *testing.T) {
 	if err != nil || len(specs) != 0 {
 		t.Errorf("only unknown types gave specs %v, err %v; want no check", specs, err)
 	}
-	if _, err := (fieldsGen{}).Oracle(Spec{Body: []byte(`[`)}); err == nil {
+	if _, err := (fieldsGen{}).Oracle(Spec{Body: []byte(`[`)}, Env{}); err == nil {
 		t.Error("a corrupt spec built an oracle")
 	}
 }

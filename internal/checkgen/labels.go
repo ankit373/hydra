@@ -59,14 +59,14 @@ func (labelsGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
 	if len(labels) < 2 {
 		return nil, nil
 	}
-	s, err := NewSpec("labels", labels, task, task.Writer)
+	s, err := NewSpec("labels", "", labels, task, task.Writer)
 	if err != nil {
 		return nil, err
 	}
 	return []Spec{s}, nil
 }
 
-func (labelsGen) Oracle(s Spec) (oracle.Oracle, error) {
+func (labelsGen) Oracle(s Spec, _ Env) (oracle.Oracle, error) {
 	var labels []string
 	if err := json.Unmarshal(s.Body, &labels); err != nil {
 		return nil, fmt.Errorf("checkgen labels: spec %s: %w", s.ID, err)

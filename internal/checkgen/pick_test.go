@@ -83,11 +83,11 @@ func TestPickGenerator_KeepsLocalOnlyPromptsLocal(t *testing.T) {
 // The report splits false-pass rates on this, so a same-family check must say so on its verdict.
 func TestRun_SameFamilyWriterIsInTheVerdictDetail(t *testing.T) {
 	span, _ := setup(t, &fakeGen{})
-	same, err := NewSpec("labels", "refund", Task{Text: "reply"}, GenInfo{Head: gptSmall.ID, Family: "openai", SameFamily: true})
+	same, err := NewSpec("labels", "", "refund", Task{Text: "reply"}, GenInfo{Head: gptSmall.ID, Family: "openai", SameFamily: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Run(context.Background(), []Spec{same}, "refund", gptBig, span); err != nil {
+	if _, err := Run(context.Background(), []Spec{same}, "refund", gptBig, span, Env{}); err != nil {
 		t.Fatal(err)
 	}
 	answers, err := evalset.Joint(evalset.VerdictsPath())

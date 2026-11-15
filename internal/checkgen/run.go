@@ -41,7 +41,7 @@ func SpecsDir() string {
 
 // Run judges answer with each spec, logs a verdict per check that ran and
 // scores span when it names one. The error joins log writes that failed.
-func Run(ctx context.Context, specs []Spec, answer string, answering provider.Head, span runlog.Event) ([]Result, error) {
+func Run(ctx context.Context, specs []Spec, answer string, answering provider.Head, span runlog.Event, env Env) ([]Result, error) {
 	out := make([]Result, 0, len(specs))
 	var errs []error
 	for _, s := range specs {
@@ -49,7 +49,7 @@ func Run(ctx context.Context, specs []Spec, answer string, answering provider.He
 			errs = append(errs, err)
 		}
 		r := Result{Spec: s}
-		r.Verdict, r.Err = verify(ctx, s, answer, span.Domain)
+		r.Verdict, r.Err = verify(ctx, s, answer, span.Domain, env)
 		out = append(out, r)
 		if !r.Checked() {
 			continue
@@ -61,12 +61,12 @@ func Run(ctx context.Context, specs []Spec, answer string, answering provider.He
 	return out, errors.Join(errs...)
 }
 
-func verify(ctx context.Context, s Spec, answer, domain string) (oracle.Verdict, error) {
+func verify(ctx context.Context, s Spec, answer, domain string, env Env) (oracle.Verdict, error) {
 	g, ok := generatorOf(s.Kind)
 	if !ok {
 		return oracle.Verdict{}, fmt.Errorf("checkgen: no generator for spec kind %q", s.Kind)
 	}
-	o, err := g.Oracle(s)
+	o, err := g.Oracle(s, env)
 	if err != nil {
 		return oracle.Verdict{}, err
 	}
@@ -74,7 +74,7 @@ func verify(ctx context.Context, s Spec, answer, domain string) (oracle.Verdict,
 }
 
 func record(r Result, answer string, answering provider.Head, span runlog.Event) error {
-	check := "gen:" + r.Spec.Kind
+	check := r.Spec.Check()
 	detail := "spec " + r.Spec.ID
 	if r.Spec.Generator.SameFamily {
 		detail += ", written by the answer's own family"
