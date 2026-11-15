@@ -151,7 +151,9 @@ registry/               ← Routing data, compiled into the binary via `go:embed
   models.yaml           ← Model definitions, token pools, context windows (flags are
                           install-specific defaults, verify against your providers). Read by
                           the agy provider and the budget governor.
-  domains.yaml          ← Domain → enum key routing (references routing.yaml).
+  domains.yaml          ← Domain → enum key routing (references routing.yaml), for any kind
+                          of work: support, legal, sales, translation, code. Reference only,
+                          nothing at runtime reads it; a registry test checks every key exists.
   pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
                           OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
                           Optional `cache_read_per_million` / `cache_write_per_million` per tier,
