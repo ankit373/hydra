@@ -143,6 +143,13 @@ func TestDefaultBinDir_IsInstallShsChoice(t *testing.T) {
 	if got := DefaultBinDir(); got != "/usr/local/bin" && got != filepath.Join(home, ".local", "bin") {
 		t.Errorf("DefaultBinDir() = %q", got)
 	}
+	writable := t.TempDir()
+	if got := binDirOr(writable); got != writable {
+		t.Errorf("binDirOr(writable) = %q", got)
+	}
+	if got := binDirOr(filepath.Join(home, "missing")); got != filepath.Join(home, ".local", "bin") {
+		t.Errorf("binDirOr(missing) = %q, want ~/.local/bin", got)
+	}
 }
 
 func TestInstallCLI_UnreachableReleaseFails(t *testing.T) {
@@ -153,5 +160,32 @@ func TestInstallCLI_UnreachableReleaseFails(t *testing.T) {
 	}
 	if _, err := fetch(context.Background(), "v1.0.0", "x", 1); err == nil {
 		t.Error("fetch from an unreachable host succeeded")
+	}
+}
+
+func TestInstallMember_RejectsANonArchive(t *testing.T) {
+	if err := InstallMember([]byte("not gzip"), "hyctl", filepath.Join(t.TempDir(), "hyctl")); err == nil {
+		t.Error("InstallMember accepted bytes that are not a .tar.gz")
+	}
+}
+
+// A listed checksum with no archive behind it is a failed download, not an install.
+func TestInstallCLI_MissingArchiveFails(t *testing.T) {
+	a := cliAsset("v9.9.9", runtime.GOOS, runtime.GOARCH)
+	fakeRelease(t, "v9.9.9", map[string][]byte{"checksums.txt": []byte(testutil.SumLine(a.Name, []byte("x")))})
+	if _, _, err := installOver(t); err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Errorf("err = %v, want the 404", err)
+	}
+}
+
+func TestLatest_ReportsHTTPAndDecodeErrors(t *testing.T) {
+	for _, c := range []struct {
+		status int
+		body   string
+	}{{500, ""}, {200, "{not json"}} {
+		stubReleases(t, c.status, c.body)
+		if _, err := Latest(context.Background()); err == nil {
+			t.Errorf("Latest() = nil error for %d %q", c.status, c.body)
+		}
 	}
 }

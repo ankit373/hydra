@@ -207,11 +207,13 @@ func replaceFile(dest string, r io.Reader) error {
 
 // DefaultBinDir is where a fresh hyctl goes: /usr/local/bin when writable,
 // else ~/.local/bin, the same choice install.sh makes.
-func DefaultBinDir() string {
-	if f, err := os.CreateTemp("/usr/local/bin", ".hydra-probe-*"); err == nil {
+func DefaultBinDir() string { return binDirOr("/usr/local/bin") }
+
+func binDirOr(system string) string {
+	if f, err := os.CreateTemp(system, ".hydra-probe-*"); err == nil {
 		f.Close()
 		os.Remove(f.Name())
-		return "/usr/local/bin"
+		return system
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "bin")
