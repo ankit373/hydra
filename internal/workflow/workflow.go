@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -62,6 +63,9 @@ type Step struct {
 	Prompt string   `json:"prompt"`
 	Enum   string   `json:"enum,omitempty"` // routing hint for THIS step
 	Tools  []string `json:"tools,omitempty"`
+	// Needs are the step numbers this step waits for and reads. nil, as in a
+	// record from before #1591, means every earlier step; empty means none.
+	Needs []int `json:"needs"`
 
 	Status Status `json:"status"`
 	Head   string `json:"head,omitempty"`
@@ -138,6 +142,57 @@ func (w Workflow) Progress() (done, total int) {
 	return done, len(w.Steps)
 }
 
+// Needs is what step i waits for, with nil read as every earlier step.
+func (w Workflow) Needs(i int) []int {
+	if n := w.Steps[i].Needs; n != nil {
+		return n
+	}
+	all := make([]int, i)
+	for j := range all {
+		all[j] = j + 1
+	}
+	return all
+}
+
+// Chain reports whether every step waits for every earlier one, the order
+// steps ran in before they could name their needs.
+func (w Workflow) Chain() bool {
+	for i := range w.Steps {
+		if len(w.Needs(i)) != i {
+			return false
+		}
+	}
+	return true
+}
+
+// ready reports whether every step that step i needs is done.
+func (w Workflow) ready(i int) bool {
+	for _, n := range w.Needs(i) {
+		if w.Steps[n-1].Status != Done {
+			return false
+		}
+	}
+	return true
+}
+
+// checkNeeds refuses a need no run could meet. Needs point backwards only, so
+// the typed order is always a valid run order and there is no cycle to find.
+func checkNeeds(steps []Step) error {
+	for i, s := range steps {
+		for _, n := range s.Needs {
+			switch {
+			case n == i+1:
+				return fmt.Errorf("step %d needs itself", i+1)
+			case n > i+1 && n <= len(steps):
+				return fmt.Errorf("step %d needs step %d, which comes after it", i+1, n)
+			case n < 1 || n > len(steps):
+				return fmt.Errorf("step %d needs step %d, which does not exist", i+1, n)
+			}
+		}
+	}
+	return nil
+}
+
 // Next returns the index of the first step still to run, and false when none is
 // left. A step that already produced output is never returned, which is what
 // makes resuming idempotent rather than a second charge for work already paid
@@ -207,6 +262,15 @@ func New(id, task string, steps []Step) (Workflow, error) {
 			s.Title = firstLine(s.Prompt)
 		}
 		w.Steps = append(w.Steps, s)
+	}
+	if err := checkNeeds(w.Steps); err != nil {
+		return Workflow{}, err
+	}
+	// Written out, so the stored record and `workflow show` say what each step waits for.
+	for i := range w.Steps {
+		n := slices.Clone(w.Needs(i))
+		slices.Sort(n)
+		w.Steps[i].Needs = slices.Compact(n)
 	}
 	return w, nil
 }
