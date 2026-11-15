@@ -410,3 +410,41 @@ func TestCoupleFiles_OnlyForFileWrites(t *testing.T) {
 		t.Error("a workflow writing a.go did not see a.go and b.go as coupled")
 	}
 }
+
+// --context stores a file once, and only the steps whose --reads name it read it.
+func TestWorkflowRun_ContextIsReadByTheStepsThatNameIt(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeWorkflowConfig(t, s.HydraHome)
+	path := filepath.Join(t.TempDir(), "tickets.csv")
+	if err := os.WriteFile(path, []byte("12,export does nothing\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The run fails for want of a head; what is asserted is the stored record.
+	_, _, _ = run(t, "workflow", "run", "--id", "wf-ctx", "--context", "tickets="+path,
+		"--step", "summarise the tickets", "--reads", "tickets",
+		"--step", "draft the changelog", "--reads", "")
+	w, err := workflow.Load("wf-ctx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps[0].Reads) != 1 || len(w.Steps[1].Reads) != 0 {
+		t.Fatalf("reads %v and %v, want the document on step 1 only", w.Steps[0].Reads, w.Steps[1].Reads)
+	}
+	blk := w.Blocks[w.Steps[0].Reads[0]]
+	if blk.Kind != workflow.BlockDocument || blk.Label != "tickets" || blk.Text != "12,export does nothing\n" {
+		t.Errorf("block %+v, want the tickets file as a document", blk)
+	}
+
+	for _, tc := range []struct {
+		want string
+		args []string
+	}{
+		{"names no --context", []string{"workflow", "run", "--step", "a", "--reads", "nope"}},
+		{"want <label>=<path>", []string{"workflow", "run", "--context", "tickets", "--step", "a"}},
+		{"one --reads per --step", []string{"workflow", "run", "--step", "a", "--step", "b", "--reads", "x"}},
+	} {
+		if _, _, err := run(t, tc.args...); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%v: err = %v, want %q", tc.args, err, tc.want)
+		}
+	}
+}

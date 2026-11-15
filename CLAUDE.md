@@ -90,6 +90,8 @@ internal/ledger/        ← MCP accountability ledger: record + policy-gate what
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,
                           except two that write the same a2a key (`--writes`) or graph-coupled files;
+                          one context store per workflow (`Blocks`, keyed by payload.Hash, kept in the
+                          record), `--context` documents given only to steps that `--reads` them;
                           state saved before every step so a killed run resumes, plus a heartbeat file beside
                           the record: a status is only what the last writer knew, so a killed run
                           read as `running` for ever until `Observed()` resolved it against a live

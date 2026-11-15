@@ -170,7 +170,7 @@ func cmdWorkflow() *cobra.Command {
 
 func cmdWorkflowRun() *cobra.Command {
 	var steps []string
-	var enums, needs, writes, stepChecks, stepKinds []string
+	var enums, needs, writes, reads, contexts, stepChecks, stepKinds []string
 	var task, id, system string
 	var localOnly, dryRun bool
 	var maxCost float64
@@ -197,7 +197,7 @@ func cmdWorkflowRun() *cobra.Command {
 				return fmt.Errorf("%d --step and %d --enum given; pass one --enum per --step, or none",
 					len(steps), len(enums))
 			}
-			for flag, vals := range map[string][]string{"needs": needs, "writes": writes} {
+			for flag, vals := range map[string][]string{"needs": needs, "writes": writes, "reads": reads} {
 				if len(vals) > 0 && len(vals) != len(steps) {
 					return fmt.Errorf("%d --step and %d --%s given; pass one --%s per --step, or none",
 						len(steps), len(vals), flag, flag)
@@ -239,6 +239,9 @@ func cmdWorkflowRun() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := addContext(&w, contexts, reads); err != nil {
+				return err
+			}
 			w.RunID = w.ID
 			// Stored on the record, so a resume continues the workflow under
 			// what it started with rather than under nothing (#1168).
@@ -256,6 +259,8 @@ func cmdWorkflowRun() *cobra.Command {
 	cmd.Flags().StringArrayVar(&enums, "enum", nil, "routing key for the step at the same position")
 	cmd.Flags().StringArrayVar(&writes, "writes", nil,
 		"what the step at the same position writes, comma separated: a path, doc:<name>#<section>, record:<table>/<id>")
+	cmd.Flags().StringArrayVar(&contexts, "context", nil, "a document for the steps that read it, <label>=<path>; repeat")
+	cmd.Flags().StringArrayVar(&reads, "reads", nil, "--context labels the step at the same position reads, comma separated")
 	cmd.Flags().StringArrayVar(&needs, "needs", nil,
 		"step numbers the step at the same position waits for, e.g. 1,2; \"\" for none (default: every earlier step)")
 	cmd.Flags().StringArrayVar(&stepChecks, "step-check", nil, "N=<check>: a dispatch --check step N's answer must pass; "+
@@ -304,6 +309,37 @@ func attachChecks(steps []workflow.Step, checks, kinds []string) error {
 		}
 		if err != nil {
 			return fmt.Errorf("--step-kind %q: %w", spec, err)
+		}
+	}
+	return nil
+}
+
+// addContext stores each --context file once as a document block and gives
+// its hash to every step whose --reads names the label.
+func addContext(w *workflow.Workflow, contexts, reads []string) error {
+	byLabel := map[string]string{}
+	for _, c := range contexts {
+		label, path, ok := strings.Cut(c, "=")
+		if label = strings.TrimSpace(label); !ok || label == "" || strings.TrimSpace(path) == "" {
+			return fmt.Errorf("--context %q: want <label>=<path>", c)
+		}
+		raw, err := os.ReadFile(strings.TrimSpace(path))
+		if err != nil {
+			return fmt.Errorf("--context %s: %w", label, err)
+		}
+		h, err := w.Put(workflow.BlockDocument, label, string(raw))
+		if err != nil {
+			return fmt.Errorf("--context %s: %w", label, err)
+		}
+		byLabel[label] = h
+	}
+	for i, r := range reads {
+		for _, f := range splitList(r) {
+			h, ok := byLabel[f]
+			if !ok {
+				return fmt.Errorf("step %d: --reads %q names no --context", i+1, f)
+			}
+			w.Steps[i].Reads = append(w.Steps[i].Reads, h)
 		}
 	}
 	return nil
