@@ -400,6 +400,8 @@ hyctl trust outcome <task_hash> --outcome incorrect
 hyctl trust reliability ; hyctl trust reliability --json
 # The same audit for every decision source, per domain, against verdicts on your own work
 hyctl trust reliability --source <head> ; hyctl trust reliability --source <head> --json
+# Per kind of work, how often each check and each pair passed an answer later found wrong
+hyctl trust joint ; hyctl trust joint --domain go --json
 # Close the loop in one command: verify the answer, score the span, train every voter
 # Verify an answer by applying it: `hyctl edit` validates the file it just wrote.
 # `hyctl dispatch --verify` is refused, a dispatch writes nothing, so its verifier
