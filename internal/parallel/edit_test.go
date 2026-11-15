@@ -636,11 +636,11 @@ func TestRunValidate_DoesNotFragmentPathsWithSpaces(t *testing.T) {
 	if err := os.WriteFile(spaced, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if rc, err := runValidate(context.Background(), "/bin/test -f {file}", spaced); rc != 0 || err != nil {
+	if rc, err := runValidate(context.Background(), "/bin/test -f {file}", spaced, nil); rc != 0 || err != nil {
 		t.Errorf("exit %d (err %v), the path was fragmented at its spaces", rc, err)
 	}
 
-	if rc, err := runValidate(context.Background(), "/usr/bin/false", "ignored"); rc == 0 || err != nil {
+	if rc, err := runValidate(context.Background(), "/usr/bin/false", "ignored", nil); rc == 0 || err != nil {
 		t.Errorf("a failing validator reported rc %d, err %v, want non-zero and no error", rc, err)
 	}
 	// A template naming a binary that does not exist is still not a pass: the
@@ -648,12 +648,12 @@ func TestRunValidate_DoesNotFragmentPathsWithSpaces(t *testing.T) {
 	// is not a verdict either, which is the part that changed, because blaming
 	// the head for a missing binary put confident false evidence in the corpus
 	// and the calibration (#998).
-	rc, err := runValidate(context.Background(), "definitely-not-installed-anywhere", "x")
+	rc, err := runValidate(context.Background(), "definitely-not-installed-anywhere", "x", nil)
 	if !errors.Is(err, editor.ErrValidatorUnavailable) {
 		t.Errorf("a missing validator binary gave rc %d, err %v, want ErrValidatorUnavailable", rc, err)
 	}
 	// An empty template means no validator is configured, which is a pass.
-	if rc, err := runValidate(context.Background(), "", "x"); rc != 0 || err != nil {
+	if rc, err := runValidate(context.Background(), "", "x", nil); rc != 0 || err != nil {
 		t.Errorf("an empty template returned %d, %v, want 0 and no error (no validator configured)", rc, err)
 	}
 }

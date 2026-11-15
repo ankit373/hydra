@@ -67,6 +67,7 @@ import (
 	"github.com/ankit373/hydra/internal/update"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/waterfall"
+	"github.com/ankit373/hydra/internal/workspace"
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -2188,7 +2189,7 @@ func cmdOracle() *cobra.Command {
 			if src == "" {
 				src = "verifier:" + args[0]
 			}
-			o := &oracle.CommandOracle{Args: args, Source: src}
+			o := &oracle.CommandOracle{Args: args, Source: src, Env: workspace.ValidatorEnvNames(config.ScriptHome())}
 			v, err := o.Verify(cmd.Context(), candidate, trust.Task{Domain: domain})
 			if err != nil {
 				return err

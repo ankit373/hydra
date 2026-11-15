@@ -79,3 +79,20 @@ validators:
   # falls back to a marker-leakage check only. Declared null here so edit.sh uses its built-in path.
   ts:   null
   tsx:  null
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Validator environment, what validators, oracles, --check cmd: and hyverify see.
+# They run files a model may have just written, so they get a short allowlist:
+# PATH, HOME, locale, TMPDIR, proxy settings, and toolchain paths such as
+# GOPATH, GOCACHE, GOFLAGS, NODE_PATH, npm_config_cache, VIRTUAL_ENV, CARGO_HOME
+# and JAVA_HOME. Nothing else crosses: no API keys, no AWS_*, no SSH_AUTH_SOCK.
+#
+# Name extra variables a validator needs here. A name that looks like a
+# credential (contains KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL or AUTH, or
+# starts with AWS_, AZURE_, ARM_, GOOGLE_, GCP_, GCLOUD_ or CLOUDSDK_) is
+# refused, and `hyctl security` says so under ASI03.
+#
+#   validator_env: [DATABASE_URL_TEST, PLAYWRIGHT_BROWSERS_PATH]
+# ─────────────────────────────────────────────────────────────────────────────
+
+validator_env: []

@@ -254,18 +254,18 @@ func TestRunValidatorCmd_PathWithSpacesStaysOneArgument(t *testing.T) {
 	}
 
 	// `test -f {file}` exits 0 only if the path arrived intact.
-	out, code, err := runValidatorCmd(context.Background(), "test -f {file}", spaced)
+	out, code, err := runValidatorCmd(context.Background(), "test -f {file}", spaced, nil)
 	if code != 0 || err != nil {
 		t.Errorf("validator exit %d (%s, err %v), the path was fragmented into separate args", code, out, err)
 	}
-	out, code, err = runValidatorCmd(context.Background(), "test -f {file}", filepath.Join(dir, "does not exist.txt"))
+	out, code, err = runValidatorCmd(context.Background(), "test -f {file}", filepath.Join(dir, "does not exist.txt"), nil)
 	if code == 0 || err != nil {
 		t.Errorf("validator passed for a missing file (%s, err %v)", out, err)
 	}
 }
 
 func TestRunValidatorCmd_EmptyTemplateIsANoOp(t *testing.T) {
-	if out, code, err := runValidatorCmd(context.Background(), "", "/tmp/x"); code != 0 || out != "" || err != nil {
+	if out, code, err := runValidatorCmd(context.Background(), "", "/tmp/x", nil); code != 0 || out != "" || err != nil {
 		t.Errorf("empty template gave (%q, %d, %v), want a clean no-op", out, code, err)
 	}
 }

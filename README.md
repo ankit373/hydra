@@ -402,7 +402,15 @@ Model subprocesses are also bounded so a grandchild holding the pipe open cannot
 
 One related fix ships with it: local model weights are fingerprinted by digest alongside agent binaries, so a swapped model behind a familiar name is detected the same way a replaced agent binary is, which matters because Ollama pulls unsigned weights from a public registry.
 
-**Not included.** Repo-supplied validator and oracle commands still run unconfined. Go's `os/exec` has no per-child rlimit support, and faking one through `sh -c 'ulimit ...'` would re-tokenize argv, which `internal/oracle` deliberately avoids. Real containment there needs a platform sandbox (`sandbox-exec`, seccomp) and is tracked separately.
+**Validators and checks.** Validators, oracles, `--check cmd:` and `hyverify` run files a model may have just written, so they get the same base set plus toolchain paths (`GOPATH`, `GOCACHE`, `GOFLAGS`, `NODE_PATH`, `npm_config_cache`, `VIRTUAL_ENV`, `CARGO_HOME`, `JAVA_HOME` and a few more) and no credential at all. If a check needs another variable, name it in `workspace.yaml`:
+
+```yaml
+validator_env: [PLAYWRIGHT_BROWSERS_PATH, DATABASE_URL_TEST]
+```
+
+A name that looks like a credential (it contains `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL` or `AUTH`, or starts with `AWS_`, `AZURE_`, `ARM_`, `GOOGLE_`, `GCP_`, `GCLOUD_` or `CLOUDSDK_`) is refused, and `hyctl security` lists it. `hyverify --env NAME,NAME` does the same for one run.
+
+**Not included.** These commands still run with your file and network access. Go's `os/exec` has no per-child rlimit support, and faking one through `sh -c 'ulimit ...'` would re-tokenize argv, which `internal/oracle` deliberately avoids. Containment there needs a platform sandbox (`sandbox-exec`, bubblewrap or landlock), and none of those works the same on macOS, Linux and Windows, so it is tracked separately.
 
 **Scoping the agents themselves.** That covers what a model *holds*. What an agent may *reach* is the access policy at `~/.hydra/mcp_policy.json`, and Hydra ships no scoping rules there on purpose: which agent may write where is a decision about your repository, and a blanket deny gets uninstalled rather than tuned. `hyctl security` tells you who is running unscoped:
 
@@ -915,6 +923,7 @@ hyctl eval classify                     # does similarity to past work predict w
 hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum MODERATE
 hyverify --candidate out.go --task "..." -- go test ./...   # name the judge yourself
 hyverify --candidate x.go --task "..." --embed-model nomic-embed-text  # so it trains a classifier
+hyverify --candidate x.go --env PLAYWRIGHT_BROWSERS_PATH -- npx playwright test  # extra vars the judge may see
 hyverify --version                                          # which build wrote a corpus row
 hyctl mcp check <tool> --agent A --resource R --action write  # 0 allow, 3 deny, 4 ask
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress

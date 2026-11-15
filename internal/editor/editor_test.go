@@ -100,10 +100,10 @@ func TestRunValidatorCmd(t *testing.T) {
 	}
 	absent := filepath.Join(dir, "absent.txt")
 
-	if _, rc, err := runValidatorCmd(context.Background(), "test -f {file}", present); rc != 0 || err != nil {
+	if _, rc, err := runValidatorCmd(context.Background(), "test -f {file}", present, nil); rc != 0 || err != nil {
 		t.Errorf("validator on existing file: rc = %d, err = %v, want 0 and no error", rc, err)
 	}
-	if _, rc, err := runValidatorCmd(context.Background(), "test -f {file}", absent); rc == 0 || err != nil {
+	if _, rc, err := runValidatorCmd(context.Background(), "test -f {file}", absent, nil); rc == 0 || err != nil {
 		t.Errorf("validator on missing file: rc = %d, err = %v, want non-zero and no error", rc, err)
 	}
 }

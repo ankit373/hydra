@@ -107,7 +107,7 @@ func TestRunValidate_CancellationIsNotAnExitCode(t *testing.T) {
 		}
 		done := make(chan result, 1)
 		go func() {
-			rc, err := runValidate(ctx, tmpl, "ignored")
+			rc, err := runValidate(ctx, tmpl, "ignored", nil)
 			done <- result{rc, err}
 		}()
 
@@ -142,7 +142,7 @@ func TestRunValidate_CancellationIsNotAnExitCode(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
 
-		rc, err := runValidate(ctx, tmpl, "ignored")
+		rc, err := runValidate(ctx, tmpl, "ignored", nil)
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("err = %v, want context.DeadlineExceeded; this is what the caller maps to max_wall_seconds_exceeded", err)
 		}

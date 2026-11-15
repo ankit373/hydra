@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/sandbox"
 )
 
 // envMap turns a []string environment into something assertable.
@@ -93,7 +94,7 @@ func TestHeadEnv_KeepsWhatAToolActuallyNeeds(t *testing.T) {
 func TestHeadEnv_OperatorCanRestoreAnUnlistedVariable(t *testing.T) {
 	t.Setenv("SOME_NEW_AGENT_TOKEN", "restored")
 	t.Setenv("STILL_NOT_PASSED", "nope")
-	t.Setenv(extraEnvVar, " SOME_NEW_AGENT_TOKEN , ")
+	t.Setenv(sandbox.HeadEnvVar, " SOME_NEW_AGENT_TOKEN , ")
 
 	env := envMap(t, headEnv(provider.Head{ID: "claude", Provider: "anthropic"}))
 

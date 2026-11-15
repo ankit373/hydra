@@ -17,6 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/internal/workspace"
 )
 
 // dispatchChecks are the checks that read the answer itself, so a dispatch,
@@ -57,7 +58,7 @@ func parseCheck(spec, prompt string) (answerCheck, error) {
 			return answerCheck{}, errors.New("the command has no {answer} or {file}, so it cannot see the answer")
 		}
 		fields := strings.Fields(arg)
-		o := &oracle.CommandOracle{Template: arg, Source: "verifier:" + fields[0]}
+		o := &oracle.CommandOracle{Template: arg, Source: "verifier:" + fields[0], Env: workspace.ValidatorEnvNames(config.ScriptHome())}
 		return answerCheck{oracle: o, source: o.Source}, nil
 	}
 	return answerCheck{}, errors.New("unknown check, want one of " + strings.Join(dispatchChecks, ", "))

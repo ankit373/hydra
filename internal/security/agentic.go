@@ -4,11 +4,14 @@ package security
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -93,14 +96,50 @@ func asi02ToolMisuse(pol ledger.Policy) Category {
 	return c
 }
 
-// asi03: the finding was that cmd.Env was set in no executor at all, so every
-// head held every provider's credential. Now enforced by construction.
+// asi03 builds the environments Hydra hands its subprocesses, from this
+// process's own environment and config, and reports any credential in them.
 func asi03IdentityAbuse() Category {
-	return Category{
-		ID: "ASI03", Name: "Identity and Privilege Abuse", Status: Enforced,
-		Detail: "a head subprocess receives its own provider's credential and no other, plus a base " +
-			"environment carrying no secrets; AWS, SSH agent and every other provider's key are withheld",
+	c := Category{ID: "ASI03", Name: "Identity and Privilege Abuse"}
+	// ValidatorEnv is BaseEnv, what every head starts from, plus toolchain and config.
+	val, refused := sandbox.ValidatorEnv(workspace.ValidatorEnvNames(config.ScriptHome()))
+	leaks := credentialsIn(val)
+	for _, k := range sandbox.HeadExtra() {
+		if sandbox.IsCredentialName(k) {
+			leaks = append(leaks, k+" (via "+sandbox.HeadEnvVar+")")
+		}
 	}
+	if len(leaks) > 0 {
+		c.Status = Partial
+		c.Detail = "subprocesses get a trimmed environment, but these credentials still reach them: " +
+			strings.Join(leaks, ", ")
+		return c
+	}
+	c.Status = Enforced
+	c.Detail = "a model subprocess gets its own provider's credential and no other; validators, " +
+		"oracles and --check commands get the base environment plus toolchain paths and no credential"
+	if len(refused) > 0 {
+		c.Detail += "; validator_env asked for " + strings.Join(refused, ", ") + " and was refused"
+	}
+	return c
+}
+
+// credentialsIn names the entries of env that look like credentials: a
+// credential-like name, or a proxy URL carrying a login.
+func credentialsIn(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		if sandbox.IsCredentialName(k) {
+			out = append(out, k)
+			continue
+		}
+		if strings.HasSuffix(strings.ToUpper(k), "_PROXY") {
+			if u, err := url.Parse(v); err == nil && u.User != nil {
+				out = append(out, k+" (login in URL)")
+			}
+		}
+	}
+	return out
 }
 
 // asi04: change detection over head binaries and local model weights. Not
@@ -118,8 +157,8 @@ func asi04SupplyChain(sc SupplyChain) Category {
 	return c
 }
 
-// asi05: validators check what a model produced. Nothing confines the
-// validator itself, and its command line comes from the repo.
+// asi05: validators check what a model produced. They run without
+// credentials, but nothing stops their network or file access.
 func asi05CodeExecution() Category {
 	c := Category{ID: "ASI05", Name: "Unexpected Code Execution"}
 	reg, err := workspace.Load(config.ScriptHome())
@@ -130,8 +169,8 @@ func asi05CodeExecution() Category {
 		return c
 	}
 	c.Status = Partial
-	c.Detail = "a validator runs after every edit and rolls back on failure, but validator and oracle " +
-		"commands come from the repo and run unconfined at full user privilege"
+	c.Detail = "a validator runs after every edit and rolls back on failure, and validator and oracle " +
+		"commands get no credentials, but they run with the user's file and network access"
 	return c
 }
 
