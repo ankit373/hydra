@@ -36,6 +36,8 @@ You probably have access to several models: hosted APIs (OpenAI, Anthropic, Gemi
 
 - **It finds your models.** Hydra discovers API keys, local model servers and CLI agents on your machine, with no configuration.
 - **It picks by measured record.** Each model is ranked on how often its answers have actually passed for that task type on your machine, starting from a catalogue score until it has a record. Today an unpinned request goes to the lowest-cost model measured competent at the task type, with stronger models behind it as the fallback chain.
+
+  Hydra counts a model as good enough at a task type only when it is still good enough after allowing for luck. A model that got 22 of 24 answers right may just have had a good run, and when several models are held to one bar, the one whose average clears it is often only the luckiest. So the bar is checked against the lowest rate the model's record supports at 95%, not against its average. 95% is the level `--confidence` uses by default. `--dry-run` prints both numbers, for example an average of 91 and at least 82 at 95%.
 - **It can check the answer.** Verifiers (tests, compile and lint for code; a grounding check against the prompt's own context; agreement between independent models) are evidence about the output. With `--confidence`, Hydra keeps asking until the answer's probability of being correct, P(correct), clears your target, then stops.
 - **It keeps data where you say.** An egress gate refuses files like `.env` or `~/.aws/credentials` to any model that leaves your machine, and a local-only policy keeps sensitive work on your hardware.
 - **It records what happened.** Every request is logged with the model that answered, token counts and cost.
