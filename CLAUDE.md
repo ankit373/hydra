@@ -140,6 +140,7 @@ internal/waterfall/     ← A run as nested spans on a timeline, with the verdic
 internal/runlog/        ← Per-run event log, v2 spans: identity + parent, level, tokens,
                           TTFT, and an open Meta map. Old runs seal into ~/.hydra/logs/seg/YYYY-MM.zst
                           (+ .idx), lossless and invisible to readers. `hyctl trace seal`.
+internal/runid/         ← Run and task ids that tie every log a run writes together.
 internal/otlp/          ← Run log → nested OpenTelemetry spans (OTLP/HTTP JSON). `hyctl trace export`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/signals/       ← Routing signals + a small closed expression language + priority-ordered
@@ -148,6 +149,7 @@ internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).
+internal/sysinfo/       ← Hardware detection + 7 days of free-memory history, for `hyctl init`'s local model pick.
 
 registry/               ← Routing data, compiled into the binary via `go:embed` (registry.go)
                           and overridable on disk at `$HYDRA_HOME/registry/<file>`. Nothing ships
