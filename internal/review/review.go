@@ -19,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/workspace"
 )
@@ -194,7 +195,7 @@ func Approve(file string) (*ApproveResult, error) {
 		}
 	}
 
-	recordReviewOutcome(file, true)
+	recordReviewOutcome(file, contentHash(file), true)
 	return &ApproveResult{Status: "approved", File: file}, nil
 }
 
@@ -206,6 +207,9 @@ func Reject(file string) (*RejectResult, error) {
 	if err := scopeCheck(file); err != nil {
 		return nil, err
 	}
+
+	// Hashed before the rollback below replaces what is being judged.
+	judged := contentHash(file)
 
 	reg, _ := workspace.Load(config.ScriptHome())
 	resolved := workspace.Resolved{}
@@ -249,7 +253,7 @@ func Reject(file string) (*RejectResult, error) {
 	if result == nil {
 		return nil, fmt.Errorf("nothing to roll back for %s", file)
 	}
-	recordReviewOutcome(file, false)
+	recordReviewOutcome(file, judged, false)
 	return result, nil
 }
 
@@ -477,9 +481,18 @@ func headFromEditLog(path, file string) string {
 	return e.HeadID
 }
 
-// recordReviewOutcome is a best-effort calibration observation: a human's
-// approve/reject is stronger ground truth than editor's own syntax-check.
-func recordReviewOutcome(file string, correct bool) {
+// recordReviewOutcome files a human's approve/reject, stronger ground truth than
+// the editor's own syntax-check, to the verdict log and calibration. Best effort.
+func recordReviewOutcome(file, candidateHash string, correct bool) {
+	if candidateHash != "" {
+		outcome := evalset.OutcomeIncorrect
+		if correct {
+			outcome = evalset.OutcomeCorrect
+		}
+		_ = evalset.AddTruth(evalset.VerdictsPath(), evalset.Truth{
+			CandidateHash: candidateHash, Outcome: outcome, Source: "review",
+		})
+	}
 	headID := headIDForFile(file)
 	if headID == "" {
 		return
@@ -493,4 +506,14 @@ func recordReviewOutcome(file string, correct bool) {
 		outcome = trust.OutcomeCorrect
 	}
 	_ = cal.Update(headID, trust.DomainForFile(file), true, outcome)
+}
+
+// contentHash keys the file's current bytes the way the edit validator keyed
+// them, or is empty when there is nothing to read.
+func contentHash(file string) string {
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return ""
+	}
+	return evalset.Hash(string(raw))
 }
