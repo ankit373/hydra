@@ -793,7 +793,7 @@ finally earns the true negative that specificity can only come from.
 ```bash
 hyctl trust outcome <task_hash> --outcome incorrect   # train every source that voted in a run
 hyctl trust record --source ollama/qwen3:4b --domain go --said-correct --outcome correct
-hyctl trust calibration          # per-source se / sp / D table (neg=0 flags an unusable cell)
+hyctl trust calibration          # per-source se / sp / D, and any change in the record (neg=0 flags an unusable cell)
 hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong answer
 hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
 hyctl trust explain <task_hash>  # the full LLR ledger for a past run: why it stopped
@@ -810,6 +810,16 @@ and how often two checks passed the same one. Beside each pair it prints what
 the rate would be if the two failed independently. A pair rate well above that
 means the two should count as one check. Under 20 shared wrong answers it prints
 no rate, because the 95% bound would be wider than the rate.
+
+Hydra also notices when a model or a check gets worse. Each source's record in
+each kind of work is watched for a change in how often it is right, and `hyctl
+trust calibration` shows when a change was found (`changed`) and the record
+since then (`since`, right out of answered), beside the full history. A short
+run of misses at a steady rate is not called a change, and one called by mistake
+is taken back once the source is right again. A model nobody is calling is not
+assumed broken for ever: while other models are judged on the same kind of work,
+the old record slowly stops counting, so a model that was fixed starts again on
+a fresh record.
 
 Every confidence run ends by printing its own `task_hash` and the `trust explain`
 command for it, so the ledger above is one copy-paste away rather than something

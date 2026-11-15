@@ -54,8 +54,7 @@ func (c *Calibrator) CommitmentsIn(source, domain string) (correct, total int) {
 }
 
 // CommitmentsSince is CommitmentsIn counted from the cell's last detected
-// change, so a source that got worse is read on its recent record. The cell is
-// caught up to its domain's clock on a copy: a read never changes the state.
+// change, so a source that got worse is read on its recent record.
 func (c *Calibrator) CommitmentsSince(source, domain string) (correct, total int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -65,6 +64,12 @@ func (c *Calibrator) CommitmentsSince(source, domain string) (correct, total int
 	if conf == nil {
 		return 0, 0
 	}
+	return c.since(key, conf)
+}
+
+// since catches a cell up to its domain's clock on a copy, so a read never
+// changes the state replay decides. Callers hold c.mu.
+func (c *Calibrator) since(key calibKey, conf *confusion) (correct, total int) {
 	d := *conf.drift
 	d.Segments = slices.Clone(d.Segments)
 	d.Idle(int(c.steps[key.domain] - conf.seen))
