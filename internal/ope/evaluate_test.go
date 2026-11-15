@@ -127,6 +127,62 @@ func TestEvaluate_RefusesWhenWeightConcentratesOnTooFewRows(t *testing.T) {
 	}
 }
 
+// Fifteen evenly weighted rows clear the ESS floor, so a row floor is the only
+// thing that refuses a pass rate drawn from them.
+func TestEvaluate_RefusesBelowMinRows(t *testing.T) {
+	var samples []CounterfactualSample
+	for i := 0; i < 15; i++ {
+		samples = append(samples, CounterfactualSample{Value: float64(i % 2), LoggedProb: 0.5, TargetProb: 1})
+	}
+	if _, err := Evaluate(samples, Options{}); err != nil {
+		t.Fatalf("without a floor the ESS check alone should pass 15 even rows: %v", err)
+	}
+	est, err := Evaluate(samples, Options{MinRows: 30})
+	if !errors.Is(err, ErrInsufficientSupport) {
+		t.Fatalf("error = %v, want ErrInsufficientSupport", err)
+	}
+	if !contains(err.Error(), "15") || !contains(err.Error(), "30") {
+		t.Errorf("the refusal does not name both counts: %v", err)
+	}
+	if est.Mean != 0 {
+		t.Errorf("a refused estimate still reported a mean of %v", est.Mean)
+	}
+}
+
+// A success indicator is averaged like a cost. Three heads, the router explores
+// at 0.2, and the target splits between the two better heads.
+func TestEvaluate_PassRateRecoversKnownValue(t *testing.T) {
+	const eps = 0.2
+	passRate := []float64{0.6, 0.8, 0.9}
+	target := []float64{0, 0.5, 0.5}
+	truth := target[1]*passRate[1] + target[2]*passRate[2]
+	logged := func(a int) float64 {
+		if a == 0 {
+			return 1 - eps + eps/3
+		}
+		return eps / 3
+	}
+	rng := rand.New(rand.NewPCG(31, 37))
+	var samples []CounterfactualSample
+	for i := 0; i < 5000; i++ {
+		a := 0
+		if rng.Float64() < eps {
+			a = rng.IntN(3)
+		}
+		samples = append(samples, CounterfactualSample{
+			Value: boolVal(rng.Float64() < passRate[a]), LoggedProb: logged(a), TargetProb: target[a],
+		})
+	}
+	est, err := Evaluate(samples, Options{Seed: 3, MinRows: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if est.Lo > truth || est.Hi < truth {
+		t.Errorf("the %.0f%% interval [%.3f, %.3f] excludes the true pass rate %.3f",
+			est.Level*100, est.Lo, est.Hi, truth)
+	}
+}
+
 // ESS is the honest count. Equal weights make it the row count; one dominant
 // weight collapses it toward one.
 func TestEffectiveSampleSize(t *testing.T) {
