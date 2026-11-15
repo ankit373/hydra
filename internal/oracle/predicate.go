@@ -70,8 +70,12 @@ func (o *PredicateOracle) Verify(ctx context.Context, candidate string, _ trust.
 		return Verdict{}, fmt.Errorf("oracle %s: %w", o.Source, err)
 	}
 	pTrue := probs[0]
+	detail := fmt.Sprintf("P(true) = %.3f", pTrue)
+	if h, ok := o.Decider.(interface{ Hard() bool }); ok && h.Hard() {
+		detail += ", a hard yes or no, not a calibrated probability"
+	}
 	// A coin flip is not a yes; calibration then learns what this source's yes is worth.
-	return Verdict{Passed: pTrue > 0.5, Detail: fmt.Sprintf("P(true) = %.3f", pTrue)}, nil
+	return Verdict{Passed: pTrue > 0.5, Detail: detail}, nil
 }
 
 // checkDistribution refuses rather than normalises: a distribution with the
