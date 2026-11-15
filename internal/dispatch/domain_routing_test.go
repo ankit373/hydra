@@ -28,12 +28,13 @@ func domainDispatcher(t *testing.T, heads []provider.Head) *Dispatcher {
 	}
 }
 
-// record files n judged outcomes for one head in one domain.
+// record files n judged outcomes for one head in one domain, the misses spread
+// evenly so the record is one steady rate and not a change.
 func record(t *testing.T, cal *trust.Calibrator, head, domain string, correct, total int) {
 	t.Helper()
 	for i := range total {
 		outcome := trust.OutcomeIncorrect
-		if i < correct {
+		if (i+1)*correct/total > i*correct/total {
 			outcome = trust.OutcomeCorrect
 		}
 		if err := cal.Update(head, domain, true, outcome); err != nil {
