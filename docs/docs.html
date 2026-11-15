@@ -710,8 +710,10 @@ hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class=
 hyctl trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
 hyctl trust stats   <span class="c"># samples saved vs fixed-N</span>
 hyctl trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>
-hyctl trust benchmark        <span class="c"># measured SPRT numbers</span></pre>
+hyctl trust benchmark        <span class="c"># measured SPRT numbers</span>
+hyctl trust joint            <span class="c"># how often two checks pass the same wrong answer</span></pre>
       </div>
+      <div class="sub"><div class="lbl">Checks that fail together</div><p>Every verdict on an answer, from tests, a linter, a grounding check, a model vote or a person, is kept in one log. <span class="fx">hyctl trust joint</span> takes the answers that later turned out wrong and reports, per kind of work, how often each pair of checks passed the same one, next to the rate you would expect if they failed independently. A pair well above that rate is one check, not two. Below 20 shared wrong answers no rate is shown, because the 95% bound would be wider than the rate.</p></div>
       <a class="more" href="/first-principles.html#calibration">See diagnostic power D derived →</a>
     </section>
 

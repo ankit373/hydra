@@ -718,7 +718,18 @@ hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong ans
 hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
 hyctl trust explain <task_hash>  # the full LLR ledger for a past run: why it stopped
 hyctl trust reliability          # is the stated confidence honest? Brier / ECE / diagram
+hyctl trust joint                # how often two checks pass the same wrong answer
 ```
+
+Two checks are not always two pieces of evidence. A test suite and a linter
+often pass the same wrong answer, and so can a grounding check and a person
+skimming the same summary. Every verdict on an answer goes into one log beside
+the eval corpus, and `hyctl trust joint` reads it. For the answers that later
+turned out wrong, it reports per kind of work how often each check passed one,
+and how often two checks passed the same one. Beside each pair it prints what
+the rate would be if the two failed independently. A pair rate well above that
+means the two should count as one check. Under 20 shared wrong answers it prints
+no rate, because the 95% bound would be wider than the rate.
 
 Every confidence run ends by printing its own `task_hash` and the `trust explain`
 command for it, so the ledger above is one copy-paste away rather than something
@@ -890,6 +901,7 @@ hyctl trust defect ...                  # modeled cost of shipping a wrong answe
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
 hyctl trust reliability                 # when it says 90%, is it right 90% of the time
+hyctl trust joint                       # how often two checks pass the same wrong answer
 hyctl edit --file /abs/path/f.go --enum SIMPLE --prompt "..."  # apply, then validate what was written: the verdict that counts
 hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hyctl graph blast <file>                # a file's blast radius + the confidence it demands
