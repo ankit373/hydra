@@ -133,9 +133,12 @@ func Handler(r Router, d Decider, token string) http.Handler {
 // Serve runs the endpoint on ln until ctx is done, then drains in-flight
 // requests. A dispatch in progress has already been paid for, so closing the
 // listener out from under it would spend money and discard the answer.
-func Serve(ctx context.Context, ln net.Listener, h http.Handler) error {
+//
+// Every request must name the bound address as its Host, carry no Origin
+// outside AllowOrigins, and POST JSON, within the Limit caps.
+func Serve(ctx context.Context, ln net.Listener, h http.Handler, opts ...Option) error {
 	srv := &http.Server{
-		Handler: h,
+		Handler: newGate(h, ln.Addr(), opts...),
 		// No write timeout: a routed dispatch can take minutes on a local
 		// head, and a deadline here would cut off an answer already paid for.
 		ReadHeaderTimeout: 10 * time.Second,

@@ -941,6 +941,12 @@ hyctl serve                             # OpenAI-compatible endpoint, loopback o
 #   streams as server-sent events, and passes tool calls through on every dialect it speaks.
 hyctl serve --task-class classification.banking77   # class for requests that send no X-Hydra-Task-Class
 #   X-Hydra-Task-Class routes on that class (and enables temperature); X-Hydra-Max-Cost-USD only lowers the ceiling.
+#   policy.yaml max_cost_usd caps every request, with or without that header.
+#   requests must name the bound address as Host (127.0.0.1, localhost or [::1] on a loopback bind),
+#   carry no Origin unless --allow-origin lists it, and POST with Content-Type: application/json.
+#   over --max-inflight (8) or --rate (120 a minute) a request gets 429 with Retry-After, which SDKs retry.
+curl -s http://127.0.0.1:8787/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"hydra","messages":[{"role":"user","content":"summarise this ticket: ..."}]}'
 
 # Tasks waiting on you
 # A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops
