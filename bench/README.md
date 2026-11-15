@@ -28,6 +28,9 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   pair still unscored is reported as INCOMPLETE, with counts but no paired statistics.
 - `--rerun` resumes the latest `-r<k>` while it is incomplete, and starts the next one
   only once it is done.
+- A grade that ran out of time is a fail, marked `timeout` on its row and counted as
+  `timeouts` per arm in `summary.json`, so a loaded machine shows up rather than reading
+  as worse answers.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).
 
 ## replay
