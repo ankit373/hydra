@@ -124,7 +124,8 @@ func cmdWorkflow() *cobra.Command {
 			"triage can run on a cheap head and the fix on a strong one, and state is\n" +
 			"written before every step so a killed run resumes where it stopped.\n\n" +
 			"Every step carries a dispatch's own caps, policy.yaml's max_cost_usd and\n" +
-			"max_wall_seconds, and every prior step's output, each fenced.",
+			"max_wall_seconds, and the output of the steps it needs, each fenced.\n" +
+			"Steps whose needs are done run at the same time.",
 	}
 	cmd.AddCommand(cmdWorkflowRun(), cmdWorkflowList(), cmdWorkflowShow(), cmdWorkflowResume(), cmdWorkflowRemove())
 	return cmd
@@ -132,7 +133,7 @@ func cmdWorkflow() *cobra.Command {
 
 func cmdWorkflowRun() *cobra.Command {
 	var steps []string
-	var enums []string
+	var enums, needs []string
 	var task, id, system string
 	var localOnly, dryRun bool
 	var maxCost float64
@@ -140,7 +141,11 @@ func cmdWorkflowRun() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run",
 		Short: "Run a workflow from explicit steps",
-		Example: "  hyctl workflow run --task \"fix the flaky test\" \\\n" +
+		Example: "  hyctl workflow run --task \"answer the support tickets\" \\\n" +
+			"    --step \"pull out the product and complaint\" --enum SIMPLE --needs \"\" \\\n" +
+			"    --step \"summarise the top issues\" --enum MODERATE --needs 1 \\\n" +
+			"    --step \"draft a reply for each\" --enum STANDARD --needs 1\n\n" +
+			"  hyctl workflow run --task \"fix the flaky test\" \\\n" +
 			"    --step \"list the failing tests\" --enum SIMPLE \\\n" +
 			"    --step \"explain why the first one fails\" --enum MODERATE \\\n" +
 			"    --step \"write the fix\" --enum EXPERT",
@@ -155,9 +160,20 @@ func cmdWorkflowRun() *cobra.Command {
 				return fmt.Errorf("%d --step and %d --enum given; pass one --enum per --step, or none",
 					len(steps), len(enums))
 			}
+			if len(needs) > 0 && len(needs) != len(steps) {
+				return fmt.Errorf("%d --step and %d --needs given; pass one --needs per --step, or none",
+					len(steps), len(needs))
+			}
 			built := make([]workflow.Step, 0, len(steps))
 			for i, p := range steps {
 				s := workflow.Step{Prompt: p}
+				if i < len(needs) {
+					n, err := parseNeeds(needs[i])
+					if err != nil {
+						return fmt.Errorf("step %d: --needs %q: %w", i+1, needs[i], err)
+					}
+					s.Needs = n
+				}
 				if i < len(enums) {
 					s.Enum = strings.ToUpper(strings.TrimSpace(enums[i]))
 					if s.Enum != "" && !dispatch.IsKnownEnum(s.Enum) {
@@ -193,6 +209,8 @@ func cmdWorkflowRun() *cobra.Command {
 	}
 	cmd.Flags().StringArrayVar(&steps, "step", nil, "a step's prompt; repeat, in order")
 	cmd.Flags().StringArrayVar(&enums, "enum", nil, "routing key for the step at the same position")
+	cmd.Flags().StringArrayVar(&needs, "needs", nil,
+		"step numbers the step at the same position waits for, e.g. 1,2; \"\" for none (default: every earlier step)")
 	cmd.Flags().StringVar(&task, "task", "", "what the whole workflow is for (default: the first step)")
 	cmd.Flags().StringVar(&id, "id", "", "workflow id (default: generated)")
 	cmd.Flags().StringVar(&system, "system", "", "system prompt applied to every step")
@@ -201,6 +219,23 @@ func cmdWorkflowRun() *cobra.Command {
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0,
 		"per-step cost ceiling in USD; overrides policy.yaml max_cost_usd, 0 lifts it")
 	return cmd
+}
+
+// parseNeeds reads "1,2" as step numbers and "" as none, which is not the
+// same as leaving --needs out: that waits for every earlier step.
+func parseNeeds(v string) ([]int, error) {
+	out := []int{}
+	for _, f := range strings.Split(v, ",") {
+		if f = strings.TrimSpace(f); f == "" {
+			continue
+		}
+		n, err := strconv.Atoi(f)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not a step number", f)
+		}
+		out = append(out, n)
+	}
+	return out, nil
 }
 
 // refuseStoredID is what `run --id` says about an id already stored: it
@@ -460,6 +495,9 @@ func printWorkflow(w workflow.Workflow) {
 		if s.Err != "" {
 			fmt.Fprintf(stdout, "      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
 		}
+		if needs := needsLabel(w, s.N-1); needs != "" {
+			fmt.Fprintf(stdout, "      %s\n", dimStyle.Render("↳ "+needs))
+		}
 	}
 	fmt.Fprintln(stdout, sep)
 	done, total := w.Progress()
@@ -469,6 +507,23 @@ func printWorkflow(w workflow.Workflow) {
 		fmt.Fprintf(stdout, "  %s\n\n", warnStyle.Render(
 			"the process running this is gone; continue it with `hyctl workflow resume "+w.ID+"`"))
 	}
+}
+
+// needsLabel says what step i waits for, and nothing for a plain chain, where
+// each step waits for every earlier one and a line per step would only repeat it.
+func needsLabel(w workflow.Workflow, i int) string {
+	if w.Chain() {
+		return ""
+	}
+	n := w.Needs(i)
+	if len(n) == 0 {
+		return "needs nothing"
+	}
+	parts := make([]string, len(n))
+	for j, x := range n {
+		parts[j] = strconv.Itoa(x)
+	}
+	return "needs " + strings.Join(parts, ", ")
 }
 
 // printStepOutputs prints every completed step's output under its step, head,
