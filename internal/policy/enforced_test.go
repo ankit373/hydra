@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -52,20 +53,22 @@ func TestEnforcedTag_MatchesCallers(t *testing.T) {
 		}
 	}
 
+	var read, keys []string
 	rt := reflect.TypeFor[FilePolicy]()
 	for i := range rt.NumField() {
 		f := rt.Field(i)
-		key := f.Tag.Get("yaml")
-		if key == "-" {
-			continue
+		if key := f.Tag.Get("yaml"); key != "-" {
+			keys = append(keys, key)
+			if used[f.Name] {
+				read = append(read, key)
+			}
 		}
-		tagged := f.Tag.Get("enforced") == "true"
-		switch {
-		case used[f.Name] && !tagged:
-			t.Errorf("FilePolicy.%s (%s) is read by a caller but not tagged enforced", f.Name, key)
-		case tagged && !used[f.Name]:
-			t.Errorf("FilePolicy.%s (%s) is tagged enforced but nothing reads it", f.Name, key)
-		}
+	}
+	if got := EnforcedKeys(); !slices.Equal(got, read) {
+		t.Errorf("EnforcedKeys() = %v, but callers read %v; fix the enforced tags", got, read)
+	}
+	if got := Keys(); !slices.Equal(got, keys) {
+		t.Errorf("Keys() = %v, want %v", got, keys)
 	}
 }
 
