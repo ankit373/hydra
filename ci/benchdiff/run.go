@@ -272,25 +272,35 @@ func fakeOllama(models []string) (func(), error) {
 	return func() { _ = srv.Close() }, nil
 }
 
-// seed replays the pinned counts through the store's own writer.
+// seed replays the pinned counts through the store's own writer, each row's
+// verdicts interleaved evenly: a row written in blocks reads as a change.
 func seed(rows []Calibrated) error {
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
 		return err
 	}
 	for _, r := range rows {
-		for _, c := range []struct {
-			n        int
+		cells := []struct {
+			n, done  int
 			said     bool
 			received trust.Outcome
 		}{
-			{r.TP, true, trust.OutcomeCorrect}, {r.FP, true, trust.OutcomeIncorrect},
-			{r.TN, false, trust.OutcomeIncorrect}, {r.FN, false, trust.OutcomeCorrect},
-		} {
-			for range c.n {
-				if err := cal.Update(r.Head, r.Domain, c.said, c.received); err != nil {
-					return err
+			{n: r.TP, said: true, received: trust.OutcomeCorrect}, {n: r.FP, said: true, received: trust.OutcomeIncorrect},
+			{n: r.TN, said: false, received: trust.OutcomeIncorrect}, {n: r.FN, said: false, received: trust.OutcomeCorrect},
+		}
+		total := r.TP + r.FP + r.TN + r.FN
+		for i := range total {
+			// The cell furthest behind its even share goes next.
+			next, lag := 0, -1
+			for j, c := range cells {
+				if d := c.n*(i+1) - c.done*total; d > lag {
+					next, lag = j, d
 				}
+			}
+			c := &cells[next]
+			c.done++
+			if err := cal.Update(r.Head, r.Domain, c.said, c.received); err != nil {
+				return err
 			}
 		}
 	}
