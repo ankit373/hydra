@@ -4,8 +4,18 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/update"
 )
 
 func TestIsHomebrewInstall(t *testing.T) {
@@ -27,81 +37,89 @@ func TestIsHomebrewInstall(t *testing.T) {
 	}
 }
 
-// A Homebrew install must not run install.sh at all, that would overwrite
-// Homebrew's symlink with a bare binary and desync `brew`'s bookkeeping.
-// `brew upgrade hyctl` is pointed at instead, printed rather than run since
-// hyctl has no business invoking `brew` on the user's behalf.
-func TestRunUpgrade_HomebrewInstallSkipsTheScript(t *testing.T) {
+// fakeUpgradeRelease serves a release whose hyctl archive holds "new", with
+// checksums.txt only when withSums, and hides gh so provenance is skipped.
+func fakeUpgradeRelease(t *testing.T, withSums bool) {
+	t.Helper()
+	name := fmt.Sprintf("hydra_9.9.9_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+	archive := testutil.TarGz(t, "hyctl", []byte("new"))
+	files := map[string][]byte{name: archive}
+	if withSums {
+		files["checksums.txt"] = []byte(testutil.SumLine(name, archive))
+	}
+	api, dl := testutil.FakeRelease(t, "v9.9.9", files)
+	origAPI, origDL := update.ReleaseURL, update.DownloadURL
+	update.ReleaseURL, update.DownloadURL = api, dl
+	t.Cleanup(func() { update.ReleaseURL, update.DownloadURL = origAPI, origDL })
+	t.Setenv("PATH", t.TempDir())
+}
+
+// upgradeAt runs runUpgrade as if hyctl lived at exe.
+func upgradeAt(t *testing.T, exe string) (string, error) {
+	t.Helper()
 	origExe := executablePath
-	executablePath = func() (string, error) { return "/opt/homebrew/Cellar/hydra/1.2.0/bin/hyctl", nil }
+	executablePath = func() (string, error) { return exe, nil }
 	t.Cleanup(func() { executablePath = origExe })
-
-	origCmd := installScriptCommand
-	installScriptCommand = "echo THIS-MUST-NOT-RUN; exit 1"
-	t.Cleanup(func() { installScriptCommand = origCmd })
-
 	var buf bytes.Buffer
-	if err := runUpgrade(&buf); err != nil {
+	err := runUpgrade(context.Background(), &buf)
+	return buf.String(), err
+}
+
+func oldHyctl(t *testing.T) string {
+	t.Helper()
+	exe := filepath.Join(t.TempDir(), "hyctl")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return exe
+}
+
+// A Homebrew install must not be touched: `brew upgrade hyctl` is printed
+// instead, and nothing is fetched.
+func TestRunUpgrade_HomebrewInstallFetchesNothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("a Homebrew install reached the network")
+	}))
+	t.Cleanup(srv.Close)
+	orig := update.ReleaseURL
+	update.ReleaseURL = srv.URL
+	t.Cleanup(func() { update.ReleaseURL = orig })
+
+	out, err := upgradeAt(t, "/opt/homebrew/Cellar/hydra/1.2.0/bin/hyctl")
+	if err != nil {
 		t.Fatalf("runUpgrade() = %v, want nil (the brew path is a no-op success)", err)
 	}
-	if strings.Contains(buf.String(), "THIS-MUST-NOT-RUN") {
-		t.Error("install.sh ran despite being a Homebrew install")
-	}
-	if !strings.Contains(buf.String(), "brew upgrade hyctl") {
-		t.Errorf("output = %q, want it to point at `brew upgrade hyctl`", buf.String())
+	if !strings.Contains(out, "brew upgrade hyctl") {
+		t.Errorf("output = %q, want it to point at `brew upgrade hyctl`", out)
 	}
 }
 
-// A non-Homebrew install runs install.sh and reports its output.
-func TestRunUpgrade_NonHomebrewRunsTheScript(t *testing.T) {
-	origExe := executablePath
-	executablePath = func() (string, error) { return "/usr/local/bin/hyctl", nil }
-	t.Cleanup(func() { executablePath = origExe })
-
-	origCmd := installScriptCommand
-	installScriptCommand = "echo installed-ok"
-	t.Cleanup(func() { installScriptCommand = origCmd })
-
-	var buf bytes.Buffer
-	if err := runUpgrade(&buf); err != nil {
-		t.Fatalf("runUpgrade() = %v", err)
+// The binary next to the running one is replaced from the verified archive.
+func TestRunUpgrade_ReplacesTheRunningBinary(t *testing.T) {
+	fakeUpgradeRelease(t, true)
+	exe := oldHyctl(t)
+	out, err := upgradeAt(t, exe)
+	got, _ := os.ReadFile(exe)
+	if runtime.GOOS == "windows" {
+		if err == nil || string(got) != "old" {
+			t.Errorf("Windows upgrade: err = %v, binary %q; want a refusal pointing at install.ps1", err, got)
+		}
+		return
 	}
-	if !strings.Contains(buf.String(), "installed-ok") {
-		t.Errorf("output = %q, want the script's stdout", buf.String())
+	if err != nil || string(got) != "new" {
+		t.Fatalf("err = %v, binary %q, want the new one\n%s", err, got, out)
 	}
 }
 
-// A failing installer's exit status must propagate, a silent failure here
-// would make `hyctl upgrade` exit 0 having installed nothing.
-func TestRunUpgrade_ScriptFailurePropagates(t *testing.T) {
-	origExe := executablePath
-	executablePath = func() (string, error) { return "/usr/local/bin/hyctl", nil }
-	t.Cleanup(func() { executablePath = origExe })
-
-	origCmd := installScriptCommand
-	installScriptCommand = "exit 1"
-	t.Cleanup(func() { installScriptCommand = origCmd })
-
-	var buf bytes.Buffer
-	if err := runUpgrade(&buf); err == nil {
-		t.Error("runUpgrade() = nil, want an error when install.sh exits non-zero")
+// With no checksums.txt the upgrade stops and the old binary stays.
+func TestRunUpgrade_NoChecksumsInstallsNothing(t *testing.T) {
+	fakeUpgradeRelease(t, false)
+	exe := oldHyctl(t)
+	if _, err := upgradeAt(t, exe); err == nil {
+		t.Error("runUpgrade() = nil with no checksums.txt published")
 	}
-}
-
-// install.sh writes to the stream itself, not through the colour writer, so
-// on a terminal it still sees a terminal and its bytes arrive untouched.
-func TestRunUpgrade_ScriptGetsTheRealStream(t *testing.T) {
-	origExe := executablePath
-	executablePath = func() (string, error) { return "/usr/local/bin/hyctl", nil }
-	t.Cleanup(func() { executablePath = origExe })
-	origCmd := installScriptCommand
-	installScriptCommand = `printf '\033[31mred'`
-	t.Cleanup(func() { installScriptCommand = origCmd })
-
-	var err error
-	out := captureStdout(t, func() { err = runUpgrade(stdout) })
-	if err != nil || !strings.Contains(out, "\x1b[31mred") {
-		t.Errorf("the script's output was rewritten on its way out: %q, %v", out, err)
+	if got, _ := os.ReadFile(exe); string(got) != "old" {
+		t.Errorf("binary was replaced with %q", got)
 	}
 }
 

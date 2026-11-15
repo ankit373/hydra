@@ -17,13 +17,8 @@ type Phase = 'idle' | 'upgrading' | 'done' | 'failed'
  * Renders nothing when already current, the common case, so there is zero
  * visual noise until an update actually exists.
  *
- * "Upgrade now" runs install-app.sh as a subprocess (same script the docs
- * point a user at for a fresh install) rather than replacing this running
- * process's own binary, the app is unsigned, so a real in-place self-update
- * is out of scope; see desktop/api/update.go's TriggerUpgrade for the full
- * reasoning. The result is a new .app bundle on disk that takes effect the
- * next time the app is opened, which is why success says "quit and reopen"
- * instead of doing that automatically.
+ * "Upgrade now" swaps the app on disk for the latest release once its checksum
+ * matches; the running window keeps its old code, so success says "quit and reopen".
  */
 export function UpdateNotice() {
   const [status, setStatus] = useState<UpdateStatus | null>(null)
@@ -71,7 +66,7 @@ export function UpdateNotice() {
           {phase === 'idle' && (
             <>
               <p className="update-notice__hint">
-                Downloads and installs the latest release, same as install-app.sh.
+                Downloads the latest release, checks its checksum, and installs it.
               </p>
               <button className="update-notice__cta" onClick={() => void upgrade()}>
                 Upgrade now

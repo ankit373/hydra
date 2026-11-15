@@ -841,7 +841,7 @@ hyctl probe                             # scan and display all available models
 hyctl status                            # live state: models that can run, budget bars, burn-rate risk
 hyctl tui                               # interactive cockpit, six views (see below), `?` for shortcuts
 hyctl version                           # version, commit, build info
-hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
+hyctl upgrade                           # self-update, checksum-verified (curl installs only; brew installs: `brew upgrade hyctl`)
 
 # Model registry (add a new model at runtime: no rebuild)
 hyctl models list                       # known models, marked with what can actually route now

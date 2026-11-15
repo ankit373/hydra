@@ -538,9 +538,9 @@ release/vX.Y        ← only to patch an old release when main cannot ship yet (
 | `release/vX.Y` | the maintainer, rarely | no | nothing by itself (RELEASING.md) |
 
 **Installers are live on merge.** `install.sh`, `install.ps1` and `install-app.sh` are served
-from `main` to every `curl | sh` user the moment a PR merges, and released binaries point at
-those URLs too. A change to them must work with the latest *published* release, not just with
-what is on main.
+from `main` to every `curl | sh` user the moment a PR merges. A change to them must work with
+the latest *published* release, not just with what is on main. `hyctl upgrade` and the desktop
+app never run them: they download and verify the release in Go (`internal/update/install.go`).
 
 ---
 
@@ -919,6 +919,7 @@ CHANGELOG.md                  ← release-please prepends each release; the pre-
                                 hand-written historical record. Do not edit the generated part.
 internal/build/build.go       ← version vars set by ldflags at build time
 internal/update/update.go     ← startup update checker (24h cache)
+internal/update/install.go    ← verified install for `hyctl upgrade` and the desktop app (checksum, gh provenance)
 .github/workflows/release.yml ← fires on a hand-pushed vX.Y.Z tag → publish.yml
 .github/workflows/edge.yml    ← fires on main push → edge build
 .github/workflows/rc.yml      ← run by hand from a commit on main (`-f sha=`), or on a release/vX.Y.Z

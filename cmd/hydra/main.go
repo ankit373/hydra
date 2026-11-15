@@ -13,9 +13,9 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -186,56 +186,46 @@ func cmdVersion() *cobra.Command {
 
 // ── upgrade ───────────────────────────────────────────────────────────────────
 
-// installScriptCommand is a var so a test can override it without touching
-// the network, matching the pattern update.ReleaseURL uses for the same
-// reason.
-var installScriptCommand = "curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh"
-
 func cmdUpgrade() *cobra.Command {
 	return &cobra.Command{
 		Use:   "upgrade",
 		Short: "Upgrade hyctl to the latest release",
-		Long: "Re-runs install.sh, the same curl installer documented for a fresh " +
-			"install. It downloads the latest release, verifies its checksum, and " +
-			"mv's the new binary over the old one, a rename, not a rewrite, so " +
-			"this process keeps running on its already-loaded pages until it exits " +
-			"and the new binary takes effect on the next invocation.\n\n" +
+		Long: "Downloads the latest release archive for this platform, checks it " +
+			"against the release's checksums.txt (and its build provenance when " +
+			"`gh` is installed and signed in), then renames the new binary over " +
+			"the old one. Nothing is installed if a check cannot run. This " +
+			"process keeps running on the old code; the next invocation uses " +
+			"the new one.\n\n" +
 			"Skipped for a Homebrew install: overwriting Homebrew's symlink here " +
 			"would desync it from `brew`'s own bookkeeping. Run `brew upgrade " +
 			"hyctl` there instead, the same command the update banner already " +
 			"recommends.",
-		RunE: func(*cobra.Command, []string) error {
-			return runUpgrade(stdout)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runUpgrade(cmd.Context(), stdout)
 		},
 	}
 }
 
 // executablePath is a var so a test can point runUpgrade at a fake path
-// (e.g. one inside a fake Cellar) without depending on where the test binary
-// itself happens to live.
+// (e.g. one inside a fake Cellar) without depending on where the test binary lives.
 var executablePath = os.Executable
 
-// runUpgrade re-runs install.sh in place. HYDRA_BIN is pointed at the
-// currently running binary's own directory so the exact binary on PATH gets
-// replaced, rather than install.sh falling back to its own default (which may
-// not be the same directory this process was launched from).
-func runUpgrade(w io.Writer) error {
+// runUpgrade replaces the hyctl next to the running binary, or installs to
+// install.sh's default directory when the running path cannot be found.
+func runUpgrade(ctx context.Context, w io.Writer) error {
 	exe, exeErr := executablePath()
 	if exeErr == nil && isHomebrewInstall(exe) {
 		fmt.Fprintln(w, dimStyle.Render("  hyctl was installed via Homebrew, run: brew upgrade hyctl"))
 		return nil
 	}
-
-	fmt.Fprintln(w, dimStyle.Render("  Running install.sh..."))
-	c := exec.Command("sh", "-c", installScriptCommand)
-	c.Stdout, c.Stderr = w, w
-	if pw, ok := w.(profileWriter); ok {
-		c.Stdout, c.Stderr = *pw.f, *pw.f // the script gets the terminal itself, as in v1
+	if runtime.GOOS == "windows" {
+		return errors.New("hyctl upgrade does not run on Windows, re-run install.ps1 or `npm install -g hyctl`")
 	}
+	dir := update.DefaultBinDir()
 	if exeErr == nil {
-		c.Env = append(os.Environ(), "HYDRA_BIN="+filepath.Dir(exe))
+		dir = filepath.Dir(exe)
 	}
-	return c.Run()
+	return update.InstallCLI(ctx, filepath.Join(dir, "hyctl"), w)
 }
 
 // isHomebrewInstall reports whether exePath resolves into a Homebrew Cellar,

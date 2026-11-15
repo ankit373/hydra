@@ -100,7 +100,7 @@ export interface UpdateStatus {
 
 export interface UpgradeResult {
   ok: boolean
-  /** Combined stdout+stderr of install-app.sh, for troubleshooting a failure. */
+  /** What the upgrade printed, for troubleshooting a failure. */
   output: string
 }
 
