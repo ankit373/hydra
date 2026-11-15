@@ -73,3 +73,32 @@ func TestDispatch_RefusesARecipeThatCannotWork(t *testing.T) {
 		t.Errorf("a refused recipe still logged %d events", len(events))
 	}
 }
+
+func TestDispatch_LogsTheRecipesItSkipped(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	d := captureDispatcher(t, &config.Config{})
+	skips := []recipe.Skip{{Name: "cheap_k_vote_label", Reason: "needs a match check, and the request has none"}}
+	if _, err := d.Dispatch(context.Background(), "hello", Options{
+		RunID: "run-rcp4", TaskID: "task-rcp4", RecipeSkips: skips,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := runlog.Load("run-rcp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if e.Kind != runlog.KindTaskStarted {
+			continue
+		}
+		got, _ := e.Meta["recipes_skipped"].([]any)
+		if len(got) != 1 || got[0].(map[string]any)["name"] != "cheap_k_vote_label" {
+			t.Errorf("recipes_skipped = %v, want the label-vote recipe", e.Meta["recipes_skipped"])
+		}
+		return
+	}
+	t.Fatal("no task span")
+}
