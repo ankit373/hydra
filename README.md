@@ -821,6 +821,12 @@ assumed broken for ever: while other models are judged on the same kind of work,
 the old record slowly stops counting, so a model that was fixed starts again on
 a fresh record.
 
+Routing reads the record since the last change, not the full history. A model
+that got worse stops clearing the bar within tens of answers, since it needs 20
+judged answers since the change before it counts as measured again, and the
+work goes to another model that does clear it. When none does, the order is the
+plain ranking again, which is how a demoted model gets asked again.
+
 Every confidence run ends by printing its own `task_hash` and the `trust explain`
 command for it, so the ledger above is one copy-paste away rather than something
 to go looking for. `trust stats` says outright when achieved confidence has never
