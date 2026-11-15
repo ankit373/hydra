@@ -70,6 +70,7 @@ type Options struct {
 	Level     float64 // confidence level; 0 means DefaultLevel
 	ClipAt    float64 // weight cap; 0 means DefaultClip, negative means no clipping
 	MinESS    float64 // refuse below this; 0 means DefaultMinESS
+	MinRows   int     // refuse below this many usable rows; 0 means no floor
 	Bootstrap int     // resamples; 0 means DefaultBootstrap
 	Seed      uint64  // fixed so the same log gives the same interval twice
 }
@@ -158,6 +159,12 @@ func Evaluate(samples []CounterfactualSample, opts Options) (Estimate, error) {
 		}
 		return est, fmt.Errorf("%w: all %d rows were skipped, so nothing can be evaluated against them",
 			ErrNoPropensity, est.Skipped)
+	}
+	// ESS alone lets a handful of evenly weighted rows through, which is too few
+	// for a pass rate however even their weights are.
+	if est.N < opts.MinRows {
+		return est, fmt.Errorf("%w: %d usable rows is below the floor of %d",
+			ErrInsufficientSupport, est.N, opts.MinRows)
 	}
 	if len(weights) == 0 {
 		return est, fmt.Errorf("%w: none of the %d usable rows took an action this policy would take",
