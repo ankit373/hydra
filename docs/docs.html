@@ -473,6 +473,7 @@ hyctl edit --file ... --enum ... --prompt "..."  <span class="c"># scoped, valid
 hyctl review ...                        <span class="c"># code review / approve / reject / QA</span>
 hyctl parallel ...                      <span class="c"># fan independent tasks across models</span>
 hyctl workflow run --step A --step B    <span class="c"># multi-step task, each step routed on its own</span>
+hyctl workflow run --step A --needs "" --step B --needs 1 --step C --needs 1   <span class="c"># B and C run together after A</span>
 hyctl workflow run --dry-run ...        <span class="c"># each step's routing chain and ceiling, nothing run</span>
 hyctl workflow run --local --max-cost 0.05 ...   <span class="c"># per-step caps, on top of policy.yaml's</span>
 hyctl workflow resume &lt;id&gt;              <span class="c"># continue a killed workflow from where it stopped</span>
@@ -1175,7 +1176,7 @@ Local server advisories    9 unfixed upstream
   ─────────────────────────────────────────────────────────
   Total                 105          401,300       $0.90</pre></div>
       <div class="sub"><div class="lbl">What each row holds</div>
-        <p>Every request is logged to <span class="fx">~/.hydra/cost.jsonl</span> with the model, routing level, token counts, estimated cost and fallback chain. <span class="fx">tokens_source</span> says whether the provider reported real usage or Hydra estimated it, and <span class="fx">cost_source</span> is always <span class="fx">estimated</span> (price × tokens, never a billed figure). A row without the cache fields reported no cache use.</p>
+        <p>Every request is logged to <span class="fx">~/.hydra/cost.jsonl</span> with the model, routing level, token counts, estimated cost and fallback chain. <span class="fx">tokens_source</span> says whether the provider reported real usage or Hydra estimated it, and <span class="fx">cost_source</span> is always <span class="fx">estimated</span> (price × tokens, never a billed figure). A row without the cache fields reported no cache use. Cached tokens are priced at the model&rsquo;s cache read and write rates where it lists them, and at the input rate where it does not, so a cache hit costs less only by a rate someone published. The cache column in <span class="fx">hyctl cost</span> shows tokens read and their share of input.</p>
         <p>Each row also carries <span class="fx">act_prob</span> (the probability the router picked its first choice, named in <span class="fx">first_head</span>, which a fallback can make differ from the model that answered) and <span class="fx">keep_prob</span> (the probability the row was kept), so a sampled log can still be read without bias. Averaging a log sampled unevenly understates rates badly enough to reverse which model looks better. <span class="fx">hyctl stats --latency</span> gives p50/p90/p99 per model from mergeable sketches accurate to within 1%, so percentiles survive after the raw rows are gone.</p>
       </div>
     </section>
