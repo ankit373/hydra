@@ -4,7 +4,11 @@
 // many samples, which checks pick among them, when to stop and what runs next.
 package recipe
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ankit373/hydra/internal/rank"
+)
 
 // Stop says when a recipe stops sampling.
 type Stop string
@@ -25,14 +29,15 @@ const (
 // Recipe is one way to get an answer. Checks are the same spec strings
 // `hyctl dispatch --check` parses, so a logged recipe can be run again.
 type Recipe struct {
-	Name        string   `json:"name"`
-	Head        string   `json:"head,omitempty"` // empty lets the ranking pick
-	Samples     int      `json:"samples"`
-	Temperature *float64 `json:"temperature,omitempty"`
-	Checks      []string `json:"checks,omitempty"`
-	Stop        Stop     `json:"stop"`
-	Fallback    string   `json:"fallback,omitempty"` // next recipe's name, empty = none
-	MaxUSD      float64  `json:"max_usd,omitempty"`
+	Name        string         `json:"name" yaml:"name"`
+	Head        string         `json:"head,omitempty" yaml:"head"`           // empty lets the ranking pick
+	Objective   rank.Objective `json:"objective,omitempty" yaml:"objective"` // with no Head: quality or cost
+	Samples     int            `json:"samples" yaml:"samples"`
+	Temperature *float64       `json:"temperature,omitempty" yaml:"temperature"`
+	Checks      []string       `json:"checks,omitempty" yaml:"checks"`
+	Stop        Stop           `json:"stop" yaml:"stop"`
+	Fallback    string         `json:"fallback,omitempty" yaml:"fallback"` // next recipe's name, empty = none
+	MaxUSD      float64        `json:"max_usd,omitempty" yaml:"max_usd"`
 }
 
 // Default is the one call dispatch already makes: one sample, and when checks
@@ -48,6 +53,9 @@ func Default(checks []string) Recipe {
 
 // Validate refuses a recipe that cannot work as written.
 func (r Recipe) Validate() error {
+	if _, err := rank.ParseObjective(string(r.Objective)); err != nil {
+		return fmt.Errorf("recipe %q: %w", r.Name, err)
+	}
 	switch {
 	case r.Samples < 1:
 		return fmt.Errorf("recipe %q: samples is %d, want at least 1", r.Name, r.Samples)

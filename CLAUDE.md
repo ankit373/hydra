@@ -74,7 +74,8 @@ internal/keystore/      ← Provider API keys saved from the desktop app: macOS 
                           `keystore.Lookup` (an exported variable wins), never os.Environ, so no subprocess inherits one (#1340).
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
 internal/recipe/        ← What a request runs: head, samples, checks, stop rule, fallback and a spend cap.
-                          Validate refuses one that cannot work. Logged on every task span.
+                          Validate refuses one that cannot work. Logged on every task span. Menus per
+                          kind of work from registry/recipes.yaml; `hyctl recipe list`.
 internal/trust/         ← Answer checking: calibration (LLR/D) + defect-cost + SPRT ensemble,
                           a monotone correction of each source's stated probability, and an
                           accept threshold chosen on held-out runs. Both off below the floor.
@@ -233,6 +234,10 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           FilePolicy marks the read fields, a test checks the tags against the
                           callers, and `hyctl security` reports them from the tags.
   workspace.yaml        ← workspace roots, validators, and validator_env (extra variables a check may see).
+  recipes.yaml          ← Named recipes and a menu per kind of work (code, extraction, classification);
+                          other kinds get the built-in `single`. A check names the kind of --check the
+                          request must bring, else the recipe is skipped and the task span says why. Strict:
+                          a bad entry fails at load with its line, in `hyctl recipe list` and `dispatch --kind`.
 design/                 ← The one design-token source (DTCG) for the website, desktop app and TUI.
                           `cd design && npm ci && npm run build` regenerates docs/assets/tokens.css,
                           desktop/frontend/src/tokens.generated.css, desktop/window_gen.go and internal/tui/tokens_gen.go;
@@ -461,6 +466,9 @@ hyctl models list ; hyctl models remove kimi-k3 ; hyctl models sync   # import O
 #   ~/.hydra/config.toml:  [openrouter]
 #                          models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]
 hyctl probe            # lists one head per model, and "2 of 423 enabled"
+
+# What each kind of work may try: model, samples, checks, stop rule
+hyctl recipe list ; hyctl recipe list --kind extraction
 
 # Multi-step task, each step routed on its own (triage cheap, fix strong)
 hyctl workflow run --task "fix the flaky test" \

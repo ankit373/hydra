@@ -86,6 +86,8 @@ type Options struct {
 	// Recipe is what this dispatch runs, logged on the task span; nil is the
 	// one-call recipe with no checks. Its checks are run by the caller.
 	Recipe *recipe.Recipe
+	// RecipeSkips are the menu's recipes this request could not run, and why.
+	RecipeSkips []recipe.Skip
 
 	// Resource is the file (or other resource) this dispatch acts on, if any,
 	// e.g. the path editor.Edit is about to write. Passed to the ledger so a
@@ -1886,6 +1888,9 @@ func taskMeta(opts Options) map[string]any {
 		r = *opts.Recipe
 	}
 	meta := map[string]any{"recipe": r}
+	if len(opts.RecipeSkips) > 0 {
+		meta["recipes_skipped"] = opts.RecipeSkips
+	}
 	if opts.Objective != "" {
 		meta["objective"] = string(opts.Objective)
 	}
