@@ -330,6 +330,7 @@ func spendAttrs(r cost.Row) []KeyValue {
 		flt("hydra.routing.act_prob", r.ActProb),
 		flt("hydra.routing.keep_prob", r.KeepProb),
 	}
+	attrs = append(attrs, firstPickAttrs(r)...)
 	if r.Enum != "" {
 		attrs = append(attrs, str("hydra.enum", r.Enum))
 	}
@@ -345,6 +346,18 @@ func spendAttrs(r cost.Row) []KeyValue {
 		attrs = append(attrs, str("hydra.config.breadcrumb", r.Config))
 	}
 	return attrs
+}
+
+// firstPickAttrs names the head act_prob belongs to. An older row has none,
+// and exporting its step as 0 would claim its first pick answered.
+func firstPickAttrs(r cost.Row) []KeyValue {
+	if r.FirstHead == "" {
+		return nil
+	}
+	return []KeyValue{
+		str("hydra.routing.first_head", r.FirstHead),
+		num("hydra.routing.fallback_step", int64(r.FallbackStep)),
+	}
 }
 
 func spanFor(r cost.Row) (Span, error) {
@@ -390,6 +403,7 @@ func spanFor(r cost.Row) (Span, error) {
 		flt("hydra.routing.act_prob", r.ActProb),
 		flt("hydra.routing.keep_prob", r.KeepProb),
 	}
+	attrs = append(attrs, firstPickAttrs(r)...)
 	if r.SwarmMode != "" {
 		attrs = append(attrs, str("hydra.swarm.mode", r.SwarmMode),
 			KeyValue{Key: "hydra.swarm.winner", Value: Value{BoolValue: &r.SwarmWinner}})

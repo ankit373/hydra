@@ -55,6 +55,11 @@ func logResult() *Result {
 	}
 }
 
+// logPick is logResult's head chosen first with prob and answering itself.
+func logPick(prob float64) firstPick {
+	return firstPick{head: logResult().Head, prob: prob}
+}
+
 func newTestDispatcher() *Dispatcher {
 	return &Dispatcher{pricing: pricing.Load()}
 }
@@ -69,7 +74,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 	t.Setenv("HYDRA_TASK_ID", "")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "a prompt", Options{}, 1, "0102030405060708"); err != nil {
+	if err := d.logDispatch(logResult(), "a prompt", Options{}, logPick(1), "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,7 +100,7 @@ func TestLogDispatch_BothLogsShareOneIdentity(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}, 1, "0102030405060708"); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}, logPick(1), "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +126,7 @@ func TestLogDispatch_ExplicitBeatsEnv(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "env-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}, 1, "0102030405060708"); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}, logPick(1), "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
@@ -142,7 +147,7 @@ func TestLogDispatch_EnvUsedWhenNoExplicit(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "orchestrator-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{}, 1, "0102030405060708"); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{}, logPick(1), "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")

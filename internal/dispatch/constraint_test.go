@@ -289,7 +289,7 @@ func TestLogDispatch_CostRowCarriesTheRoutingDomain(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{Resource: "internal/auth/token.go"}, 1, "span"); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{Resource: "internal/auth/token.go"}, logPick(1), "span"); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
@@ -306,7 +306,7 @@ func TestLogDispatch_CostRowCarriesTheRoutingDomain(t *testing.T) {
 	second := t.TempDir()
 	t.Setenv("HOME", second)
 	t.Setenv("USERPROFILE", second)
-	if err := d.logDispatch(logResult(), "p", Options{}, 1, "span"); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{}, logPick(1), "span"); err != nil {
 		t.Fatal(err)
 	}
 	rows = readLog(t, second, "cost.jsonl")

@@ -447,7 +447,8 @@ OCR_LLM_URL=http://127.0.0.1:8787/v1 OCR_LLM_MODEL=hydra ocr review   # any Open
 hyctl ask list ; hyctl ask answer <task-id> "go ahead" ; hyctl ask decline <task-id> "not prod"
 
 # Routing propensity: every dispatch row carries act_prob (probability the router
-# chose that head) and keep_prob (probability the row was retained). Both are
+# chose its first pick, first_head; fallback_step says how far down the chain the
+# answer came from) and keep_prob (probability the row was retained). Both are
 # always written - an absent propensity is unusable and a zero one divides by
 # zero. `explore_rate` in config.toml (default 0 = pure argmax) is what gives
 # non-chosen heads a non-zero probability at all; without it, counterfactual
