@@ -219,6 +219,10 @@ type Result struct {
 	// candidates. Zero means it did not run, never that nothing was demanded.
 	Requirement float64
 
+	// SpanID is the span of the attempt that answered, so a later verdict can be
+	// scored on it. Empty for a cached answer and a dry run.
+	SpanID string
+
 	// CostUSD is this call's price, set once from CallCost: every cost row,
 	// runlog span and caller reads it rather than pricing the call again.
 	CostUSD float64
@@ -1114,7 +1118,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		d.health.Pass(h.ID)
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp,
-			Domain: domain, Scores: scores, Objective: opts.Objective,
+			Domain: domain, Scores: scores, Objective: opts.Objective, SpanID: span,
 			CostUSD: CallCost(d.pricing, h, resp.InputTokens, resp.OutputTokens)}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
