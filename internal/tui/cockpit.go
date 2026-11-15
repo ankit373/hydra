@@ -420,12 +420,23 @@ func CockpitSnapshotView(view int) string {
 
 // ckSnapshotModel builds the one demo Cockpit state every snapshot view
 // renders from (NewCockpit alone scans the machine; the audit stays lazy,
-// #524). The transcript uses the real renderers, a snapshot never dispatches.
+// #524). It leads with a non-code task and keeps a code task in a second
+// thread. The transcript uses the real renderers, a snapshot never dispatches.
 func ckSnapshotModel() Cockpit {
 	m := NewCockpit()
 	m.w, m.h, m.ready = 100, 30, true
 
-	demo := ckTask{
+	extract := ckTask{
+		prompt: "pull supplier, date and total from these 12 invoices",
+		mode:   ckModeByName("ask"), kind: "extraction",
+		runID: "20260904T100000Z-demo0001",
+		answer: "12 rows as JSON, the first two:\n" +
+			`{"supplier": "Acme Ltd", "date": "2026-03-03", "total": 1240.00}` + "\n" +
+			`{"supplier": "Northwind", "date": "2026-03-05", "total": 312.50}`,
+		headName: "mistral-small", tier: 8,
+		costUSD: 0.0009, elapsed: 1400 * time.Millisecond,
+	}
+	code := ckTask{
 		prompt: "add pagination to the users endpoint",
 		mode:   ckModeByName("auto"), file: "internal/api/users.go",
 		runID:     "20260904T100000Z-demo0000",
@@ -435,14 +446,15 @@ func ckSnapshotModel() Cockpit {
 		headName:    "qwen2.5-coder", tier: 7,
 		costUSD: 0.0041, elapsed: 3200 * time.Millisecond,
 	}
-	t := m.th()
-	t.name = ckThreadName(demo.prompt)
-	t.log = append(t.log, ckYouS.Render("❯ "+demo.prompt))
-	t.log = append(t.log, m.routeLines(demo, ckHead{name: demo.headName, tier: demo.tier}, "STANDARD", ckOverride{}, false)...)
-	t.log = append(t.log, ckResultLines(demo)...)
 
-	t.codeLang = "go"
-	t.codeLines = []string{
+	first := m.th()
+	m.snapshotThread(first, extract, "SIMPLE")
+	m = m.addThread()
+	ct := m.th()
+	ct.log = nil
+	m.snapshotThread(ct, code, "STANDARD")
+	ct.codeLang = "go"
+	ct.codeLines = []string{
 		"// paginated users endpoint",
 		"func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {",
 		"    page := parsePage(r.URL.Query())",
@@ -454,8 +466,18 @@ func ckSnapshotModel() Cockpit {
 		"    json.NewEncoder(w).Encode(users)",
 		"}",
 	}
-	t.codeShown = len(t.codeLines)
-	return m
+	ct.codeShown = len(ct.codeLines)
+	return m.focusThread(first.id)
+}
+
+// snapshotThread writes one finished demo task onto t, as a real run leaves it.
+func (m Cockpit) snapshotThread(t *ckThread, task ckTask, enum string) {
+	task.threadID = t.id
+	t.name = ckThreadName(task.prompt)
+	t.log = append(t.log, ckYouS.Render("❯ "+task.prompt))
+	t.log = append(t.log, m.routeLines(task, ckHead{name: task.headName, tier: task.tier}, enum, ckOverride{}, false)...)
+	t.log = append(t.log, ckResultLines(task)...)
+	t.lastDone = &task
 }
 
 // CockpitSnapshot renders all six views stacked plus the shortcut glossary,

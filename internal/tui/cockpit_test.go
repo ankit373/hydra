@@ -417,3 +417,30 @@ func TestCockpit_StartsInAsk(t *testing.T) {
 		t.Errorf("the input chip does not read Ask:\n%s", got)
 	}
 }
+
+// The docs frame leads with work that is not code: the active thread names no
+// file and runs no test command, and the code task sits in a second thread.
+func TestSnapshotModel_LeadsWithNonCodeTask(t *testing.T) {
+	testutil.NewSandbox(t)
+	m := ckSnapshotModel()
+	done := m.th().lastDone
+	if done == nil {
+		t.Fatal("the active demo thread has no finished task")
+	}
+	if f := ckFileRe.FindString(done.prompt); f != "" || done.file != "" {
+		t.Errorf("the active demo task names a file: %q", done.prompt)
+	}
+	if done.verifyLabel != "" || done.kind == "code" {
+		t.Errorf("the active demo task reads as code: kind %q, verify %q", done.kind, done.verifyLabel)
+	}
+	if got := stripANSI(m.frame()); strings.Contains(got, "CODE ·") {
+		t.Errorf("the lead frame shows a code panel:\n%s", got)
+	}
+	var codeThread bool
+	for _, th := range m.threads {
+		codeThread = codeThread || (th.lastDone != nil && th.lastDone.file != "")
+	}
+	if !codeThread {
+		t.Error("no code thread beside the lead task")
+	}
+}
