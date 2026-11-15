@@ -19,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/swarm"
@@ -92,6 +93,7 @@ func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file stri
 		MaxEstCostUSD: r.maxCost,
 		Confidence:    bar.Target,
 		Domain:        domain,
+		PromptCache:   policy.ForPrompt(config.ScriptHome(), prompt).PromptCache,
 	})
 	if err != nil {
 		// An uncalibrated domain refuses identically for every file in that
@@ -167,6 +169,7 @@ func (r vetRouter) Review(ctx context.Context, prompt, domain, resource string) 
 		// one that runs by default, so --max-cost was inert on it (#1166).
 		MaxCostUSD:    r.maxCost,
 		MaxCostSource: "--max-cost",
+		PromptCache:   policy.ForPrompt(config.ScriptHome(), prompt).PromptCache,
 	})
 	if err != nil {
 		if !r.contentCanForceLocal(resource) {

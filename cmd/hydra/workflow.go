@@ -83,6 +83,7 @@ func (r dispatchRouter) options(prompt, enum string) (dispatch.Options, policy.F
 		MaxCostSource: ceilingFrom,
 		MaxMemoryMB:   fp.MaxMemoryMB,
 		MaxCPUSeconds: fp.MaxCPUSeconds,
+		PromptCache:   fp.PromptCache,
 	}, fp, nil
 }
 

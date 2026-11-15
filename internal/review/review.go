@@ -20,6 +20,7 @@ import (
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/workspace"
 )
@@ -289,7 +290,8 @@ CONCERNS <bullet list of issues>`, file, diffText)
 	}
 	defer d.Close()
 	result, err := d.Dispatch(ctx, qaPrompt, dispatch.Options{
-		TierHint: strconv.Itoa(tier),
+		TierHint:    strconv.Itoa(tier),
+		PromptCache: policy.ForPrompt(config.ScriptHome(), qaPrompt).PromptCache,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("dispatch failed: %w", err)

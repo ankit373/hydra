@@ -221,10 +221,13 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           dispatch`, the command that actually spends the money, where it had
                           no ceiling at all and the denial-of-wallet guard had never once
                           fired; `--max-cost` overrides it, and `--max-cost 0` lifts it for one
-                          run (#838). The rest are declared and read by nothing. The
-                          `enforced:"true"` tag on FilePolicy marks the read fields, a test
-                          checks the tags against the callers, and `hyctl security` reports
-                          them from the tags.
+                          run (#838). prompt_cache (default true) reaches every dispatch from
+                          every entry point (dispatch, swarm, serve, workflow, parallel, edit,
+                          vet, review, TUI, desktop) and asks Anthropic to cache the system
+                          prompt and tools; a rule can set it false (#1474). The rest are
+                          declared and read by nothing. The `enforced:"true"` tag on
+                          FilePolicy marks the read fields, a test checks the tags against the
+                          callers, and `hyctl security` reports them from the tags.
   workspace.yaml        ← workspace roots, validators, and validator_env (extra variables a check may see).
 design/                 ← The one design-token source (DTCG) for the website, desktop app and TUI.
                           `cd design && npm ci && npm run build` regenerates docs/assets/tokens.css,

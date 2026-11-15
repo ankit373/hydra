@@ -196,6 +196,7 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		MaxCostSource: "policy.yaml max_cost_usd",
 		MaxMemoryMB:   fp.MaxMemoryMB,
 		MaxCPUSeconds: fp.MaxCPUSeconds,
+		PromptCache:   fp.PromptCache,
 	})
 	if err != nil {
 		cleanupBackup()

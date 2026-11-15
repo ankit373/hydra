@@ -45,7 +45,9 @@
 #   ── Observability ────────────────────────────────────────────
 #   track_tokens            bool, log token cost to logs/cost.jsonl
 #   ── Context ──────────────────────────────────────────────────
-#   prompt_cache            bool, enable Anthropic prompt caching (SDK tiers)
+#   prompt_cache            bool, ask providers that cache only on request (Anthropic) to
+#                           cache the system prompt and tools. Every dispatch reads it,
+#                           any kind of work; others (OpenAI, Gemini, DeepSeek) cache anyway.
 #
 #   ══ Editing files: hyctl edit and hyctl parallel ════════════
 #   ── Edit format ──────────────────────────────────────────────
@@ -88,7 +90,7 @@ defaults:
   # Observability
   track_tokens: true
   # Context
-  prompt_cache: true         # always on (no-op until SDK tier ships)
+  prompt_cache: true         # cached reads cost a fraction of input; a rule can turn it off
 
   # ══ Editing files ══
   # Edit format
