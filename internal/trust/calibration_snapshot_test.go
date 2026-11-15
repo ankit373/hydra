@@ -105,7 +105,7 @@ func TestSnapshot_OffsetPastFileSizeIsRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{}, info.Size()+1_000_000); err != nil {
+	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{}, nil, info.Size()+1_000_000); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +138,7 @@ func TestSnapshot_MisalignedOffsetFallsBackToFullReplay(t *testing.T) {
 	}
 	// A few bytes short of EOF lands inside the last line's JSON, not on a
 	// newline, schema-valid and in-bounds, but not a real line boundary.
-	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{}, info.Size()-5); err != nil {
+	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{}, nil, info.Size()-5); err != nil {
 		t.Fatal(err)
 	}
 
@@ -174,10 +174,8 @@ func TestSnapshot_NotWrittenBelowThreshold(t *testing.T) {
 }
 
 // A checkpoint written before the key was normalized holds its rows under "".
-// loadSnapshot rebuilds the store without going through apply, so restoring one
-// verbatim puts the old history in a cell no reader asks for while every later
-// observation lands in "default", and saveSnapshot then re-persists the dead
-// cell forever.
+// Restored verbatim, the history sits in a cell no reader asks for. It has no
+// detectors, so it is refused and the log replayed under the right key.
 func TestSnapshot_APreNormalizationCheckpointFoldsIntoTheCellReadersAsk(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "calibration.jsonl")
 
@@ -195,7 +193,7 @@ func TestSnapshot_APreNormalizationCheckpointFoldsIntoTheCellReadersAsk(t *testi
 	// the end of the file so nothing is left to replay on top of it.
 	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{
 		{"verifier:go test", ""}: {TP: 51, FP: 1, TN: 21, FN: 1},
-	}, info.Size()); err != nil {
+	}, nil, info.Size()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -221,44 +219,5 @@ func TestSnapshot_APreNormalizationCheckpointFoldsIntoTheCellReadersAsk(t *testi
 	feed(t, c2, "verifier:go test", "", 10, 0, 0, 0)
 	if rows = c2.Report(); len(rows) != 1 || rows[0].N != 80 {
 		t.Errorf("after ten more: %d cells, first N=%v; want 1 cell of 80", len(rows), rows[0].N)
-	}
-}
-
-// Folding two entries must add what they observed, not what they store: every
-// entry carries the Laplace prior, so summing the raw counts inflates the cell
-// by a whole prior's worth and reports observations that never happened.
-func TestSnapshot_FoldingTwoEntriesDoesNotCountThePriorTwice(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "calibration.jsonl")
-
-	c1, err := New(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	feed(t, c1, "claude", DefaultDomain, 1, 0, 0, 0) // one line, so the offset has somewhere to land
-
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Both spellings of the same cell, as a store straddling the fix holds them.
-	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{
-		{"claude", ""}:            {TP: 41, FP: 1, TN: 31, FN: 1},
-		{"claude", DefaultDomain}: {TP: 21, FP: 1, TN: 11, FN: 1},
-	}, info.Size()); err != nil {
-		t.Fatal(err)
-	}
-
-	c2, err := New(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rows := c2.Report()
-	if len(rows) != 1 {
-		t.Fatalf("got %d cells, want the two spellings folded into 1: %+v", len(rows), rows)
-	}
-	// 40+30 real from one entry, 20+10 from the other. 104 means the prior was
-	// added twice; 30 or 70 means one entry overwrote the other.
-	if rows[0].N != 100 {
-		t.Errorf("observations = %v, want 100", rows[0].N)
 	}
 }
