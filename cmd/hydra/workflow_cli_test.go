@@ -4,6 +4,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -357,5 +359,54 @@ func TestNeedsLabel_OnlyWhenNotAChain(t *testing.T) {
 	fan := workflow.Workflow{Steps: []workflow.Step{{N: 1}, {N: 2, Needs: []int{1}}, {N: 3, Needs: []int{1}}}}
 	if got := needsLabel(fan, 2); got != "needs 1" {
 		t.Errorf("step 3 is labelled %q, want needs 1", got)
+	}
+}
+
+// --writes N belongs to --step N, comma separated, and show prints it.
+func TestWorkflowRun_WritesPairsWithStep(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeWorkflowConfig(t, s.HydraHome)
+	// The run fails for want of a head; what is asserted is the stored record.
+	_, _, _ = run(t, "workflow", "run", "--id", "wf-writes",
+		"--step", "reply to ticket 12", "--writes", "doc:replies#ticket-12, record:tickets/12",
+		"--step", "update the changelog", "--writes", "CHANGELOG.md")
+	w, err := workflow.Load("wf-writes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range [][]string{{"doc:replies#ticket-12", "record:tickets/12"}, {"CHANGELOG.md"}} {
+		if got := w.Steps[i].Writes; !slices.Equal(got, want) {
+			t.Errorf("step %d writes %v, want %v", i+1, got, want)
+		}
+	}
+	out := stripANSICodes(captureStdout(t, func() { printWorkflow(w) }))
+	if !strings.Contains(out, "writes doc:replies#ticket-12, record:tickets/12") {
+		t.Errorf("the table does not say what step 1 writes:\n%s", out)
+	}
+
+	_, _, err = run(t, "workflow", "run", "--step", "a", "--step", "b", "--writes", "x")
+	if err == nil || !strings.Contains(err.Error(), "one --writes per --step") {
+		t.Errorf("a short --writes list: err = %v", err)
+	}
+}
+
+// The coupling is read only when a step writes a file, and from the working
+// directory's graph.json.
+func TestCoupleFiles_OnlyForFileWrites(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	graphJSON := `{"nodes":[{"id":"a","file":"a.go"},{"id":"b","file":"b.go"}],"edges":[{"from":"a","to":"b"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "graph.json"), []byte(graphJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	docs := workflow.Workflow{Steps: []workflow.Step{{Writes: []string{"doc:replies"}}}}
+	coupleFiles(&docs)
+	if docs.Coupled != nil {
+		t.Error("a workflow writing no file loaded the code graph")
+	}
+	code := workflow.Workflow{Steps: []workflow.Step{{Writes: []string{"a.go"}}}}
+	coupleFiles(&code)
+	if code.Coupled == nil || !code.Coupled("a.go", "b.go") {
+		t.Error("a workflow writing a.go did not see a.go and b.go as coupled")
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 )
 
@@ -66,6 +67,9 @@ type Step struct {
 	// Needs are the step numbers this step waits for and reads. nil, as in a
 	// record from before #1591, means every earlier step; empty means none.
 	Needs []int `json:"needs"`
+	// Writes are what the step writes, as a2a keys: file:<path>, doc:<name>#<section>,
+	// record:<table>/<id>. Two steps that write the same one never run together.
+	Writes []string `json:"writes,omitempty"`
 
 	Status Status `json:"status"`
 	Head   string `json:"head,omitempty"`
@@ -98,6 +102,10 @@ type Workflow struct {
 	System     string   `json:"system,omitempty"`
 	LocalOnly  bool     `json:"local_only,omitempty"`
 	MaxCostUSD *float64 `json:"max_cost_usd,omitempty"`
+
+	// Coupled says two files are linked in the code graph, so writing both at
+	// once is a clash too. Set by the caller when a graph exists; never stored.
+	Coupled func(fileA, fileB string) bool `json:"-"`
 }
 
 // Observed is the status to show a reader. The stored one, except that a run
@@ -173,6 +181,30 @@ func (w Workflow) ready(i int) bool {
 		}
 	}
 	return true
+}
+
+// clashes reports whether steps i and j write the same thing, or two files the
+// code graph couples.
+func (w Workflow) clashes(i, j int) bool {
+	a, b := w.Steps[i].Writes, w.Steps[j].Writes
+	if a2a.Overlap(a, b) {
+		return true
+	}
+	if w.Coupled == nil {
+		return false
+	}
+	for _, x := range a {
+		fx, ok := strings.CutPrefix(a2a.Key(x), "file:")
+		if !ok {
+			continue
+		}
+		for _, y := range b {
+			if fy, ok := strings.CutPrefix(a2a.Key(y), "file:"); ok && w.Coupled(fx, fy) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // checkNeeds refuses a need no run could meet. Needs point backwards only, so

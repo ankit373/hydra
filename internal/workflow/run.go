@@ -5,6 +5,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -120,16 +121,26 @@ func Run(ctx context.Context, w Workflow, r Router, save Saver) (Workflow, error
 }
 
 // launchReady starts every ready step, up to maxParallel in flight, after
-// saving them as running.
+// saving them as running. A step that clashes with one in flight waits for it.
 func launchReady(ctx context.Context, w *Workflow, r Router, save Saver, launched []bool, inflight *int, results chan<- finished) error {
-	var batch []int
+	var busy, batch []int
+	for i := range w.Steps {
+		if launched[i] && w.Steps[i].Status == Running {
+			busy = append(busy, i)
+		}
+	}
 	for i := range w.Steps {
 		if *inflight+len(batch) == maxParallel {
 			break
 		}
-		if !launched[i] && w.Steps[i].Status != Done && w.ready(i) {
-			batch = append(batch, i)
+		if launched[i] || w.Steps[i].Status == Done || !w.ready(i) {
+			continue
 		}
+		if slices.ContainsFunc(busy, func(j int) bool { return w.clashes(i, j) }) {
+			continue
+		}
+		batch = append(batch, i)
+		busy = append(busy, i)
 	}
 	if len(batch) == 0 {
 		return nil
