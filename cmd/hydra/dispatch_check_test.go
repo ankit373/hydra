@@ -39,8 +39,15 @@ func TestDispatch_CheckGround_FlagsAnInventedNumber(t *testing.T) {
 	for _, s := range runlog.ScoresBySpan(events) {
 		scored = append(scored, s...)
 	}
-	if len(scored) != 1 || scored[0].Name != "grounding" || scored[0].Value != 0 {
-		t.Errorf("span scores = %+v, want one failing grounding score", scored)
+	// The check's own verdict, and dispatch's mark that the answer was rejected (#1586).
+	want := map[string]bool{"grounding": false, "check": false}
+	for _, sc := range scored {
+		if _, ok := want[sc.Name]; ok && sc.Value == 0 {
+			want[sc.Name] = true
+		}
+	}
+	if len(scored) != 2 || !want["grounding"] || !want["check"] {
+		t.Errorf("span scores = %+v, want a failing grounding score and the rejection", scored)
 	}
 	verdicts, err := evalset.VerdictBySpan(evalset.VerdictsPath())
 	if err != nil {

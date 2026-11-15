@@ -103,7 +103,8 @@ func filePolicyControl() Control {
 		"`hyctl edit` and `hyctl parallel` enforce them, so a refusal reads the same "+
 		"either way (#769). prompt_cache reaches every dispatch, whatever the kind of work, and asks "+
 		"a provider that caches only on request to cache the stable start of the prompt. "+
-		"The other %d are declared and read by nothing",
+		"max_retries and escalate_on_fail set how many stronger heads a failed "+
+		"`hyctl dispatch --check` may ask (#1587). The other %d are declared and read by nothing",
 		n, len(enforced), all, strings.Join(enforced, ", "),
 		filePolicyEnforcementSite, all-len(enforced))
 	// A condition naming a field the evaluator does not know can never be

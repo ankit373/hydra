@@ -101,6 +101,7 @@ internal/decide/        ← Routes one decision: the first source answers alone 
                           `OnFail` is the plain rule for the CLI paths (#1583): a check that ran and failed asks
                           one stronger head, a check that could not run is "not checked" and never escalates.
                           `policy.Escalations` reads its count from `max_retries` / `escalate_on_fail`.
+                          `hyctl dispatch --check` uses it (#1587): reruns once, filed per head; `--max-escalations`.
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
@@ -220,9 +221,10 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           max_memory_mb / max_cpu_seconds cap a subprocess head through
                           `internal/sandbox`. The first three are enforced from
                           `internal/policy`'s caps.go, so a refusal reads the same
-                          whichever command hit it. max_cost_usd also reaches `hyctl
-                          dispatch`, the command that actually spends the money, where it had
-                          no ceiling at all and the denial-of-wallet guard had never once
+                          whichever command hit it. max_retries and escalate_on_fail set
+                          how many reruns a failed `hyctl dispatch --check` gets (#1587).
+                          max_cost_usd also reaches `hyctl dispatch`, the command that
+                          actually spends the money, where it had no ceiling at all and the denial-of-wallet guard had never once
                           fired; `--max-cost` overrides it, and `--max-cost 0` lifts it for one
                           run (#838). prompt_cache (default true) reaches every dispatch from
                           every entry point (dispatch, swarm, serve, workflow, parallel, edit,
