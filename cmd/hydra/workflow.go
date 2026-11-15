@@ -15,8 +15,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
@@ -134,7 +136,7 @@ func cmdWorkflow() *cobra.Command {
 
 func cmdWorkflowRun() *cobra.Command {
 	var steps []string
-	var enums, needs []string
+	var enums, needs, writes []string
 	var task, id, system string
 	var localOnly, dryRun bool
 	var maxCost float64
@@ -161,9 +163,11 @@ func cmdWorkflowRun() *cobra.Command {
 				return fmt.Errorf("%d --step and %d --enum given; pass one --enum per --step, or none",
 					len(steps), len(enums))
 			}
-			if len(needs) > 0 && len(needs) != len(steps) {
-				return fmt.Errorf("%d --step and %d --needs given; pass one --needs per --step, or none",
-					len(steps), len(needs))
+			for flag, vals := range map[string][]string{"needs": needs, "writes": writes} {
+				if len(vals) > 0 && len(vals) != len(steps) {
+					return fmt.Errorf("%d --step and %d --%s given; pass one --%s per --step, or none",
+						len(steps), len(vals), flag, flag)
+				}
 			}
 			built := make([]workflow.Step, 0, len(steps))
 			for i, p := range steps {
@@ -174,6 +178,9 @@ func cmdWorkflowRun() *cobra.Command {
 						return fmt.Errorf("step %d: --needs %q: %w", i+1, needs[i], err)
 					}
 					s.Needs = n
+				}
+				if i < len(writes) {
+					s.Writes = splitList(writes[i])
 				}
 				if i < len(enums) {
 					s.Enum = strings.ToUpper(strings.TrimSpace(enums[i]))
@@ -210,6 +217,8 @@ func cmdWorkflowRun() *cobra.Command {
 	}
 	cmd.Flags().StringArrayVar(&steps, "step", nil, "a step's prompt; repeat, in order")
 	cmd.Flags().StringArrayVar(&enums, "enum", nil, "routing key for the step at the same position")
+	cmd.Flags().StringArrayVar(&writes, "writes", nil,
+		"what the step at the same position writes, comma separated: a path, doc:<name>#<section>, record:<table>/<id>")
 	cmd.Flags().StringArrayVar(&needs, "needs", nil,
 		"step numbers the step at the same position waits for, e.g. 1,2; \"\" for none (default: every earlier step)")
 	cmd.Flags().StringVar(&task, "task", "", "what the whole workflow is for (default: the first step)")
@@ -222,14 +231,22 @@ func cmdWorkflowRun() *cobra.Command {
 	return cmd
 }
 
+// splitList reads "a, b" as [a b], dropping empty entries.
+func splitList(v string) []string {
+	var out []string
+	for _, f := range strings.Split(v, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // parseNeeds reads "1,2" as step numbers and "" as none, which is not the
 // same as leaving --needs out: that waits for every earlier step.
 func parseNeeds(v string) ([]int, error) {
 	out := []int{}
-	for _, f := range strings.Split(v, ",") {
-		if f = strings.TrimSpace(f); f == "" {
-			continue
-		}
+	for _, f := range splitList(v) {
 		n, err := strconv.Atoi(f)
 		if err != nil {
 			return nil, fmt.Errorf("%q is not a step number", f)
@@ -370,6 +387,7 @@ func runWorkflow(ctx context.Context, w workflow.Workflow) error {
 	runlog.DeclareRun(w.RunID, taskID, w.Task)
 	defer runlog.FinishRun(w.RunID, taskID)
 
+	coupleFiles(&w)
 	r := routerFor(d, w)
 	// Progress is printed from the saver rather than a separate hook: Run
 	// already saves the moment a step goes Running, which is exactly the
@@ -405,6 +423,22 @@ func runWorkflow(ctx context.Context, w workflow.Workflow) error {
 		return err
 	}
 	return nil
+}
+
+// coupleFiles lets the code graph in the working directory keep edits to two
+// linked files apart, when any step writes a file and a graph is there.
+func coupleFiles(w *workflow.Workflow) {
+	for _, s := range w.Steps {
+		for _, k := range s.Writes {
+			if strings.HasPrefix(a2a.Key(k), "file:") {
+				// A missing graph loads empty; an unreadable one only loses the coupling.
+				if g, err := graph.Load(graph.DefaultPath(".")); err == nil {
+					w.Coupled = g.Coupled
+				}
+				return
+			}
+		}
+	}
 }
 
 // padCell pads s to n display cells, and rpadCell right-aligns in them.
@@ -498,6 +532,9 @@ func printWorkflow(w workflow.Workflow) {
 		}
 		if needs := needsLabel(w, s.N-1); needs != "" {
 			fmt.Fprintf(stdout, "      %s\n", dimStyle.Render("↳ "+needs))
+		}
+		if len(s.Writes) > 0 {
+			fmt.Fprintf(stdout, "      %s\n", dimStyle.Render("↳ writes "+truncLabel(strings.Join(s.Writes, ", "), 60)))
 		}
 	}
 	fmt.Fprintln(stdout, sep)
