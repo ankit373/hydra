@@ -51,6 +51,7 @@ floor internal/build                90
 floor internal/capabilities         90
 floor internal/config               84
 floor internal/cache                85
+floor internal/checkgen             85
 floor internal/classify             82
 floor internal/cost                 91
 floor internal/decide               96
