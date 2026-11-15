@@ -76,6 +76,9 @@ func verify(ctx context.Context, s Spec, answer, domain string) (oracle.Verdict,
 func record(r Result, answer string, answering provider.Head, span runlog.Event) error {
 	check := "gen:" + r.Spec.Kind
 	detail := "spec " + r.Spec.ID
+	if r.Spec.Generator.SameFamily {
+		detail += ", written by the answer's own family"
+	}
 	if r.Verdict.Detail != "" {
 		detail += ": " + r.Verdict.Detail
 	}

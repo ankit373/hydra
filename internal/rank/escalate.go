@@ -4,7 +4,6 @@ package rank
 
 import (
 	"math"
-	"strings"
 
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -59,22 +58,9 @@ func tied(a, b Score) bool {
 	return math.Abs(pa-pb) <= 1.96*math.Sqrt(va+vb)
 }
 
-// family is the vendor behind a head: a LiteLLM head's upstream, else the vendor
-// prefix of a "vendor/model" id, else the provider. No head carries a family field,
-// so every model behind one local server reads as one family.
-func family(h provider.Head) string {
-	if up := h.Meta["litellm_upstream"]; up != "" {
-		return up
-	}
-	if vendor, _, ok := strings.Cut(h.Meta["model"], "/"); ok && vendor != "" {
-		return vendor
-	}
-	return h.Provider
-}
-
 func freshFamily(h provider.Head, asked []provider.Head) bool {
 	for _, a := range asked {
-		if family(a) == family(h) {
+		if provider.Family(a) == provider.Family(h) {
 			return false
 		}
 	}
