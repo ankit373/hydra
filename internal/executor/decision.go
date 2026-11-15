@@ -18,6 +18,9 @@ import (
 // decisionKind prefixes the id of a head that answers typed questions with probabilities, never prose.
 const decisionKind = "decision"
 
+// IsDecisionHead says whether h answers with probabilities rather than prose.
+func IsDecisionHead(h provider.Head) bool { return strings.HasPrefix(h.ID, decisionKind+"/") }
+
 // decisionDialect is one wire format a decision head speaks.
 type decisionDialect struct {
 	path    string

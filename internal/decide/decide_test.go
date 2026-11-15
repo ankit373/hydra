@@ -371,3 +371,22 @@ func TestDecide_RecordsEachAnswerForTheReliabilityAudit(t *testing.T) {
 		t.Error("the decision has no span id, so no verdict can be attached to it")
 	}
 }
+
+// One call answers every question, so its price lands once, on the first span.
+func TestDecide_RecordsTheCallCostOnce(t *testing.T) {
+	testutil.NewSandbox(t)
+	two := decision.Request{Questions: []decision.Question{{Name: "a", Kind: decision.Predicate}, {Name: "b", Kind: decision.Predicate}}}
+	res := decision.Result{Model: "m", Answers: []decision.Answer{{Probabilities: []float64{0.99, 0.01}}, {Probabilities: []float64{0.99, 0.01}}}}
+	r := router(&fakeAsker{answers: map[string]decision.Result{"a": res}}, newCal(t), "a")
+	r.Price = func(provider.Head, decision.Request) float64 { return 0.002 }
+	if _, err := r.Decide(context.Background(), Call{Request: two, RunID: "run-cost"}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := runlog.Load("run-cost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[0].CostUSD != 0.002 || events[1].CostUSD != 0 {
+		t.Fatalf("events = %+v, want the call's cost on the first span only", events)
+	}
+}

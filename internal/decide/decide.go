@@ -223,6 +223,8 @@ func (l *askLog) ask(ctx context.Context, h provider.Head) (decision.Result, err
 // whether this source's numbers are honest. A lost event never fails the call.
 func (l *askLog) record(h provider.Head, res decision.Result) {
 	log := runlog.New(l.call.RunID)
+	// One call answers every question, so its cost goes on the first event alone.
+	cost := l.router.Price(h, l.call.Request)
 	for i, q := range l.call.Request.Questions {
 		a := res.Answers[i]
 		// A predicate's forecast is P(true); any other is the probability of the chosen outcome.
@@ -236,8 +238,10 @@ func (l *askLog) record(h provider.Head, res decision.Result) {
 			Head:       h.ID,
 			Model:      res.Model,
 			Confidence: stated,
+			CostUSD:    cost,
 			Domain:     l.call.Domain,
 			Detail:     q.Name,
 		})
+		cost = 0
 	}
 }
