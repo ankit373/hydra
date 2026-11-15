@@ -279,13 +279,10 @@ func TestSidebar_UnknownContextSaysNoData(t *testing.T) {
 	}
 }
 
-// The code panel renders whether or not anything has streamed yet, at any
-// width, and in diff mode it colours by prefix instead of syntax.
+// The code panel renders at any width, and in diff mode it colours by prefix
+// instead of syntax.
 func TestCodePanel_RendersAtEverySize(t *testing.T) {
 	m := testCockpit()
-	if got := m.codePanel(m.th(), 40, 20); !strings.Contains(got, "no edits yet") {
-		t.Errorf("the empty state does not say what it is waiting for:\n%s", got)
-	}
 	m.th().codeLang = "go"
 	m.th().codeLines = []string{"package main", "func main() {}", "// done"}
 	m.th().codeShown = len(m.th().codeLines)
@@ -357,5 +354,36 @@ func TestIsWordChar(t *testing.T) {
 		if isWordChar(r) {
 			t.Errorf("isWordChar(%q) = true", r)
 		}
+	}
+}
+
+// A translation or a summary has nothing for the code panel, so the chat takes
+// the whole width until the thread streams a file or a diff.
+func TestChat_NoCodePanelUntilAFileIsTouched(t *testing.T) {
+	m := testCockpit()
+	m.w, m.h = 120, 30
+	m.view = ckViewChat
+	if got := stripANSI(m.View().Content); strings.Contains(got, "CODE ·") {
+		t.Errorf("code panel drawn for a thread that touched no file:\n%s", got)
+	}
+	m.th().codeLang, m.th().codeLines, m.th().codeShown = "go", []string{"package main"}, 1
+	if got := stripANSI(m.View().Content); !strings.Contains(got, "CODE · go") {
+		t.Errorf("code panel missing after a file streamed:\n%s", got)
+	}
+}
+
+// Scrollback clamps to the width actually drawn: the full main pane with no
+// code panel, half of it with one.
+func TestChatLogGeom_MatchesRenderedWidth(t *testing.T) {
+	m := testCockpit()
+	m.w, m.h = 120, 30
+	m.view = ckViewChat
+	mainW := m.w - 23
+	if w, _ := m.chatLogGeom(); w != mainW {
+		t.Errorf("no code panel: log width %d, want the full pane %d", w, mainW)
+	}
+	m.th().codeLines, m.th().codeShown = []string{"package main"}, 1
+	if w, _ := m.chatLogGeom(); w != mainW/2 {
+		t.Errorf("with a code panel: log width %d, want %d", w, mainW/2)
 	}
 }

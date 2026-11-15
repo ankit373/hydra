@@ -231,9 +231,9 @@ func (m Cockpit) chatCode(bodyH int) string {
 	case m.split && m.threadByID(m.splitID) != nil:
 		main = m.splitPanes(mainW, bodyH)
 	default:
-		chatW, split := ckChatSplit(mainW)
+		chatW, split := ckChatSplit(m.th(), mainW)
 		if !split {
-			// too tight for the code panel, the whole main pane is chat.
+			// nothing to show, or too tight for the panel: the main pane is chat.
 			main = m.chatMain(m.th(), mainW, bodyH)
 		} else {
 			main = lipgloss.JoinHorizontal(lipgloss.Top,
@@ -273,7 +273,7 @@ func (m Cockpit) chatLogGeom() (w, logH int) {
 		}
 	} else {
 		w = mainW
-		if chatW, split := ckChatSplit(mainW); split {
+		if chatW, split := ckChatSplit(t, mainW); split {
 			w = chatW
 		}
 		logH = bodyH - lipgloss.Height(m.inputBar(w))
@@ -479,10 +479,11 @@ func (m Cockpit) inputBar(w int) string {
 		Render(strings.Join(wrapped, "\n"))
 }
 
-// ckChatSplit decides the chat/code split for the main column budget.
-func ckChatSplit(mainW int) (chatW int, split bool) {
+// ckChatSplit decides the chat/code split: the panel shows only once the thread
+// has streamed a file or a diff, and only when it fits beside the chat.
+func ckChatSplit(t *ckThread, mainW int) (chatW int, split bool) {
 	chatW = mainW / 2
-	return chatW, mainW-chatW >= 22
+	return chatW, len(t.codeLines) > 0 && mainW-chatW >= 22
 }
 
 // ckTailTruncate keeps the END of a styled line within n cells, the input's
@@ -498,7 +499,7 @@ func ckTailTruncate(s string, n int) string {
 
 // codePanel renders the code panel beside the chat console: the thread's last
 // edit's real content (streamed), or its diff after `d`. w is the full column
-// budget.
+// budget; callers draw it only once the thread has lines to show.
 func (m Cockpit) codePanel(t *ckThread, w, h int) string {
 	inner := w - 2 // border-left (1) + padding-left (1)
 	if inner < 10 {
@@ -514,31 +515,26 @@ func (m Cockpit) codePanel(t *ckThread, w, h int) string {
 	}
 	rows := []string{ckLabelS.Render(title) + ckDimS.Render(" · "+lang)}
 
-	if len(t.codeLines) == 0 {
-		rows = append(rows, "", ckFaintS.Render("no edits yet."),
-			ckFaintS.Render("A task that changes a"), ckFaintS.Render("file streams it here."))
-	} else {
-		shown := min(t.codeShown, len(t.codeLines))
-		// Width() budgets padding too, so a line may only use inner-1 cells;
-		// the 4-cell gutter comes out of that. Overshooting wrapped every full
-		// line in two and silently halved the panel.
-		textW := inner - 1 - 4
-		if textW < 4 {
-			textW = 4
-		}
-		// The panel is a preview, not a pager: show the newest lines that fit.
-		avail := max(1, h-1)
-		start := 0
-		if shown > avail {
-			start = shown - avail
-		}
-		for i := start; i < shown; i++ {
-			rows = append(rows, ckFaintS.Render(fmt.Sprintf("%3d ", i+1))+
-				ckCodeLine(truncate(ckSafe(t.codeLines[i]), textW), t.codeDiff))
-		}
-		if shown < len(t.codeLines) && len(rows) <= avail { // cursor while streaming
-			rows = append(rows, ckFaintS.Render(fmt.Sprintf("%3d ", shown+1))+ckAquaS.Render("▏"))
-		}
+	shown := min(t.codeShown, len(t.codeLines))
+	// Width() budgets padding too, so a line may only use inner-1 cells;
+	// the 4-cell gutter comes out of that. Overshooting wrapped every full
+	// line in two and silently halved the panel.
+	textW := inner - 1 - 4
+	if textW < 4 {
+		textW = 4
+	}
+	// The panel is a preview, not a pager: show the newest lines that fit.
+	avail := max(1, h-1)
+	start := 0
+	if shown > avail {
+		start = shown - avail
+	}
+	for i := start; i < shown; i++ {
+		rows = append(rows, ckFaintS.Render(fmt.Sprintf("%3d ", i+1))+
+			ckCodeLine(truncate(ckSafe(t.codeLines[i]), textW), t.codeDiff))
+	}
+	if shown < len(t.codeLines) && len(rows) <= avail { // cursor while streaming
+		rows = append(rows, ckFaintS.Render(fmt.Sprintf("%3d ", shown+1))+ckAquaS.Render("▏"))
 	}
 	if len(rows) > h {
 		rows = rows[:h]
