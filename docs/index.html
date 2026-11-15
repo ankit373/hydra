@@ -359,16 +359,6 @@ h2.big{font-size:clamp(var(--hy-font-size-2xl),4.4vw,var(--hy-font-size-4xl));le
 .gridln{stroke:color-mix(in srgb,var(--hy-color-accent-secondary) 9%,transparent);stroke-width:1;}
 .axtx{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-subtle);}
 .dotlbl{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-muted);}
-/* percolation graph */
-.pg-edge{stroke:var(--hy-color-border-default);stroke-width:1.4;transition:stroke var(--hy-motion-duration-base),stroke-width var(--hy-motion-duration-base),opacity var(--hy-motion-duration-base);opacity:.5;}
-.pg-node circle{transition:fill var(--hy-motion-duration-base),r var(--hy-motion-duration-base);cursor:pointer;}
-.pg-node text{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-muted);pointer-events:none;}
-.pg-edge.hot{stroke:var(--hy-color-accent-default);stroke-width:2.2;opacity:1;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--hy-color-accent-default) 70%,transparent));}
-.pg-node.hot circle{fill:var(--hy-color-accent-default)!important;}
-.pg-node.dep.hot circle{fill:color-mix(in srgb,var(--hy-color-accent-default) 55%,transparent)!important;}
-.pg-readout{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-subtle);}
-.pg-readout tspan.k{fill:var(--hy-color-status-danger);}
-
 /* ── section 5 · crazy numbers bento ───────────────────────────────────── */
 .bento{display:grid;gap:var(--hy-space-4);margin-top:var(--hy-space-8);grid-template-columns:repeat(6,1fr);}
 @media(max-width:900px){.bento{grid-template-columns:repeat(2,1fr);}}
@@ -544,7 +534,7 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
 <section class="blk wrap reveal" id="math">
   <div class="klabel"><span>The math, drawn</span><b>how the router decides</b></div>
   <h2 class="big">Three curves that <span class="grad">run the router</span>.</h2>
-  <p class="lede">Hydra picks from each model's measured record, stops asking for more evidence once the answer clears your target, and for code, reads the dependency graph to know when a change is risky. Here is the math.</p>
+  <p class="lede">Hydra picks from each model's measured record, and stops asking for more evidence once the answer clears your target. Here is the math.</p>
 
   <div class="chartgrid">
     <!-- (a) Pareto frontier -->
@@ -619,17 +609,43 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
       <div class="foot"><b>Fewer calls, bar cleared</b>: a stated probability you can audit against outcomes.</div>
     </div>
 
-    <!-- (c) percolation-κ blast radius -->
-    <div class="chart" id="chartPercol">
-      <div class="ct">c · percolation-κ</div>
-      <h3>Blast radius (Molloy-Reed)</h3>
-      <p class="cd">κ = ⟨k²⟩/⟨k⟩. A hub file with many transitive dependents is cascade-capable, so an edit to it must clear a higher bar. <b>Hover a node.</b></p>
-      <svg viewBox="0 0 340 260" id="percolSvg" role="img" aria-label="Dependency graph. Hovering a high-kappa hub lights its dependents.">
-        <g id="pgEdges"></g>
-        <g id="pgNodes"></g>
-        <text class="pg-readout" id="pgReadout" x="170" y="248" text-anchor="middle">hover a node, κ &amp; blast radius</text>
+    <!-- (c) calibration, diagnostic power D -->
+    <div class="chart" id="chartCal">
+      <div class="ct">c · calibration</div>
+      <h3>A coin flip tells you nothing</h3>
+      <p class="cd">Each model or check earns a record: how often it says "correct" when the answer is right, and when it is wrong. The gap between the two is its evidence, <i>D</i>. A coin-flip source has no gap, so its vote moves nothing.</p>
+      <svg viewBox="0 0 340 260" role="img" aria-label="Two sources. A measured source says correct 90% of the time on right answers and 10% on wrong ones, D 1.76 nats. A coin-flip source says correct 50% of the time on both, D 0.">
+        <line class="axisln" x1="40" y1="220" x2="326" y2="220"/>
+        <line class="axisln" x1="40" y1="20" x2="40" y2="220"/>
+        <text class="axtx" x="12" y="120" text-anchor="middle" transform="rotate(-90 12 120)">P(says correct)  →</text>
+        <line class="gridln" x1="40" y1="130" x2="326" y2="130"/>
+        <text class="axtx" x="36" y="134" text-anchor="end">.5</text>
+        <!-- measured source: se 0.90, sp 0.90 -->
+        <g class="dots">
+          <rect class="pop" x="76" y="58" width="30" height="162" rx="3" fill="var(--hy-color-chart-series-1)" style="transition-delay:.2s"/>
+          <rect class="pop" x="114" y="202" width="30" height="18" rx="3" fill="var(--hy-color-chart-series-2)" style="transition-delay:.35s"/>
+          <text class="dotlbl pop" x="91" y="52" text-anchor="middle" style="transition-delay:.4s">.90</text>
+          <text class="dotlbl pop" x="129" y="196" text-anchor="middle" style="transition-delay:.45s">.10</text>
+          <text class="dotlbl pop" x="110" y="30" text-anchor="middle" fill="var(--hy-color-accent-default)" style="transition-delay:.6s">D = 1.76 nats</text>
+        </g>
+        <!-- coin-flip source: se 0.50, sp 0.50 -->
+        <g class="dots">
+          <rect class="pop" x="216" y="130" width="30" height="90" rx="3" fill="var(--hy-color-chart-series-1)" style="transition-delay:.8s"/>
+          <rect class="pop" x="254" y="130" width="30" height="90" rx="3" fill="var(--hy-color-chart-series-2)" style="transition-delay:.95s"/>
+          <text class="dotlbl pop" x="231" y="124" text-anchor="middle" style="transition-delay:1s">.50</text>
+          <text class="dotlbl pop" x="269" y="124" text-anchor="middle" style="transition-delay:1.05s">.50</text>
+          <text class="dotlbl pop" x="250" y="30" text-anchor="middle" fill="var(--hy-color-text-subtle)" style="transition-delay:1.2s">D = 0</text>
+        </g>
+        <text class="axtx" x="110" y="238" text-anchor="middle">measured source</text>
+        <text class="axtx" x="250" y="238" text-anchor="middle">coin flip</text>
+        <g class="axtx">
+          <rect x="76" y="248" width="8" height="8" rx="2" fill="var(--hy-color-chart-series-1)"/>
+          <text x="88" y="256">answer right</text>
+          <rect x="196" y="248" width="8" height="8" rx="2" fill="var(--hy-color-chart-series-2)"/>
+          <text x="208" y="256">answer wrong</text>
+        </g>
       </svg>
-      <div class="foot"><b>High-κ ⇒ higher bar.</b> The required probability rises with the graph.</div>
+      <div class="foot"><b>Measured, not assumed.</b> <code translate="no">hyctl trust calibration</code> shows each source's D on your machine.</div>
     </div>
   </div>
   <div style="text-align:center;margin-top:var(--hy-space-8);">
@@ -1009,8 +1025,6 @@ function onVisible(el,cb,opts){
     {threshold:(opts&&opts.threshold)||0.18});
   io.observe(el);return io;
 }
-var NS='http://www.w3.org/2000/svg';
-function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
 
 /* ══════════════════════════════════════════════════════════════════════════
    1 · HERO, hydra-hud: heads converge into the cortex, then the scroll
@@ -1628,7 +1642,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════
-   3 · MATH, reveal charts on scroll (Pareto + SPRT via CSS); percolation graph
+   3 · MATH, reveal charts on scroll (Pareto, SPRT, calibration via CSS)
    ══════════════════════════════════════════════════════════════════════════*/
 (function charts(){
   // set dash lengths so stroke-dashoffset animation works
@@ -1636,95 +1650,12 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var p=$(sel);if(!p)return;var len=0;try{len=p.getTotalLength();}catch(e){len=600;}
     p.style.strokeDasharray=len;p.style.strokeDashoffset=reduce?0:len;
   });
-  ['#chartPareto','#chartSprt','#chartPercol'].forEach(function(sel){
+  ['#chartPareto','#chartSprt','#chartCal'].forEach(function(sel){
     var el=$(sel);if(!el)return;
     onVisible(el,function(vis,io){if(vis){el.classList.add('in');
       var line=el.querySelector('.draw');if(line)line.style.strokeDashoffset=0;
       if(io)io.disconnect();}},{threshold:0.3});
   });
-
-  /* percolation-κ dependency graph */
-  var host=$('#percolSvg'); if(!host) return;
-  var gE=$('#pgEdges'),gN=$('#pgNodes'),ro=$('#pgReadout');
-  // nodes: two hubs (high-κ token.go / low-κ log.go) + dependents + leaves
-  var nodes=[
-    {id:'token', x:120,y:96, label:'token.go', hub:true, k:'3.1', deps:12},
-    {id:'log',   x:270,y:200,label:'log.go',   hub:true, k:'0.4', deps:1},
-    // dependents of token.go
-    {id:'auth',  x:60, y:56, dep:'token'},
-    {id:'api',   x:60, y:130},
-    {id:'sess',  x:120,y:40, dep:'token'},
-    {id:'mw',    x:180,y:56, dep:'token'},
-    {id:'login', x:180,y:130,dep:'token'},
-    {id:'refresh',x:40,y:96, dep:'token'},
-    {id:'jwt',   x:120,y:150,dep:'token'},
-    // dependents of log.go
-    {id:'metrics',x:320,y:170,dep:'log'}
-  ];
-  var edges=[
-    ['auth','token'],['sess','token'],['mw','token'],['login','token'],
-    ['refresh','token'],['jwt','token'],['api','auth'],['login','jwt'],
-    ['metrics','log']
-  ];
-  var byId={};nodes.forEach(function(n){byId[n.id]=n;});
-  // mark transitive dependents of token: api depends on auth which depends on token
-  var TOKEN_DEPS=['auth','sess','mw','login','refresh','jwt','api'];
-  var LOG_DEPS=['metrics'];
-  // draw edges
-  var edgeEls={};
-  edges.forEach(function(e,i){
-    var a=byId[e[0]],b=byId[e[1]];
-    var ln=svg('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'pg-edge'});
-    ln.setAttribute('data-a',e[0]);ln.setAttribute('data-b',e[1]);
-    gE.appendChild(ln);edgeEls[e[0]+'>'+e[1]]=ln;
-  });
-  // draw nodes
-  nodes.forEach(function(n){
-    var g=svg('g',{class:'pg-node'+(n.hub?' hub':' dep')});
-    g.setAttribute('data-id',n.id);
-    var r=n.hub?11:5.5;
-    var c=svg('circle',{cx:n.x,cy:n.y,r:r});
-    c.style.fill=n.hub?'var(--hy-color-'+(n.id==='token'?'status-danger':'status-success')+')':'color-mix(in srgb,var(--hy-color-accent-secondary) 50%,transparent)';
-    if(n.hub&&n.id==='token'&&!reduce)c.style.filter='drop-shadow(0 0 5px color-mix(in srgb,var(--hy-color-status-danger) 70%,transparent))';
-    g.appendChild(c);
-    if(n.label){var tx=svg('text',{x:n.x,y:n.y-15,'text-anchor':'middle'});tx.textContent=n.label;g.appendChild(tx);}
-    gN.appendChild(g);
-    function enter(){highlight(n);}
-    function leave(){clearHi();}
-    g.addEventListener('mouseenter',enter);g.addEventListener('mouseleave',leave);
-    g.addEventListener('focus',enter);g.addEventListener('blur',leave);
-    g.setAttribute('tabindex','0');
-  });
-  function setHot(id,on){var el=gN.querySelector('.pg-node[data-id="'+id+'"]');if(el)el.classList.toggle('hot',on);}
-  function highlight(n){
-    clearHi();
-    if(!n.hub){setHot(n.id,true);return;}
-    setHot(n.id,true);
-    var deps=(n.id==='token')?TOKEN_DEPS:LOG_DEPS;
-    deps.forEach(function(d){setHot(d,true);});
-    // light edges touching hot nodes
-    $all('.pg-edge',gE).forEach(function(ln){
-      var a=ln.getAttribute('data-a'),b=ln.getAttribute('data-b');
-      var hot=(a===n.id||b===n.id||deps.indexOf(a)>=0||deps.indexOf(b)>=0);
-      ln.classList.toggle('hot',hot);
-    });
-    var bar=(n.id==='token')?'0.95':'0.80';
-    ro.innerHTML='';
-    var t1=svg('tspan',{});t1.textContent=n.label+' · ';
-    var t2=svg('tspan',{class:'k'});t2.textContent='κ='+n.k;
-    var t3=svg('tspan',{});t3.textContent=' · '+n.deps+' dependents · bar → '+bar;
-    ro.appendChild(t1);ro.appendChild(t2);ro.appendChild(t3);
-    ro.style.fill='var(--hy-color-'+(n.id==='token'?'text-default':'text-muted')+')';
-  }
-  function clearHi(){
-    $all('.pg-node',gN).forEach(function(g){g.classList.remove('hot');});
-    $all('.pg-edge',gE).forEach(function(l){l.classList.remove('hot');});
-    ro.textContent='hover a node, κ & blast radius';ro.style.fill='';
-  }
-  // idle demo: briefly pulse the token hub once visible (reduced-motion skips)
-  if(!reduce){
-    onVisible(host,function(vis,io){if(vis){highlight(byId.token);setTimeout(clearHi,1600);if(io)io.disconnect();}},{threshold:0.4});
-  }
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════
