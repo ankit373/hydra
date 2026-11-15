@@ -32,6 +32,13 @@ const ext = PLATFORM === 'windows' ? 'zip' : 'tar.gz';
 const archive = `${PROJECT}_${version}_${PLATFORM}_${ARCH}.${ext}`;
 const base = `https://github.com/${REPO}/releases/download/${TAG}`;
 const binName = PLATFORM === 'windows' ? 'hyctl.exe' : 'hyctl';
+
+// Git for Windows puts GNU tar on PATH, which can't read zip; Windows' own bsdtar can (#1509).
+function tarPath() {
+  if (PLATFORM !== 'windows') return 'tar';
+  const sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+  return fs.existsSync(sys) ? sys : 'tar';
+}
 const binDir = path.join(__dirname, '..', 'bin');
 
 // Follow redirects (GitHub release assets 302 to a CDN) and buffer the body.
@@ -97,7 +104,7 @@ async function main() {
   fs.writeFileSync(archivePath, archiveBuf);
 
   try {
-    execFileSync('tar', ['-xf', archivePath, '-C', tmp, binName], { stdio: 'ignore' });
+    execFileSync(tarPath(), ['-xf', archivePath, '-C', tmp, binName], { stdio: 'ignore' });
   } catch (e) {
     fail(`extraction failed, ${e.message}`);
   }
