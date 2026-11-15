@@ -16,6 +16,8 @@ logs/
 # And the entity probe set, which is embedded into the binary rather than read
 # at test time: without it the package does not build at all.
 !internal/entity/*.jsonl
+# And the bench suites' parser fixtures, a few hand-written rows in the upstream format.
+!internal/bench/suites/testdata/*/*.jsonl
 state.json
 auth_required.json
 

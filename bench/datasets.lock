@@ -31,3 +31,13 @@ licence_verified = "https://github.com/clinc/oos-eval/blob/828f8093932c8fe6ca793
 name = "data_full.json"
 url = "https://raw.githubusercontent.com/clinc/oos-eval/828f8093932c8fe6ca7936c3d2e52903b1c523de/data/data_full.json"
 sha256 = "36923c3705a59e08fe9c3883d8bc2dd966ef93e22cb78ac41171782a698d56e0"
+
+[gsm8k]
+revision = "openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c"
+licence = "MIT"
+licence_verified = "https://github.com/openai/grade-school-math/blob/3101c7d5072418e28b9008a6636bde82a006892c/LICENSE, 2026-11-15"
+
+[[gsm8k.file]]
+name = "test.jsonl"
+url = "https://raw.githubusercontent.com/openai/grade-school-math/3101c7d5072418e28b9008a6636bde82a006892c/grade_school_math/data/test.jsonl"
+sha256 = "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14"

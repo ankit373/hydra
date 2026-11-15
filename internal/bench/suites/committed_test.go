@@ -33,6 +33,7 @@ func TestCommittedSplits_CountsAndRanks(t *testing.T) {
 	for suite, want := range map[string]struct{ rows, excluded int }{
 		"banking77": {13083, 4},
 		"clinc150":  {23700, 9},
+		"gsm8k":     {1319, 0},
 	} {
 		rows := committedSplits(t, suite)
 		ids := map[string]bool{}
@@ -107,6 +108,14 @@ func TestCommittedSplits_GoldenIDs(t *testing.T) {
 			{"test/0599", bench.SplitExcluded, 17927560966528348799},
 			{"test/0938", bench.SplitExcluded, 1639612101800119413},
 		},
+		"gsm8k": {
+			{"test/0000", bench.SplitCalibration, 17528850516536583371},
+			{"test/0263", bench.SplitTest, 2583345747240974078},
+			{"test/0526", bench.SplitTest, 8329161390577877157},
+			{"test/0789", bench.SplitTest, 2924700427788190797},
+			{"test/1052", bench.SplitTest, 13382222736159128620},
+			{"test/1315", bench.SplitTest, 2835625184471401485},
+		},
 	}
 	for suite, want := range golden {
 		by := map[string]bench.SplitRow{}
@@ -129,7 +138,7 @@ func TestCommittedSmokeIDs_AreTheFirstTestItemsByRank(t *testing.T) {
 		t.Fatal(err)
 	}
 	var want strings.Builder
-	for _, suite := range []string{"banking77", "clinc150"} {
+	for _, suite := range []string{"banking77", "clinc150", "gsm8k"} {
 		for _, it := range bench.FirstByRank(SplitItems(committedSplits(t, suite)), bench.SplitTest, SmokeTestItems) {
 			want.WriteString(suite + "\t" + it.ID + "\n")
 		}
@@ -145,7 +154,8 @@ func TestCommittedLock_PinsWhatTheLoadersRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][]string{"banking77": {"categories.json", "train.csv", "test.csv"}, "clinc150": {"data_full.json"}}
+	want := map[string][]string{"banking77": {"categories.json", "train.csv", "test.csv"}, "clinc150": {"data_full.json"},
+		"gsm8k": {"test.jsonl"}}
 	if len(lock) != len(Registry()) {
 		t.Fatalf("lock pins %v, registry has %d suites", bench.Names(lock), len(Registry()))
 	}
