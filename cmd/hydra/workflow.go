@@ -97,9 +97,12 @@ func (r dispatchRouter) Route(ctx context.Context, prompt string, step workflow.
 	}
 	opts.Domain = step.Kind
 	// The prompt carries the needed steps' output fenced, so ground checks against it.
-	checks, err := parseChecks(step.Check, prompt)
+	checks, gen, err := parseChecks(step.Check, prompt)
 	if err != nil {
 		return workflow.StepResult{}, err
+	}
+	if gen.asked() {
+		return workflow.StepResult{}, errors.New("a workflow step cannot run gen checks yet; use them with hyctl dispatch")
 	}
 	esc := checkRule(&opts, checks, policy.Escalations(fp))
 	ctx, cancel := fp.Deadline(ctx)

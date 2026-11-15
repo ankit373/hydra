@@ -129,7 +129,10 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           gen:claims-ground with `ground.Check`, gen:claims-judge with one yes/no question per sentence.
                           Writing gets a rubric of yes/no items from the request, any item the request does not back
                           dropped, fewer than 3 not checked: gen:rubric-code (word cap, phrase present or absent, no
-                          model) and gen:rubric-judge (one question per item). Nothing calls it yet.
+                          model) and gen:rubric-judge (one question per item). `hyctl dispatch --check gen` runs the
+                          default checks for `--kind`, `gen:<kind>` one by name; a head of another family writes them
+                          (`PickGenerator`, every head priced by `Dispatcher.PricedScores`), and `--max-usd` stops the
+                          rest as not checked.
 internal/vet/           ← Review a diff: open-code-review resolves the files and rules, the router
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace

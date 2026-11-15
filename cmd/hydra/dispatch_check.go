@@ -33,16 +33,22 @@ type answerCheck struct {
 }
 
 // parseChecks builds every --check, refusing a bad one before anything routes.
-func parseChecks(specs []string, prompt string) ([]answerCheck, error) {
+// The gen checks come back apart: they are written only once the answer exists.
+func parseChecks(specs []string, prompt string) ([]answerCheck, genChecks, error) {
 	checks := make([]answerCheck, 0, len(specs))
+	var gen genChecks
 	for _, s := range specs {
-		c, err := parseCheck(s, prompt)
-		if err != nil {
-			return nil, fmt.Errorf("--check %q: %w", s, err)
+		isGen, err := gen.parseGen(s)
+		if !isGen {
+			var c answerCheck
+			c, err = parseCheck(s, prompt)
+			checks = append(checks, c)
 		}
-		checks = append(checks, c)
+		if err != nil {
+			return nil, genChecks{}, fmt.Errorf("--check %q: %w", s, err)
+		}
 	}
-	return checks, nil
+	return checks, gen, nil
 }
 
 func parseCheck(spec, prompt string) (answerCheck, error) {

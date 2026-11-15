@@ -104,10 +104,10 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 
 | Kind of work | Example | How Hydra checks it | What exists today |
 |---|---|---|---|
-| Write | draft a reply, rewrite a paragraph | several models agree; a judge picks the best; you confirm the outcome | agreement (`--confidence`) and a judge (`--swarm-mode best`); outcomes via `hyctl trust outcome` |
-| Summarise | a report, a call transcript | every claim appears in the source | `--check ground` or `hyctl oracle ground`, numbers, dates, names, paths, identifiers and quoted phrases only |
-| Extract | invoice fields, contract terms to JSON | the output fits a schema, required fields are present | any command via `--check cmd:...` or `hyctl oracle verify --candidate` |
-| Classify | label tickets, route emails | the label is one of the allowed set; models agree | `--check match:labels=<file>` and `match` verifiers in `hyctl serve`; agreement via `--confidence` |
+| Write | draft a reply, rewrite a paragraph | several models agree; a judge picks the best; you confirm the outcome | agreement (`--confidence`) and a judge (`--swarm-mode best`); outcomes via `hyctl trust outcome`; a yes/no rubric from the request via `--check gen` |
+| Summarise | a report, a call transcript | every claim appears in the source | `--check ground` or `hyctl oracle ground`, numbers, dates, names, paths, identifiers and quoted phrases only; sentence by sentence via `--check gen` |
+| Extract | invoice fields, contract terms to JSON | the output fits a schema, required fields are present | any command via `--check cmd:...` or `hyctl oracle verify --candidate`; fields and source values via `--check gen`, a second model's extraction via `--check gen:roundtrip` |
+| Classify | label tickets, route emails | the label is one of the allowed set; models agree | `--check match:labels=<file>` and `match` verifiers in `hyctl serve`; the label set the request names via `--check gen`; agreement via `--confidence` |
 | Translate | release notes into German | models agree | agreement only; no dedicated check yet |
 | Answer from documents | questions over files you give it | the answer is grounded in the given text | `--check ground` or `hyctl oracle ground` |
 | Analyse | compare numbers, explain a trend | a script recomputes the figures | any command via `--check cmd:...` or `hyctl oracle verify` |
@@ -977,6 +977,7 @@ hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is 
 hyctl dispatch --check ground "..."     # check the answer against the context the prompt fenced
 hyctl dispatch --check match:labels=labels.txt "label this ticket: ..."   # the answer must be one of the labels
 hyctl dispatch --check 'cmd:check-jsonschema --schemafile invoice.json {file}' "pull the invoice fields as JSON"
+hyctl dispatch --kind classification --check gen "is this ticket billing, bug or how-to? ..."   # checks written for the request by another model
 
 # Serve the router to anything that speaks OpenAI
 hyctl serve                             # OpenAI-compatible endpoint, loopback only

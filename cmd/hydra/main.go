@@ -867,6 +867,7 @@ func cmdDispatch() *cobra.Command {
 		a2aFile   string
 		enumKey   string
 		maxCost   float64
+		maxUSD    float64
 		noStream  bool
 		// swarm flags
 		doSwarm       bool
@@ -937,7 +938,7 @@ func cmdDispatch() *cobra.Command {
 					"`hyctl oracle verify --candidate <file> -- <command>`")
 			}
 			prompt := strings.Join(args, " ")
-			answerChecks, err := parseChecks(checks, prompt)
+			answerChecks, gen, err := parseChecks(checks, prompt)
 			if err != nil {
 				return err
 			}
@@ -1253,6 +1254,7 @@ func cmdDispatch() *cobra.Command {
 			// reading the zero (#838).
 			ceiling, ceilingFrom := costCeiling(fp, cmd.Flags().Changed("max-cost"), maxCost)
 			rcp := recipe.Default(checks)
+			rcp.MaxUSD = maxUSD
 			opts := dispatch.Options{
 				Recipe:         &rcp,
 				RecipeSkips:    recipeSkips,
@@ -1341,6 +1343,11 @@ func cmdDispatch() *cobra.Command {
 			finish := func() error {
 				printOutputWarning(result.OutputProvenance)
 				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID)
+				genKind := ""
+				if cmd.Flags().Changed("kind") {
+					genKind = domain
+				}
+				genRun{want: gen, d: d, kind: genKind, runID: runID, maxUSD: maxUSD, localOnly: localOnly}.run(ctx, result, prompt)
 				return nil
 			}
 			if sr != nil && sr.Streamed() {
@@ -1383,6 +1390,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE, selects the tier when --tier is unset")
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
+	cmd.Flags().Float64Var(&maxUSD, "max-usd", 0, "spend cap for the request in USD: once the answer and its generated checks have spent it, the remaining checks are not checked (0 = none)")
 	cmd.Flags().BoolVar(&noStream, "no-stream", false, "print the answer in one block instead of as it arrives, and draw no fan-out panel (piped output never streams)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
@@ -1402,7 +1410,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use --check, `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
 	cmd.Flags().StringArrayVar(&checks, "check", nil, "check the answer itself, repeatable: ground (every number and identifier appears in the prompt's fenced context), "+
 		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file}). "+
-		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error")
+		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error. "+
+		"gen runs checks written for the request's --kind by a head of another family where one exists, gen:<check> one of them, e.g. gen:roundtrip; these only report")
 	cmd.Flags().IntVar(&maxEsc, "max-escalations", 1, "with --check, how many stronger heads a failed check may ask; default from policy.yaml max_retries and escalate_on_fail, 0 turns it off")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")

@@ -306,6 +306,14 @@ func TestDispatchRouter_RefusesAnUnknownEnum(t *testing.T) {
 	}
 }
 
+// A saved step naming a gen check is refused, never routed with the check silently dropped.
+func TestDispatchRouter_RefusesAGenCheck(t *testing.T) {
+	testutil.NewSandbox(t)
+	if _, err := (dispatchRouter{}).Route(t.Context(), "p", workflow.Step{Check: []string{"gen"}}); err == nil {
+		t.Fatal("a step's gen check was dropped and the step routed")
+	}
+}
+
 // --needs N belongs to --step N, the same pairing as --enum, and "" is no
 // needs rather than the default of every earlier step.
 func TestWorkflowRun_NeedsPairsWithStep(t *testing.T) {
