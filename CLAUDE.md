@@ -109,7 +109,9 @@ internal/mcpregistry/   ← MCP server trust registry: sync official registry, s
                           (#1303). `hyctl mcp registry`.
 internal/oracle/        ← Checks as calibrated evidence: any command (tests, a schema check), label match, predicates. `hyctl oracle`.
 internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, claims, rubric, tests), stored once
-                          at $HYDRA_HOME/evalset/checks/, run on one answer with a verdict per check. `HeadDecider`
+                          at $HYDRA_HOME/evalset/checks/, run on one answer with a verdict per check, named
+                          gen:<kind> or gen:<kind>-<variant>. An oracle reaches the spec's writer head at check
+                          time only through the `Env` Run is given; none there means not checked. `HeadDecider`
                           answers a yes/no predicate with one head: a decision head's probabilities, or a chat head's
                           strict yes or no. Classification gets a labels check: the set the request lists, with any
                           label the writer invented dropped. Extraction gets a fields check: valid JSON, required fields,
