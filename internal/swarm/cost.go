@@ -132,6 +132,12 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			entry["config"] = breadcrumb
 		}
+		if a.CacheReadTokens > 0 { // match the omitempty on cost.Row
+			entry["cache_read_tokens"] = a.CacheReadTokens
+		}
+		if a.CacheWriteTokens > 0 {
+			entry["cache_write_tokens"] = a.CacheWriteTokens
+		}
 		raw, _ := json.Marshal(entry)
 		_, _ = fmt.Fprintln(f, string(raw))
 	}

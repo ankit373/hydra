@@ -44,6 +44,11 @@ type Row struct {
 	TaskID         string  `json:"task_id"`
 	RunID          string  `json:"run_id"`
 
+	// Parts of PromptTokens read from or written to the provider's cache.
+	// Absent means none reported, which on an old row is unknown, not zero.
+	CacheReadTokens  int `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+
 	// SpanID is the run-log span this spend belongs to. Without it a cost row
 	// joins the trace only by task id, which cannot say which of several
 	// attempts on one task actually spent the money.

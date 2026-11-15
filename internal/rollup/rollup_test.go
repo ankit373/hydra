@@ -205,3 +205,36 @@ func TestRefreshBuildsFromCostLog(t *testing.T) {
 		t.Errorf("second refresh doubled: calls=%d", again[0].Calls)
 	}
 }
+
+func TestRollup_SumsCacheTokensPerModel(t *testing.T) {
+	cached := func(ts, model string, read, write int) cost.Row {
+		r := row(ts, model, 2, 100, 0.01, 1, 1)
+		r.CacheReadTokens, r.CacheWriteTokens = read, write
+		return r
+	}
+	got := Build([]cost.Row{
+		cached("2026-09-01T10:00:00Z", "m1", 80, 0),
+		cached("2026-09-01T11:00:00Z", "m1", 60, 20),
+		cached("2026-09-01T12:00:00Z", "m2", 0, 0),
+	})
+	by := map[string]Row{}
+	for _, r := range got {
+		by[r.Model] = r
+	}
+	if m1 := by["m1"]; m1.CacheReadTokens != 140 || m1.CacheWriteTokens != 20 || m1.PromptTokens != 200 {
+		t.Errorf("m1 = read %d write %d of %d, want 140/20 of 200", m1.CacheReadTokens, m1.CacheWriteTokens, m1.PromptTokens)
+	}
+	if m2 := by["m2"]; m2.CacheReadTokens != 0 || m2.CacheWriteTokens != 0 {
+		t.Errorf("m2 = %+v, want no cache tokens", m2)
+	}
+
+	merged, err := Merge(got, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range merged {
+		if r.Model == "m1" && (r.CacheReadTokens != 280 || r.CacheWriteTokens != 40) {
+			t.Errorf("merged m1 = %d/%d, want 280/40", r.CacheReadTokens, r.CacheWriteTokens)
+		}
+	}
+}

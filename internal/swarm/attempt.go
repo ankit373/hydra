@@ -43,6 +43,10 @@ type Attempt struct {
 	StartedAt       time.Time
 	FinishedAt      time.Time
 	Rank            int // 1 = winner; 0 = unranked
+
+	// Parts of InputTokens read from or written to the provider's cache.
+	CacheReadTokens  int
+	CacheWriteTokens int
 }
 
 // Succeeded reports whether the attempt produced usable output.

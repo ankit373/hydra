@@ -1164,12 +1164,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			SpanID: span, ParentSpanID: taskSpan,
 			InputRef: inRef, OutputRef: outRef,
 			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
-			CostUSD:      r.CostUSD,
-			DurationMS:   resp.Duration.Milliseconds(),
-			InputTokens:  resp.InputTokens,
-			OutputTokens: resp.OutputTokens,
-			TTFTMs:       resp.TTFT.Milliseconds(),
-			Meta:         dispatchMeta(opts, resp),
+			CostUSD:          r.CostUSD,
+			DurationMS:       resp.Duration.Milliseconds(),
+			InputTokens:      resp.InputTokens,
+			OutputTokens:     resp.OutputTokens,
+			CacheReadTokens:  resp.CacheReadTokens,
+			CacheWriteTokens: resp.CacheWriteTokens,
+			TTFTMs:           resp.TTFT.Milliseconds(),
+			Meta:             dispatchMeta(opts, resp),
 		})
 		_ = d.logDispatch(r, prompt, opts, firstPick{head: first, prob: actProb, step: i}, span)
 		d.recordBudget(r)
@@ -1962,6 +1964,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, first f
 	if opts.Objective != "" {
 		dispatchEntry["objective"] = string(opts.Objective)
 	}
+	addCacheTokens(dispatchEntry, r.Response)
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
 	}
@@ -2004,6 +2007,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, first f
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb
 		}
+		addCacheTokens(costEntry, r.Response)
 		// enum is empty on an objective route, so this is what attributes it.
 		if opts.Objective != "" {
 			costEntry["objective"] = string(opts.Objective)
@@ -2017,6 +2021,16 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, first f
 	}
 
 	return nil
+}
+
+// addCacheTokens writes the cache counts, matching the omitempty on cost.Row.
+func addCacheTokens(entry map[string]any, resp *executor.Response) {
+	if resp.CacheReadTokens > 0 {
+		entry["cache_read_tokens"] = resp.CacheReadTokens
+	}
+	if resp.CacheWriteTokens > 0 {
+		entry["cache_write_tokens"] = resp.CacheWriteTokens
+	}
 }
 
 func appendJSONL(path string, entry map[string]any) error {

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/waterfall"
 )
 
 func sampleRow() cost.Row {
@@ -318,5 +320,44 @@ func TestSpanFor_FallsBackOnAnUnusableSpanID(t *testing.T) {
 				t.Fatalf("fallback span id %q is not 8 bytes of hex", span.SpanID)
 			}
 		})
+	}
+}
+
+func TestExport_CacheTokenAttributes(t *testing.T) {
+	attrs := func(p Payload) map[string]string {
+		out := map[string]string{}
+		for _, kv := range p.ResourceSpans[0].ScopeSpans[0].Spans[0].Attributes {
+			if kv.Value.IntValue != nil {
+				out[kv.Key] = *kv.Value.IntValue
+			}
+		}
+		return out
+	}
+	const read, write = "gen_ai.usage.cache_read.input_tokens", "gen_ai.usage.cache_creation.input_tokens"
+
+	r := sampleRow()
+	r.CacheReadTokens, r.CacheWriteTokens = 900, 100
+	p, err := Build(nil, []cost.Row{r}, "hydra", "1.4.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := attrs(p); a[read] != "900" || a[write] != "100" {
+		t.Errorf("cost-row span cache attrs = %q/%q, want 900/100", a[read], a[write])
+	}
+
+	tr := &waterfall.Trace{RunID: "run-xyz", Roots: []*waterfall.Span{{
+		ID: "0102030405060708", TaskID: "task-abc", Kind: runlog.KindDispatchFinished,
+		Start: time.Unix(1, 0), End: time.Unix(2, 0), InputTokens: 1000, CacheReadTokens: 900,
+	}}}
+	p, err = Build([]*waterfall.Trace{tr}, nil, "hydra", "1.4.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := attrs(p)
+	if a[read] != "900" {
+		t.Errorf("run-log span cache read = %q, want 900", a[read])
+	}
+	if _, ok := a[write]; ok {
+		t.Error("a span with no cache writes exports a write count")
 	}
 }
