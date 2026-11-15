@@ -8,8 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 )
+
+// helperMemMB sits well above the helper's own peak address space when the cap applies,
+// so a runtime mapping in that window cannot fail it. Measured in the PR for #1529.
+const helperMemMB = 4096
 
 func TestWithLimits_RefusesNilEnv(t *testing.T) {
 	cmd := exec.Command("/bin/echo", "hello")
@@ -82,7 +89,7 @@ func TestRlimitExecHelperProcess(t *testing.T) {
 	if os.Getenv("HYDRA_TEST_RLIMIT_HELPER") != "1" {
 		return
 	}
-	if err := RunRlimitExec([]string{"true"}); err != nil {
+	if err := RunRlimitExec([]string{"/bin/sh", "-c", "ulimit -v; ulimit -t"}); err != nil {
 		os.Stderr.WriteString(err.Error())
 		os.Exit(1)
 	}
@@ -96,12 +103,29 @@ func TestRunRlimitExec(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-test.run=^TestRlimitExecHelperProcess$")
 	cmd.Env = append(os.Environ(),
 		"HYDRA_TEST_RLIMIT_HELPER=1",
-		"HYDRA_RLIMIT_MEM_MB=64",
+		"HYDRA_RLIMIT_MEM_MB="+strconv.Itoa(helperMemMB),
 		"HYDRA_RLIMIT_CPU_SECONDS=5",
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("helper process failed: %v, output: %s", err, out)
+	}
+	wantChildLimits(t, out, helperMemMB, "5")
+}
+
+// wantChildLimits checks what the helper's shell printed: ulimit -v in KiB, then ulimit -t.
+// Darwin applies no memory limit, so only the CPU line is checked there.
+func wantChildLimits(t *testing.T, out []byte, memMB int, cpu string) {
+	t.Helper()
+	got := strings.Fields(string(out))
+	if len(got) != 2 {
+		t.Fatalf("child printed %q, want two lines: ulimit -v and ulimit -t", out)
+	}
+	if want := strconv.Itoa(memMB * 1024); runtime.GOOS == "linux" && got[0] != want {
+		t.Errorf("child ulimit -v = %s KiB, want %s", got[0], want)
+	}
+	if got[1] != cpu {
+		t.Errorf("child ulimit -t = %s, want %s", got[1], cpu)
 	}
 }
 

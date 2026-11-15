@@ -11,6 +11,8 @@ package main
 import (
 	"context"
 	"os/exec"
+	"runtime"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -111,15 +113,21 @@ func TestRlimitExecE2E_NoLimitSurvives(t *testing.T) {
 	}
 }
 
-// A memory ceiling must never surface as an error to the caller: enforced
-// for real on Linux, a documented no-op on Darwin (RLIMIT_AS/RLIMIT_DATA
-// fail with EINVAL there), but the real binary must run the target either way.
+// hyctlMemMB sits well above hyctl's own peak address space when the cap applies,
+// so a runtime mapping in that window cannot fail it. Measured in the PR for #1529.
+const hyctlMemMB = 4096
+
+// A memory ceiling must reach the target on Linux, and on Darwin, where it is a
+// documented no-op (RLIMIT_AS fails with EINVAL), the target must still run.
 func TestRlimitExecE2E_MemoryLimitRunsTheTarget(t *testing.T) {
 	bin := buildHyctl(t)
-	cmd := exec.Command(bin, "__rlimit-exec", "--", "/bin/echo", "ok")
-	cmd.Env = append(cmd.Environ(), "HYDRA_RLIMIT_MEM_MB=64")
+	cmd := exec.Command(bin, "__rlimit-exec", "--", "/bin/sh", "-c", "ulimit -v")
+	cmd.Env = append(cmd.Environ(), "HYDRA_RLIMIT_MEM_MB="+strconv.Itoa(hyctlMemMB))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("unexpected error with a memory ceiling set: %v, output: %s", err, out)
+	}
+	if want := strconv.Itoa(hyctlMemMB*1024) + "\n"; runtime.GOOS == "linux" && string(out) != want {
+		t.Errorf("child ulimit -v = %q, want %q KiB", out, want)
 	}
 }
