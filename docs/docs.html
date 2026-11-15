@@ -393,6 +393,7 @@ hyctl dispatch --confidence 0.95 "..."  <span class="c"># SPRT: sample until thi
 hyctl dispatch --check ground "..."     <span class="c"># check the answer against the context the prompt fenced</span>
 hyctl dispatch --check match:labels=labels.txt "label this ticket: ..."   <span class="c"># the answer must be one of the labels</span>
 hyctl dispatch --check 'cmd:check-jsonschema --schemafile invoice.json {file}' "pull the invoice fields as JSON"
+hyctl dispatch --kind classification --check gen "is this ticket billing, bug or how-to? ..."   <span class="c"># checks written for the request by another model</span>
 
 <span class="c"># Serve the router to anything that speaks OpenAI</span>
 hyctl serve                             <span class="c"># OpenAI-compatible endpoint, loopback only</span>
@@ -908,7 +909,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="fl">--kind</span> cl
         <div class="pill-row">
           <span class="mp"><b>--enum</b> / <b>--tier</b></span><span class="mp"><b>--kind</b> summary, extraction, code&hellip;</span><span class="mp"><b>--dry-run</b></span><span class="mp"><b>--local</b></span>
           <span class="mp"><b>--file</b> raise bar by blast radius</span><span class="mp"><b>--a2a</b> handoff.json</span><span class="mp"><b>--system</b></span>
-          <span class="mp"><b>--no-stream</b></span><span class="mp"><b>--check</b> ground, match:labels=&lt;file&gt;, cmd:&lt;command {answer}&gt;; a real fail reruns once on a stronger model</span><span class="mp"><b>--max-escalations</b> 0 turns the rerun off</span>
+          <span class="mp"><b>--no-stream</b></span><span class="mp"><b>--check</b> ground, match:labels=&lt;file&gt;, cmd:&lt;command {answer}&gt;, gen; a real fail reruns once on a stronger model</span><span class="mp"><b>--max-escalations</b> 0 turns the rerun off</span><span class="mp"><b>--max-usd</b> cap for answer and generated checks</span>
         </div>
       </div>
     </section>
