@@ -69,6 +69,7 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 	}
 	sources := make([]trust.Source, len(r.Heads))
 	for i, h := range r.Heads {
+		// Provider, not provider.Family: co-agreement history is stored under it.
 		sources[i] = trust.Source{ID: h.ID, Family: h.Provider, EstCostUSD: r.Price(h, c.Request)}
 		asked.heads[h.ID] = h
 	}

@@ -119,6 +119,7 @@ func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int,
 		if inGroup[idx] {
 			llr = llrTrue[idx]
 		}
+		// Keyed by Provider, not provider.Family: co-agreement history is stored under it.
 		if fam := attempts[idx].Head.Provider; fam != "" {
 			if seenFamily[fam] {
 				llr *= trust.FamilyDiscount(trust.DefaultCoAgreementPath(), fam)
