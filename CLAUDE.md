@@ -114,6 +114,8 @@ internal/embed/         ← Vectors from an embedding model already on the machi
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.
 internal/rollup/        ← Per-day aggregates of cost.jsonl (calls, tokens, spend, latency sketch).
 internal/evalset/       ← Oracle-verified labelled examples. Outside logs/, exempt from retention. `hyctl eval`.
+                          verdicts.jsonl beside it: every check's verdict on an answer, keyed by
+                          span or candidate hash, plus later ground truth. `Joint` folds it per answer.
 internal/classify/      ← What the verified corpus says about work like this: the k nearest
                           examples by embedding, each enum's measured pass rate, and a
                           leave-one-out evaluation of whether that predicts anything at all.
