@@ -1988,6 +1988,10 @@ replaced before it is written.`,
 			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"budget %s, oldest packs dropped past it · admitted at %.0f%%",
 				humanBytes(payload.Budget(cfg)), payload.KeepRate(cfg)*100)))
+			if st.PinnedBytes > 0 {
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
+					"%s pinned, never dropped even past the budget", humanBytes(st.PinnedBytes))))
+			}
 			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%d dictionary-compressed · %d contained redacted secrets", st.WithDict, st.WithPII)))
 			return nil

@@ -5,6 +5,7 @@ package payload
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -88,7 +89,7 @@ func (s *Store) rotateIfFull(frameLen int64) error {
 }
 
 // evictLocked drops whole packs, oldest first, until the store is inside its
-// budget. The caller holds the lock.
+// budget, skipping any pack that holds a pinned hash. The caller holds the lock.
 //
 // Deterministic by age, not random: sampling would need every survivor to carry
 // an inclusion probability, and a trace you can open only one time in ten is
@@ -111,6 +112,14 @@ func (s *Store) evictLocked() error {
 	if err != nil {
 		return err
 	}
+	held := map[int]bool{}
+	pinned := s.pinnedLocked()
+	for h, e := range s.index {
+		if pinned[h] {
+			held[e.Pack] = true
+		}
+	}
+	skippedPinned := false
 	for _, n := range nums {
 		if total <= s.budget {
 			break
@@ -118,6 +127,10 @@ func (s *Store) evictLocked() error {
 		// Never evict the pack still being written: it holds the payload that
 		// was just stored, and dropping it would make a fresh run unreadable.
 		if n == s.pack {
+			continue
+		}
+		if held[n] {
+			skippedPinned = true
 			continue
 		}
 		for h, e := range s.index {
@@ -129,6 +142,10 @@ func (s *Store) evictLocked() error {
 		if err := os.Remove(packPath(s.dir, n)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
+	}
+	if total > s.budget && skippedPinned && !s.pinWarned {
+		s.pinWarned = true
+		log.Printf("warning: payload store is %d B over its %d B budget, held by pinned packs", total-s.budget, s.budget)
 	}
 	return s.rewriteIndexLocked()
 }
@@ -163,12 +180,15 @@ func (s *Store) rewriteIndexLocked() error {
 	return os.Rename(tmp.Name(), filepath.Join(s.dir, "blobs.idx"))
 }
 
-// reopenIndexLocked refreshes the in-memory index from disk. Called while
+// reopenIndexLocked refreshes the in-memory index and pins from disk. Called while
 // holding the cross-process lock, because another `hyctl` may have added blobs
 // or evicted packs since this store was opened.
 func (s *Store) reopenIndexLocked() error {
 	s.index = map[string]Entry{}
 	if err := s.loadIndex(); err != nil {
+		return err
+	}
+	if err := s.loadPins(); err != nil {
 		return err
 	}
 	p, err := newestPack(s.dir)

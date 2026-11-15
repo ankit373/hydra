@@ -135,6 +135,11 @@ type Store struct {
 	// to. Both are set by Open.
 	budget int64
 	pack   int
+
+	// pins maps an owner to the hashes it keeps from eviction (pins.json).
+	// pinWarned stops a store stuck over budget from warning on every Put.
+	pins      map[string][]string
+	pinWarned bool
 }
 
 // DefaultKeepRate keeps every payload. The store is bounded by bytes and
@@ -174,6 +179,9 @@ func Open(dir string) (*Store, error) {
 	}
 	s := &Store{dir: dir, index: map[string]Entry{}, budget: DefaultBudgetBytes}
 	if err := s.loadIndex(); err != nil {
+		return nil, err
+	}
+	if err := s.loadPins(); err != nil {
 		return nil, err
 	}
 	p, err := newestPack(dir)
@@ -395,6 +403,7 @@ type Stats struct {
 	LogicalBytes int64 `json:"logical_bytes"`
 	RawBytes     int64 `json:"raw_bytes"`
 	PackBytes    int64 `json:"pack_bytes"`
+	PinnedBytes  int64 `json:"pinned_bytes"` // pack bytes eviction will not touch
 	WithDict     int   `json:"with_dict"`
 	WithPII      int   `json:"with_pii"`
 	DiskBytes    int64 `json:"disk_bytes"`
@@ -406,9 +415,13 @@ func (s *Store) Stat() Stats {
 	defer s.mu.Unlock()
 	var st Stats
 	st.Blobs = len(s.index)
-	for _, e := range s.index {
+	pinned := s.pinnedLocked()
+	for h, e := range s.index {
 		st.RawBytes += e.Raw
 		st.PackBytes += e.Len
+		if pinned[h] {
+			st.PinnedBytes += e.Len
+		}
 		if e.Dict {
 			st.WithDict++
 		}
