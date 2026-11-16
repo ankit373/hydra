@@ -50,6 +50,9 @@ func (fieldsGen) Kind() string { return "fields" }
 
 // Generate drops a field with no name or an unknown type. No field left is no check.
 func (fieldsGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
+	if task.Fields != nil {
+		return schemaSpec(task)
+	}
 	if task.Ask == nil {
 		return nil, errors.New("checkgen fields: no writer head to ask")
 	}
@@ -75,6 +78,20 @@ func (fieldsGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
 		return nil, nil
 	}
 	s, err := NewSpec("fields", "", body, task, task.Writer)
+	if err != nil {
+		return nil, err
+	}
+	return []Spec{s}, nil
+}
+
+// schemaSpec is the fields spec for the user's schema: no writer call, and a value is
+// held to the source only when the request fenced one.
+func schemaSpec(task Task) ([]Spec, error) {
+	body := fieldsBody{Source: sourceOf(task.Text), Fields: slices.Clone(task.Fields)}
+	for i := range body.Fields {
+		body.Fields[i].FromSource = body.Fields[i].FromSource && body.Source != ""
+	}
+	s, err := NewSpec("fields", "", body, task, GenInfo{Head: "schema"})
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +170,7 @@ func (o *fieldsOracle) Verify(_ context.Context, candidate string, _ trust.Task)
 	src := source{text: fold(o.Source), numbers: numbersIn(o.Source)}
 	var broken []string
 	for _, f := range o.Fields {
-		fv := judgeField(f, got[f.Name], src)
+		fv := judgeField(f, fieldValue(got, f.Name), src)
 		o.last = append(o.last, fv)
 		if fv.failed() {
 			broken = append(broken, fmt.Sprintf("field %q %s", f.Name, fv.Detail))
@@ -198,6 +215,18 @@ func DecodeObject(answer string) (map[string]any, bool) {
 		return nil, false
 	}
 	return got, true
+}
+
+// fieldValue is obj's key name, or for a dotted name with no such key, the path a.b.
+func fieldValue(obj map[string]any, name string) any {
+	if v, ok := obj[name]; ok {
+		return v
+	}
+	parent, child, ok := strings.Cut(name, ".")
+	if m, isObj := obj[parent].(map[string]any); ok && isObj {
+		return fieldValue(m, child)
+	}
+	return nil
 }
 
 // SameValue compares two field values the way the fields check reads them: numbers
