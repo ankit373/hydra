@@ -162,7 +162,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdVet(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
-		cmdWorkflow(), cmdRecipe(), cmdServe(), cmdBench(),
+		cmdWorkflow(), cmdRecipe(), cmdCompare(), cmdServe(), cmdBench(),
 		cmdSecurity(), cmdPolicy(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 		cmdRlimitExec(),
 	)

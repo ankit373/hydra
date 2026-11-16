@@ -96,7 +96,7 @@ func (r Report) FalsePositiveHigh() float64 {
 // wilson returns the 95% score interval for k successes in n trials. Counts that
 // cannot be a measurement read as no evidence, the whole range, so nothing is eligible on them.
 func wilson(k, n int) (lo, hi float64) {
-	lo, hi, err := stats.Wilson(k, n, 1.959964)
+	lo, hi, err := stats.Wilson(k, n, stats.Z95)
 	if err != nil {
 		return 0, 1
 	}

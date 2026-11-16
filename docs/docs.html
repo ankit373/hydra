@@ -266,6 +266,7 @@ pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-d
 
       <div class="grp" data-grp>Verification &amp; graph</div>
       <a href="#trust"><code translate="no">hyctl trust</code></a>
+      <a href="#compare"><code translate="no">hyctl compare</code></a>
       <a href="#graph-blast"><code translate="no">graph blast</code></a>
       <a href="#graph-parallel"><code translate="no">graph parallel</code></a>
       <a href="#context"><code translate="no">context entropy</code></a>
@@ -1024,6 +1025,14 @@ hyctl trust joint            <span class="c"># how often two checks pass the sam
       </div>
       <div class="sub"><div class="lbl">Checks that fail together</div><p>Every verdict on an answer, from tests, a linter, a grounding check, a model vote or a person, is kept in one log. <span class="fx">hyctl trust joint</span> takes the answers that later turned out wrong and reports, per kind of work, how often each pair of checks passed the same one, next to the rate you would expect if they failed independently. A pair well above that rate is one check, not two. Below 20 shared wrong answers no rate is shown, because the 95% bound would be wider than the rate. Each check&rsquo;s rate is also watched for a change, such as a judge model swapped underneath, and a changed check shows when and its rate since.</p></div>
       <a class="more" href="/first-principles.html#calibration">See diagnostic power D derived →</a>
+    </section>
+
+    <section class="doc" id="compare">
+      <h2><span class="cmd">hyctl compare</span> <span class="tagline">two models on your own kind of work</span></h2>
+      <p class="sum">Puts two models side by side for one kind of work, read from your own checked answers. It calls no model.</p>
+      <div class="sub"><div class="lbl">How it reads</div><p>For each model: how many of its answers were checked, how many passed, and the 95% lower bound on its pass rate (Wilson). If its record changed, the row also shows the record since that day. One model is called ahead only when its lower bound is above the other&rsquo;s upper bound, judged on the record since any change. Otherwise it says there is no clear difference yet, and roughly how many more checked answers each would need if the rates hold. Cost per checked answer shows as unknown for now, rather than a guess.</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl compare claude-sonnet ollama/qwen3:4b <span class="fl">--kind</span> summary
+hyctl compare gpt-5 gemini-2.5-pro <span class="fl">--kind</span> extraction.invoices <span class="fl">--json</span></pre></div>
     </section>
 
     <section class="doc" id="graph-blast">

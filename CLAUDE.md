@@ -50,7 +50,7 @@ Never do work yourself that belongs to a lower tier. Never escalate work to your
 (#86, #88), there is no shell fallback and no `hyctl run`. Everything is native Go.
 ```
 cmd/hydra/              ← CLI entry point (Cobra): dispatch, probe, status, cost, stats,
-                          pricing, edit, review, parallel, trust, init.
+                          pricing, edit, review, parallel, trust, compare, init.
 cmd/hyverify/           ← A second binary, the standalone verifier: run the command that judges
                           a repo against a candidate file and record the verdict as a labelled
                           example. No router, no head selection, no Hydra config, so a corpus
@@ -148,7 +148,8 @@ internal/ope/           ← Off-policy estimation: IPW over sampled logs, plus c
                           evaluation with bootstrap intervals. `hyctl trace evaluate`.
 internal/stats/         ← Pure maths, one implementation each: seeded paired bootstrap, Tango, exact
                           McNemar, binomial CDF, Clopper–Pearson, Wilson, pass^k, BetaCDF and
-                          BetaQuantile. Imported by ope, entity, budget, trust and the benchmark
+                          BetaQuantile, and `Z95`, the one 95% z every Wilson caller passes.
+                          Imported by ope, entity, budget, trust, `hyctl compare` and the benchmark
                           harness.
 internal/bench/         ← Benchmark harness: pinned datasets, committed splits, scored arms. `hyctl bench`.
                           `replay/` runs acceptance policies on cached labelled answers over seeded
@@ -462,6 +463,9 @@ hyctl trust outcome <task_hash> --outcome incorrect
 hyctl trust reliability ; hyctl trust reliability --json
 # The same audit for every decision source, per domain, against verdicts on your own work
 hyctl trust reliability --source <head> ; hyctl trust reliability --source <head> --json
+# Two heads side by side on one kind of work, from the record: pass rate, 95% lower bound,
+# record since any change. Names one ahead only when the intervals do not overlap
+hyctl compare claude-sonnet ollama/qwen3:4b --kind summary ; hyctl compare a b --kind extraction --json
 # Per kind of work, how often each check and each pair passed an answer later found wrong,
 # and when a check's rate changed (its rate and bound since)
 hyctl trust joint ; hyctl trust joint --domain go --json
