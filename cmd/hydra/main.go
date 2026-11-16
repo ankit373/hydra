@@ -1409,6 +1409,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use --check, `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
 	cmd.Flags().StringArrayVar(&checks, "check", nil, "check the answer itself, repeatable: ground (every number and identifier appears in the prompt's fenced context), "+
+		"links (fetch each URL in the answer, at most 20, and look for any quote in the link's sentence on the page; only the URL leaves the machine, "+
+		"each fetch is asked of the MCP ledger first and recorded, and a denied fetch or no network is not checked), "+
 		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file}). "+
 		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error. "+
 		"gen runs checks written for the request's --kind by a head of another family where one exists, gen:<check> one of them, e.g. gen:roundtrip; these only report")

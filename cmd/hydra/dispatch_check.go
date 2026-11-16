@@ -14,6 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/ground"
+	"github.com/ankit373/hydra/internal/linkcheck"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -23,7 +24,7 @@ import (
 
 // dispatchChecks are the checks that read the answer itself, so a dispatch,
 // which writes no file, can still run them.
-var dispatchChecks = []string{"ground", "match:labels=<file>", "match:pattern=<re>", "cmd:<command with {answer} or {file}>"}
+var dispatchChecks = []string{"ground", "links", "match:labels=<file>", "match:pattern=<re>", "cmd:<command with {answer} or {file}>"}
 
 // answerCheck is one parsed --check, built before anything routes.
 type answerCheck struct {
@@ -57,6 +58,9 @@ func parseCheck(spec, prompt string) (answerCheck, error) {
 	case spec == "ground":
 		g := &ground.Oracle{Prompt: prompt}
 		return answerCheck{oracle: g, source: g.Key(), ground: g}, nil
+	case spec == "links":
+		o := &linkcheck.Oracle{Gate: linkcheck.LedgerGate}
+		return answerCheck{oracle: o, source: o.Key()}, nil
 	case kind == "match":
 		return parseMatch(arg)
 	case kind == "cmd":

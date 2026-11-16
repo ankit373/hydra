@@ -84,6 +84,7 @@ floor internal/idle                 95
 # the logic it wraps through a fake and the file store, not the binding itself.
 floor internal/keystore             84
 floor internal/ledger               86
+floor internal/linkcheck            88
 # internal/mcpregistry talks to two external APIs (OSV.dev, GitHub) and reads
 # five clients' config files, so its remaining uncovered lines are the
 # cross-device-rename and UserHomeDir-failure branches that no portable test

@@ -117,6 +117,9 @@ internal/mcpregistry/   ← MCP server trust registry: sync official registry, s
                           saved tools/list at $HYDRA_HOME/mcp_tools/<server>.json, never a live server
                           (#1303). `hyctl mcp registry`.
 internal/oracle/        ← Checks as calibrated evidence: any command (tests, a schema check), label match, predicates. `hyctl oracle`.
+internal/linkcheck/     ← `--check links`: each URL in an answer must resolve, and a quote in its sentence must be
+                          on the page. Asks the ledger (`ledger.Network`) before each fetch; only the URL leaves.
+                          No links, a denied fetch or no network is not checked, never a pass (#1860).
 internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, claims, rubric, tests), stored once
                           at $HYDRA_HOME/evalset/checks/, run on one answer with a verdict per check, named
                           gen:<kind> or gen:<kind>-<variant>. An oracle reaches the spec's writer head at check
@@ -476,6 +479,8 @@ hyctl trust joint ; hyctl trust joint --domain go --json
 # would judge the repository rather than the answer (#982). `--check ground` reads
 # the answer itself, so a dispatch can run it.
 hyctl dispatch --check ground "summarise this: <fenced source>"
+# Fetch every cited link (ledger-gated, the URL alone leaves); dead link or misquote fails
+hyctl dispatch --kind answer --check links "what did the regulator decide? cite your sources"
 hyctl edit --file "$PWD/internal/auth/token.go" --enum MODERATE --prompt "rotate signing key"
 hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain <task_hash>
 
