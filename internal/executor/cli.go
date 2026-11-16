@@ -91,8 +91,10 @@ func (t cliTemplate) buildArgs(prompt string) []string {
 // cliTemplates maps provider ID (or head ID) to invocation template.
 // To add a new CLI tool, add an entry here and in capabilities/data.json.
 var cliTemplates = map[string]cliTemplate{
-	"anthropic":   {args: []string{"--print", ""}}, // claude --print "<prompt>"
-	"openai":      {args: []string{"exec", ""}},    // codex exec "<prompt>", bare codex launches its interactive TUI (#491)
+	"anthropic": {args: []string{"--print", ""}}, // claude --print "<prompt>"
+	// codex exec "<prompt>": bare codex opens its TUI (#491). exec refuses to run outside a
+	// git repo unless told; it stays read-only (https://learn.chatgpt.com/docs/non-interactive-mode).
+	"openai":      {args: []string{"exec", "--skip-git-repo-check", ""}},
 	"google":      {args: []string{""}},            // gemini "<prompt>"
 	"antigravity": {args: []string{"--print", ""}}, // agy --print "<prompt>", bare agy launches its interactive TUI and, unlike codex, still exits 0 (#492)
 	"cursor":      {args: []string{"--stdio"}, stdinPrompt: true},
