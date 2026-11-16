@@ -69,6 +69,8 @@ type Request struct {
 	// Objective is the one the client named, already validated; empty leaves
 	// it to the route's default.
 	Objective rank.Objective
+	// Conversation is ConversationHeader as sent; empty when it was not.
+	Conversation string
 
 	// RequestID is what this request is traceable by. serve mints it and the
 	// router adopts it as the run id, so the value a client is handed back is
@@ -278,7 +280,11 @@ func parseTarget(h http.Header, in chatRequest) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling, Objective: obj}
+	conv, err := conversation(h)
+	if err != nil {
+		return Request{}, err
+	}
+	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling, Objective: obj, Conversation: conv}
 	// Temperature is opt-in with the class header: serve ignored it before E1,
 	// and a client that never asked for the new contract must not get a 400.
 	if class != "" {

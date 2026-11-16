@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -152,6 +153,10 @@ type Options struct {
 	// swarm does, otherwise each call is its own run.
 	RunID  string
 	TaskID string
+
+	// Conversation keys the chat a served request continues, so the runs of
+	// one conversation can be found again. Empty for a single-shot dispatch.
+	Conversation string
 
 	// Decision is the routing rules' verdict, computed once by the caller.
 	// Nil means this dispatch computes it itself, which is right for callers
@@ -1924,8 +1929,8 @@ func (d *Dispatcher) domainMeasurement(domain string) rank.Lookup {
 // the governor falls back to and whose cache threshold the objective route keeps.
 const ServedDefaultEnum = "STANDARD"
 
-// taskMeta names the recipe a task runs, and the objective that ordered it,
-// since its enum is empty.
+// taskMeta names the recipe a task runs, the objective that ordered it since
+// its enum is empty, and the conversation it continues with its message count.
 func taskMeta(opts Options) map[string]any {
 	r := recipe.Default(nil)
 	if opts.Recipe != nil {
@@ -1938,7 +1943,17 @@ func taskMeta(opts Options) map[string]any {
 	if opts.Objective != "" {
 		meta["objective"] = string(opts.Objective)
 	}
+	maps.Copy(meta, conversationMeta(opts))
 	return meta
+}
+
+// conversationMeta is the chat a served task continues and how many messages
+// it carried; nil for a single-shot dispatch.
+func conversationMeta(opts Options) map[string]any {
+	if opts.Conversation == "" {
+		return nil
+	}
+	return map[string]any{runlog.MetaConversation: opts.Conversation, "messages": len(opts.Messages)}
 }
 
 // routingDomain is the calibration domain a dispatch routes for: what the
