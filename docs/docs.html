@@ -482,7 +482,7 @@ hyctl workflow run --step "pull the totals as JSON" --step "summarise them" \
   --step-kind 1=extraction --step-check '1=cmd:check-jsonschema --schemafile totals.json {file}'
 <span class="c">#   a step's check fails: it reruns once on a model measured stronger at its kind, else the workflow stops there</span>
 hyctl workflow resume &lt;id&gt;              <span class="c"># continue a killed workflow from where it stopped</span>
-hyctl workflow show &lt;id&gt;                <span class="c"># each step's model, routing level, cost and output</span>
+hyctl workflow show &lt;id&gt;                <span class="c"># each step's model, routing level, cost, output, and whether a check ran on it</span>
 
 <span class="c"># Reviewing a diff</span>
 hyctl vet                               <span class="c"># review the working diff, each file routed to its own model</span>

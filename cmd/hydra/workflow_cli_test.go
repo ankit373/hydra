@@ -65,6 +65,50 @@ func TestPrintWorkflow_ShowsPerStepHeadAndTier(t *testing.T) {
 	}
 }
 
+// A done step nobody checked must not read like one that passed its checks.
+func TestWorkflowShow_MarksUncheckedSteps(t *testing.T) {
+	w := workflow.Workflow{
+		ID: "wf1", Task: "t", Status: workflow.Done,
+		Steps: []workflow.Step{
+			{N: 1, Title: "extract fields", Status: workflow.Done, Check: []string{"ground"}, Checked: true},
+			{N: 2, Title: "draft reply", Status: workflow.Done},
+		},
+	}
+	out := stripANSICodes(captureStdout(t, func() { printWorkflow(w) }))
+	for _, want := range []string{"done, checked", "done, not checked"} {
+		if strings.Count(out, want) != 1 {
+			t.Errorf("want %q once:\n%s", want, out)
+		}
+	}
+}
+
+func TestWorkflowShow_CheckedCount(t *testing.T) {
+	testutil.NewSandbox(t)
+	w := storedWorkflow(t, "wf1")
+	w.Steps[1].Status, w.Steps[1].Checked = workflow.Done, true
+	if err := workflow.Save(w); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "workflow", "show", "wf1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stripANSICodes(out), "1 of 2 done steps checked") {
+		t.Errorf("no checked count:\n%s", out)
+	}
+	jsonOut, _, err := run(t, "workflow", "show", "wf1", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got workflow.Workflow
+	if err := json.Unmarshal([]byte(jsonOut), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Steps[0].Checked || !got.Steps[1].Checked || !strings.Contains(jsonOut, `"checked":false`) {
+		t.Errorf("--json checked = %v, %v, want false then true:\n%s", got.Steps[0].Checked, got.Steps[1].Checked, jsonOut)
+	}
+}
+
 // The workflow's answer is its last completed step's output; printing every
 // step would bury it.
 func TestLastOutput_IsTheFinalCompletedStep(t *testing.T) {
