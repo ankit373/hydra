@@ -118,8 +118,10 @@ func (s *snips) Prompt(it bench.Item) (executor.Request, error) {
 
 // Grade passes only when every gold field matches, compared as checkgen's fields
 // check compares values, and no other key carries a value. Not JSON is a format fail.
+// It also runs the fields check on the answer and tallies which right and wrong fields it flagged.
 func (s *snips) Grade(_ context.Context, it bench.Item, answer string) (bench.Grade, error) {
-	if _, err := s.fieldsOf(it); err != nil {
+	fields, err := s.fieldsOf(it)
+	if err != nil {
 		return bench.Grade{}, err
 	}
 	label, err := it.Label()
@@ -134,22 +136,73 @@ func (s *snips) Grade(_ context.Context, it bench.Item, answer string) (bench.Gr
 	if !ok {
 		return bench.Grade{Format: true, Detail: "the answer is not a JSON object"}, nil
 	}
+	text, err := it.Text()
+	if err != nil {
+		return bench.Grade{}, err
+	}
+	g := bench.Grade{Passed: true, Fields: tallyFields(fields, text, answer, gold, got)}
 	for _, k := range slices.Sorted(maps.Keys(gold)) {
 		v, ok := got[k]
 		if !ok || v == nil {
-			return bench.Grade{Detail: fmt.Sprintf("field %q is missing, gold %q", k, gold[k])}, nil
+			g.Passed, g.Detail = false, fmt.Sprintf("field %q is missing, gold %q", k, gold[k])
+			return g, nil
 		}
 		if !checkgen.SameValue(gold[k], v) {
-			return bench.Grade{Detail: fmt.Sprintf("field %q is %v, gold %q", k, v, gold[k])}, nil
+			g.Passed, g.Detail = false, fmt.Sprintf("field %q is %v, gold %q", k, v, gold[k])
+			return g, nil
 		}
 	}
 	for _, k := range slices.Sorted(maps.Keys(got)) {
-		if _, ok := gold[k]; !ok && got[k] != nil && got[k] != "" {
-			return bench.Grade{Detail: fmt.Sprintf("field %q is %v, but the message gives no value for it", k, got[k])}, nil
+		if _, ok := gold[k]; !ok && given(got[k]) {
+			g.Passed, g.Detail = false, fmt.Sprintf("field %q is %v, but the message gives no value for it", k, got[k])
+			return g, nil
 		}
 	}
-	return bench.Grade{Passed: true}, nil
+	return g, nil
 }
+
+// tallyFields counts each gold field and each key the answer gave a value, by the kind
+// of its gold value (or of the answer's, for a key with no gold): right when it matches
+// the gold, flagged when the fields check, holding every value to the utterance, did not
+// mark it good. A key outside the intent's fields is never checked, so always flagged.
+func tallyFields(fields []string, text, answer string, gold map[string]string, got map[string]any) map[string]bench.FieldTally {
+	list := make([]checkgen.Field, len(fields))
+	for i, f := range fields {
+		list[i] = checkgen.Field{Name: f, Type: "string", FromSource: true}
+	}
+	good := make(map[string]bool, len(fields))
+	for _, v := range checkgen.JudgeFields(list, text, answer) {
+		good[v.Name] = v.Good()
+	}
+	out := map[string]bench.FieldTally{}
+	count := func(k, value string, right bool) {
+		kind := bench.FieldKind(value)
+		t, flagged := out[kind], !good[k]
+		switch {
+		case right && flagged:
+			t.Right, t.RightFlagged = t.Right+1, t.RightFlagged+1
+		case right:
+			t.Right++
+		case flagged:
+			t.Wrong, t.WrongFlagged = t.Wrong+1, t.WrongFlagged+1
+		default:
+			t.Wrong++
+		}
+		out[kind] = t
+	}
+	for k, v := range got {
+		if _, isGold := gold[k]; !isGold && given(v) {
+			count(k, fmt.Sprint(v), false)
+		}
+	}
+	for k, want := range gold {
+		count(k, want, got[k] != nil && checkgen.SameValue(want, got[k]))
+	}
+	return out
+}
+
+// given says the answer put a value in a key: null and "" leave it out.
+func given(v any) bool { return v != nil && v != "" }
 
 func (s *snips) fieldsOf(it bench.Item) ([]string, error) {
 	if s.fields == nil {

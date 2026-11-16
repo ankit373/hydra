@@ -4,6 +4,7 @@ package suites
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"testing"
 
@@ -72,5 +73,34 @@ func TestExtractionSuite_RowsRefuseWhatHasNoOneGold(t *testing.T) {
 		if _, err := Registry()["snips"]().Rows(ds, dir); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// The fields check holds every value to the utterance: it flags a value the message
+// never says and a field left out, and cannot catch a swap of two values it does say.
+func TestExtractionSuite_TalliesTheFieldsTheCheckFlagged(t *testing.T) {
+	s, items := loadFixture(t, "snips")
+	it := items[1] // "book a table for 4 at 7 pm in Lisbon"
+	type tally = bench.FieldTally
+	for answer, want := range map[string]map[string]tally{
+		`{"city": "Lisbon", "party_size_number": "4", "timeRange": "7 pm"}`: {"text": {Right: 2}, "number": {Right: 1}},
+		`{"city": "Lisbon", "party_size_number": "5", "timeRange": "7 pm"}`: {"text": {Right: 2}, "number": {Wrong: 1, WrongFlagged: 1}},
+		`{"city": "Lisbon", "party_size_number": "4"}`:                      {"text": {Right: 1, Wrong: 1, WrongFlagged: 1}, "number": {Right: 1}},
+		`{"city": "7 pm", "party_size_number": "4", "timeRange": "Lisbon"}`: {"text": {Wrong: 2}, "number": {Right: 1}},
+		`{"city": "Lisbon", "party_size_number": "4", "timeRange": "7 pm", "cuisine": "thai"}`: {"text": {Right: 2, Wrong: 1, WrongFlagged: 1},
+			"number": {Right: 1}},
+		`{"city": "Lisbon", "party_size_number": 4, "timeRange": "7 pm", "cuisine": null}`: {"text": {Right: 2},
+			"number": {Right: 1, RightFlagged: 1}},
+	} {
+		g, err := s.Grade(context.Background(), it, answer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !maps.Equal(g.Fields, want) {
+			t.Errorf("Grade(%s) fields = %+v, want %+v", answer, g.Fields, want)
+		}
+	}
+	if g, _ := s.Grade(context.Background(), it, "a table for four"); g.Fields != nil {
+		t.Errorf("a format fail tallied %+v", g.Fields)
 	}
 }

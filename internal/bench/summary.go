@@ -67,6 +67,8 @@ type ArmSummary struct {
 	LatencyMS       LatencyStats `json:"latency_ms"`
 	// Detection is set on a check suite: how much the arm caught and how often it cried wolf.
 	Detection *DetectionStats `json:"detection,omitempty"`
+	// Fields is set on a suite that tallies fields, such as snips.
+	Fields *FieldCatch `json:"fields,omitempty"`
 }
 
 // DetectionStats counts a check suite's rows. Recall is caught positives over all
@@ -80,6 +82,18 @@ type DetectionStats struct {
 	FalseFlags      int        `json:"false_flags"`
 	FalseFlagRate   float64    `json:"false_flag_rate"`
 	FalseFlagWilson [2]float64 `json:"false_flag_wilson95"`
+}
+
+// FieldCatch is an arm's field tallies read as a detection: a wrong field is a positive,
+// so Recall is the share of wrong fields the checks flagged, the number checked extraction
+// promises, and the false-flag rate is the share of right fields flagged.
+type FieldCatch struct {
+	DetectionStats
+	Accuracy float64 `json:"accuracy"`
+	// CostPerVerified is the arm's spend over the fields not flagged; nil when none were,
+	// and on a kind, since a call is not billed per kind.
+	CostPerVerified *float64              `json:"cost_per_verified"`
+	ByKind          map[string]FieldCatch `json:"by_kind,omitempty"`
 }
 
 // Moments is a mean and a nearest-rank p95.
@@ -299,6 +313,7 @@ func oracleRows(byArm map[string][]Result) []Result {
 func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
 	a := ArmSummary{N: len(rs), CostUSD: spend}
 	var in, out []float64
+	var fields map[string]FieldTally // by kind
 	lat := sketch.New(sketch.DefaultAlpha)
 	for _, r := range rs {
 		if r.Passed {
@@ -320,6 +335,14 @@ func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
 			ti, to = ti+c.InputTokens, to+c.OutputTokens
 		}
 		in, out = append(in, float64(ti)), append(out, float64(to))
+		for kind, t := range r.Fields {
+			if fields == nil {
+				fields = map[string]FieldTally{}
+			}
+			k := fields[kind]
+			k.add(t)
+			fields[kind] = k
+		}
 		if r.LatencyInvalid || r.ErrKind != "" {
 			a.LatencyMS.Skipped++
 			continue
@@ -341,6 +364,9 @@ func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
 	}
 	a.TokensIn, a.TokensOut = moments(in), moments(out)
 	if a.Detection, err = detection(rs); err != nil {
+		return a, err
+	}
+	if a.Fields, err = fieldCatch(fields, a.CostUSD); err != nil {
 		return a, err
 	}
 	if a.LatencyMS.Valid > 0 {
@@ -374,6 +400,11 @@ func detection(rs []Result) (*DetectionStats, error) {
 	if !seen {
 		return nil, nil
 	}
+	return &d, d.rates()
+}
+
+// rates fills the shares and their 95% Wilson intervals from the counts; a share of nothing stays 0.
+func (d *DetectionStats) rates() error {
 	var err error
 	if d.Positives > 0 {
 		d.Recall = float64(d.Caught) / float64(d.Positives)
@@ -382,10 +413,45 @@ func detection(rs []Result) (*DetectionStats, error) {
 		d.FalseFlagRate = float64(d.FalseFlags) / float64(d.Negatives)
 	}
 	if d.RecallWilson[0], d.RecallWilson[1], err = stats.Wilson(d.Caught, d.Positives, stats.Z95); err != nil {
-		return nil, err
+		return err
 	}
 	d.FalseFlagWilson[0], d.FalseFlagWilson[1], err = stats.Wilson(d.FalseFlags, d.Negatives, stats.Z95)
-	return &d, err
+	return err
+}
+
+// fieldCatch reads each kind's tally and their sum as detections; nil when no row tallied fields.
+func fieldCatch(byKind map[string]FieldTally, spend float64) (*FieldCatch, error) {
+	if byKind == nil {
+		return nil, nil
+	}
+	var all FieldTally
+	kinds := make(map[string]FieldCatch, len(byKind))
+	for kind, t := range byKind {
+		all.add(t)
+		c, err := t.catch()
+		if err != nil {
+			return nil, err
+		}
+		kinds[kind] = c
+	}
+	c, err := all.catch()
+	if err != nil {
+		return nil, err
+	}
+	c.ByKind = kinds
+	if verified := all.Right + all.Wrong - all.RightFlagged - all.WrongFlagged; verified > 0 {
+		v := spend / float64(verified)
+		c.CostPerVerified = &v
+	}
+	return &c, nil
+}
+
+func (t FieldTally) catch() (FieldCatch, error) {
+	c := FieldCatch{DetectionStats: DetectionStats{Positives: t.Wrong, Caught: t.WrongFlagged, Negatives: t.Right, FalseFlags: t.RightFlagged}}
+	if n := t.Right + t.Wrong; n > 0 {
+		c.Accuracy = float64(t.Right) / float64(n)
+	}
+	return c, c.rates()
 }
 
 func moments(v []float64) Moments {
