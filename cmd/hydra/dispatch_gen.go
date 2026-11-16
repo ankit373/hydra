@@ -119,6 +119,7 @@ func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string, v *v
 	for _, x := range o.results {
 		printGenResult(x)
 	}
+	printFieldVerdicts(checkgen.MergeFields(o.results))
 	note := ""
 	if o.same {
 		note = ", written by the answer's own family"
@@ -208,22 +209,27 @@ func printGenResult(r checkgen.Result) {
 		detail = "" // the field lines below say it one field at a time
 	}
 	fmt.Fprintf(stdout, "  %s  %s  %s\n", status, r.Spec.Check(), dimStyle.Render(detail))
-	printFieldVerdicts(r.Fields)
 	printSentences(r.Sentences)
 }
 
-// printFieldVerdicts is a line per field that is not ok, then how many are.
-func printFieldVerdicts(fields []checkgen.FieldVerdict) {
+// printFieldVerdicts is a line per field that is not plain ok, every field once
+// when both field checks ran, then how many are ok.
+func printFieldVerdicts(fields []checkgen.FieldVerdict, merged bool) {
 	if len(fields) == 0 {
 		return
 	}
-	ok := 0
+	ok, width := 0, len(checkgen.FieldNotInSource)+1
 	for _, f := range fields {
-		if f.Status == checkgen.FieldOK {
+		width = max(width, len(f.Status))
+	}
+	for _, f := range fields {
+		if f.Good() {
 			ok++
+		}
+		if f.Status == checkgen.FieldOK && !merged {
 			continue
 		}
-		fmt.Fprintf(stdout, "    %-14s %s  %s\n", f.Status, f.Name, dimStyle.Render(f.Detail))
+		fmt.Fprintf(stdout, "    %-*s %s  %s\n", width, f.Status, f.Name, dimStyle.Render(f.Detail))
 	}
 	fmt.Fprintf(stdout, "    %s\n", dimStyle.Render(fmt.Sprintf("%d of %d fields ok", ok, len(fields))))
 }

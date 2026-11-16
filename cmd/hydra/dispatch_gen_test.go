@@ -3,6 +3,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -85,5 +86,29 @@ func TestDispatch_CheckGenFields_PrintsEveryBrokenField(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output has no %q:\n%s", want, out)
 		}
+	}
+}
+
+// One run with both field checks prints each field once, merged.
+func TestDispatch_FieldsAndRoundtripMergePerField(t *testing.T) {
+	s, _ := dispatchable(t, `{"vendor": "Acme Ltd", "total": 9, "date": "30 June", "paid": true}`)
+	// The writer's one reply serves both asks: the field list is the [...] part, the re-extraction the fenced object.
+	s.FakeBinary(t, "claude", testutil.EchoScript("```json\n"+`{"vendor": "acme ltd", "total": 1200.5, "paid": true}`+"\n```\n"+
+		`[{"name": "vendor", "type": "string", "required": true, "from_source": true}, {"name": "total", "type": "number", "required": true},
+{"name": "date", "type": "string", "from_source": true}, {"name": "paid", "type": "bool", "required": true}]`))
+	prompt := "Pull vendor, total, date and paid as JSON.\n" + util.WrapUntrusted("DOCUMENT", "Acme Ltd, total 1,200.50, due 30 June, paid")
+	out, cobraOut, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--kind", "extraction",
+		"--check", "gen:fields", "--check", "gen:roundtrip", prompt)
+	if err != nil {
+		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
+	}
+	for _, want := range []string{"PASS  gen:fields", "FAIL  gen:roundtrip", "in_source_and_agreed vendor",
+		"differs              total", "in_source            date", "agreed               paid", "3 of 4 fields ok"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output has no %q:\n%s", want, out)
+		}
+	}
+	if n := regexp.MustCompile(`(?m)^ {4}\S+ +vendor  `).FindAllString(out, -1); len(n) != 1 {
+		t.Errorf("vendor printed %d times, want once:\n%s", len(n), out)
 	}
 }
