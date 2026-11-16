@@ -88,6 +88,8 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           each source turn; `ExtractConstraints` copies rule lines byte for byte, no model.
                           `Transcript` reads a run or a served conversation back as turns from the run log
                           and payload store, and refuses (`ErrNoOriginals`) when any text is missing.
+                          `Eligible` decides if a conversation may be compacted now (quiet, filling, a
+                          local model, AC power, low load and memory pressure) and says why when not.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,
@@ -190,7 +192,8 @@ internal/policy/        ← PII detection + local-only enforcement. `Redact` lab
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).
-internal/sysinfo/       ← Hardware detection + 7 days of free-memory history, for `hyctl init`'s local model pick.
+internal/sysinfo/       ← Hardware detection + 7 days of free-memory history, for `hyctl init`'s local model pick;
+                          AC power and load average, for idle compaction.
 
 registry/               ← Routing data, compiled into the binary via `go:embed` (registry.go)
                           and overridable on disk at `$HYDRA_HOME/registry/<file>`. Nothing ships
