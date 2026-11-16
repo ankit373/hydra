@@ -12,8 +12,7 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// seedCompare files passed of checked said-correct answers per head in kind,
-// the fails spread evenly so no stretch reads as a change.
+// seedCompare files passed of checked answers per head in kind, through recordN.
 func seedCompare(t *testing.T, kind string, heads map[string][2]int) {
 	t.Helper()
 	cal, err := trust.New(trust.DefaultPath())
@@ -21,16 +20,7 @@ func seedCompare(t *testing.T, kind string, heads map[string][2]int) {
 		t.Fatal(err)
 	}
 	for _, head := range slices.Sorted(maps.Keys(heads)) {
-		pc := heads[head]
-		for i := range pc[1] {
-			out := trust.OutcomeIncorrect
-			if (i+1)*pc[0]/pc[1] > i*pc[0]/pc[1] {
-				out = trust.OutcomeCorrect
-			}
-			if err := cal.Update(head, kind, true, out); err != nil {
-				t.Fatal(err)
-			}
-		}
+		recordN(t, cal, head, kind, heads[head][0], heads[head][1])
 	}
 }
 
