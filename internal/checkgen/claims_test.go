@@ -155,3 +155,81 @@ type failing struct{}
 func (failing) Decide(context.Context, string, []string) ([]float64, error) {
 	return nil, fmt.Errorf("head down: %w", errors.ErrUnsupported)
 }
+
+// lastVerdicts runs the oracle for spec on answer and returns its per-sentence verdicts.
+func lastVerdicts(t *testing.T, spec Spec, env Env, answer string) []SentenceVerdict {
+	t.Helper()
+	o, err := claimsGen{}.Oracle(spec, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.Verify(context.Background(), answer, trust.Task{})
+	return o.(*claimsOracle).Last
+}
+
+func TestClaims_SentenceVerdictsCoverEverySentence(t *testing.T) {
+	answer := "Acme Supplies sold 1,200 units in March. Sales went well overall. Costs fell by 45 percent."
+	got := lastVerdicts(t, claimsSpecs(t)[0], Env{}, answer)
+	want := []struct{ status, unsupported string }{
+		{StatusSupported, ""}, {StatusNothingToCheck, ""}, {StatusNotSupported, "45"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d verdicts, want one per sentence: %+v", len(got), got)
+	}
+	for i, w := range want {
+		g := got[i]
+		if g.N != i+1 || g.Text != sentences(answer)[i] || g.Status != w.status {
+			t.Errorf("sentence %d = %+v, want status %s", i+1, g, w.status)
+		}
+		if w.unsupported == "" && (len(g.Unsupported) > 0 || g.Why != "") {
+			t.Errorf("sentence %d carries a reason it should not: %+v", i+1, g)
+		}
+		if w.unsupported != "" && (len(g.Unsupported) != 1 || g.Unsupported[0].Text != w.unsupported || g.Why == "") {
+			t.Errorf("sentence %d unsupported = %+v, want %q with a reason", i+1, g, w.unsupported)
+		}
+	}
+	judged := lastVerdicts(t, claimsSpecs(t)[1], Env{Decider: func(GenInfo) oracle.Decider {
+		return &noIfSays{word: "Atlantis"}
+	}}, "Acme sold units. The firm moved to Atlantis.")
+	if len(judged) != 2 || judged[0].Status != StatusSupported || judged[1].Status != StatusNotSupported ||
+		judged[1].Why == "" || judged[1].Unsupported != nil {
+		t.Fatalf("judge verdicts = %+v; want the second not supported, with a reason and no spans", judged)
+	}
+}
+
+func TestClaims_SentenceWithNothingCheckableIsMarked(t *testing.T) {
+	got := lastVerdicts(t, claimsSpecs(t)[0], Env{}, "Sales went well overall.")
+	if len(got) != 1 || got[0].Status != StatusNothingToCheck || got[0].Text != "Sales went well overall." {
+		t.Fatalf("verdicts = %+v; want the one sentence marked nothing to check", got)
+	}
+}
+
+func TestClaims_PassFailUnchanged(t *testing.T) {
+	judge := Env{Decider: func(GenInfo) oracle.Decider { return &noIfSays{word: "Atlantis"} }}
+	cases := []struct {
+		spec   int
+		env    Env
+		answer string
+		passed bool
+		detail string
+		errs   bool
+	}{
+		{0, Env{}, "Acme Supplies sold 1,200 units in March. Jane Doe runs the Lisbon office. Costs fell by 45 percent.", false,
+			`sentences not supported: 3 "Costs fell by 45 percent." (not in the context given: number 45)`, false},
+		{0, Env{}, "Acme Supplies sold 1,200 units.", true, "all 1 sentences checked passed", false},
+		{0, Env{}, "Sales went well overall.", false, "", true},
+		{1, judge, "Acme sold units. OK. The firm moved to Atlantis. Jane Doe runs it.", false,
+			`sentences not supported: 2 "The firm moved to Atlantis."`, false},
+		{1, judge, "Acme sold units. Jane Doe runs it.", true, "all 2 sentences checked passed", false},
+	}
+	for i, c := range cases {
+		o, err := claimsGen{}.Oracle(claimsSpecs(t)[c.spec], c.env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, err := o.Verify(context.Background(), c.answer, trust.Task{})
+		if (err != nil) != c.errs || v.Passed != c.passed || v.Detail != c.detail {
+			t.Errorf("case %d = %+v, %v; want passed %v detail %q", i, v, err, c.passed, c.detail)
+		}
+	}
+}
