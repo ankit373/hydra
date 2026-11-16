@@ -25,6 +25,9 @@ func GenerateSplits(lock map[string]bench.Dataset, dataRoot, benchDir string) (m
 		if !ok {
 			return nil, fmt.Errorf("suites: the lockfile pins %s, which no suite loads", name)
 		}
+		if lock[name].LocalSplits {
+			continue // derived at run time; its licence keeps the labels out of the repository
+		}
 		s := mk()
 		rows, err := s.Rows(lock[name], bench.DataDir(dataRoot, name))
 		if err != nil {

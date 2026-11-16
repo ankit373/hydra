@@ -1,0 +1,19 @@
+{
+ "samples": [
+  {
+   "sample_id": 0,
+   "source": "The bridge is 300 metres long and was finished in spring.",
+   "summary": "The bridge is 300 metres long. It is 0.3 km long. It is the longest bridge in the region.",
+   "annotations": [
+    {
+     "label": [
+      "Unwanted",
+      "Unwanted.Extrinsic"
+     ],
+     "summary_start": 60,
+     "summary_end": 74
+    }
+   ]
+  }
+ ]
+}

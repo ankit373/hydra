@@ -1,0 +1,19 @@
+{
+ "samples": [
+  {
+   "sample_id": 0,
+   "source": "The market opens at 9 and has twelve dozen stalls. It sells fish and bread.",
+   "summary": "The market opens at 9. It has 144 stalls. It sells fish. It sells bread and cheese.",
+   "annotations": [
+    {
+     "label": [
+      "Unwanted",
+      "Unwanted.Extrinsic"
+     ],
+     "summary_start": 72,
+     "summary_end": 82
+    }
+   ]
+  }
+ ]
+}

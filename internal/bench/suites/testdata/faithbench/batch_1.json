@@ -1,0 +1,47 @@
+{
+ "samples": [
+  {
+   "sample_id": 0,
+   "source": "The Riverside library opened in 1998 and holds 42,000 books. Its director, Maria Lopez, plans a new reading room for 2027.",
+   "summary": "The Riverside library opened in 1998. It holds 52,000 books. Maria Lopez directs it. The reading room opens in 2027.",
+   "annotations": [
+    {
+     "label": [
+      "Unwanted",
+      "Unwanted.Intrinsic"
+     ],
+     "summary_start": 47,
+     "summary_end": 53
+    },
+    {
+     "label": [
+      "Benign"
+     ],
+     "summary_start": 73,
+     "summary_end": 80
+    },
+    {
+     "label": [
+      "Questionable"
+     ],
+     "summary_start": 73,
+     "summary_end": 83
+    }
+   ]
+  },
+  {
+   "sample_id": 1,
+   "source": "Zoë Park won the café prize in Lyon.",
+   "summary": "Zoë Park won the café prize. She also won in Paris in 2020.",
+   "annotations": [
+    {
+     "label": [
+      "Unwanted.Extrinsic"
+     ],
+     "summary_start": 29,
+     "summary_end": 37
+    }
+   ]
+  }
+ ]
+}

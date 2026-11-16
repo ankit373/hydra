@@ -177,7 +177,7 @@ func TestCommittedLock_PinsWhatTheLoadersRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string][]string{"banking77": {"categories.json", "train.csv", "test.csv"}, "clinc150": {"data_full.json"},
-		"gsm8k": {"test.jsonl"}, "humanevalplus": {"HumanEvalPlus.jsonl.gz"}, "snips": snipsFiles()}
+		"gsm8k": {"test.jsonl"}, "humanevalplus": {"HumanEvalPlus.jsonl.gz"}, "snips": snipsFiles(), "faithbench": faithFiles()}
 	if len(lock) != len(Registry()) {
 		t.Fatalf("lock pins %v, registry has %d suites", bench.Names(lock), len(Registry()))
 	}
