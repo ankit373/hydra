@@ -17,10 +17,10 @@ var fixtures = []struct {
 	{
 		name: "support",
 		turns: []Turn{
-			{Ref: "s1", Role: "system", Content: "You are the billing assistant for Acme.\nNever promise a refund over $200 without a manager.\nAlways answer in the customer's language."},
-			{Ref: "u1", Role: "user", Content: "I was charged twice on 3 March.\nPlease don't close the ticket until I confirm."},
-			{Ref: "a1", Role: "assistant", Content: "I will never close it early, you must confirm first."},
-			{Ref: "u2", Role: "user", Content: "Thanks. Only email me, no calls."},
+			{Ref: "s1", Role: "system", Text: "You are the billing assistant for Acme.\nNever promise a refund over $200 without a manager.\nAlways answer in the customer's language."},
+			{Ref: "u1", Role: "user", Text: "I was charged twice on 3 March.\nPlease don't close the ticket until I confirm."},
+			{Ref: "a1", Role: "assistant", Text: "I will never close it early, you must confirm first."},
+			{Ref: "u2", Role: "user", Text: "Thanks. Only email me, no calls."},
 		},
 		want: []string{
 			"Never promise a refund over $200 without a manager.",
@@ -32,8 +32,8 @@ var fixtures = []struct {
 	{
 		name: "writing",
 		turns: []Turn{
-			{Ref: "u1", Role: "user", Content: "Draft a 600-word essay on city trees.\n\n## Requirements\n\n- British spelling\n- Cite the 2021 council survey\n   - keep quotes under 40 words  \n\n## Background\n\nThe council planted 4,000 trees.\nMake sure the tone stays warm."},
-			{Ref: "u2", Role: "user", Content: "Also: do not use the word “lush”."},
+			{Ref: "u1", Role: "user", Text: "Draft a 600-word essay on city trees.\n\n## Requirements\n\n- British spelling\n- Cite the 2021 council survey\n   - keep quotes under 40 words  \n\n## Background\n\nThe council planted 4,000 trees.\nMake sure the tone stays warm."},
+			{Ref: "u2", Role: "user", Text: "Also: do not use the word “lush”."},
 		},
 		want: []string{
 			"- British spelling",
@@ -46,8 +46,8 @@ var fixtures = []struct {
 	{
 		name: "code",
 		turns: []Turn{
-			{Ref: "s1", Role: "system", Content: "Rules:\nTabs for indentation.\nRun go test -race before you finish.\n\nExamples:\nfmt.Println(x)"},
-			{Ref: "u1", Role: "user", Content: "Fix the flaky test in cache_test.go.\n```go\n// must never block\nfunc onlyOnce() {}\n```\nYou must not change the public API.\nRules:\nTabs for indentation."},
+			{Ref: "s1", Role: "system", Text: "Rules:\nTabs for indentation.\nRun go test -race before you finish.\n\nExamples:\nfmt.Println(x)"},
+			{Ref: "u1", Role: "user", Text: "Fix the flaky test in cache_test.go.\n```go\n// must never block\nfunc onlyOnce() {}\n```\nYou must not change the public API.\nRules:\nTabs for indentation."},
 		},
 		want: []string{
 			"Tabs for indentation.",
@@ -73,7 +73,7 @@ func TestExtractConstraints_CopiesBytesExactly(t *testing.T) {
 	for _, f := range fixtures {
 		refs := map[string]string{}
 		for _, turn := range f.turns {
-			refs[turn.Ref] = turn.Content
+			refs[turn.Ref] = turn.Text
 		}
 		for _, q := range ExtractConstraints(f.turns) {
 			src, ok := refs[q.Ref]

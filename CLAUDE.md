@@ -86,6 +86,8 @@ internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
 internal/idle/          ← Compaction while a conversation is idle (#1475). Typed `State` with a ref back to
                           each source turn; `ExtractConstraints` copies rule lines byte for byte, no model.
+                          `Transcript` reads a run or a served conversation back as turns from the run log
+                          and payload store, and refuses (`ErrNoOriginals`) when any text is missing.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,
