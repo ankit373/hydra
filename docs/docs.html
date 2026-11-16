@@ -398,6 +398,7 @@ hyctl dispatch --check 'cmd:check-jsonschema --schemafile invoice.json {file}' "
 hyctl dispatch --kind classification --check gen "is this ticket billing, bug or how-to? ..."   <span class="c"># checks written for the request by another model</span>
 hyctl dispatch --kind extraction --check gen:fields "pull vendor, total and date as JSON: ..."   <span class="c"># a verdict on every field, each broken one listed</span>
 hyctl dispatch --check ground --require-pass "..."   <span class="c"># exit 0 passed, 1 a check failed, 2 a check could not run</span>
+hyctl dispatch --kind writing.support --source-only "reply to this customer: ... &lt;fenced policy&gt;"   <span class="c"># only what the docs say, or "the documents given do not cover this"</span>
 
 <span class="c"># Serve the router to anything that speaks OpenAI</span>
 hyctl serve                             <span class="c"># OpenAI-compatible endpoint, loopback only</span>
