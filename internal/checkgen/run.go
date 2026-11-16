@@ -25,9 +25,11 @@ const (
 )
 
 // Result is one spec's outcome on one answer. Err set means the check never ran.
+// Fields is every field's verdict, for a fields check only.
 type Result struct {
 	Spec    Spec
 	Verdict oracle.Verdict
+	Fields  []FieldVerdict
 	Err     error
 }
 
@@ -48,8 +50,7 @@ func Run(ctx context.Context, specs []Spec, answer string, answering provider.He
 		if err := storeSpec(s); err != nil {
 			errs = append(errs, err)
 		}
-		r := Result{Spec: s}
-		r.Verdict, r.Err = verify(ctx, s, answer, span.Domain, env)
+		r := verify(ctx, s, answer, span.Domain, env)
 		out = append(out, r)
 		if !r.Checked() {
 			continue
@@ -61,16 +62,23 @@ func Run(ctx context.Context, specs []Spec, answer string, answering provider.He
 	return out, errors.Join(errs...)
 }
 
-func verify(ctx context.Context, s Spec, answer, domain string, env Env) (oracle.Verdict, error) {
+func verify(ctx context.Context, s Spec, answer, domain string, env Env) Result {
+	r := Result{Spec: s}
 	g, ok := Named(s.Kind)
 	if !ok {
-		return oracle.Verdict{}, fmt.Errorf("checkgen: no generator for spec kind %q", s.Kind)
+		r.Err = fmt.Errorf("checkgen: no generator for spec kind %q", s.Kind)
+		return r
 	}
 	o, err := g.Oracle(s, env)
 	if err != nil {
-		return oracle.Verdict{}, err
+		r.Err = err
+		return r
 	}
-	return o.Verify(ctx, answer, trust.Task{Domain: domain})
+	r.Verdict, r.Err = o.Verify(ctx, answer, trust.Task{Domain: domain})
+	if f, ok := o.(*fieldsOracle); ok {
+		r.Fields = f.last
+	}
+	return r
 }
 
 func record(r Result, answer string, answering provider.Head, span runlog.Event) error {

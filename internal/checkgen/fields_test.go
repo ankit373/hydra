@@ -27,6 +27,13 @@ var invoiceFields = `[
 // fieldsCheck generates the invoice spec from req and returns the answer's verdict.
 func fieldsCheck(t *testing.T, req, answer string) (bool, string) {
 	t.Helper()
+	passed, detail, _ := fieldsVerdicts(t, req, answer)
+	return passed, detail
+}
+
+// fieldsVerdicts is fieldsCheck with every field's verdict.
+func fieldsVerdicts(t *testing.T, req, answer string) (bool, string, []FieldVerdict) {
+	t.Helper()
 	task := Task{Text: req, Kind: "extraction.finance", Writer: GenInfo{Head: "google/gemini", Family: "google"},
 		Ask: func(context.Context, string) (string, error) { return invoiceFields, nil }}
 	specs, err := fieldsGen{}.Generate(context.Background(), task)
@@ -41,7 +48,54 @@ func fieldsCheck(t *testing.T, req, answer string) (bool, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return v.Passed, v.Detail
+	return v.Passed, v.Detail, o.(*fieldsOracle).last
+}
+
+// statuses is name=status per field, in field order.
+func statuses(fields []FieldVerdict) string {
+	var out []string
+	for _, f := range fields {
+		out = append(out, f.Name+"="+f.Status)
+	}
+	return strings.Join(out, " ")
+}
+
+func TestFields_ReportsEveryBrokenField(t *testing.T) {
+	answer := `{"vendor": "Apex Supplies", "total": "1200.50", "paid": "no"}`
+	passed, detail, fields := fieldsVerdicts(t, withSource, answer)
+	if want := "vendor=not_in_source total=wrong_type paid=wrong_type lines=absent"; passed || statuses(fields) != want {
+		t.Fatalf("passed=%v fields=%q, want %q", passed, statuses(fields), want)
+	}
+	for _, name := range []string{`"vendor"`, `"total"`, `"paid"`} {
+		if !strings.Contains(detail, name) {
+			t.Errorf("detail %q does not name %s", detail, name)
+		}
+	}
+}
+
+func TestFields_PassFailUnchanged(t *testing.T) {
+	for _, tc := range []struct {
+		answer string
+		passed bool
+	}{
+		{`{"vendor": "Acme Supplies Ltd.", "total": 1200.5}`, true},
+		{`{"vendor": "Acme Supplies Ltd.", "total": 1200.5, "paid": true, "lines": []}`, true},
+		{`{"vendor": "Acme Supplies Ltd."}`, false},
+		{`{"vendor": "Acme Supplies Ltd.", "total": 1250}`, false},
+		{`{"vendor": "Acme Supplies Ltd.", "total": 1200.5, "paid": "yes"}`, false},
+		{`not json`, false},
+	} {
+		if passed, detail := fieldsCheck(t, withSource, tc.answer); passed != tc.passed {
+			t.Errorf("%s: passed=%v (%q), want %v", tc.answer, passed, detail, tc.passed)
+		}
+	}
+}
+
+func TestFields_NoSourceMarksUnverified(t *testing.T) {
+	passed, _, fields := fieldsVerdicts(t, "Give me the vendor and total as JSON.", `{"vendor": "Anyone", "total": 3, "paid": true}`)
+	if want := "vendor=unverified total=unverified paid=ok lines=absent"; !passed || statuses(fields) != want {
+		t.Errorf("passed=%v fields=%q, want a pass with %q", passed, statuses(fields), want)
+	}
 }
 
 var withSource = "Pull the vendor and total from this invoice.\n" + util.WrapUntrusted("DOCUMENT", invoice)
