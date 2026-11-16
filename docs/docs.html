@@ -963,7 +963,7 @@ hyctl dispatch <span class="fl">--confidence</span> 0.90 <span class="fl">--file
 
     <section class="doc" id="edit">
       <h2><span class="cmd">hyctl edit</span> <span class="tagline">safe file edits</span></h2>
-      <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a model.</p>
+      <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a model. A failed validator gets one rerun on a model measured stronger at that kind of file.</p>
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl edit <span class="fl">--file</span> "$PWD/internal/foo.go" <span class="fl">--enum</span> MODERATE <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
     </section>
     <section class="doc" id="review">

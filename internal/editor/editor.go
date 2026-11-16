@@ -22,6 +22,10 @@ import (
 	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/policy"
+	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
@@ -81,6 +85,10 @@ type Result struct {
 	ValidatorPassed *bool  `json:"validator_passed"`
 	RolledBack      bool   `json:"rolled_back"`
 	Error           string `json:"error,omitempty"`
+	// Escalated is set when the validator failed FirstHead's answer and this
+	// result is the one rerun on a head measured stronger.
+	Escalated bool   `json:"escalated"`
+	FirstHead string `json:"first_head,omitempty"`
 }
 
 // Edit performs a scoped, validated, rollback-safe file edit.
@@ -186,7 +194,9 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	defer d.Close()
 	ctx, cancel := fp.Deadline(ctx)
 	defer cancel()
-	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
+	// Resolved once, so a rerun's dispatch lands in the same run and task.
+	req.RunID, req.TaskID = runid.ResolveRun(req.RunID), runid.ResolveTask(req.TaskID)
+	opts := dispatch.Options{
 		TierHint:      enumToTier(req.Enum),
 		LocalOnly:     req.LocalOnly,
 		RunID:         req.RunID,
@@ -197,7 +207,8 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		MaxMemoryMB:   fp.MaxMemoryMB,
 		MaxCPUSeconds: fp.MaxCPUSeconds,
 		PromptCache:   fp.PromptCache,
-	})
+	}
+	dispResult, err := d.Dispatch(ctx, editPrompt, opts)
 	if err != nil {
 		cleanupBackup()
 		if fp.Bounded(ctx) {
@@ -206,32 +217,107 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		return failResult(req, wsName, resolved.GitRoot, "route_failed: "+err.Error()), nil
 	}
 
-	// ── Parse response ────────────────────────────────────────────────────────
+	e := &editRun{req: req, reg: reg, wsName: wsName, resolved: resolved,
+		origContent: origContent, origExisted: origExisted, backup: backup, m: m, fp: fp, emb: d.Embedder()}
+	res, vout, err := e.apply(ctx, dispResult)
+	if err == nil && res.ValidatorPassed != nil && !*res.ValidatorPassed && policy.Escalations(fp) > 0 {
+		res, err = e.escalate(ctx, d, editPrompt, opts, dispResult, res, vout)
+	}
+	// Only a backup THIS edit created: one an earlier edit wrote is
+	// internal/review's baseline and outlives a failed attempt.
+	if err != nil || res.Status != "ok" {
+		cleanupBackup()
+	}
+	return res, err
+}
+
+// editRun is what every answer to one edit shares: the file's scope, its
+// snapshot and its policy.
+type editRun struct {
+	req         Request
+	reg         *workspace.Registry
+	wsName      string
+	resolved    workspace.Resolved
+	origContent string
+	origExisted bool
+	backup      string
+	m           markers
+	fp          policy.FilePolicy
+	emb         embed.Embedder
+}
+
+// escalate reruns once after the validator failed first's answer, and puts
+// the rerun's answer through the same steps.
+func (e *editRun) escalate(ctx context.Context, d *dispatch.Dispatcher, prompt string, opts dispatch.Options,
+	first *dispatch.Result, failed *Result, vout string) (*Result, error) {
+	second, why := Escalate(ctx, d, prompt, opts, first, vout)
+	if second == nil {
+		failed.Error += "; " + why
+		return failed, nil
+	}
+	res, _, err := e.apply(ctx, second)
+	if res != nil {
+		res.Escalated, res.FirstHead = true, first.Head.ID
+	}
+	return res, err
+}
+
+// Escalate is the one rerun an edit gets once the validator failed first's
+// answer with output vout: on the head measured to beat first's, within what
+// first left of opts.MaxCostUSD, in opts' run and task. Nil and why when none.
+func Escalate(ctx context.Context, d *dispatch.Dispatcher, prompt string, opts dispatch.Options,
+	first *dispatch.Result, vout string) (*dispatch.Result, string) {
+	j, ok := rank.Escalation(first.Fallbacks, first.Scores, first.Head, []provider.Head{first.Head})
+	if !ok {
+		return nil, "no stronger measured head"
+	}
+	if opts.MaxCostUSD > 0 {
+		if opts.MaxCostUSD -= first.CostUSD; opts.MaxCostUSD <= 0 {
+			return nil, "no cost ceiling left for a stronger head"
+		}
+	}
+	reason := validatorSource + " failed: " + firstLines(vout, retryReasonLines)
+	// Scored on the first answer's span, so the trace shows why the rerun exists.
+	_ = runlog.New(opts.RunID).Append(runlog.Event{
+		Kind: runlog.KindScore, TaskID: opts.TaskID, SpanID: first.SpanID,
+		ParentSpanID: runlog.SpanIDFor(opts.TaskID), Head: first.Head.ID, Model: first.Head.Name,
+		Score: &runlog.Score{Name: "check", Value: 0, Source: "escalation", Comment: reason},
+	})
+	// The rerun carries the rejected answer, which must never be cached.
+	opts.Head, opts.NoCache = first.Fallbacks[j].ID, true
+	second, err := d.Dispatch(ctx, dispatch.RetryPrompt(prompt, first, reason), opts)
+	if err != nil {
+		return nil, "rerun on " + opts.Head + " failed: " + err.Error()
+	}
+	return second, ""
+}
+
+// apply writes r's answer, validates and records it, and rolls the file back
+// on any failure. vout is the validator's output when it failed the file.
+func (e *editRun) apply(ctx context.Context, r *dispatch.Result) (*Result, string, error) {
+	req, gitRoot := e.req, e.resolved.GitRoot
 	// A head answered, so every failure from here names it: a rejected answer
 	// is an observation about that head (#1171).
-	headFail := func(msg string) *Result {
-		r := failResult(req, wsName, resolved.GitRoot, msg)
-		r.Head = dispResult.Head.ID
-		return r
+	fail := func(msg string, passed *bool, rolledBack bool) *Result {
+		res := failResult(req, e.wsName, gitRoot, msg)
+		res.Head, res.ValidatorPassed, res.RolledBack = r.Head.ID, passed, rolledBack
+		return res
 	}
-	newContent := stripOuterFence(extractContent(dispResult.Output, m))
+	newContent := stripOuterFence(extractContent(r.Output, e.m))
 
-	if strings.Contains(newContent, m.start) || strings.Contains(newContent, m.end) {
-		cleanupBackup()
-		return headFail("marker_leakage"), nil
+	if strings.Contains(newContent, e.m.start) || strings.Contains(newContent, e.m.end) {
+		return fail("marker_leakage", nil, false), "", nil
 	}
 	if newContent == "" {
-		cleanupBackup()
-		if origExisted {
-			return headFail("empty_replacement"), nil
+		if e.origExisted {
+			return fail("empty_replacement", nil, false), "", nil
 		}
-		return headFail("marker_parse_failed"), nil
+		return fail("marker_parse_failed", nil, false), "", nil
 	}
 
 	// ── Atomic write ──────────────────────────────────────────────────────────
 	if err := atomicWrite(req.File, newContent+"\n"); err != nil {
-		cleanupBackup()
-		return headFail("write_failed: " + err.Error()), nil
+		return fail("write_failed: "+err.Error(), nil, false), "", nil
 	}
 
 	// ── Validate ──────────────────────────────────────────────────────────────
@@ -240,108 +326,78 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	var validatorPassed *bool
 	if req.Validate {
 		ext := fileExt(req.File)
-		vtmpl := reg.ValidatorFor(ext)
+		vtmpl := e.reg.ValidatorFor(ext)
 
 		// TypeScript fallback: use workspace-local tsc
-		if vtmpl == "" && (ext == "ts" || ext == "tsx") && resolved.GitRoot != "" {
-			vtmpl = tscTemplate(resolved.GitRoot)
+		if vtmpl == "" && (ext == "ts" || ext == "tsx") && gitRoot != "" {
+			vtmpl = tscTemplate(gitRoot)
 		}
 
 		if vtmpl != "" {
-			vout, vrc, verr := runValidatorCmd(ctx, vtmpl, req.File, reg.ValidatorEnv())
+			vout, vrc, verr := runValidatorCmd(ctx, vtmpl, req.File, e.reg.ValidatorEnv())
 			if errors.Is(verr, ErrValidatorUnavailable) {
 				// Not the head's fault and not a verdict, so nothing is
 				// recorded: validatorPassed stays nil and says so.
-				rollback(req.File, origContent, origExisted)
-				// Only a backup THIS edit created: one an earlier edit wrote is
-				// internal/review's baseline and outlives a failed attempt.
-				cleanupBackup()
-				return &Result{
-					Status: "fail", File: req.File, Workspace: wsName,
-					GitRoot: resolved.GitRoot, Enum: req.Enum, Head: dispResult.Head.ID,
-					RolledBack: true, Error: verr.Error(),
-				}, nil
+				rollback(req.File, e.origContent, e.origExisted)
+				return fail(verr.Error(), nil, true), "", nil
 			}
 			if verr != nil {
 				// Interrupted, so nothing was learned about this head. Recording
 				// it would teach the calibrator that a Ctrl+C is broken code.
-				rollback(req.File, origContent, origExisted)
-				// Only a backup THIS edit created: one an earlier edit wrote is
-				// internal/review's baseline and outlives a failed attempt.
-				cleanupBackup()
-				return nil, fmt.Errorf("validating %s: %w", req.File, verr)
+				rollback(req.File, e.origContent, e.origExisted)
+				return nil, "", fmt.Errorf("validating %s: %w", req.File, verr)
 			}
 			validatorPassed = boolp(vrc == 0)
 			// The validator ran against the file this edit had already written,
 			// so unlike a dispatch's verdict this one judges the candidate and
 			// is ground truth (#986). Filed here, before the rollback below
 			// discards the content it is about.
-			RecordVerifiedEdit(ctx, d.Embedder(), VerifiedEdit{
+			RecordVerifiedEdit(ctx, e.emb, VerifiedEdit{
 				Prompt: req.Prompt, File: req.File, Enum: req.Enum,
-				Head: dispResult.Head.ID, Candidate: newContent,
+				Head: r.Head.ID, Candidate: newContent,
 				Passed: vrc == 0, Detail: firstLine(vout),
 			})
 			if vrc != 0 {
-				rollback(req.File, origContent, origExisted)
-				// Only a backup THIS edit created: one an earlier edit wrote is
-				// internal/review's baseline and outlives a failed attempt.
-				cleanupBackup()
-				return &Result{
-					Status:          "fail",
-					File:            req.File,
-					Workspace:       wsName,
-					GitRoot:         resolved.GitRoot,
-					Enum:            req.Enum,
-					Head:            dispResult.Head.ID,
-					ValidatorPassed: validatorPassed,
-					RolledBack:      true,
-					Error:           "validation_failed: " + firstLine(vout),
-				}, nil
+				rollback(req.File, e.origContent, e.origExisted)
+				return fail("validation_failed: "+firstLine(vout), validatorPassed, true), vout, nil
 			}
 		}
 	}
 
 	// ── Diff stats ────────────────────────────────────────────────────────────
-	added, removed := diffStats(req.File, origContent, resolved.GitRoot, backup, origExisted)
+	added, removed := diffStats(req.File, e.origContent, gitRoot, e.backup, e.origExisted)
 
 	// ── Diff-size cap ─────────────────────────────────────────────────────────
 	// After the write, because the size of the change is only knowable once it
 	// exists, and before the run log, so a rolled-back edit is never recorded
 	// as an applied one.
-	if origExisted {
-		if why, over := fp.DiffExceeded(added, removed, strings.Count(origContent, "\n")+1); over {
-			rollback(req.File, origContent, origExisted)
-			// Only a backup THIS edit created: one an earlier edit wrote is
-			// internal/review's baseline and outlives a failed attempt.
-			cleanupBackup()
-			return &Result{
-				Status: "fail", File: req.File, Workspace: wsName,
-				GitRoot: resolved.GitRoot, Enum: req.Enum, Head: dispResult.Head.ID,
-				ValidatorPassed: validatorPassed, RolledBack: true, Error: why,
-			}, nil
+	if e.origExisted {
+		if why, over := e.fp.DiffExceeded(added, removed, strings.Count(e.origContent, "\n")+1); over {
+			rollback(req.File, e.origContent, e.origExisted)
+			return fail(why, validatorPassed, true), "", nil
 		}
 	}
 
 	// ── Run log ───────────────────────────────────────────────────────────────
 	// Emitted here, after validation, so a rolled-back edit is never recorded as
 	// an applied change, the rollback path returns above without reaching this.
-	logEdit(req, origContent, newContent+"\n", added, removed)
+	logEdit(req, e.origContent, newContent+"\n", added, removed)
 
 	// ── A2A handoff ───────────────────────────────────────────────────────────
-	_ = writeLastEdit(req.File, req.Enum, wsName, dispResult.Head.ID, added, removed)
+	_ = writeLastEdit(req.File, req.Enum, e.wsName, r.Head.ID, added, removed)
 
 	return &Result{
 		Status:          "ok",
 		File:            req.File,
-		Workspace:       wsName,
-		GitRoot:         resolved.GitRoot,
+		Workspace:       e.wsName,
+		GitRoot:         gitRoot,
 		Enum:            req.Enum,
-		Head:            dispResult.Head.ID,
+		Head:            r.Head.ID,
 		LinesAdded:      added,
 		LinesRemoved:    removed,
 		ValidatorPassed: validatorPassed,
 		RolledBack:      false,
-	}, nil
+	}, "", nil
 }
 
 // recordValidationOutcome is a best-effort calibration observation: the
@@ -803,13 +859,16 @@ func readFileLines(path string) string {
 	return string(raw)
 }
 
-func firstLine(s string) string {
-	lines := strings.SplitN(strings.TrimSpace(s), "\n", 2)
-	if len(lines) > 0 {
-		return lines[0]
-	}
-	return s
+// retryReasonLines is how much of a failed validator's output a rerun is sent.
+const retryReasonLines = 10
+
+// firstLines is s's first n lines, trimmed.
+func firstLines(s string, n int) string {
+	lines := strings.SplitN(strings.TrimSpace(s), "\n", n+1)
+	return strings.Join(lines[:min(len(lines), n)], "\n")
 }
+
+func firstLine(s string) string { return firstLines(s, 1) }
 
 func writeLastEdit(file, enum, ws, headID string, added, removed int) error {
 	h := map[string]any{
