@@ -64,7 +64,7 @@ func (claimsGen) Oracle(s Spec, env Env) (oracle.Oracle, error) {
 	}
 	switch s.Variant {
 	case "ground":
-		return claimsOracle{check: groundSentence(b.Prompt)}, nil
+		return &claimsOracle{check: groundSentence(b.Prompt)}, nil
 	case "judge":
 		d, err := env.decider(s.Generator)
 		if err != nil {
@@ -74,55 +74,82 @@ func (claimsGen) Oracle(s Spec, env Env) (oracle.Oracle, error) {
 			Template: claimsJudgeAsk + util.WrapUntrusted("SOURCE", sourceOf(b.Prompt)) + "\n{answer}",
 			Decider:  d, Source: s.Check(),
 		}
-		return claimsOracle{check: func(ctx context.Context, sentence string) (bool, bool, string, error) {
+		return &claimsOracle{check: func(ctx context.Context, sentence string) (SentenceVerdict, error) {
 			v, err := p.Verify(ctx, sentence, trust.Task{})
-			return true, v.Passed, "", err
+			if err != nil {
+				return SentenceVerdict{}, err
+			}
+			if v.Passed {
+				return SentenceVerdict{Status: StatusSupported}, nil
+			}
+			return SentenceVerdict{Status: StatusNotSupported, Why: "the judge answered no: " + v.Detail}, nil
 		}}, nil
 	}
 	return nil, fmt.Errorf("checkgen claims: spec %s has unknown variant %q", s.ID, s.Variant)
 }
 
+// Sentence statuses. nothing_to_check is a sentence with no number, name, date or quote in it.
+const (
+	StatusSupported      = "supported"
+	StatusNotSupported   = "not_supported"
+	StatusNothingToCheck = "nothing_to_check"
+)
+
+// SentenceVerdict is one sentence's result. N counts from 1. Ground fills Unsupported, the judge Why.
+type SentenceVerdict struct {
+	N           int
+	Text        string
+	Status      string
+	Unsupported []ground.Claim
+	Why         string
+}
+
 // groundSentence checks one sentence with ground.Check. A sentence naming nothing checkable is skipped.
 func groundSentence(prompt string) sentenceCheck {
-	return func(_ context.Context, sentence string) (bool, bool, string, error) {
+	return func(_ context.Context, sentence string) (SentenceVerdict, error) {
 		v := ground.Check(sentence, prompt)
-		if !v.Checked {
-			return false, false, "", ground.ErrNoContext
+		switch {
+		case !v.Checked:
+			return SentenceVerdict{}, ground.ErrNoContext
+		case v.Claims == 0:
+			return SentenceVerdict{Status: StatusNothingToCheck}, nil
+		case v.Grounded:
+			return SentenceVerdict{Status: StatusSupported}, nil
 		}
-		if v.Claims == 0 {
-			return false, false, "", nil
-		}
-		return true, v.Grounded, v.Detail(), nil
+		return SentenceVerdict{Status: StatusNotSupported, Unsupported: v.Unsupported, Why: v.Detail()}, nil
 	}
 }
 
-// sentenceCheck judges one sentence: whether it was checked, whether it passed, and why not.
-type sentenceCheck func(ctx context.Context, sentence string) (checked, passed bool, why string, err error)
+// sentenceCheck judges one sentence; Verify fills in N and Text.
+type sentenceCheck func(ctx context.Context, sentence string) (SentenceVerdict, error)
 
-type claimsOracle struct{ check sentenceCheck }
+// claimsOracle keeps Last, the verdict of each sentence its most recent Verify looked at.
+type claimsOracle struct {
+	check sentenceCheck
+	Last  []SentenceVerdict
+}
 
 // Verify passes only when every sentence it checked passed and it checked them all.
 // Any error leaves the whole answer not checked rather than judged on part of it.
-func (o claimsOracle) Verify(ctx context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
+func (o *claimsOracle) Verify(ctx context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
 	all := sentences(candidate)
 	checked := all[:min(len(all), maxClaimSentences)]
+	o.Last = make([]SentenceVerdict, 0, len(checked))
 	var failed []string
 	ran := 0
 	for i, s := range checked {
-		ok, passed, why, err := o.check(ctx, s)
+		sv, err := o.check(ctx, s)
 		if err != nil {
 			return oracle.Verdict{}, fmt.Errorf("sentence %d: %w", i+1, err)
 		}
-		if !ok {
+		sv.N, sv.Text = i+1, s
+		o.Last = append(o.Last, sv)
+		if sv.Status == StatusNothingToCheck {
 			continue
 		}
 		ran++
-		if !passed {
-			f := fmt.Sprintf("%d %q", i+1, s)
-			if why != "" {
-				f += " (" + why + ")"
-			}
-			failed = append(failed, f)
+		if sv.Status == StatusNotSupported {
+			failed = append(failed, failedDetail(sv))
 		}
 	}
 	if len(failed) > 0 {
@@ -135,6 +162,15 @@ func (o claimsOracle) Verify(ctx context.Context, candidate string, _ trust.Task
 		return oracle.Verdict{}, fmt.Errorf("partly checked: the first %d of %d sentences passed", len(checked), len(all))
 	}
 	return oracle.Verdict{Passed: true, Detail: fmt.Sprintf("all %d sentences checked passed", ran)}, nil
+}
+
+// failedDetail names a failed sentence, with the spans ground could not find. The judge's Why stays out of it.
+func failedDetail(sv SentenceVerdict) string {
+	f := fmt.Sprintf("%d %q", sv.N, sv.Text)
+	if len(sv.Unsupported) > 0 {
+		f += " (" + sv.Why + ")"
+	}
+	return f
 }
 
 // sentences splits on . ! ? before a space or the end, and on line breaks. A
