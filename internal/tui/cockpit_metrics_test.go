@@ -5,10 +5,13 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // One fold of the cost rows feeds every consumer: per-model stats, the run
@@ -182,5 +185,34 @@ func TestBlastFor_RealGraphYieldsRealNumbers(t *testing.T) {
 	}
 	if _, _, _, ok := m.ckBlastFor("not-in-graph.go"); ok {
 		t.Error("a file absent from the graph reported an impact")
+	}
+}
+
+func TestCockpit_RecentChangeNotice(t *testing.T) {
+	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	day := func(d int) time.Time { return now.AddDate(0, 0, -d) }
+	stats := []trust.Stat{
+		{Source: "steady", Domain: "code.general"},
+		{Source: "old", Domain: "code.general", Changed: day(20)},
+		{Source: "a", Domain: "summary.general", Changed: day(1)},
+		{Source: "b", Domain: "extraction.invoices", Changed: day(9), Recovered: day(2)},
+		{Source: "c", Domain: "writing.general", Changed: day(3)},
+		{Source: "d", Domain: "go", Changed: day(5)},
+	}
+	got := ckDriftNotice(stats, now)
+	want := "this week: a worse at summary, b back at extraction.invoices, c worse at writing, " +
+		"1 more in hyctl trust calibration"
+	if got != want {
+		t.Errorf("notice\n got %q\nwant %q", got, want)
+	}
+	if got := ckDriftNotice(stats[:2], now); got != "" {
+		t.Errorf("no recent change, want no notice, got %q", got)
+	}
+
+	m := testCockpit()
+	m.th().log = nil
+	m.metrics.driftNotice = want
+	if out := stripANSI(m.frame()); !strings.Contains(out, "this week: a worse at summary") {
+		t.Errorf("first screen lacks the notice:\n%s", out)
 	}
 }
