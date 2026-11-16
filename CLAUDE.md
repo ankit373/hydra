@@ -1060,6 +1060,22 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 | New public page or anchor | `sitemap.xml` |
 | AI crawler policy change | `robots.txt` |
 
+### Where each topic lives
+
+One home per topic; the README keeps a short paragraph and links to it (#1796).
+
+| Topic | Home |
+|---|---|
+| What Hydra is, what people use it for, how it checks, install, platform table, quick start | `README.md` |
+| Every command, configuration, adding a model, serve, TUI, desktop app, security, egress, PII | `docs/docs.html` (one section each, linked from the README by anchor) |
+| The math and the measured numbers | `docs/first-principles.html` (`#numbers` for the numbers) |
+| Comparison with other gateways, landing numbers | `docs/index.html` (`#compare`, `#numbers`) |
+| Package layout | this file, Directory Layout and Go Control Plane |
+| Roadmap | GitHub milestones (the project board is private) |
+
+A user-visible change updates its home, plus the README only if its short paragraph is now wrong.
+`TestReadme_SiteLinksResolve` fails when a README link to the site names a missing page or anchor.
+
 ### Styling and the accessibility check
 - Every page links `docs/assets/tokens.css` (generated) then `docs/assets/site.css`, the one shared
   stylesheet: header with its phone menu, footer, buttons, code blocks, focus ring, skip link.
