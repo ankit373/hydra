@@ -25,7 +25,11 @@ const waitDelay = 5 * time.Second
 // context instead, which is why that had to land first (#738).
 func Harden(cmd *exec.Cmd) *exec.Cmd {
 	cmd.WaitDelay = waitDelay
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Set the field, not the struct, so Offline's namespace flags survive either order.
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
 	cmd.Cancel = func() error {
 		// A negative pid signals the group. Setpgid with no Pgid makes the
 		// child its own group leader, so -pid is exactly this head's tree.

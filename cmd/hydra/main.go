@@ -59,6 +59,7 @@ import (
 	"github.com/ankit373/hydra/internal/rollup"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/shellpath"
 	"github.com/ankit373/hydra/internal/signals"
@@ -2973,6 +2974,8 @@ func cmdSecurity() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Probed here, not in Build: the probe starts a process.
+			rep.Checks = append(rep.Checks, security.OfflineCheck(sandbox.NetworkIsolation()))
 			switch {
 			case jsonOut:
 				return json.NewEncoder(os.Stdout).Encode(rep)

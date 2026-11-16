@@ -5,9 +5,8 @@
 //
 // It is not a sandbox in the kernel sense. Go's os/exec has no per-child
 // rlimit support, and faking one through `sh -c 'ulimit ...; exec'` would
-// re-tokenize argv, which internal/oracle deliberately avoids. Platform
-// confinement (sandbox-exec, seccomp) is a separate piece of work; what is
-// here is the portable part that needs no privileges.
+// re-tokenize argv, which internal/oracle deliberately avoids. Offline cuts
+// the network where the platform allows; filesystem confinement is separate.
 package sandbox
 
 import (

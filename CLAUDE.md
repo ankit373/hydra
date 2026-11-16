@@ -125,6 +125,10 @@ internal/mcpregistry/   ← MCP server trust registry: sync official registry, s
                           saved tools/list at $HYDRA_HOME/mcp_tools/<server>.json, never a live server
                           (#1303). `hyctl mcp registry`.
 internal/oracle/        ← Checks as calibrated evidence: any command (tests, a schema check), label match, predicates. `hyctl oracle`.
+internal/sandbox/       ← What a subprocess Hydra starts may see and do. `Confine` strips credentials, `Harden` bounds
+                          the process tree, `WithLimits` caps CPU and memory. `Offline` cuts the network, loopback
+                          included (a network namespace on Linux, sandbox-exec with `offline.sb` on macOS), or refuses
+                          with `ErrNoNetworkIsolation`, which reads as not checked, never a pass. `hyctl security` says which (#1976).
 internal/linkcheck/     ← `--check links`: each URL in an answer must resolve, and a quote in its sentence must be
                           on the page. Asks the ledger (`ledger.Network`) before each fetch; only the URL leaves.
                           No links, a denied fetch or no network is not checked, never a pass (#1860).

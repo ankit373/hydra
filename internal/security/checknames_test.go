@@ -37,6 +37,7 @@ func producedNames() map[string]bool {
 		incidentCheck(nil),
 		privilegeCheck(nil),
 		bomCheck(nil),
+		OfflineCheck(nil),
 	}
 	out := map[string]bool{}
 	for _, c := range checks {
@@ -77,8 +78,8 @@ func TestCheckNamesAreReal(t *testing.T) {
 // A builder returning an unnamed Check is unreachable by the view, and an
 // empty name would also make the guard above vacuous.
 func TestEveryCheckIsNamed(t *testing.T) {
-	if got := len(producedNames()); got != 13 {
-		t.Errorf("collected %d distinct check names, want 13, a builder was added, "+
+	if got := len(producedNames()); got != 14 {
+		t.Errorf("collected %d distinct check names, want 14, a builder was added, "+
 			"removed, or returned an unnamed Check", got)
 	}
 }
