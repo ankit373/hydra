@@ -6,12 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/checkgen"
 	"github.com/ankit373/hydra/internal/dispatch"
-	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -21,6 +19,7 @@ import (
 type genChecks struct {
 	all   bool
 	named []string
+	skip  string // a spec kind already run another way, e.g. claims under --source-only
 }
 
 func (g genChecks) asked() bool { return g.all || len(g.named) > 0 }
@@ -47,7 +46,7 @@ func (g genChecks) generators(kind string) []checkgen.Generator {
 	var out []checkgen.Generator
 	seen := map[string]bool{}
 	add := func(gen checkgen.Generator) {
-		if !seen[gen.Kind()] {
+		if !seen[gen.Kind()] && gen.Kind() != g.skip {
 			seen[gen.Kind()] = true
 			out = append(out, gen)
 		}
@@ -113,9 +112,7 @@ func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string, v *v
 		return
 	}
 	// Only heads that can run: a pick nothing can drive would leave every check not checked.
-	heads := slices.DeleteFunc(slices.Clone(g.d.Heads()), func(h provider.Head) bool {
-		return executor.Unroutable(h) != "" || !g.d.Allows(h.ID)
-	})
+	heads := runnableHeads(g.d)
 	h, same, ok := checkgen.PickGenerator(heads, g.d.PricedScores(heads, g.kind), r.Head, nil, g.localOnly)
 	if !ok {
 		notChecked("gen", errors.New("no head can write the checks"))

@@ -141,7 +141,8 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           model) and gen:rubric-judge (one question per item). `hyctl dispatch --check gen` runs the
                           default checks for `--kind`, `gen:<kind>` one by name; a head of another family writes them
                           (`PickGenerator`, every head priced by `Dispatcher.PricedScores`), and `--max-usd` stops the
-                          rest as not checked.
+                          rest as not checked. `--source-only` runs both claims checks for any kind as escalating
+                          checks and prints a fixed "not covered" reply, never the answer, when none passes (#1859).
 internal/vet/           ← Review a diff: open-code-review resolves the files and rules, the router
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace
@@ -487,6 +488,8 @@ hyctl dispatch --check ground "summarise this: <fenced source>"
 hyctl dispatch --kind answer --check links "what did the regulator decide? cite your sources"
 # Gate a script on it: 0 passed, 1 a check failed, 2 a check could not run
 hyctl dispatch --check ground --require-pass "summarise this: <fenced source>"
+# Reply only from the fenced docs: every sentence checked, else "the documents given do not cover this", exit 1
+hyctl dispatch --kind writing.support --source-only "reply to this customer: <fenced policy>"
 hyctl edit --file "$PWD/internal/auth/token.go" --enum MODERATE --prompt "rotate signing key"
 hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain <task_hash>
 
