@@ -120,19 +120,18 @@ func TestDispatch_TheGovernorRoutesAnObjectiveAsTheOldDefault(t *testing.T) {
 	}
 }
 
-// A pinned dispatch pays for no explanation unless it is a dry run, which is
-// the only reader of one there.
-func TestDispatch_APinnedDispatchSkipsTheExplanation(t *testing.T) {
+// A pinned head was the whole list, so only a dry run explains it.
+func TestDispatch_APinnedHeadSkipsTheExplanation(t *testing.T) {
 	d := objectiveDispatcher(t)
 	for _, dry := range []bool{false, true} {
 		res, err := d.Dispatch(context.Background(), "hi", Options{
-			TierHint: "1", Domain: objectiveClass, DryRun: dry, RunID: "run-x", TaskID: "task-x",
+			Head: "best", Domain: objectiveClass, DryRun: dry, RunID: "run-x", TaskID: "task-x",
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if (res.Scores != nil) != dry {
-			t.Errorf("dry run %v: scores %+v; explain must run on a pinned route only for a dry run", dry, res.Scores)
+			t.Errorf("dry run %v: scores %+v; a pinned head is explained only for a dry run", dry, res.Scores)
 		}
 	}
 }
