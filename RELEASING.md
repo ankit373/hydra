@@ -86,19 +86,31 @@ label, then re-run the check.
    empty `chore:` commit with a `Release-As: X.Y.Z` footer in its PR body. Never set `release-as`
    in release-please-config.json, because it is sticky.
 2. Check that the docs files in the PR moved to the new version and that CI on main is green.
-3. Start CI on the release PR. release-please opens it with `GITHUB_TOKEN`, which starts no
+3. Check the release notes page. release-please.yml renders `docs/releases/vX.Y.Z.html`, the
+   index, the feed and the sitemap onto the release PR after every update, from the new
+   CHANGELOG section and GitHub (PR authors, linked issues, each PR's `## Upgrade notes`). For a
+   minor or major, land `docs/releases/notes/vX.Y.Z.md` on main first (`## Summary`,
+   `## Highlights`, `## Upgrade notes`, `## Security`); without it the page says its summary was
+   generated. Security notes say only what was hardened until the advisories are published.
+4. Start CI on the release PR. release-please opens it with `GITHUB_TOKEN`, which starts no
    workflow, so close and reopen the PR to run CI.
-4. **Approve the PR.** Mergify queues it once the release build and security checks are green,
+5. **Approve the PR.** Mergify queues it once the release build and security checks are green,
    and it merges. A new merge to main makes release-please push to the PR, which dismisses your
    approval: read the new CHANGELOG and approve again.
-5. Watch the run:
+6. Watch the run:
    `gh run watch $(gh run list --workflow release-please.yml -L1 --json databaseId -q '.[0].databaseId')`.
    If one channel fails, use "Re-run failed jobs". Do not re-dispatch publish.yml for a version
    that is partly published.
-6. release-smoke.yml runs after publish. It installs from brew, npm, pip, install.sh and the
+7. release-smoke.yml runs after publish. It installs from brew, npm, pip, install.sh and the
    release archive, and checks `hyctl --version` and an offline `hyctl --help`. If it fails it
    opens a `release:blocked` issue and labels the next release PR; go to section 5. Run it by
    hand with `gh workflow run release-smoke.yml -f tag=vX.Y.Z`.
+8. release-notes.yml runs after publish too, and every Monday for advisories published later. It
+   adds the release's files, digests and provenance, and any published GHSA, to the release
+   pages, and opens or updates one PR from `bot/release-notes`. It is opened with `GITHUB_TOKEN`:
+   close and reopen it to run CI, then approve it. Mergify queues it only with your approval, and
+   only while it changes nothing but the generated pages. Run it by hand with
+   `gh workflow run release-notes.yml`.
 
 ### Large or major
 1. Pick the commit (usually main's head) and run `gh workflow run rc.yml -f sha=<sha>`. It tags

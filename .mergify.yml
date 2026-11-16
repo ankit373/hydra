@@ -66,8 +66,13 @@ shared:
   release_please_bot: &release_please_bot author=github-actions[bot]
   same_repo: &same_repo -from-fork
   # release-please's PR touches CHANGELOG, the manifest and the extra-files in
-  # release-please-config.json (the docs version pins); anything else is not its PR.
-  release_please_files: &release_please_files -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json|README\.md|docs/app\.html|docs/index\.html)$)
+  # release-please-config.json (the docs version pins), plus the release pages
+  # release-please.yml generates onto it; anything else is not its PR.
+  release_please_files: &release_please_files -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json|README\.md|docs/app\.html|docs/index\.html|docs/sitemap\.xml|docs/releases/(index\.html|feed\.xml|v\d+\.\d+\.\d+\.html|data/v\d+\.\d+\.\d+\.json))$)
+
+  # release-notes.yml's refresh PR: generated release pages and nothing else.
+  release_notes_head: &release_notes_head head=bot/release-notes
+  release_notes_files: &release_notes_files -files~=^(?!(docs/sitemap\.xml|docs/releases/(index\.html|feed\.xml|v\d+\.\d+\.\d+\.html|data/v\d+\.\d+\.\d+\.json))$)
 
   # A release waits while any of these is on its PR (RELEASING.md).
   release_not_held: &release_not_held
@@ -154,6 +159,23 @@ queue_rules:
     update_method: merge
     # One fresh run for a flaky leg; a second red dequeues, so nothing merges around it.
     max_checks_retries: 1
+
+  # release-notes.yml's refresh of the release pages. Only the maintainer's approval queues it.
+  - name: release-notes
+    queue_conditions:
+      - base=main
+      - *release_notes_head
+      - author=github-actions[bot]
+      - *same_repo
+      - *release_notes_files
+      - approved-reviews-by=ankit373
+      - -draft
+      - *conventional
+      - and: *not_held
+    merge_conditions:
+      - and: *ci
+      - and: *release_build
+      - and: *security
 
   # Every other PR into main. After release-please, promote and release, so those
   # match first. Pinned off the release-please bot by author, not by branch name: its
@@ -243,8 +265,10 @@ merge_protections:
       - *not_mergify
       - not:
           and:
-            - *release_please
             - author=github-actions[bot]
+            - or:
+                - *release_please
+                - *release_notes_head
     success_conditions:
       - *cla
 
@@ -311,6 +335,20 @@ pull_request_rules:
       - -closed
       - -draft
       - and: *release_not_held
+      - and: *not_held
+    actions:
+      queue:
+
+  - name: Queue the release notes refresh once the maintainer approves it
+    conditions:
+      - base=main
+      - *release_notes_head
+      - author=github-actions[bot]
+      - *same_repo
+      - *release_notes_files
+      - approved-reviews-by=ankit373
+      - -closed
+      - -draft
       - and: *not_held
     actions:
       queue:

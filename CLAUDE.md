@@ -1121,6 +1121,8 @@ CHANGELOG release has no page or the newest page is not the manifest's version. 
 | New desktop build target | `app.html` download table, `README.md` platform table, `llms.txt` platform support |
 | Pricing change (model rates) | `pricing.md`, cost comparison table in `index.html`, `llms.txt` |
 | New public page or anchor | `sitemap.xml` |
+| New release | nothing by hand: `release-please.yml` renders `docs/releases/` onto the release PR, and `release-notes.yml` adds the files, provenance and published advisories after publish through a `bot/release-notes` PR. For a minor or major, land `docs/releases/notes/vX.Y.Z.md` first |
+| A change users must act on when they upgrade | the PR body's `## Upgrade notes` section (the template has one); the release page copies it |
 | AI crawler policy change | `robots.txt` |
 
 ### Where each topic lives

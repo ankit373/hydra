@@ -40,6 +40,54 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+  # The release PR carries its own notes page (docs/releases/), rendered from the
+  # CHANGELOG release-please just wrote and from GitHub, so it lands with the release.
+  # A push with GITHUB_TOKEN starts no workflow; CI starts when the PR is reopened (RELEASING.md).
+  release-notes-pr:
+    name: Release notes on the release PR
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created != 'true' }}
+    runs-on: ubuntu-latest
+    # Two quick merges render twice; the newer run carries everything the older one would.
+    concurrency:
+      group: release-notes-pr
+      cancel-in-progress: true
+    permissions:
+      contents: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Find the release PR
+        id: pr
+        run: |
+          branch=$(gh pr list --repo "$GITHUB_REPOSITORY" --label 'autorelease: pending' --state open \
+            --json headRefName,author -q '[.[] | select(.author.login == "app/github-actions")][0].headRefName // ""')
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: ${{ steps.pr.outputs.branch != '' }}
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          persist-credentials: false
+
+      - name: Render the pages onto the release PR
+        if: ${{ steps.pr.outputs.branch != '' }}
+        env:
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          python3 docs/releases/generate.py fetch
+          python3 docs/releases/generate.py
+          git add docs/releases docs/sitemap.xml
+          if git diff --cached --quiet; then
+            echo "release pages are up to date"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "docs(releases): notes pages for this release"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+
   publish:
     name: Publish everywhere
     needs: release-please
@@ -67,3 +115,12 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
       expect_latest: true
+  # Adds the published files, digests and provenance to the release pages, via a PR.
+  release-notes:
+    name: Release notes refresh
+    needs: [release-please, publish]
+    if: ${{ !cancelled() && needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/release-notes.yml

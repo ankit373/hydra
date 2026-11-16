@@ -12,6 +12,14 @@ squash commit body: a BREAKING CHANGE: or Release-As: line here changes the next
 version, so leave those out unless you mean them (RELEASING.md).
 -->
 
+## Upgrade notes
+
+<!--
+What someone upgrading must do or know: a new default, a request that is now
+refused, a config key that moved. Leave it empty if nothing. This section is
+copied to the release notes page (docs/releases/generate.py).
+-->
+
 ## Type of change
 
 - [ ] Bug fix
