@@ -31,6 +31,12 @@ func Kind(kind, area string) (string, error) {
 	return TaskClass(kind + "." + area)
 }
 
+// KindLabel is a domain as a person reads it: the default area dropped, so
+// summary.general is summary and extraction.invoices stays as it is.
+func KindLabel(domain string) string {
+	return strings.TrimSuffix(domain, "."+DefaultArea)
+}
+
 // ParseKind reads a --kind value, <kind> or <kind>.<area>.
 func ParseKind(s string) (string, error) {
 	kind, area, _ := strings.Cut(s, ".")

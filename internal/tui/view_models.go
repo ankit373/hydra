@@ -377,6 +377,14 @@ func (m Cockpit) modelDetail(w int) string {
 		lines = append(lines, " "+ckDimS.Render(ckCell(s.Domain, 9))+
 			ckCyanS.Render(fmt.Sprintf("n %.0f · sens %.2f · spec %.2f · D %.2f", s.N, s.Se, s.Sp, s.D)))
 	}
+	for _, s := range stats {
+		if l, since := ckDriftLine(s); l != "" {
+			lines = append(lines, " "+ckExpS.Render(truncate(l, 38)))
+			if since != "" {
+				lines = append(lines, "   "+ckFaintS.Render(since))
+			}
+		}
+	}
 	return box.Render(strings.Join(lines, "\n"))
 }
 

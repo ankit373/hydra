@@ -57,3 +57,13 @@ func TestKind_NeverCollidesWithAnExtensionCell(t *testing.T) {
 		}
 	}
 }
+
+func TestKindLabel_DropsOnlyTheDefaultArea(t *testing.T) {
+	for in, want := range map[string]string{
+		"summary.general": "summary", "extraction.invoices": "extraction.invoices", "go": "go",
+	} {
+		if got := KindLabel(in); got != want {
+			t.Errorf("KindLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
