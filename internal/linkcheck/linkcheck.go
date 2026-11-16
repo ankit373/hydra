@@ -9,15 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"io"
 	"net/http"
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/ankit373/hydra/internal/ground"
-	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -25,37 +22,14 @@ import (
 // Source is the calibration key the check records under.
 const Source = "check:links"
 
-const (
-	maxLinks     = 20
-	maxRedirects = 3
-	maxPageBytes = 2 << 20
-	fetchTimeout = 10 * time.Second
-)
+// maxLinks bounds the fetches one answer can cause.
+const maxLinks = 20
 
 var (
 	// errNoLinks is an answer with no URL in it: nothing to check, never a pass.
 	errNoLinks = errors.New("no links in the answer")
-	// errDenied is the ledger refusing the fetch.
-	errDenied = errors.New("the ledger did not allow network access")
-
-	errRedirects = errors.New("too many redirects")
-	urlRE        = regexp.MustCompile(`https?://[^\s<>"'“”()\[\]{}]+`)
+	urlRE      = regexp.MustCompile(`https?://[^\s<>"'“”()\[\]{}]+`)
 )
-
-// Gate decides whether one URL may be fetched. LedgerGate asks the MCP ledger and records the answer.
-type Gate func(url string) (bool, error)
-
-// LedgerGate asks the ledger's policy for network access to url and records the decision.
-func LedgerGate(url string) (bool, error) {
-	pol, err := ledger.LoadPolicy(ledger.DefaultPolicyPath())
-	if err != nil {
-		return false, err
-	}
-	d, err := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
-		Agent: "hyctl", Tool: Source, Resource: url, Action: ledger.Network,
-	})
-	return d == ledger.Allow, err
-}
 
 // Oracle fetches every link in an answer, asking Gate first.
 type Oracle struct{ Gate Gate }
@@ -125,51 +99,19 @@ func (o *Oracle) Verify(ctx context.Context, candidate string, _ trust.Task) (or
 	return oracle.Verdict{Passed: true, Detail: fmt.Sprintf("all %d links resolved", len(pages))}, nil
 }
 
-// fetch gets url once the gate allows it. An error is not checked: the network or the
-// gate said nothing about the link. A reply that is not 2xx, or loops, is a dead link.
+// fetch reads a link's page. An error is not checked; a reply that is not 2xx, or loops, is a dead link.
 func (o *Oracle) fetch(ctx context.Context, url string) (page, error) {
-	if o.Gate == nil {
-		return page{}, errDenied
-	}
-	ok, err := o.Gate(url)
-	if err != nil {
+	r, err := get(ctx, o.Gate, url, "")
+	switch {
+	case err != nil:
 		return page{}, err
+	case r.failed != "":
+		return page{failed: r.failed}, nil
+	case r.status < 200 || r.status > 299:
+		return page{failed: fmt.Sprintf("does not resolve: %d %s", r.status, http.StatusText(r.status))}, nil
 	}
-	if !ok {
-		return page{}, errDenied
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return page{failed: "is not a valid URL"}, nil
-	}
-	resp, err := client.Do(req)
-	if errors.Is(err, errRedirects) {
-		return page{failed: fmt.Sprintf("redirects more than %d times", maxRedirects)}, nil
-	}
-	if err != nil {
-		return page{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return page{failed: "does not resolve: " + resp.Status}, nil
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPageBytes+1))
-	if err != nil {
-		return page{}, err
-	}
-	truncated := len(body) > maxPageBytes
-	if truncated {
-		body = body[:maxPageBytes]
-	}
-	return page{text: pageText(string(body)), truncated: truncated}, nil
+	return page{text: pageText(string(r.body)), truncated: r.truncated}, nil
 }
-
-var client = &http.Client{Timeout: fetchTimeout, CheckRedirect: func(_ *http.Request, via []*http.Request) error {
-	if len(via) > maxRedirects {
-		return errRedirects
-	}
-	return nil
-}}
 
 var (
 	hiddenRE = regexp.MustCompile(`(?is)<(script|style)\b.*?</(script|style)\s*>`)
