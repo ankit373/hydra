@@ -58,6 +58,9 @@ stays on your machine, and has no upload path. Contributing code does not contri
 - **Feature requests**, open an issue using the [feature template](.github/ISSUE_TEMPLATE/feature_request.md)
 - **Documentation improvements**, edit `.md` files and send a PR
 - **New model integrations**, add an entry to `registry/models.yaml` + a tier in `registry/routing.yaml`
+- **New CLI agents**, add the binary to `knownCLIs` (`internal/provider/cli/provider.go`), its non-interactive
+  invocation to `cliTemplates` (`internal/executor/cli.go`) and its name to `internal/capabilities/data.json`.
+  Say in the PR that `hyctl probe` found it and a `hyctl dispatch` to it answered.
 - **Terminal cockpit**, `internal/tui` (Bubble Tea)
 - **Desktop app**, `desktop/` (Wails v2 + React/TS); its Go backend is `desktop/api`
 
