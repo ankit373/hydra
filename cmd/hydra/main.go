@@ -889,6 +889,7 @@ func cmdDispatch() *cobra.Command {
 		checks       []string
 		maxEsc       int
 		requirePass  bool
+		sourceOnly   bool
 	)
 
 	cmd := &cobra.Command{
@@ -939,12 +940,18 @@ func cmdDispatch() *cobra.Command {
 					"`hyctl oracle verify --candidate <file> -- <command>`")
 			}
 			prompt := strings.Join(args, " ")
+			if sourceOnly {
+				var err error
+				if prompt, err = sourceOnlyPrompt(prompt); err != nil {
+					return err
+				}
+			}
 			answerChecks, gen, err := parseChecks(checks, prompt)
 			if err != nil {
 				return err
 			}
-			if requirePass && (len(checks) == 0 || dryRun) {
-				return errors.New("--require-pass needs a --check and an answer to check, so not --dry-run")
+			if requirePass && ((len(checks) == 0 && !sourceOnly) || dryRun) {
+				return errors.New("--require-pass needs a --check or --source-only, and an answer to check, so not --dry-run")
 			}
 			if maxEsc < 0 {
 				return fmt.Errorf("--max-escalations must be 0 or more, got %d", maxEsc)
@@ -1123,8 +1130,8 @@ func cmdDispatch() *cobra.Command {
 			})
 
 			// A check judges one answer and scores its span; an ensemble has neither yet.
-			if len(checks) > 0 && (effectiveConf > 0 || doSwarm) {
-				return errors.New("--check judges a single dispatch's answer; it does not combine " +
+			if (len(checks) > 0 || sourceOnly) && (effectiveConf > 0 || doSwarm) {
+				return errors.New("--check and --source-only judge a single dispatch's answer; it does not combine " +
 					"with --swarm or a confidence run (--confidence, --file, --irreversible, --production, or PII in the prompt)")
 			}
 			// --dry-run must mean "spend nothing" in every mode. It was read only
@@ -1288,11 +1295,19 @@ func cmdDispatch() *cobra.Command {
 			if !cmd.Flags().Changed("max-escalations") {
 				maxEsc = policy.Escalations(fp)
 			}
+			if sourceOnly {
+				claims, err := sourceOnlyChecks(ctx, d, prompt, domain, runID, localOnly)
+				if err != nil {
+					return err
+				}
+				answerChecks = append(answerChecks, claims...)
+				gen.skip = "claims"
+			}
 			esc := checkRule(&opts, answerChecks, maxEsc)
 
 			var sr *streamRenderer
 			// A streamed answer cannot be taken back once a check rejects it.
-			streamable := opts.Retry == nil
+			streamable := opts.Retry == nil && !sourceOnly
 			if !dryRun && !noStream && streamable && isatty.IsTerminal(os.Stdout.Fd()) {
 				w, h := terminalSize()
 				sr = newStreamRenderer(stdout, runID, w, h, d.CapturesPayloads())
@@ -1344,20 +1359,39 @@ func cmdDispatch() *cobra.Command {
 			// Output would show it twice. Only the numbers are still missing,
 			// since they do not exist until the call returns.
 			// Every way the answer reaches the screen ends here, so a check runs on all of them.
-			finish := func() error {
-				printOutputWarning(result.OutputProvenance)
-				var v verified
-				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID, &v)
+			runGen := func(v *verified) {
 				genKind := ""
 				if cmd.Flags().Changed("kind") {
 					genKind = domain
 				}
-				genRun{want: gen, d: d, kind: genKind, runID: runID, maxUSD: maxUSD, localOnly: localOnly}.run(ctx, result, prompt, &v)
+				genRun{want: gen, d: d, kind: genKind, runID: runID, maxUSD: maxUSD, localOnly: localOnly}.run(ctx, result, prompt, v)
+			}
+			// settle prints why the answer is not passed, and with --require-pass exits on it.
+			settle := func(v *verified) error {
 				v.report()
 				if requirePass && v.status() != 0 {
 					return v.status()
 				}
 				return nil
+			}
+			finish := func() error {
+				printOutputWarning(result.OutputProvenance)
+				var v verified
+				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID, &v)
+				runGen(&v)
+				return settle(&v)
+			}
+			// Judged before anything is printed, so an answer the documents do not back is never shown.
+			if sourceOnly {
+				printOutputWarning(result.OutputProvenance)
+				var v verified
+				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID, &v)
+				if err := refuseUncovered(answerChecks, esc); err != nil {
+					return err
+				}
+				fmt.Fprintf(stdout, "\n%s\n\n", result.Output)
+				runGen(&v)
+				return settle(&v)
 			}
 			if sr != nil && sr.Streamed() {
 				sr.Finish(result.InputTokens, result.OutputTokens, result.Duration, result.TTFT)
@@ -1424,6 +1458,9 @@ func cmdDispatch() *cobra.Command {
 		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error. "+
 		"gen runs checks written for the request's --kind by a head of another family where one exists, gen:<check> one of them, e.g. gen:roundtrip; these only report")
 	cmd.Flags().BoolVar(&requirePass, "require-pass", false, "with --check, exit 1 when the answer failed a check and 2 when a check could not run, so a script can gate on it")
+	cmd.Flags().BoolVar(&sourceOnly, "source-only", false, "answer only from the documents fenced in the prompt, refused without one: every sentence is checked against them "+
+		"(gen:claims-ground and gen:claims-judge, for any --kind), a failed reply reruns once on a stronger head, and if none passes "+
+		"hyctl prints \""+notCoveredReply+"\" with the failed sentences instead of the reply and exits 1 (2 when it could not check)")
 	cmd.Flags().IntVar(&maxEsc, "max-escalations", 1, "with --check, how many stronger heads a failed check may ask; default from policy.yaml max_retries and escalate_on_fail, 0 turns it off")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")

@@ -31,6 +31,7 @@ type answerCheck struct {
 	oracle oracle.Oracle
 	source string
 	ground *ground.Oracle // set for ground only, whose spans and "not checked" print apart
+	claims bool           // a --source-only claims check, which decides whether the answer is shown
 }
 
 // parseChecks builds every --check, refusing a bad one before anything routes.
