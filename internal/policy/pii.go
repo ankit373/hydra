@@ -3,6 +3,7 @@
 package policy
 
 import (
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,9 +37,17 @@ var detectors = []detector{
 	// nothing else looks like them. None of them were detected before (#169).
 	{name: "pem private key", re: regexp.MustCompile(`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----`)},
 	{name: "aws access key id", re: regexp.MustCompile(`\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b`)},
-	{name: "github token", re: regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{36,}\b`)},
+	{name: "github token", re: regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\w{22,})\b`)},
 	{name: "slack token", re: regexp.MustCompile(`\bxox[baprs]-[A-Za-z0-9-]{10,}\b`)},
+	{name: "slack webhook", re: regexp.MustCompile(`\bhooks\.slack\.com/(?:services|workflows|triggers)/[A-Za-z0-9+/_-]{20,}`)},
 	{name: "openai key", re: regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}\b`)},
+	// Prefixes and lengths follow the gitleaks default rules (#1564).
+	{name: "stripe key", re: regexp.MustCompile(`\b(?:sk|rk)_(?:live|test|prod)_[A-Za-z0-9]{10,99}\b`)},
+	{name: "gitlab token", re: regexp.MustCompile(`\bgl(?:pat|ptt|dt|rt|cbt|soat|ft|imt)-[A-Za-z0-9_-]{20,}`)},
+	{name: "npm token", re: regexp.MustCompile(`\bnpm_[A-Za-z0-9]{36}\b`)},
+	{name: "hugging face token", re: regexp.MustCompile(`\bhf_[A-Za-z0-9]{30,}\b`)},
+	{name: "groq key", re: regexp.MustCompile(`\bgsk_[A-Za-z0-9]{40,}\b`)},
+	{name: "aws secret key", re: regexp.MustCompile(`[A-Za-z0-9/+]{40}`), valid: validAWSSecret},
 	{name: "google api key", re: regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`)},
 	{name: "jwt", re: regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+`)},
 	{name: "auth header", re: regexp.MustCompile(`(?i)\bauthorization\s*:\s*(?:bearer|basic|token)\s+\S+`)},
@@ -73,7 +82,9 @@ var detectors = []detector{
 	{name: "iban", re: regexp.MustCompile(`\b[A-Za-z]{2}\d{2}[A-Za-z0-9]{11,30}\b`), valid: validIBAN},
 
 	// ── Context-dependent ────────────────────────────────────────────────────
-	{name: "credentials", re: regexp.MustCompile(`(?i)\b(?:password|passwd|secret|api[-_]?key|access[-_]?key|auth[-_]?token|token|private[-_]?key)\s*[:=]\s*("[^"]*"|'[^']*'|\S+)`), valid: validCredentialValue},
+	// The key may carry a prefix (OPENAI_API_KEY=) or a closing quote ("api_key":).
+	// A key that only ends in _key needs a long, high-entropy value.
+	{name: "credentials", re: regexp.MustCompile(`(?i)\b([\w.-]*?(?:` + credentialKeyWords + `|_key))["']?\s*[:=]\s*("[^"]*"|'[^']*'|\S+)`), valid: validCredentialValue},
 	{name: "ip address", re: regexp.MustCompile(`\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b`), valid: validPublicIP},
 }
 
@@ -154,12 +165,21 @@ const minCredentialValueLen = 6
 // secret. The keyword alone is not enough: `token`, `secret` and `key` are all
 // ordinary config names whose values are frequently small integers (#169).
 func validCredentialValue(prompt string, loc []int) bool {
-	if len(loc) < 4 || loc[2] < 0 {
+	if len(loc) < 6 || loc[4] < 0 {
 		return false
 	}
-	v := strings.Trim(prompt[loc[2]:loc[3]], `"'`)
+	v := strings.Trim(prompt[loc[4]:loc[5]], `"',`)
 	if len(v) < minCredentialValueLen {
 		return false
+	}
+	// A reference to a secret held elsewhere, a call that fetches one, or an
+	// elided example ("sk-...") is not one.
+	if strings.HasPrefix(v, "$") || strings.HasPrefix(v, "{{") || codeExpr.MatchString(v) ||
+		strings.HasSuffix(v, "...") || strings.HasSuffix(v, "…") {
+		return false
+	}
+	if !strongCredentialKey.MatchString(prompt[loc[2]:loc[3]]) {
+		return len(v) >= minKeyValueLen && shannon(v) >= minKeyValueEntropy
 	}
 	// A purely numeric value is a port, size, timeout or count. Real secrets
 	// are effectively never all-digits, and treating them as such is what made
@@ -173,6 +193,66 @@ func validCredentialValue(prompt string, loc []int) bool {
 		return false
 	}
 	return true
+}
+
+// codeExpr is a value that starts as a call or an index: env("X"), creds["x"].
+var codeExpr = regexp.MustCompile(`^[A-Za-z_][\w.]*[(\[]`)
+
+// credentialKeyWords mark a value as a secret on their own. A key matched only
+// by its _key suffix (sort_key, primary_key) must earn it by entropy.
+const credentialKeyWords = `password|passwd|secret|api[-_]?key|access[-_]?key|token|private[-_]?key`
+
+var strongCredentialKey = regexp.MustCompile(`(?i)` + credentialKeyWords)
+
+// A bare _key value counts at 16 or more characters and 3.5 bits per character,
+// the gitleaks generic-key threshold. "user_id" is about 2.8.
+const (
+	minKeyValueLen     = 16
+	minKeyValueEntropy = 3.5
+)
+
+// shannon is the entropy of s in bits per byte.
+func shannon(s string) float64 {
+	var counts [256]int
+	for i := 0; i < len(s); i++ {
+		counts[s[i]]++
+	}
+	h, n := 0.0, float64(len(s))
+	for _, c := range counts {
+		if c > 0 {
+			p := float64(c) / n
+			h -= p * math.Log2(p)
+		}
+	}
+	return h
+}
+
+// validAWSSecret keeps a bare 40-character run only when it stands alone and
+// looks random: a git SHA is hex, a path or base64 blob runs on past 40.
+func validAWSSecret(prompt string, loc []int) bool {
+	if loc[0] > 0 && isBase64Byte(prompt[loc[0]-1]) {
+		return false
+	}
+	if loc[1] < len(prompt) && (isBase64Byte(prompt[loc[1]]) || prompt[loc[1]] == '=') {
+		return false
+	}
+	m := prompt[loc[0]:loc[1]]
+	var upper, lower, digit bool
+	for i := 0; i < len(m); i++ {
+		c := m[i]
+		upper = upper || (c >= 'A' && c <= 'Z')
+		lower = lower || (c >= 'a' && c <= 'z')
+		digit = digit || isDigit(c)
+	}
+	return upper && lower && digit && shannon(m) >= minAWSSecretEntropy
+}
+
+// minAWSSecretEntropy is under the least of 100,000 random 40-character keys
+// (4.16 bits; median 4.78). It drops repetitive runs; the neighbour checks do the rest.
+const minAWSSecretEntropy = 4.0
+
+func isBase64Byte(c byte) bool {
+	return isLetter(c) || isDigit(c) || c == '/' || c == '+'
 }
 
 // versionContext are words that precede a dotted quad which is a version, not
