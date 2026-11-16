@@ -208,6 +208,7 @@ internal/policy/        ← PII detection + local-only enforcement. `Redact` lab
                           `Restore` puts values back and reports placeholders it never issued.
                           `hyctl dispatch --redact` or `[policies.pii] action = "redact"` sends remote heads
                           that form and restores the answer before checks; local heads get the original.
+                          The ledger's provenance counts kinds sent as placeholders; `hyctl egress receipt`.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).

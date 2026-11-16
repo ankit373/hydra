@@ -79,8 +79,9 @@ func AssessTrifecta(events []ledger.Event) Trifecta {
 	sinks := map[string]int{}
 
 	for _, e := range events {
+		// Only a dispatch's exec event says what was sent; a restore note does not.
 		p := e.Provenance
-		if p == nil {
+		if p == nil || e.Action != ledger.Exec {
 			continue
 		}
 		t.Evaluated++

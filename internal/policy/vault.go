@@ -18,6 +18,8 @@ type Vault struct {
 	byValue map[string]string // original -> placeholder key, e.g. EMAIL_1
 	byKey   map[string]string // placeholder key -> original
 	next    map[string]int    // per kind, the last number handed out
+	// restored counts placeholders Restore put back, over the vault's life.
+	restored int
 }
 
 func NewVault() *Vault {
@@ -32,6 +34,28 @@ func (v *Vault) Len() int {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return len(v.byKey)
+}
+
+// Counts is how many distinct values the vault holds per detector kind, e.g.
+// {"EMAIL": 2}. Counts only: nothing that could recover a value.
+func (v *Vault) Counts() map[string]int {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if len(v.byKey) == 0 {
+		return nil
+	}
+	out := map[string]int{}
+	for k := range v.byKey {
+		out[k[:strings.LastIndexByte(k, '_')]]++
+	}
+	return out
+}
+
+// Restored is how many placeholders Restore has put back so far.
+func (v *Vault) Restored() int {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.restored
 }
 
 // Keys lists the placeholder keys the vault issued, e.g. EMAIL_1, sorted.
@@ -100,6 +124,7 @@ func (v *Vault) Restore(text string) (string, []string) {
 		sub := placeholderRe.FindStringSubmatch(m)
 		key := strings.ToUpper(sub[2])
 		if val, ok := v.byKey[key]; ok {
+			v.restored++
 			return val
 		}
 		if (sub[1] != "" || sub[3] != "") && !seen[key] {
