@@ -45,6 +45,8 @@ type openAIChatRequest struct {
 	Stream     bool            `json:"stream"`
 	Tools      []ToolDef       `json:"tools,omitempty"`
 	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
+	// Reasoning is a head's Meta["reasoning_effort"]; "none" turns a local model's thinking off.
+	Reasoning string `json:"reasoning_effort,omitempty"`
 }
 
 type openAIChatResponse struct {
@@ -157,6 +159,7 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 		Stream:     false,
 		Tools:      req.Tools,
 		ToolChoice: req.ToolChoice,
+		Reasoning:  req.Head.Meta["reasoning_effort"],
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {

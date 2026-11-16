@@ -73,14 +73,17 @@ type Call struct {
 	PriceRef        string  `json:"price_ref"` // the snapshot row used; "reserved" when an error left it unknown
 }
 
+// Local is the provider of a model served by Ollama on this machine: no key, $0.
+const Local = "ollama"
+
 // ParseModel splits "<provider>:<model id>" and refuses an id nobody pinned yet.
 func ParseModel(spec string) (prov, model string, err error) {
 	prov, model, ok := strings.Cut(spec, ":")
 	if !ok || model == "" || strings.ContainsAny(model, "<> ") {
 		return "", "", fmt.Errorf("bench: model %q is not a pinned \"<provider>:<model id>\"", spec)
 	}
-	if prov != "bedrock" && prov != "openrouter" {
-		return "", "", fmt.Errorf("bench: model %q: provider must be bedrock or openrouter", spec)
+	if prov != "bedrock" && prov != "openrouter" && prov != Local {
+		return "", "", fmt.Errorf("bench: model %q: provider must be bedrock, openrouter or %s", spec, Local)
 	}
 	return prov, model, nil
 }
@@ -93,7 +96,13 @@ func headFor(spec string) (provider.Head, string, error) {
 		return provider.Head{}, "", err
 	}
 	id := "bench/" + prov + "/" + model
-	return provider.Head{ID: id, Name: id, Provider: prov, Source: "env", Meta: map[string]string{"model": model}}, model, nil
+	h := provider.Head{ID: id, Name: id, Provider: prov, Source: "env", Meta: map[string]string{"model": model}}
+	if prov == Local {
+		// OpenAI-compatible, so the HTTP executor drives it. Thinking off: a suite's answer
+		// cap is a few tokens, and hidden reasoning would spend them all.
+		h.Endpoint, h.Meta["reasoning_effort"] = provider.OllamaHost(), "none"
+	}
+	return h, model, nil
 }
 
 // checkArm answers with the suite's own check: no model, no spend, no retry.
