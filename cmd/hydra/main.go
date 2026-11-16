@@ -1462,6 +1462,11 @@ improved against.`,
 				all = all[:limit]
 			}
 			if jsonOut {
+				for i := range all {
+					if all[i].PII { // the task can be the user's own words; never print it for a PII row
+						all[i].Task = ""
+					}
+				}
 				raw, _ := json.MarshalIndent(all, "", "  ")
 				fmt.Fprintln(stdout, string(raw))
 				return nil
@@ -2253,8 +2258,8 @@ func cmdOracle() *cobra.Command {
 					// Hydra does not see the task on this path, so it is the
 					// caller's to name; unnamed stays unknown rather than being
 					// stood in for by the domain, which collided (#973).
-					TaskHash: evalset.TaskHashFor(taskText),
-					Domain:   domain, Source: src, Candidate: candidate,
+					Task:   taskText,
+					Domain: domain, Source: src, Candidate: candidate,
 					Passed: v.Passed, Detail: v.Detail,
 					Enum: enum, Tier: tier, Head: spanEv.Head,
 				})

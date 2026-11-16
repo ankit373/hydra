@@ -117,7 +117,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	vec, model := embedTask(*embedModel, *task)
 	added, err := evalset.Add(*out, evalset.Example{
-		TaskHash:   evalset.TaskHashFor(*task),
+		Task:       *task,
 		Domain:     dom,
 		Source:     "hyverify",
 		Candidate:  string(content),

@@ -166,7 +166,7 @@ func TestCLI_OracleVerifyRecordsTheRoutingDecision(t *testing.T) {
 	// passing verifier has to do. A POSIX shell path would skip on Windows,
 	// and this contract is not platform-specific.
 	if _, _, err := run(t, "oracle", "verify", "--candidate", f,
-		"--domain", "go", "--enum", "SIMPLE", "--tier", "8",
+		"--domain", "go", "--enum", "SIMPLE", "--tier", "8", "--task", "add a package clause",
 		"--", s.FakeBinary(t, "always-pass")); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -177,6 +177,9 @@ func TestCLI_OracleVerifyRecordsTheRoutingDecision(t *testing.T) {
 	}
 	if got[0].Enum != "SIMPLE" || got[0].Tier != 8 {
 		t.Errorf("routing decision not recorded: enum=%q tier=%d", got[0].Enum, got[0].Tier)
+	}
+	if got[0].Task != "add a package clause" || got[0].TaskHash != evalset.TaskHashFor("add a package clause") {
+		t.Errorf("task not kept: %q, hash %q", got[0].Task, got[0].TaskHash)
 	}
 }
 
@@ -531,5 +534,25 @@ func TestCLI_OracleVerifyWritesOneVerdictOnTheSpan(t *testing.T) {
 	c.V, c.TS, c.Detail = 0, "", ""
 	if c != want {
 		t.Errorf("verdict = %+v, want %+v", c, want)
+	}
+}
+
+// A PII example's task can be the user's own words, so the listing never prints it.
+func TestCLI_EvalListJSONHidesTheTaskOfAPIIExample(t *testing.T) {
+	cliSandbox(t)
+	for _, e := range []evalset.Example{
+		{Domain: "summary", Source: "oracle:x", Candidate: "Done.", Passed: true, Task: "email alice.smith@example.com the notes"},
+		{Domain: "summary", Source: "oracle:x", Candidate: "Fine.", Passed: true, Task: "summarise the release notes"},
+	} {
+		if _, err := evalset.Add(evalset.DefaultPath(), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, _, err := run(t, "eval", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "alice.smith") || !strings.Contains(out, "summarise the release notes") {
+		t.Errorf("want the PII task hidden and the other shown:\n%s", out)
 	}
 }

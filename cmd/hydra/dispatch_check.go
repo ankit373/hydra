@@ -222,7 +222,7 @@ func fileAnswer(cal *trust.Calibrator, checks []answerCheck, vs []decide.Judged,
 		return // nothing was checked, so there is no verdict to keep
 	}
 	fileExample(evalset.Example{
-		TaskHash: evalset.TaskHashFor(prompt), Domain: domain, Source: strings.Join(sources, ","),
+		Task: prompt, Domain: domain, Source: strings.Join(sources, ","),
 		Head: a.Head.ID, Enum: enum, Tier: rank.UITier(a.Head),
 		Candidate: a.Output, Passed: passed, Detail: strings.Join(failed, "; "),
 	})
