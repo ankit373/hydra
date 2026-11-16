@@ -814,6 +814,14 @@ export interface EventProvenance {
   sensitivity?: string
   /** Where it went. 'local' never left the machine, 'remote' did. */
   sink?: string
+  /** The run this request belonged to. */
+  run_id?: string
+  /** Who received it: the head's provider. */
+  provider?: string
+  /** Values sent as placeholders, counted per kind. Never the values. */
+  redacted?: Record<string, number>
+  /** Placeholders put back into the answer on this machine. */
+  restored?: number
 }
 
 /** One raw ledger row, the evidence behind a finding. */

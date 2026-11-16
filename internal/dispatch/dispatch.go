@@ -1030,7 +1030,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		decision, lerr := ledger.CheckAndRecordDispatch(ledger.Dispatch{
 			Agent: "hydra-dispatch", HeadID: h.ID, Resource: opts.Resource,
 			Content: out.prompt, Class: out.class,
-			Provenance: provenanceRecord(out.parts, h),
+			Provenance: provenanceRecord(out, h, rl.RunID(), vault),
 		})
 		refuse := func(code GateCode, detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
@@ -1242,7 +1242,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		var unrestored []string
 		var miss string
 		if out.redacted {
+			before := vault.Restored()
 			unrestored, miss = restoreResponse(resp, vault)
+			recordRestored(h, rl.RunID(), vault.Restored()-before)
 		}
 		r := &Result{Output: resp.Output, Head: h, Fallbacks: candidates[i+1:], Retries: i, Attempts: attempts, Gates: gates, Response: resp,
 			Domain: domain, Scores: scores, Objective: opts.Objective, SpanID: span,
@@ -1697,16 +1699,21 @@ func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
 // Recorded per candidate rather than per dispatch on purpose. The sink is the
 // half that changes between candidates, and a fallback from a local head to a
 // remote one is exactly the transition an auditor needs to see.
-func provenanceRecord(parts []egress.Part, h provider.Head) *ledger.EventProvenance {
-	s := egress.Summarize(parts)
+func provenanceRecord(out outgoing, h provider.Head, runID string, v *policy.Vault) *ledger.EventProvenance {
+	s := egress.Summarize(out.parts)
 	sink := string(egress.SinkRemote)
 	if h.LocalOnly {
 		sink = string(egress.SinkLocal)
 	}
-	return &ledger.EventProvenance{
+	p := &ledger.EventProvenance{
 		Sources: s.Sources, Origins: s.Origins,
 		Sensitivity: s.Sensitivity, Sink: sink,
+		RunID: runID, Provider: h.Provider,
 	}
+	if out.redacted {
+		p.Redacted = v.Counts()
+	}
+	return p
 }
 
 // provenance describes where every span of the outgoing payload came from.

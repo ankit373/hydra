@@ -9,7 +9,9 @@ import (
 
 	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/policy"
+	"github.com/ankit373/hydra/internal/provider"
 )
 
 // outgoing is what one head is sent. redacted says the text holds placeholders
@@ -110,4 +112,15 @@ func (d *Dispatcher) rerunLocal(ctx context.Context, prompt string, opts Options
 	}
 	r.RedactionMiss = why
 	return r, true
+}
+
+// recordRestored files how many placeholders went back into one head's answer,
+// beside the exec event that recorded what it was sent.
+func recordRestored(h provider.Head, runID string, n int) {
+	_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+		Agent: "hydra-dispatch", Tool: h.ID, Action: ledger.Read,
+		Resource: "response", Decision: ledger.Allow,
+		Reason:     "placeholders restored on this machine",
+		Provenance: &ledger.EventProvenance{RunID: runID, Provider: h.Provider, Restored: n},
+	})
 }

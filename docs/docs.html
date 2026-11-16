@@ -1354,6 +1354,16 @@ config.toml to allow it out</pre>
       openai/gpt-5                                 5</pre>
         <p>Any one of the three is fine; all three at once is what turns a poisoned input into a data leak with no software bug involved. The headline is <b>exposure</b>, not presence: a trifecta the gate refused is reported as contained, because a dashboard that flags a working control teaches people to ignore it.</p>
       </div>
+      <div class="sub"><div class="lbl">Receipt</div>
+        <p><span class="fx">hyctl egress receipt [run-id]</span> says, for each model a run asked: its provider, whether it was local or remote, how sensitive the request was, and how many values of each kind it saw as placeholders and got back restored. It defaults to the last run, takes <span class="fx">--json</span>, and says whether the ledger's hash chain still verifies. It holds counts, never a value or a hash of one.</p>
+        <pre translate="no">$ hyctl egress receipt
+
+  egress receipt run 20261116-a1b2
+  litellm/claude-sonnet  remote  provider litellm  internal  allow
+    sent as placeholders: CREDIT_CARD 1, EMAIL 2   restored: 3
+
+  ledger chain: verified</pre>
+      </div>
     </section>
 
     <section class="doc" id="least-privilege">
