@@ -23,6 +23,8 @@ type StepResult struct {
 	CostUSD float64
 	// FirstHead is set when a failed check reran the step: the head it replaced.
 	FirstHead string
+	// Checked is true when the step had checks and every one ran and passed.
+	Checked bool
 }
 
 // Router runs one step's prompt, routed and checked as the step says.
@@ -198,6 +200,7 @@ func record(w *Workflow, f finished, save Saver) error {
 	s.Tier = f.res.Tier
 	s.CostUSD = f.res.CostUSD
 	s.Escalated, s.FirstHead = f.res.FirstHead != "", f.res.FirstHead
+	s.Checked = f.res.Checked
 	if err := save(*w); err != nil {
 		return fmt.Errorf("workflow %s: step %d ran but its result could not be saved: %w", w.ID, f.i+1, err)
 	}

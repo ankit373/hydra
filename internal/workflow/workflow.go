@@ -84,6 +84,9 @@ type Step struct {
 	// Escalated says a failed check reran the step on a stronger head than FirstHead.
 	Escalated bool   `json:"escalated,omitempty"`
 	FirstHead string `json:"first_head,omitempty"`
+	// Checked says the step had checks and every one ran on the answer it kept;
+	// false for a step with none, or one whose check could not run.
+	Checked bool `json:"checked"`
 
 	CostUSD    float64 `json:"cost_usd"`
 	DurationMS int64   `json:"duration_ms"`

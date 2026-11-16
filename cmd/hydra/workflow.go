@@ -153,6 +153,11 @@ func (r dispatchRouter) Route(ctx context.Context, prompt string, step workflow.
 		}
 		return workflow.StepResult{}, fmt.Errorf("check failed on %s: %s", on, why)
 	}
+	// No real fail, so the step is checked only if no check was skipped.
+	out.Checked = true
+	for _, j := range esc.Verdicts()[len(esc.Verdicts())-len(checks):] {
+		out.Checked = out.Checked && j.Checked
+	}
 	return out, nil
 }
 
@@ -582,7 +587,7 @@ func workflowLine(n, title, status, tier, head, took, cost string) string {
 	return "  " + strings.Join([]string{
 		padCell(n, 3),
 		padCell(title, 28),
-		padCell(status, 10),
+		padCell(status, 17),
 		padCell(tier, 5),
 		padCell(head, 18),
 		rpadCell(took, 8),
@@ -642,7 +647,7 @@ func printWorkflow(w workflow.Workflow) {
 			spent = fmt.Sprintf("$%.4f", s.CostUSD)
 		}
 		fmt.Fprintln(stdout, workflowRow(s.N, truncLabel(s.Title, 28),
-			statusLabel(workflow.ObservedStep(s.Status, observed)), tier, head, took, spent))
+			stepStatus(s, observed), tier, head, took, spent))
 		if s.Escalated {
 			fmt.Fprintf(stdout, "      %s\n", dimStyle.Render("↳ rerun after a failed check on "+s.FirstHead))
 		}
@@ -658,8 +663,18 @@ func printWorkflow(w workflow.Workflow) {
 	}
 	fmt.Fprintln(stdout, sep)
 	done, total := w.Progress()
-	fmt.Fprintf(stdout, "  %s %s  ·  %d/%d steps  ·  $%.4f\n\n",
+	fmt.Fprintf(stdout, "  %s %s  ·  %d/%d steps  ·  $%.4f\n",
 		dimStyle.Render("Workflow →"), cortexStyle.Render(string(observed)), done, total, w.CostUSD())
+	if done > 0 {
+		checked := 0
+		for _, s := range w.Steps {
+			if s.Status == workflow.Done && s.Checked {
+				checked++
+			}
+		}
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf("%d of %d done steps checked", checked, done)))
+	}
+	fmt.Fprintln(stdout)
 	if observed == workflow.Interrupted {
 		fmt.Fprintf(stdout, "  %s\n\n", warnStyle.Render(
 			"the process running this is gone; continue it with `hyctl workflow resume "+w.ID+"`"))
@@ -707,6 +722,18 @@ func lastOutput(w workflow.Workflow) string {
 		}
 	}
 	return ""
+}
+
+// stepStatus marks a done step that no check ran on, so "done" is never read as verified.
+func stepStatus(s workflow.Step, observed workflow.Status) string {
+	st := workflow.ObservedStep(s.Status, observed)
+	switch {
+	case st != workflow.Done:
+		return statusLabel(st)
+	case s.Checked:
+		return okStyle.Render("done, checked")
+	}
+	return okStyle.Render("done") + warnStyle.Render(", not checked")
 }
 
 func statusLabel(s workflow.Status) string {

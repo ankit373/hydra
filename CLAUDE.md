@@ -503,6 +503,7 @@ hyctl workflow run --task "answer the support tickets" \
   --step "summarise the top issues" --enum MODERATE --needs 1 \
   --step "draft a reply for each" --enum STANDARD --needs 1
 hyctl workflow list ; hyctl workflow show <id> ; hyctl workflow resume <id>
+# show marks each done step "done, checked" or "done, not checked" and counts them
 
 # Review a diff: rules and file selection from open-code-review, Heads from Hydra.
 # Needs `npm install -g @alibaba-group/open-code-review`; exits 3 on a blocking
