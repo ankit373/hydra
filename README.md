@@ -94,7 +94,7 @@ hyctl dispatch --local --kind classification --check match:labels=labels.txt "la
 
 `labels.txt` holds one allowed label per line, and any other answer fails the check. To send only the unsure ones to a stronger model, drop `--local` and `--check` and add `--confidence 0.9` once the task type has a record. Hydra asks models in most-evidence-per-dollar order and stops as soon as the answer clears the bar.
 
-**Change code.** `hyctl edit` applies the change, runs the repo's tests (or the validator for the file's language), and rolls the change back if they fail.
+**Change code.** `hyctl edit` applies the change, runs the repo's tests (or the validator for the file's language), and rolls the change back if they fail. A failed check gets one rerun on a model measured stronger at that kind of file, sent the failed answer and the validator's output, within what is left of `max_cost_usd`; `escalate_on_fail: false` in `policy.yaml` turns it off, and its JSON output shows `escalated` and `first_head`.
 
 ```bash
 hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and collapse repeated dashes so slug_test.go passes"
