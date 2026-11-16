@@ -154,6 +154,15 @@ type EventProvenance struct {
 	Sensitivity string `json:"sensitivity,omitempty"`
 	// Sink is where it went. "local" never left the machine, "remote" did.
 	Sink string `json:"sink,omitempty"`
+
+	// RunID ties the event to a run, and Provider names who received it.
+	RunID    string `json:"run_id,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	// Redacted counts the values sent as placeholders, per detector kind:
+	// counts only, never values or hashes of them. Restored is how many
+	// placeholders were put back into the answer (#1885).
+	Redacted map[string]int `json:"redacted,omitempty"`
+	Restored int            `json:"restored,omitempty"`
 }
 
 // maxProvenanceItems bounds Sources and Origins. A payload assembled from
@@ -172,6 +181,14 @@ func (p *EventProvenance) sanitize() *EventProvenance {
 	out.Origins = safeList(p.Origins)
 	out.Sensitivity = SafeText(p.Sensitivity)
 	out.Sink = SafeText(p.Sink)
+	out.RunID = SafeText(p.RunID)
+	out.Provider = SafeText(p.Provider)
+	if len(p.Redacted) > 0 {
+		out.Redacted = make(map[string]int, len(p.Redacted))
+		for k, n := range p.Redacted {
+			out.Redacted[SafeText(k)] += n
+		}
+	}
 	return &out
 }
 
