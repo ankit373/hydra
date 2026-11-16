@@ -240,7 +240,8 @@ def upgrade_notes(body):
     body = re.sub(r"(?s)<!--.*?-->", "", body or "")
     found = [m.strip() for m in UPGRADE_RE.findall(body)]
     found += [" ".join(m.split()) for m in BREAKING_RE.findall(body)]
-    return "\n\n".join(f for f in found if f and f.lower().strip(".") not in ("none", "n/a", "no"))
+    nothing = re.compile(r"(?i)^(none|n/a|no|nothing)\b")  # "None. This only changes CI."
+    return "\n\n".join(f for f in found if f and not nothing.match(f))
 
 
 def fetch_prs(numbers):
