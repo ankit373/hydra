@@ -38,6 +38,14 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   and the false-flag rate per arm, each with a 95% Wilson interval.
 - `faith.toml` runs the claims check's `ground` variant on FaithBench. A `judge` variant is a
   normal model arm on the same suite: add a pinned model to it, as the file's comment says.
+- An extraction suite (snips) also runs the fields check on each answer, holding every
+  value to the utterance, and counts each field right or wrong against the gold. The table
+  then adds a second table per arm: field accuracy, the share of wrong fields the check
+  flagged (95% Wilson interval), the share of right fields it flagged, and the cost per
+  field it did not flag. Each arm gets a row for all fields and one per kind of gold value:
+  number, code (one token with a digit, or in capitals, like `INV-2041`) and text, since a
+  check can catch wrong amounts and still miss a misread code. An answer that is not JSON
+  is a format fail and adds no fields.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).
 
 ## replay
