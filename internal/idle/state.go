@@ -11,11 +11,13 @@ import (
 	"strings"
 )
 
-// Turn is one message of a conversation. Ref is the payload hash it is kept under.
+// Turn is one message of a conversation. Ref is the payload hash it is kept
+// under and Seq its place in the transcript, from 0.
 type Turn struct {
-	Ref     string
-	Role    string
-	Content string
+	Role string
+	Text string
+	Ref  string
+	Seq  int
 }
 
 // Quote is text taken from a turn, with the ref of the turn it came from.
@@ -143,7 +145,7 @@ func ExtractConstraints(turns []Turn) []Quote {
 			continue
 		}
 		underRules, inFence := false, false
-		for _, line := range strings.Split(t.Content, "\n") {
+		for _, line := range strings.Split(t.Text, "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "```") {
 				inFence = !inFence
 				continue
