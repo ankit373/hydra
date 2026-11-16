@@ -64,6 +64,10 @@
     "image": "https://hydra.uvansa.com/logo.png",
     "sameAs": "https://github.com/ankit373/hydra",
     "featureList": [
+      "Routing by kind of work: writing, summaries, extraction, classification, translation, answers from documents, analysis, agents and code each keep their own record per model, and a request goes to a model measured competent at that kind (hyctl dispatch --kind summary)",
+      "Checks per kind of work: hyctl dispatch --check ground checks a summary against its source, --check match:labels=<file> checks a label against the allowed set, --check cmd:<command> runs a schema validator or any command on the answer, and tests, build and lint check code",
+      "Local-only policy: PII detection and a local-only rule keep sensitive work on your own hardware, and an egress gate refuses files like .env or ~/.aws/credentials to any model that leaves your machine",
+      "Cost on every request: each one is logged with the model that answered, its token counts and its cost, and hyctl cost and hyctl stats roll it up by model, routing level and day",
       "Checked answers: hyctl dispatch --confidence asks models one at a time and stops once a sequential probability ratio test (SPRT) says the answer is correct with the probability you set",
       "Per-source calibration (hyctl trust calibration), measures each model's diagnostic power from real outcomes, and flags a source whose specificity has never been measured instead of reporting a number for it",
       "hyctl trust outcome, trains every model that voted in a past run once its answer is known, including the dissenters, because a model that disagreed with an answer that turned out wrong is the only evidence that measures specificity",
@@ -73,14 +77,11 @@
       "hyctl trust joint, reports per kind of work how often two checks passed the same wrong answer, so a test suite and a linter that fail together are not counted as two pieces of evidence",
       "Blast-radius aware routing for code: a dependency graph raises the required probability of a correct answer for widely depended-on files",
       "Local MCP accountability ledger, records and gates what each agent's tools touch",
-      "Routing by task type and complexity, on each model's measured record",
       "Automatic fallback chains that can end at a local model",
       "Local Ollama + cloud model hybrid, provider-neutral discovery",
-      "hyctl vet, reviews a diff and says what is wrong with it: open-code-review resolves which files are worth reviewing and by what rules with no model and no spend, and Hydra routes each file to a model of its own, so cost, policy, fallback and per-task-type calibration all apply",
-      "hyctl vet --confidence reviews each file with as many models as its blast radius warrants: a leaf file gets one low-cost model, a hub-core file gets as many as it takes, and the SPRT stops the moment the target probability is reached",
-      "hyctl vet refuses to guess: an unreadable reply is reported as unreadable rather than as a clean file, a finding naming a file the model was never shown is discarded, and it exits 3 on a blocking finding so a script can gate on it",
+      "hyctl vet, reviews a diff file by file with each file routed to a model of its own; with --confidence a leaf file gets one low-cost model and a widely depended-on file as many as it takes. An unreadable reply is reported as unreadable rather than clean, and it exits 3 on a blocking finding so a script can gate on it",
       "hyctl serve, an OpenAI-compatible endpoint in front of the router, so any tool that speaks OpenAI routes through Hydra: the model field is the routing instruction (hydra, hydra/hard, hydra/t4, or a model id), and tool calling is passed through on every chat dialect it speaks, not just the OpenAI one, so agent loops work. It streams: stream: true is answered as server-sent events, and a fallback after output has already gone out ends the stream rather than appending a second model's answer to an abandoned partial",
-      "hyctl serve binds loopback and refuses an off-loopback bind with no token, rather than warning, because the endpoint spends money and reads your code. It answers only requests addressed to the bound address, takes browser origins only from --allow-origin, caps every request at policy.yaml max_cost_usd, and limits requests in flight and per minute",
+      "hyctl serve binds loopback and refuses an off-loopback bind with no token, rather than warning, because the endpoint spends money and reads your prompts and files. It answers only requests addressed to the bound address, takes browser origins only from --allow-origin, caps every request at policy.yaml max_cost_usd, and limits requests in flight and per minute",
       "Interactive TUI cockpit (hyctl tui), chat, route work, and watch spend live",
       "Desktop app (Wails v2) for macOS, Windows and Linux, chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage, Audit and Settings views",
       "Per-run span log, identity, parent, level, tokens and time-to-first-token, at 35 bytes a span on disk",
@@ -107,7 +108,7 @@
       "Opt-in answer cache (hyctl trace cache), off by default, which refuses far more often than it answers: the same question word for word is served outright, anything else must clear both a cosine threshold and a gate requiring the two prompts to ask about exactly the same things, and a prompt carrying personal data is never served or stored at all",
       "Off-policy evaluation (hyctl trace evaluate), what a routing policy you never ran would have cost, with a confidence interval, refusing where the log cannot answer",
       "OpenTelemetry export (hyctl trace export --otlp), a run as nested OTLP spans for Langfuse, Grafana or Jaeger, keeping the fallback chain a collector would otherwise see flat, with HYDRA_OTLP_HEADERS for a hosted collector's auth; nothing leaves the machine by default",
-      "hyctl workflow, an ordered multi-step task with each step routed on its own, so triage runs cheap and the fix runs strong, and steps that do not need each other run at the same time. Every step carries a dispatch's own caps, policy.yaml's max_cost_usd and max_wall_seconds plus --max-cost, --local and --dry-run, because a workflow spends a dispatch's money once per step. State is written before every step, so a killed run resumes from where it stopped rather than restarting, and a heartbeat beside the record tells a dead run from a live one and is claimed exclusively, so a second resume over a live workflow is refused instead of dispatching every remaining step twice",
+      "hyctl workflow, an ordered multi-step task with each step routed on its own, so sorting can run on a cheap model and the final write-up on a strong one, and steps that do not need each other run at the same time. Every step carries a dispatch's own caps, policy.yaml's max_cost_usd and max_wall_seconds plus --max-cost, --local and --dry-run, because a workflow spends a dispatch's money once per step. State is written before every step, so a killed run resumes from where it stopped rather than restarting, and a heartbeat beside the record tells a dead run from a live one and is claimed exclusively, so a second resume over a live workflow is refused instead of dispatching every remaining step twice",
       "hyctl ask, tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
       "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
@@ -140,6 +141,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Hydra is an open source gateway for AI models. For each request it picks the model best suited to that kind of task. It can also check the answer, and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider, and runs as a desktop app, a command-line tool (hyctl) and an OpenAI-compatible endpoint."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Hydra only for coding?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Code is one kind of work it routes. Most of what it does works the same for writing, summaries, extraction and the rest."
       }
     },
     {
@@ -1050,6 +1059,10 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
     <div class="faq-item">
       <h3>What is Hydra?</h3>
       <p>Hydra is an open source gateway for AI models. For each request it picks the model best suited to that kind of task. It can also check the answer, and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider, and runs as a desktop app, a command-line tool (hyctl) and an OpenAI-compatible endpoint.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Is Hydra only for coding?</h3>
+      <p>No. Code is one kind of work it routes. Most of what it does works the same for writing, summaries, extraction and the rest.</p>
     </div>
     <div class="faq-item">
       <h3>How does Hydra check an answer?</h3>
