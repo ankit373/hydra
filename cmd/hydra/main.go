@@ -870,7 +870,7 @@ func cmdDispatch() *cobra.Command {
 		maxCost   float64
 		maxUSD    float64
 		noStream  bool
-		redact    bool
+		redact    string
 		// swarm flags
 		doSwarm       bool
 		swarmMode     string
@@ -1055,7 +1055,12 @@ func cmdDispatch() *cobra.Command {
 			if d.PIILocalOnly() && touchesPII {
 				localOnly = true
 			}
-			redact = redact || (d.PIIRedact() && touchesPII)
+			if redact != "" && redact != "on" && redact != "names" {
+				return fmt.Errorf("--redact takes on or names, not %q", redact)
+			}
+			if redact == "" && d.PIIRedact() && touchesPII {
+				redact = "on"
+			}
 			// The code graph is loaded once and read twice: the rules want the
 			// dependent count, a measurement, and the defect model wants its
 			// own derived radius. Two loads of the same file would be a second
@@ -1099,7 +1104,7 @@ func cmdDispatch() *cobra.Command {
 			printRuleDecision(stdout, ruleDecision, dryRun)
 
 			// Redacted PII never reaches a hosted head, so it alone does not demand an ensemble.
-			if file != "" || irreversible || production || (touchesPII && !redact) {
+			if file != "" || irreversible || production || (touchesPII && redact == "") {
 				radius := 1.0
 				if file != "" {
 					radius = g.BlastRadiusForFile(file)
@@ -1146,7 +1151,7 @@ func cmdDispatch() *cobra.Command {
 			})
 
 			// Placeholders are restored inside Dispatch; the ensembles call heads directly.
-			if redact && (effectiveConf > 0 || doSwarm) {
+			if redact != "" && (effectiveConf > 0 || doSwarm) {
 				return errors.New("--redact runs a single dispatch; it does not combine " +
 					"with --swarm or a confidence run (--confidence, --file, --irreversible, --production)")
 			}
@@ -1305,9 +1310,10 @@ func cmdDispatch() *cobra.Command {
 				// The same key --confidence reads. A plain dispatch now routes
 				// on it too, so the domain a session fills is the domain its
 				// next dispatch is ranked for (#885).
-				Domain:   domain,
-				Decision: &ruleDecision,
-				Redact:   redact,
+				Domain:      domain,
+				Decision:    &ruleDecision,
+				Redact:      redact != "",
+				RedactNames: redact == "names",
 			}
 
 			// Streamed on a terminal only. A pipe keeps the buffered rendering
@@ -1335,7 +1341,7 @@ func cmdDispatch() *cobra.Command {
 			var sr *streamRenderer
 			// A streamed answer cannot be taken back once a check rejects it.
 			// Nor can a redacted one, whose placeholders are restored only at the end.
-			streamable := opts.Retry == nil && !sourceOnly && !redact
+			streamable := opts.Retry == nil && !sourceOnly && redact == ""
 			if !dryRun && !noStream && streamable && !chunked && isatty.IsTerminal(os.Stdout.Fd()) {
 				w, h := terminalSize()
 				sr = newStreamRenderer(stdout, runID, w, h, d.CapturesPayloads())
@@ -1480,7 +1486,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE, selects the tier when --tier is unset")
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
 	cmd.Flags().Float64Var(&maxUSD, "max-usd", 0, "spend cap for the request in USD: once the answer and its generated checks have spent it, the remaining checks are not checked (0 = none)")
-	cmd.Flags().BoolVar(&redact, "redact", false, "send a hosted model placeholders for detected emails, keys and numbers, and restore them in the answer locally")
+	cmd.Flags().StringVar(&redact, "redact", "", "send a hosted model placeholders for detected emails, keys and numbers, and restore them in the answer locally; --redact=names also has a local model measured by `hyctl policy ner` mark names and addresses")
+	cmd.Flags().Lookup("redact").NoOptDefVal = "on"
 	cmd.Flags().BoolVar(&noStream, "no-stream", false, "print the answer in one block instead of as it arrives, and draw no fan-out panel (piped output never streams)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")

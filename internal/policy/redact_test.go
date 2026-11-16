@@ -266,3 +266,18 @@ func TestStreamRestorer_ReleasesALongRun(t *testing.T) {
 		t.Errorf("Push released %q of %q", got, long)
 	}
 }
+
+// Values a pattern cannot find are replaced once added, and a value that
+// overlaps a pattern hit is left to the pattern.
+func TestVault_AddValuesRedactsWhatNoPatternFinds(t *testing.T) {
+	v := NewVault()
+	v.AddValues("personal", []string{"Aisha Bello", "aisha@example.com"})
+	in := "Offer for Aisha Bello, mail aisha@example.com. Aisha Bello starts Monday."
+	got := RedactReversible(in, v)
+	if want := "Offer for <<PERSONAL_1>>, mail <<EMAIL_1>>. <<PERSONAL_1>> starts Monday."; got != want {
+		t.Errorf("redacted = %q, want %q", got, want)
+	}
+	if back, _ := v.Restore(got); back != in {
+		t.Errorf("round trip = %q", back)
+	}
+}

@@ -34,3 +34,12 @@ func TestDispatchRedact_RefusesAnEnsemble(t *testing.T) {
 		t.Errorf("--redact --swarm = %v, want a refusal", err)
 	}
 }
+
+func TestDispatchRedact_RefusesAnUnknownMode(t *testing.T) {
+	testutil.NewSandbox(t)
+	litellmHeads(t, map[string]string{"a": "ok"}, "summary.general")
+	if _, _, err := run(t, "dispatch", "--redact=everything", "x"); err == nil ||
+		!strings.Contains(err.Error(), "--redact takes on or names") {
+		t.Errorf("--redact=everything = %v, want a refusal", err)
+	}
+}

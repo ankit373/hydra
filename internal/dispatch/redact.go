@@ -104,7 +104,7 @@ func (d *Dispatcher) rerunLocal(ctx context.Context, prompt string, opts Options
 	if opts.OnStream != nil {
 		return nil, false
 	}
-	opts.LocalOnly, opts.Redact, opts.Vault, opts.Head, opts.TaskID = true, false, nil, "", ""
+	opts.LocalOnly, opts.Redact, opts.RedactNames, opts.Vault, opts.Head, opts.TaskID = true, false, false, nil, "", ""
 	r, err := d.Dispatch(ctx, prompt, opts)
 	if err != nil {
 		log.Printf("redaction: %s, and no local head could rerun it: %v", why, err)
