@@ -146,7 +146,10 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           types, and values found in the fenced source, all without a model, with a `FieldVerdict` per
                           field on `Result.Fields` (ok, absent, missing, wrong_type, not_in_source, unverified). `SchemaFields` reads a
                           JSON Schema (`hyctl dispatch --schema`) as that field list, objects one level deep as dotted
-                          names, so no model writes it. `SameValue` is the one
+                          names, so no model writes it. `ChunkFields` splits a wider list than `--max-fields` (30) in
+                          schema order, an object's fields kept together; `cmd/hydra`'s `chunkedDispatch` asks each
+                          chunk on the first chunk's head and `MergeObjects` joins them, a key two chunks give reported,
+                          never overwritten. `SameValue` is the one
                           field comparison, also used by the bench's extraction suite. `SumOracle` (`--check sum:`)
                           adds an answer's parts and compares them with its total, no model. gen:roundtrip re-extracts the
                           same fields with the check's head and compares required fields, a `FieldVerdict` each (agreed,
