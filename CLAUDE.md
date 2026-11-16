@@ -456,6 +456,10 @@ hyctl dispatch --tier 8 "write a User DTO in TypeScript"
 hyctl dispatch --tier simple "write a User DTO in TypeScript"
 hyctl dispatch --tier local "write a User DTO in TypeScript"   # alias for grunt, the free floor
 
+# A head that answered, or was passed over on its record, and got worse or recovered at
+# this kind in the last 14 days gets one dim line under the route line (#1877)
+hyctl dispatch --kind summary "summarise these meeting notes"
+
 # Preview the routing/fallback chain without executing
 hyctl dispatch --dry-run --enum STANDARD "add pagination"
 
