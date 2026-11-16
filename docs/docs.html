@@ -973,7 +973,7 @@ hyctl dispatch <span class="fl">--confidence</span> 0.90 <span class="fl">--file
     </section>
     <section class="doc" id="parallel">
       <h2><span class="cmd">hyctl parallel</span> <span class="tagline">fan independent tasks</span></h2>
-      <p class="sum">Fan a set of independent tasks across models. Optimal count follows <span class="fx">n*=√((1−s)/k)</span>.</p>
+      <p class="sum">Fan a set of independent tasks across models. Optimal count follows <span class="fx">n*=√((1−s)/k)</span>. An edit task whose validator fails gets the same one rerun as <span class="fx">hyctl edit</span>.</p>
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl parallel <span class="fl">--tasks</span> tasks.txt</pre></div>
       <a class="more" href="#graph-parallel">graph parallel →</a>
     </section>
