@@ -30,6 +30,10 @@ const (
 	// ConversationHeader names the chat a request continues, for a client
 	// whose opening messages change between turns. Request only.
 	ConversationHeader = "X-Hydra-Conversation"
+	// RedactHeader "on" asks for placeholders in place of detected values on
+	// the way to a remote head; RedactedHeader answers how many values were.
+	RedactHeader   = "X-Hydra-Redact"
+	RedactedHeader = "X-Hydra-Redacted"
 
 	// CheckHeader names a check the answer must pass, repeatable; see Checks.
 	CheckHeader = "X-Hydra-Check"
@@ -125,6 +129,29 @@ func writeEvidence(w http.ResponseWriter, body map[string]any, ev *Evidence) {
 	}
 	setEvidenceHeaders(w.Header(), ev)
 	body["hydra"] = ev
+}
+
+// redactRequested reads RedactHeader: "on" or "off", anything else is refused
+// rather than read as off, since off sends the values.
+func redactRequested(h http.Header) (bool, error) {
+	on := false
+	for _, v := range h.Values(RedactHeader) {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "on":
+			on = true
+		case "off", "":
+		default:
+			return false, fmt.Errorf("%s must be on or off, not %q", RedactHeader, v)
+		}
+	}
+	return on, nil
+}
+
+// setRedacted reports the count when redaction was asked for or happened.
+func setRedacted(h http.Header, req Request) {
+	if n := req.Vault.Len(); req.Redact || n > 0 {
+		h.Set(RedactedHeader, strconv.Itoa(n))
+	}
 }
 
 // explicitClass is the class the client named in TaskClassHeader, if any.

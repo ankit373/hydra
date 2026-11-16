@@ -22,8 +22,11 @@ func NewVault() *Vault {
 	return &Vault{byValue: map[string]string{}, byKey: map[string]string{}, next: map[string]int{}}
 }
 
-// Len is how many distinct values the vault holds.
+// Len is how many distinct values the vault holds; 0 for a nil vault.
 func (v *Vault) Len() int {
+	if v == nil {
+		return 0
+	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return len(v.byKey)
@@ -97,4 +100,82 @@ func (v *Vault) Restore(text string) (string, []string) {
 		return m
 	})
 	return out, unknown
+}
+
+// StreamRestorer restores an answer that arrives in pieces. A placeholder split
+// across two pieces is held back until the next one decides it (#1883).
+type StreamRestorer struct {
+	v    *Vault
+	held string
+}
+
+// Stream starts restoring one streamed answer.
+func (v *Vault) Stream() *StreamRestorer { return &StreamRestorer{v: v} }
+
+// Push returns the part of held+chunk that is safe to show, restored. It holds
+// back at most the longest placeholder the vault could restore.
+func (s *StreamRestorer) Push(chunk string) string {
+	buf := s.held + chunk
+	limit := s.v.longestPlaceholder()
+	if limit == 0 {
+		s.held = ""
+		return buf
+	}
+	cut := max(trailingRunStart(buf), len(buf)-limit)
+	for _, m := range placeholderRe.FindAllStringIndex(buf, -1) {
+		if m[0] >= cut || m[1] <= cut {
+			continue
+		}
+		// A match the cut would split: send it whole when it is closed or too
+		// long to be one of ours, hold it whole when it may still grow.
+		if m[1] < len(buf) || m[1]-m[0] > limit {
+			cut = m[1]
+		} else {
+			cut = m[0]
+		}
+	}
+	s.held = buf[cut:]
+	out, _ := s.v.Restore(buf[:cut])
+	return out
+}
+
+// Flush restores and returns whatever is still held, at the end of the answer.
+func (s *StreamRestorer) Flush() string {
+	if s.held == "" {
+		return ""
+	}
+	out, _ := s.v.Restore(s.held)
+	s.held = ""
+	return out
+}
+
+// longestPlaceholder is the longest text Restore turns back into a value: the
+// longest key with brackets and a space on each side. 0 for an empty vault.
+func (v *Vault) longestPlaceholder() int {
+	if v == nil {
+		return 0
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	n := 0
+	for k := range v.byKey {
+		n = max(n, len(k))
+	}
+	if n == 0 {
+		return 0
+	}
+	return n + len("<< ") + len(" >>")
+}
+
+// trailingRunStart is where buf's tail of placeholder characters begins.
+func trailingRunStart(buf string) int {
+	i := len(buf)
+	for i > 0 {
+		c := buf[i-1]
+		if !(isLetter(c) || isDigit(c) || c == '_' || c == '<' || c == '>' || c == ' ') {
+			break
+		}
+		i--
+	}
+	return i
 }
