@@ -19,7 +19,7 @@ func captureDispatcher(t *testing.T, cfg *config.Config) *Dispatcher {
 	t.Helper()
 	return &Dispatcher{
 		cfg: cfg, heads: []provider.Head{servingHead(t)},
-		policy: policy.New(policy.DefaultRules(false)), pricing: pricing.Load(),
+		policy: policy.New(policy.DefaultRules("")), pricing: pricing.Load(),
 	}
 }
 

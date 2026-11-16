@@ -19,11 +19,11 @@ import (
 // head. It must fire when enabled and must not exist when disabled, a rule
 // that silently never matches is the same as no rule.
 func TestDefaultRules_PIIRuleIsPresentOnlyWhenEnabled(t *testing.T) {
-	if got := DefaultRules(false); len(got) != 0 {
+	if got := DefaultRules(""); len(got) != 0 {
 		t.Errorf("local-only disabled produced %d rules: %+v", len(got), got)
 	}
 
-	rules := DefaultRules(true)
+	rules := DefaultRules(PIILocalOnly)
 	if len(rules) != 1 {
 		t.Fatalf("local-only enabled produced %d rules, want 1", len(rules))
 	}
@@ -77,7 +77,7 @@ func TestEngine_NoMatchIsNoRestriction(t *testing.T) {
 // End to end: a prompt containing a secret must be constrained to local heads
 // by the default ruleset.
 func TestEngine_PIIPromptIsForcedLocal(t *testing.T) {
-	e := New(DefaultRules(true))
+	e := New(DefaultRules(PIILocalOnly))
 
 	secret := "here is my key AKIAIOSFODNN7EXAMPLE please use it"
 	if got := e.Evaluate(Request{Prompt: secret}); !got.LocalOnly {
