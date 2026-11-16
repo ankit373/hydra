@@ -387,7 +387,7 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
       <thead><tr><th>What</th><th>Value</th><th>How it is measured</th></tr></thead>
       <tbody>
         <tr><td>Routing overhead</td><td>~1,130 ns per request</td><td><code translate="no">go test -bench=BenchmarkRoutingPath</code> (Apple M1): policy, model choice and budget check</td></tr>
-        <tr><td>Machine discovery</td><td>&lt; 2 s</td><td>13+ CLIs, 14 API providers, 2 local runtimes, scanned at once (<code translate="no">hyctl probe</code>)</td></tr>
+        <tr><td>Machine discovery</td><td>&lt; 2 s</td><td>the CLI agents hydra runs (Claude Code, Codex, Antigravity), 14 API providers, 2 local runtimes, scanned at once (<code translate="no">hyctl probe</code>)</td></tr>
         <tr><td>Calibration</td><td>D ≈ 1.76 nats</td><td>a 90%-reliable source; a coin-flip source gives D ≈ 0. Table tests in <code translate="no">internal/trust</code></td></tr>
         <tr><td>SPRT, easy tasks</td><td>2.6 samples, −49% vs fixed-5</td><td>98.8% accuracy over 20k seeded synthetic trials (<code translate="no">TestSPRT_Law3</code>)</td></tr>
         <tr><td>SPRT, mixed workload</td><td>3.8 samples, −24% vs fixed-5</td><td>98.2% accuracy; 71% easy and 29% hard tasks</td></tr>
