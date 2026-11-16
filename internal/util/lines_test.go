@@ -73,3 +73,27 @@ func TestSplitLines_BeyondScannerLimit(t *testing.T) {
 		}
 	}
 }
+
+// Inner fences or prose make the outer pair ambiguous, so the reply is refused
+// rather than cut at a guess.
+func TestSoleFencedBlock(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		// Taken: exactly one block, whitespace around it ignored.
+		{"one block", "```go\nx := 1\n```", "```go\nx := 1\n```"},
+		{"surrounding whitespace", "\n```\nx\n```\n\n", "```\nx\n```"},
+		{"crlf", "```\r\nx\r\n```", "```\nx\n```"},
+
+		// Refused: anything else.
+		{"prose before", "Here it is:\n```\nx\n```", ""},
+		{"inner fence", "```md\n```sh\nls\n```\n```", ""},
+		{"unclosed", "```go\nx := 1", ""},
+		{"no fence", "x := 1", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SoleFencedBlock(tt.in); got != tt.want {
+				t.Errorf("SoleFencedBlock(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

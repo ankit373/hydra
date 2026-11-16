@@ -99,7 +99,7 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 | Translate | release notes into German | models agree | agreement only; no dedicated check yet |
 | Answer from documents | questions over files you give it | the answer is grounded in the given text | `--check ground` or `hyctl oracle ground` |
 | Analyse | compare numbers, explain a trend | a script recomputes the figures | any command via `--check cmd:...` or `hyctl oracle verify` |
-| Code | edit, generate, review | tests, build, lint; a file many others depend on needs more confidence | `hyctl edit`, `hyctl vet`, `hyctl graph blast`, `hyverify` |
+| Code | edit, generate, review | tests, build, lint; a file many others depend on needs more confidence | `hyctl edit`, `hyctl vet`, `hyctl graph blast`, `hyverify`; Go tests another model writes for the change, run with the network off, via `--check gen:tests=<file>` |
 
 `--check` judges one answer, and a real fail reruns once on a stronger model: [how checks work](https://hydra.uvansa.com/docs.html#check). Each kind of work also has a menu of [recipes](https://hydra.uvansa.com/docs.html#recipe).
 
