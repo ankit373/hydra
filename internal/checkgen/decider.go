@@ -76,7 +76,7 @@ func (d *HeadDecider) chat(ctx context.Context, question string) ([]float64, err
 	if d.Chat == nil {
 		return nil, errors.New("head decider: no chat dispatcher configured")
 	}
-	res, err := d.Chat(ctx, question+"\n\nReply yes or no.", dispatch.Options{
+	res, err := d.Chat(ctx, chatQuestion(question), dispatch.Options{
 		Head: d.Head.ID, System: yesNoSystem, Domain: d.Domain, RunID: d.RunID,
 		// The prompt embeds the answer judged, so a stored reply would be about another answer.
 		NoCache: true,
@@ -84,15 +84,24 @@ func (d *HeadDecider) chat(ctx context.Context, question string) ([]float64, err
 	if err != nil {
 		return nil, err
 	}
+	yes, ok := YesNo(res.Output)
+	switch {
+	case !ok:
+		return nil, fmt.Errorf("head decider: %s did not answer yes or no: %.80q", d.Head.ID, res.Output)
+	case yes:
+		return []float64{1, 0}, nil
+	}
+	return []float64{0, 1}, nil
+}
+
+// chatQuestion is a predicate's question as a chat head is asked it.
+func chatQuestion(question string) string { return question + "\n\nReply yes or no." }
+
+// YesNo reads a chat head's reply by its first word; ok is false when that is neither yes nor no.
+func YesNo(output string) (yes, ok bool) {
 	first := ""
-	if words := strings.Fields(res.Output); len(words) > 0 {
+	if words := strings.Fields(output); len(words) > 0 {
 		first = strings.ToLower(strings.TrimRight(words[0], ".,!"))
 	}
-	switch first {
-	case "yes":
-		return []float64{1, 0}, nil
-	case "no":
-		return []float64{0, 1}, nil
-	}
-	return nil, fmt.Errorf("head decider: %s did not answer yes or no: %.80q", d.Head.ID, res.Output)
+	return first == "yes", first == "yes" || first == "no"
 }

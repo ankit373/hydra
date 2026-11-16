@@ -68,10 +68,7 @@ func (claimsGen) Oracle(s Spec, env Env) (oracle.Oracle, error) {
 		if err != nil {
 			return nil, err
 		}
-		p := &oracle.PredicateOracle{
-			Template: claimsJudgeAsk + util.WrapUntrusted("SOURCE", sourceOf(b.Prompt)) + "\n{answer}",
-			Decider:  d, Source: s.Check(),
-		}
+		p := &oracle.PredicateOracle{Template: claimsJudgeTemplate(sourceOf(b.Prompt)), Decider: d, Source: s.Check()}
 		return &claimsOracle{check: func(ctx context.Context, sentence string) (SentenceVerdict, error) {
 			v, err := p.Verify(ctx, sentence, trust.Task{})
 			if err != nil {
@@ -84,6 +81,35 @@ func (claimsGen) Oracle(s Spec, env Env) (oracle.Oracle, error) {
 		}}, nil
 	}
 	return nil, fmt.Errorf("checkgen claims: spec %s has unknown variant %q", s.ID, s.Variant)
+}
+
+// claimsJudgeTemplate is the judge's question about one sentence, {answer} where the sentence goes.
+func claimsJudgeTemplate(source string) string {
+	return claimsJudgeAsk + util.WrapUntrusted("SOURCE", source) + "\n{answer}"
+}
+
+// ClaimsJudgeChat is the system prompt and question the judge variant sends a chat head
+// about one sentence, built by the same oracle, so the bench asks what dispatch asks.
+func ClaimsJudgeChat(source, sentence string) (system, prompt string, err error) {
+	var q recordQuestion
+	p := &oracle.PredicateOracle{Template: claimsJudgeTemplate(source), Decider: &q, Source: "bench"}
+	if _, err := p.Verify(context.Background(), sentence, trust.Task{}); err != nil {
+		return "", "", err
+	}
+	return yesNoSystem, chatQuestion(string(q)), nil
+}
+
+// recordQuestion is a Decider that keeps the question it was asked and answers yes.
+type recordQuestion string
+
+func (q *recordQuestion) Decide(_ context.Context, question string, _ []string) ([]float64, error) {
+	*q = recordQuestion(question)
+	return []float64{1, 0}, nil
+}
+
+// GroundSentence is the ground variant's verdict on one sentence of an answer to prompt.
+func GroundSentence(ctx context.Context, prompt, sentence string) (SentenceVerdict, error) {
+	return groundSentence(prompt)(ctx, sentence)
 }
 
 // Sentence statuses. nothing_to_check is a sentence with no number, name, date or quote in it.

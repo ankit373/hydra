@@ -1,6 +1,6 @@
 # Benchmark datasets
 
-The raw data is **not** committed. `bench/datasets.lock` pins each file by commit and
+The raw data is **not** committed, and for FaithBench neither are its splits. `bench/datasets.lock` pins each file by commit and
 sha256; `hyctl bench fetch` downloads it to `$HYDRA_HOME/bench/data/<suite>/` and refuses
 any file whose hash differs. What is committed is derived: `bench/splits/<suite>.tsv`
 (`id  split  rank  label`; a Snips label is its gold fields as JSON), generated once by
@@ -39,6 +39,24 @@ Paired differences against the frontier arm are the claim; absolute rates are co
 | Split | 7,034 calibration · 16,657 test · **9 excluded** |
 | Ids | `<key>/<index>`, e.g. `oos_test/0999` |
 | Citation | Larson et al., *An Evaluation Dataset for Intent Classification and Out-of-Scope Prediction*, EMNLP 2019 |
+
+## FaithBench (claims)
+
+| | |
+|---|---|
+| Source | https://github.com/vectara/FaithBench (`data_for_release/batch_<n>.json`) |
+| Revision | `cf89797d82812c23b5d5e5c121f1d9b8983bbbce` |
+| Files | fifteen, `batch_1` to `batch_16` with no `batch_13`; each sha256 is in `bench/datasets.lock` |
+| Licence | CC BY-NC-SA 4.0, **verified**: LICENSE at the pinned commit, 2026-11-16. Non-commercial and share-alike, so **no row, label or split file is committed**. `local_splits = true` in the lock: `hyctl bench run` derives the split file into `$HYDRA_HOME/bench/data/faithbench/splits.tsv` from the fetched data and then checks it like a committed one. The test fixture is synthetic text written for this repository |
+| Items | 750 summaries, 3,631 sentences by `ground.Sentences`. **3,149** get a label: 2,480 supported, 669 not supported. 482 are left out |
+| Sentence label | the annotations are character spans of the summary, counted in Unicode code points, from several annotators. A sentence is `not_supported` when any annotator's span with an `Unwanted` or `Unwanted.*` label overlaps it, `supported` when no span touches it, and left out when only `Questionable`, `Benign` or unlabelled spans touch it. This rule is a choice: one annotator is enough to mark a sentence |
+| Split | 952 calibration · 2,188 test · **9 excluded**. The split key is the sentence with combining marks dropped plus the first 8 bytes of its source's sha256, so one sentence about two sources is two items. A few summaries spell an accent with a combining mark, and the key has no NFC |
+| Ids | `batch_<n>/<sample_id>/<sentence>`, e.g. `batch_3/41/2`; the sentence counts from 1 |
+| Class | `claims.faithbench` |
+| Prompt | the claims check's judge question for one sentence, exactly as the judge variant sends it to a chat head (`checkgen.ClaimsJudgeChat`) |
+| Arms | `ground`, a check arm: the claims check's ground variant on the sentence against the fenced source, no model. A judge arm is any model arm; its reply is read by its first word, yes or no |
+| Grade | the sentence is flagged when the answer is `not_supported` or no. `nothing_to_check` (ground found no number, name, date or quote) is not a flag. A reply that is neither yes nor no is a format fail and counts as not flagged. Recall is flagged over not-supported sentences; the false-flag rate is flagged over supported ones, each with a 95% Wilson interval |
+| Citation | Bao et al., *FaithBench: A Diverse Hallucination Benchmark for Summarization by Modern LLMs*, NAACL 2025 |
 
 ## GSM8K
 
@@ -106,6 +124,7 @@ differ are label noise no arm can score, so every copy is `excluded`.
 | GSM8K | 0 | 0 |
 | HumanEval+ | 0 | 0 |
 | Snips | 5 (10) | 0 |
+| FaithBench | not counted | 9 items excluded |
 
 | Suite | Utterances | Labels | Ids |
 |---|---|---|---|

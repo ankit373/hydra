@@ -65,6 +65,21 @@ type ArmSummary struct {
 	TokensIn        Moments      `json:"tokens_in"`
 	TokensOut       Moments      `json:"tokens_out"`
 	LatencyMS       LatencyStats `json:"latency_ms"`
+	// Detection is set on a check suite: how much the arm caught and how often it cried wolf.
+	Detection *DetectionStats `json:"detection,omitempty"`
+}
+
+// DetectionStats counts a check suite's rows. Recall is caught positives over all
+// positives; the false-flag rate is flagged negatives over all negatives.
+type DetectionStats struct {
+	Positives       int        `json:"positives"`
+	Caught          int        `json:"caught"`
+	Recall          float64    `json:"recall"`
+	RecallWilson    [2]float64 `json:"recall_wilson95"`
+	Negatives       int        `json:"negatives"`
+	FalseFlags      int        `json:"false_flags"`
+	FalseFlagRate   float64    `json:"false_flag_rate"`
+	FalseFlagWilson [2]float64 `json:"false_flag_wilson95"`
 }
 
 // Moments is a mean and a nearest-rank p95.
@@ -325,11 +340,52 @@ func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
 		a.CostPerAccepted = &c
 	}
 	a.TokensIn, a.TokensOut = moments(in), moments(out)
+	if a.Detection, err = detection(rs); err != nil {
+		return a, err
+	}
 	if a.LatencyMS.Valid > 0 {
 		p50, p95 := lat.Quantile(0.5), lat.Quantile(0.95)
 		a.LatencyMS.P50, a.LatencyMS.P95 = &p50, &p95
 	}
 	return a, nil
+}
+
+// detection counts the rows that carry one, and is nil when none does.
+func detection(rs []Result) (*DetectionStats, error) {
+	var d DetectionStats
+	seen := false
+	for _, r := range rs {
+		switch {
+		case r.Detection == nil:
+			continue
+		case r.Detection.Positive:
+			d.Positives++
+			if r.Detection.Flagged {
+				d.Caught++
+			}
+		default:
+			d.Negatives++
+			if r.Detection.Flagged {
+				d.FalseFlags++
+			}
+		}
+		seen = true
+	}
+	if !seen {
+		return nil, nil
+	}
+	var err error
+	if d.Positives > 0 {
+		d.Recall = float64(d.Caught) / float64(d.Positives)
+	}
+	if d.Negatives > 0 {
+		d.FalseFlagRate = float64(d.FalseFlags) / float64(d.Negatives)
+	}
+	if d.RecallWilson[0], d.RecallWilson[1], err = stats.Wilson(d.Caught, d.Positives, stats.Z95); err != nil {
+		return nil, err
+	}
+	d.FalseFlagWilson[0], d.FalseFlagWilson[1], err = stats.Wilson(d.FalseFlags, d.Negatives, stats.Z95)
+	return &d, err
 }
 
 func moments(v []float64) Moments {

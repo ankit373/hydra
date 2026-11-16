@@ -1,0 +1,21 @@
+# Unsupported-claim recall and false flags on FaithBench (#1862). The ground arm is the
+# claims check's ground variant: no model, no spend. n_test is above the test split, so
+# every test sentence runs.
+tier = "full"
+track = "claims"
+suites = ["faithbench"]
+n_test = 100000
+seed = 1
+# Checked before every call; the ground arm never spends.
+max_usd = 1
+arms = ["ground"]
+checks = ["ground"]
+
+# A judge arm is one model asked the claims judge's yes/no question per sentence.
+# To run one, pin its id, price and cutoff, add it to arms and raise max_usd:
+#
+# arms = ["ground", "judge-a"]
+# [models]
+# judge-a = "openrouter:<model id>"
+# [cutoffs]
+# "<model id>" = "<stated training cutoff, or unstated>"

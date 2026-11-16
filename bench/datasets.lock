@@ -32,6 +32,89 @@ name = "data_full.json"
 url = "https://raw.githubusercontent.com/clinc/oos-eval/828f8093932c8fe6ca7936c3d2e52903b1c523de/data/data_full.json"
 sha256 = "36923c3705a59e08fe9c3883d8bc2dd966ef93e22cb78ac41171782a698d56e0"
 
+# CC BY-NC-SA 4.0: no row or label is committed. local_splits derives the split file
+# next to the data at run time; see bench/DATASETS.md.
+[faithbench]
+revision = "vectara/FaithBench@cf89797d82812c23b5d5e5c121f1d9b8983bbbce"
+licence = "CC-BY-NC-SA-4.0"
+licence_verified = "https://github.com/vectara/FaithBench/blob/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/LICENSE, 2026-11-16"
+local_splits = true
+
+[[faithbench.file]]
+name = "batch_1.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_1.json"
+sha256 = "a4e7858702e741b0fb024a022a906f61fb8eb65011b7f7b138e56e080a4c8c59"
+
+[[faithbench.file]]
+name = "batch_2.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_2.json"
+sha256 = "18f1b2b9eae6fbf2020f295dc5ca512ef1a7e389e763b707bc51831f58df6a70"
+
+[[faithbench.file]]
+name = "batch_3.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_3.json"
+sha256 = "84b709a9d88998f478f429ee2330ea18666ae9e5340ea398ece03cec6ab54308"
+
+[[faithbench.file]]
+name = "batch_4.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_4.json"
+sha256 = "c0f68bc222dd8b6e332cb6668840de8da150687ddf6f9b5bd243f389033fda42"
+
+[[faithbench.file]]
+name = "batch_5.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_5.json"
+sha256 = "6be08bb37ccdf68e41e117b0174cc3c8b41ed7bf85134d00e0e89c023e96b436"
+
+[[faithbench.file]]
+name = "batch_6.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_6.json"
+sha256 = "a5fd42aa64fbe15f535192ddfd3cfc72b53535cde7834cb6685ebe0a229f8587"
+
+[[faithbench.file]]
+name = "batch_7.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_7.json"
+sha256 = "28e83e1487381ce317103505dab4d5679ad74f53541374a98e24e3673734343b"
+
+[[faithbench.file]]
+name = "batch_8.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_8.json"
+sha256 = "5cf2b8ab42fe1d4b0018cf736448dd8a88318267b0efc2f45ea200e713932975"
+
+[[faithbench.file]]
+name = "batch_9.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_9.json"
+sha256 = "4924fe2d0975890712032a128544c0619c2ebf81d5d472e99e7883f1a9720bd5"
+
+[[faithbench.file]]
+name = "batch_10.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_10.json"
+sha256 = "8e5cec822516abbf74cd6796104bbe537da98628c671b64c10afa3b15bebe08c"
+
+[[faithbench.file]]
+name = "batch_11.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_11.json"
+sha256 = "cf999c8fa9696f4b24d8f4b08f9fdd6603a942cfee63ad851ff6d1f265c116cc"
+
+[[faithbench.file]]
+name = "batch_12.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_12.json"
+sha256 = "fda9f0e0eae69c13b79a8fc1f81d1f8a02e9f28ad8c3274619c4369bb15c818e"
+
+[[faithbench.file]]
+name = "batch_14.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_14.json"
+sha256 = "72f07b9f4b91f8a49d96e7adc79a8308edb92a2e6b34babcd9ef68dc6b7b2f34"
+
+[[faithbench.file]]
+name = "batch_15.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_15.json"
+sha256 = "c6608ce2edd17134674c7f8a0fdfc871e22458b432b35506889886c737eb4663"
+
+[[faithbench.file]]
+name = "batch_16.json"
+url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/data_for_release/batch_16.json"
+sha256 = "e35ace1069bb79844b122415d3c4192f7147737a2b9ad509185fb2c1ba7090db"
+
 [gsm8k]
 revision = "openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c"
 licence = "MIT"

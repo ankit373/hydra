@@ -75,14 +75,24 @@ func Plan(c *Config, s Suite, ds Dataset, splitsPath string, all []Item, nTest i
 	return run, byID, nil
 }
 
-// BuildArms makes each arm in run from its frozen config and prices. Only
-// static-fallback carries a fault plan, keyed on the run's seed. A nil sleep is real time.
-func BuildArms(run Run, exec func(provider.Head) executor.Executor, sleep func(context.Context, time.Duration) error) (map[string]Arm, error) {
+// BuildArms makes each arm in run from its frozen config and prices; a check arm
+// runs s's own check. Only static-fallback carries a fault plan, keyed on the run's
+// seed. A nil sleep is real time.
+func BuildArms(run Run, s Suite, exec func(provider.Head) executor.Executor,
+	sleep func(context.Context, time.Duration) error) (map[string]Arm, error) {
 	if sleep == nil {
 		sleep = sleepCtx
 	}
 	out := map[string]Arm{}
 	for name, ac := range run.Arms {
+		if ac.Kind == KindCheck {
+			a, err := newCheckArm(name, s)
+			if err != nil {
+				return nil, err
+			}
+			out[name] = a
+			continue
+		}
 		var faults *FaultPlan
 		if ac.FaultRate > 0 {
 			faults = &FaultPlan{Rate: ac.FaultRate, Seed: run.Seed}

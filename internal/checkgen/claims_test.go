@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/ground"
 	"github.com/ankit373/hydra/internal/oracle"
@@ -236,5 +237,20 @@ func TestClaims_SupportedSentenceListsItsLines(t *testing.T) {
 	if len(got) != 2 || len(got[0].Sources) != 1 || got[0].Sources[0].Label != "DOCUMENT" ||
 		got[0].Sources[0].StartLine != 1 || got[0].Sources[0].EndLine != 2 || got[1].Sources != nil {
 		t.Fatalf("verdicts = %+v; want the first sentence backed by DOCUMENT lines 1-2 and the second by nothing", got)
+	}
+}
+
+// The bench asks a judge model exactly what the judge variant sends a chat head.
+func TestClaimsJudgeChat_IsWhatTheJudgeVariantAsks(t *testing.T) {
+	var prompts []string
+	var opts []dispatch.Options
+	env := Env{Decider: func(GenInfo) oracle.Decider {
+		return &HeadDecider{Head: chatHead, Chat: chatSays("yes", &prompts, &opts)}
+	}}
+	sentence := "Jane Doe runs the Lisbon office."
+	lastVerdicts(t, claimsSpecs(t)[1], env, sentence)
+	system, prompt, err := ClaimsJudgeChat(sourceOf(report), sentence)
+	if err != nil || len(prompts) != 1 || prompts[0] != prompt || opts[0].System != system {
+		t.Fatalf("ClaimsJudgeChat = %q, %q, %v; the judge sent %q with %+v", system, prompt, err, prompts, opts)
 	}
 }

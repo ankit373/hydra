@@ -30,7 +30,8 @@ func Registry() map[string]func() bench.Suite {
 		"humanevalplus": func() bench.Suite {
 			return &evalplus{name: "humanevalplus", file: "HumanEvalPlus.jsonl.gz", deadline: evalplusDeadline}
 		},
-		"snips": func() bench.Suite { return &snips{} },
+		"snips":      func() bench.Suite { return &snips{} },
+		"faithbench": func() bench.Suite { return &faithbench{} },
 	}
 }
 

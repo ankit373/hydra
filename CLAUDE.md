@@ -176,7 +176,9 @@ internal/stats/         ← Pure maths, one implementation each: seeded paired b
                           harness.
 internal/bench/         ← Benchmark harness: pinned datasets, committed splits, scored arms. `hyctl bench`.
                           `replay/` runs acceptance policies on cached labelled answers over seeded
-                          splits, with no model calls. `hyctl bench replay`.
+                          splits, with no model calls. `hyctl bench replay`. A check arm (`checks` in
+                          the config) answers with the suite's own check, no model; a check suite
+                          (faithbench) reports recall and false flags per arm with Wilson intervals.
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/embed/         ← Vectors from an embedding model already on the machine. No new dependency.
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.

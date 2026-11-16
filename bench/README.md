@@ -8,6 +8,7 @@ default paths below are repo-relative. Datasets and their splits are described i
 hyctl bench fetch                                  # pinned data into $HYDRA_HOME/bench/data, sha256-checked
 hyctl bench run --config bench/configs/smoke.toml --dry-run   # worst-case cost, no call
 hyctl bench run --config bench/configs/smoke.toml             # resumable; the same command continues
+hyctl bench run --config bench/configs/faith.toml             # claims check recall and false flags, no model
 hyctl bench report <run-id>                        # recompute summary.json, print the table
 hyctl bench table <run-id>                         # write bench/results/<run-id>/table.md
 ```
@@ -31,6 +32,12 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
 - A grade that ran out of time is a fail, marked `timeout` on its row and counted as
   `timeouts` per arm in `summary.json`, so a loaded machine shows up rather than reading
   as worse answers.
+- A config's `checks` names arms the suite answers itself with a check of its own, calling no
+  model and spending nothing. On a check suite (FaithBench) every row records whether the gold
+  had something to catch and whether the arm flagged it, and `run` and `report` print recall
+  and the false-flag rate per arm, each with a 95% Wilson interval.
+- `faith.toml` runs the claims check's `ground` variant on FaithBench. A `judge` variant is a
+  normal model arm on the same suite: add a pinned model to it, as the file's comment says.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).
 
 ## replay
