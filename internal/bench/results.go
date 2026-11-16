@@ -27,10 +27,11 @@ type Result struct {
 	Split  string `json:"split"`
 	Arm    string `json:"arm"`
 	Attempt
-	Passed bool    `json:"passed"`
-	Score  float64 `json:"score"` // 1/0 for classification
-	Format bool    `json:"format_fail,omitempty"`
-	Detail string  `json:"detail,omitempty"`
+	Passed  bool    `json:"passed"`
+	Score   float64 `json:"score"` // 1/0 for classification
+	Format  bool    `json:"format_fail,omitempty"`
+	Timeout bool    `json:"timeout,omitempty"`
+	Detail  string  `json:"detail,omitempty"`
 	// CostUSD is money: only a spend row carries it, one per call that may have been
 	// billed, written as the call returns. A result row lists its calls and adds 0.
 	CostUSD float64   `json:"cost_usd"`

@@ -42,6 +42,18 @@ name = "test.jsonl"
 url = "https://raw.githubusercontent.com/openai/grade-school-math/3101c7d5072418e28b9008a6636bde82a006892c/grade_school_math/data/test.jsonl"
 sha256 = "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14"
 
+# A release asset, not a file in the repository: it is what the evalplus package
+# downloads, and the copy committed at the tag differs from it byte for byte.
+[humanevalplus]
+revision = "evalplus/humanevalplus_release@v0.1.10 (ea5804b59b8a7837cb2faa1b10273fa804cdea5c)"
+licence = "Apache-2.0"
+licence_verified = "https://github.com/evalplus/humanevalplus_release/blob/ea5804b59b8a7837cb2faa1b10273fa804cdea5c/LICENSE, 2026-11-15"
+
+[[humanevalplus.file]]
+name = "HumanEvalPlus.jsonl.gz"
+url = "https://github.com/evalplus/humanevalplus_release/releases/download/v0.1.10/HumanEvalPlus.jsonl.gz"
+sha256 = "272720b90ac375502c8ed23cd791c2a93dfb22a911641a494da74a426c09f101"
+
 [snips]
 revision = "sonos/nlu-benchmark@b86ac7f1577868c42158d0dec77db50956046696"
 licence = "CC0-1.0"

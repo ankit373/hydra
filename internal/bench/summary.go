@@ -57,6 +57,7 @@ type ArmSummary struct {
 	Accepted        int          `json:"accepted"`
 	Errors          int          `json:"errors"`
 	FormatFails     int          `json:"format_fails"`
+	Timeouts        int          `json:"timeouts"`
 	PassRate        float64      `json:"pass_rate"`
 	PassWilson      [2]float64   `json:"pass_wilson95"`
 	CostUSD         float64      `json:"cost_usd"`
@@ -290,6 +291,9 @@ func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
 		}
 		if r.Format {
 			a.FormatFails++
+		}
+		if r.Timeout {
+			a.Timeouts++
 		}
 		if r.ErrKind != "" {
 			a.Errors++

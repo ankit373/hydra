@@ -54,9 +54,10 @@ type Row struct {
 // Grade is a suite's judgement of one answer. Format means the answer is not in
 // the label set at all, counted apart so verbosity cannot hide as wrongness.
 type Grade struct {
-	Passed bool
-	Format bool
-	Detail string
+	Passed  bool
+	Format  bool
+	Timeout bool // a fail that never finished; counted apart, since load causes it
+	Detail  string
 }
 
 // Suite is one dataset with one verifier. Prompt is identical for every arm.

@@ -31,10 +31,11 @@ func committedSplits(t *testing.T, suite string) []bench.SplitRow {
 // any platform, without the data.
 func TestCommittedSplits_CountsAndRanks(t *testing.T) {
 	for suite, want := range map[string]struct{ rows, excluded int }{
-		"banking77": {13083, 4},
-		"clinc150":  {23700, 9},
-		"gsm8k":     {1319, 0},
-		"snips":     {700, 0},
+		"banking77":     {13083, 4},
+		"clinc150":      {23700, 9},
+		"gsm8k":         {1319, 0},
+		"humanevalplus": {164, 0},
+		"snips":         {700, 0},
 	} {
 		rows := committedSplits(t, suite)
 		ids := map[string]bool{}
@@ -117,6 +118,13 @@ func TestCommittedSplits_GoldenIDs(t *testing.T) {
 			{"test/1052", bench.SplitTest, 13382222736159128620},
 			{"test/1315", bench.SplitTest, 2835625184471401485},
 		},
+		"humanevalplus": {
+			{"HumanEval/0", bench.SplitTest, 5975802926892583350},
+			{"HumanEval/33", bench.SplitCalibration, 4274543685008985276},
+			{"HumanEval/66", bench.SplitCalibration, 16208768204687509098},
+			{"HumanEval/99", bench.SplitTest, 3741250572565018553},
+			{"HumanEval/132", bench.SplitTest, 833649430340342743},
+		},
 		// GetWeather/038 and /091 are one utterance twice, so they share a split.
 		"snips": {
 			{"AddToPlaylist/000", bench.SplitTest, 6877933496308745925},
@@ -152,7 +160,7 @@ func TestCommittedSmokeIDs_AreTheFirstTestItemsByRank(t *testing.T) {
 		t.Fatal(err)
 	}
 	var want strings.Builder
-	for _, suite := range []string{"banking77", "clinc150", "gsm8k", "snips"} {
+	for _, suite := range []string{"banking77", "clinc150", "gsm8k", "humanevalplus", "snips"} {
 		for _, it := range bench.FirstByRank(SplitItems(committedSplits(t, suite)), bench.SplitTest, SmokeTestItems) {
 			want.WriteString(suite + "\t" + it.ID + "\n")
 		}
@@ -169,7 +177,7 @@ func TestCommittedLock_PinsWhatTheLoadersRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string][]string{"banking77": {"categories.json", "train.csv", "test.csv"}, "clinc150": {"data_full.json"},
-		"gsm8k": {"test.jsonl"}, "snips": snipsFiles()}
+		"gsm8k": {"test.jsonl"}, "humanevalplus": {"HumanEvalPlus.jsonl.gz"}, "snips": snipsFiles()}
 	if len(lock) != len(Registry()) {
 		t.Fatalf("lock pins %v, registry has %d suites", bench.Names(lock), len(Registry()))
 	}

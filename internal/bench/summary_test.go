@@ -168,9 +168,10 @@ func TestSummarize_ArmsPairsAndTheOracle(t *testing.T) {
 		exec.set("bench/openrouter/m-cheap", q, reply{answer: map[bool]string{true: "no", false: "yes"}[q == "q002" || q == "q004"]})
 	}
 	exec.set("bench/openrouter/m-cheap", "q005", reply{answer: "perhaps"})
+	exec.set("bench/openrouter/m-cheap", "q003", reply{answer: "slow"}) // still wrong, but timed out
 	s := summarize(t, 40, exec, "fixture", "frontier", "cheapest")
 	f, c, o := s.Arms["frontier"], s.Arms["cheapest"], s.Arms[OracleArm]
-	if f.N != 40 || f.Passed != 39 || c.Passed != 35 || c.FormatFails != 1 || c.Accepted != 40 {
+	if f.N != 40 || f.Passed != 39 || c.Passed != 35 || c.FormatFails != 1 || c.Timeouts != 1 || c.Accepted != 40 {
 		t.Fatalf("frontier %+v cheapest %+v", f, c)
 	}
 	if o.Passed != 40 || o.PassRate < f.PassRate || o.PassRate < c.PassRate {
