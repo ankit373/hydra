@@ -197,3 +197,21 @@ func TestCalibration_NewChangeClearsRecovery(t *testing.T) {
 		t.Errorf("changed %v, want the second drop's date", s.Changed)
 	}
 }
+
+// A model that got better was not broken, so a rise alone dates nothing.
+func TestCalibration_RiseIsNotAChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+	writeLog(t, path, 1, [2]float64{0.70, 2000}, [2]float64{0.92, 1000})
+
+	c, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := c.Report()[0]
+	if !s.Changed.IsZero() || !s.Recovered.IsZero() {
+		t.Errorf("changed %v recovered %v after a rise, want neither", s.Changed, s.Recovered)
+	}
+	if s.SinceTotal >= 3000 {
+		t.Errorf("since %d, want routing to read the record after the rise", s.SinceTotal)
+	}
+}
