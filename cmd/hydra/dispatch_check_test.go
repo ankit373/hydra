@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/linkcheck"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -160,5 +161,12 @@ func TestDispatch_CheckCmd_WithoutPlaceholderRefused(t *testing.T) {
 	_, _, err := run(t, "dispatch", "--check", "cmd:go test ./...", "q")
 	if err == nil || !strings.Contains(err.Error(), "cannot see the answer") {
 		t.Fatalf("err = %v, want a command without {answer} or {file} refused", err)
+	}
+}
+
+func TestParseCheck_LinksIsALedgerGatedOracle(t *testing.T) {
+	c, err := parseCheck("links", "q")
+	if o, ok := c.oracle.(*linkcheck.Oracle); err != nil || !ok || o.Gate == nil || c.source != linkcheck.Source {
+		t.Fatalf("links = %+v, %v; want the link oracle behind the ledger gate", c, err)
 	}
 }

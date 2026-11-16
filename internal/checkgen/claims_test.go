@@ -6,11 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/ground"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
@@ -40,14 +40,6 @@ func claimsSpecs(t *testing.T) []Spec {
 		t.Fatalf("specs = %+v, %v", specs, err)
 	}
 	return specs
-}
-
-func TestClaims_SplitsSentencesNotNumbers(t *testing.T) {
-	got := sentences("Costs fell by 3.5 percent. She said \"it rose. Then fell.\" Did it? Yes.\n1. Revenue was $1,200.\nOK.")
-	want := []string{"Costs fell by 3.5 percent.", `She said "it rose. Then fell."`, "Did it?", "1. Revenue was $1,200."}
-	if !slices.Equal(got, want) {
-		t.Fatalf("sentences = %q, want %q", got, want)
-	}
 }
 
 func TestClaims_UnsupportedSentenceFailsGround(t *testing.T) {
@@ -178,7 +170,7 @@ func TestClaims_SentenceVerdictsCoverEverySentence(t *testing.T) {
 	}
 	for i, w := range want {
 		g := got[i]
-		if g.N != i+1 || g.Text != sentences(answer)[i] || g.Status != w.status {
+		if g.N != i+1 || g.Text != ground.Sentences(answer)[i] || g.Status != w.status {
 			t.Errorf("sentence %d = %+v, want status %s", i+1, g, w.status)
 		}
 		if w.unsupported == "" && (len(g.Unsupported) > 0 || g.Why != "") {
