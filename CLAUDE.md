@@ -90,6 +90,8 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           and payload store, and refuses (`ErrNoOriginals`) when any text is missing.
                           `Eligible` decides if a conversation may be compacted now (quiet, filling, a
                           local model, AC power, low load and memory pressure) and says why when not.
+                          `Build` writes a `Pack` on a local head (remote only on opt-in): a note per new turn, then
+                          `State` as JSON; constraints and files from code, incremental from the last pack's `Covers`.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,
