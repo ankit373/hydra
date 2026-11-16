@@ -16,6 +16,6 @@ checks = ["ground"]
 #
 # arms = ["ground", "judge-a"]
 # [models]
-# judge-a = "openrouter:<model id>"
+# judge-a = "openrouter:<model id>"   # or "ollama:<name>": local, $0, no [prices] row
 # [cutoffs]
 # "<model id>" = "<stated training cutoff, or unstated>"

@@ -225,6 +225,7 @@ func TestDirect_WorstCaseCoversEveryModelAndRefusesUnpriced(t *testing.T) {
 func TestParseModel(t *testing.T) {
 	for spec, ok := range map[string]bool{
 		"bedrock:amazon.nova-micro-v1:0":  true,
+		"ollama:qwen3:8b":                 true,
 		"openrouter:anthropic/claude-4.5": true,
 		"bedrock:<strongest Opus id>":     false,
 		"anthropic:claude":                false,

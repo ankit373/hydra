@@ -80,7 +80,11 @@ func DetectionTable(sums []Summary) string {
 			}
 			models := "none"
 			if ms := s.Breadcrumb.Arms[arm].Models; len(ms) > 0 {
-				models = strings.Join(ms, ", ")
+				labels := make([]string, len(ms))
+				for i, m := range ms {
+					labels[i] = modelLabel(m)
+				}
+				models = strings.Join(labels, ", ")
 			}
 			fmt.Fprintf(&b, "| %s | %s | %s | %.1f (%.1f–%.1f) of %d | %.1f (%.1f–%.1f) of %d |\n",
 				s.Breadcrumb.Suite, arm, models, 100*d.Recall, 100*d.RecallWilson[0], 100*d.RecallWilson[1], d.Positives,
@@ -125,6 +129,14 @@ func fieldTable(sums []Summary) string {
 		}
 	}
 	return b.String()
+}
+
+// modelLabel says a local model is local, so its number is not read as a hosted one's.
+func modelLabel(spec string) string {
+	if m, ok := strings.CutPrefix(spec, Local+":"); ok {
+		return m + " (local)"
+	}
+	return spec
 }
 
 // armOrder puts the frontier first, the computed oracle last, and the rest by name.

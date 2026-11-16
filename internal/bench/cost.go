@@ -36,7 +36,10 @@ func Snapshot(lookup PriceLookup, fetchedAt time.Time, models []string, refs map
 	out := PriceSnapshot{}
 	for _, m := range models {
 		if p, ok := overrides[m]; ok {
-			p.Model, p.Ref = m, "override"
+			p.Model = m
+			if p.Ref == "" {
+				p.Ref = "override"
+			}
 			out[m] = p
 			continue
 		}
