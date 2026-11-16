@@ -129,7 +129,12 @@ func (s *streamer) finish(ans Answer, usage bool) {
 	}
 
 	reason := finishReason(ans)
-	s.frame(chunk{Delta: delta{}, Finish: &reason})
+	last := s.chunk(chunk{Delta: delta{}, Finish: &reason})
+	// The headers left with the first frame, so a verdict reached only now rides here.
+	if ans.Evidence != nil && ans.Evidence.CheckResult != "" {
+		last["hydra"] = ans.Evidence
+	}
+	s.raw(last)
 	if usage {
 		// The documented shape: a final chunk with an EMPTY choices array whose
 		// only payload is usage.
@@ -181,13 +186,15 @@ func (s *streamer) begin(head, model string) {
 	s.frame(chunk{Delta: delta{Role: role}})
 }
 
-func (s *streamer) frame(c chunk) {
+func (s *streamer) frame(c chunk) { s.raw(s.chunk(c)) }
+
+func (s *streamer) chunk(c chunk) map[string]any {
 	c.Index = 0
-	s.raw(map[string]any{
+	return map[string]any{
 		"id": s.id, "object": "chat.completion.chunk",
 		"created": time.Now().Unix(), "model": s.model,
 		"choices": []chunk{c},
-	})
+	}
 }
 
 func (s *streamer) raw(v any) {

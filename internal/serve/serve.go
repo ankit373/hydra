@@ -71,6 +71,8 @@ type Request struct {
 	Objective rank.Objective
 	// Conversation is ConversationHeader as sent; empty when it was not.
 	Conversation string
+	// Checks are the CheckHeader values, already known to be ones serve takes.
+	Checks []string
 
 	// RequestID is what this request is traceable by. serve mints it and the
 	// router adopts it as the run id, so the value a client is handed back is
@@ -262,7 +264,7 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 }
 
 // parseTarget reads what a request asks of the router beyond its conversation:
-// the route, the class the client named, its ceiling and its temperature.
+// the route, the class the client named, its ceiling, temperature and checks.
 func parseTarget(h http.Header, in chatRequest) (Request, error) {
 	route, err := parseRoute(in.Model)
 	if err != nil {
@@ -284,7 +286,11 @@ func parseTarget(h http.Header, in chatRequest) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling, Objective: obj, Conversation: conv}
+	checks, err := requestChecks(h)
+	if err != nil {
+		return Request{}, err
+	}
+	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling, Objective: obj, Conversation: conv, Checks: checks}
 	// Temperature is opt-in with the class header: serve ignored it before E1,
 	// and a client that never asked for the new contract must not get a 400.
 	if class != "" {

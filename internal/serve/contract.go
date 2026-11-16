@@ -31,6 +31,13 @@ const (
 	// whose opening messages change between turns. Request only.
 	ConversationHeader = "X-Hydra-Conversation"
 
+	// CheckHeader names a check the answer must pass, repeatable; see Checks.
+	CheckHeader = "X-Hydra-Check"
+	// CheckResultHeader is the served answer's verdict: CheckPassed, CheckFailed or CheckNotChecked.
+	CheckResultHeader = "X-Hydra-Check-Result"
+	// CheckDetailHeader is one line on that verdict: what failed, what could not run, or what passed.
+	CheckDetailHeader = "X-Hydra-Check-Detail"
+
 	// DeprecationHeader (RFC 9745) marks a reply whose route relied on the
 	// implicit `hydra` default, which v2.0.0 changes (#1206).
 	DeprecationHeader = "Deprecation"
@@ -39,6 +46,30 @@ const (
 	// deprecationLink is RFC 9745's rel="deprecation" pointer to what changes.
 	deprecationLink = `<https://hydra.uvansa.com/docs.html#serve-objective>; rel="deprecation"; type="text/html"`
 )
+
+// The verdicts CheckResultHeader takes. A check that could not run is never a pass.
+const (
+	CheckPassed     = "passed"
+	CheckFailed     = "failed"
+	CheckNotChecked = "not_checked"
+)
+
+// Checks are the checks a request may name: the ones that need no file on this machine.
+var Checks = []string{"ground", "match:pattern=<re>", "gen"}
+
+// requestChecks reads every CheckHeader value. Each is one check, never split on
+// commas, since a pattern may hold one.
+func requestChecks(h http.Header) ([]string, error) {
+	var out []string
+	for _, v := range h.Values(CheckHeader) {
+		c := strings.TrimSpace(v)
+		if c != "ground" && c != "gen" && !strings.HasPrefix(c, "match:pattern=") {
+			return nil, fmt.Errorf("%s: unknown check %q, want one of %s", CheckHeader, c, strings.Join(Checks, ", "))
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
 
 // Deprecator is an optional Router extension. Deprecated reports that a
 // request relies on a default a later major changes.
@@ -63,6 +94,9 @@ type Evidence struct {
 	// Objective is empty on a pinned route, where nothing was ordered by one.
 	Objective  string `json:"objective,omitempty"`
 	PPassBasis string `json:"p_pass_basis,omitempty"`
+	// CheckResult is set only when the request named a check; see CheckResultHeader.
+	CheckResult string `json:"check_result,omitempty"`
+	CheckDetail string `json:"check_detail,omitempty"`
 }
 
 // setEvidenceHeaders is shared by the buffered and streamed replies, so the
@@ -74,6 +108,8 @@ func setEvidenceHeaders(h http.Header, ev *Evidence) {
 	setNonEmpty(h, TaskClassHeader, ev.TaskClass)
 	setNonEmpty(h, ObjectiveHeader, ev.Objective)
 	setNonEmpty(h, BasisHeader, ev.PPassBasis)
+	setNonEmpty(h, CheckResultHeader, ev.CheckResult)
+	setNonEmpty(h, CheckDetailHeader, ev.CheckDetail)
 }
 
 func setNonEmpty(h http.Header, name, v string) {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -101,10 +102,20 @@ type escalation struct {
 }
 
 // escalationFor is set up only for a buffered, tool-free request ordered by an objective
-// whose class has a verifier; every other request dispatches exactly as before.
-// A tool call has no text a verifier could read.
-func (r serveRouter) escalationFor(ev *serve.Evidence, req serve.Request, opts *dispatch.Options) *escalation {
-	if ev == nil || req.OnEvent != nil || len(req.Tools) > 0 || opts.Objective == "" || len(r.verifiers[ev.TaskClass]) == 0 {
+// whose class has a verifier, or that named one (named); every other request dispatches
+// exactly as before. A tool call has no text a verifier could read.
+func (r serveRouter) escalationFor(ev *serve.Evidence, req serve.Request, opts *dispatch.Options, named []decide.Verifier) *escalation {
+	if ev == nil || req.OnEvent != nil || len(req.Tools) > 0 || opts.Objective == "" {
+		return nil
+	}
+	verifiers := slices.Clone(r.verifiers[ev.TaskClass])
+	for _, n := range named {
+		// One source counted twice would double its evidence.
+		if !slices.ContainsFunc(verifiers, func(v decide.Verifier) bool { return v.Source == n.Source }) {
+			verifiers = append(verifiers, n)
+		}
+	}
+	if len(verifiers) == 0 {
 		return nil
 	}
 	// The whole cascade, its first head included, spends within one ceiling:
@@ -117,7 +128,7 @@ func (r serveRouter) escalationFor(ev *serve.Evidence, req serve.Request, opts *
 		MaxEscalations: r.maxEscalations,
 		Cal:            r.cal,
 		Domain:         ev.TaskClass,
-		Verifiers:      r.verifiers[ev.TaskClass],
+		Verifiers:      verifiers,
 		// A head's score is a prior, often a catalogue guess: only a verdict accepts.
 		NeedsVerdict: true,
 	}}

@@ -122,6 +122,7 @@ func checkRule(opts *dispatch.Options, checks []answerCheck, max int) *decide.On
 // never a pass, so one alone keeps the answer from counting as verified.
 type verified struct {
 	failed, unchecked []string // "<check>: <reason>"
+	passed            []string // check names
 }
 
 func (v *verified) add(check string, checked, passed bool, detail string) {
@@ -130,6 +131,23 @@ func (v *verified) add(check string, checked, passed bool, detail string) {
 		v.unchecked = append(v.unchecked, check+": "+oneLine(detail))
 	case !passed:
 		v.failed = append(v.failed, check+": "+oneLine(detail))
+	default:
+		v.passed = append(v.passed, check)
+	}
+}
+
+// addGen adds every generated check's verdict, or one not checked when none could be written.
+func (v *verified) addGen(o genOutcome) {
+	if o.err != nil {
+		v.add("gen", false, false, genWhy(o.err))
+		return
+	}
+	for _, x := range o.results {
+		detail := x.Verdict.Detail
+		if !x.Checked() {
+			detail = genWhy(x.Err)
+		}
+		v.add(x.Spec.Check(), x.Checked(), x.Verdict.Passed, detail)
 	}
 }
 
@@ -144,14 +162,18 @@ func (v verified) status() exitStatus {
 	return 0
 }
 
+// why is the reason behind status: the failures, else the checks that could not run.
+func (v verified) why() string {
+	if len(v.failed) > 0 {
+		return strings.Join(v.failed, "; ")
+	}
+	return strings.Join(v.unchecked, "; ")
+}
+
 // report is the last line of a dispatch whose answer failed or was not checked.
 func (v verified) report() {
-	why := v.failed
-	if len(why) == 0 {
-		why = v.unchecked
-	}
-	if len(why) > 0 {
-		fmt.Fprintf(stdout, "  %s\n\n", warnStyle.Render("not verified: "+strings.Join(why, "; ")))
+	if why := v.why(); why != "" {
+		fmt.Fprintf(stdout, "  %s\n\n", warnStyle.Render("not verified: "+why))
 	}
 }
 
