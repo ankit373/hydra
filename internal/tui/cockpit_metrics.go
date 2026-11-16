@@ -7,6 +7,7 @@ package tui
 // never invent a figure, but a figure that exists must be shown, not dropped.
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -44,6 +45,9 @@ type ckMetrics struct {
 	graph      *graph.Graph // nil when graph.json is absent
 	calibrator *trust.Calibrator
 	trustStats *trust.Stats // nil when no consensus run was ever recorded
+	// driftNotice names the heads whose record dropped or came back in the
+	// last 7 days, for the first screen; "" when none did.
+	driftNotice string
 }
 
 // ckModelStat aggregates one model's cost rows for the detail panel.
@@ -90,6 +94,7 @@ func ckLoadMetrics(pr *pricing.DB) ckMetrics {
 	}
 	if cal, err := trust.New(trust.DefaultPath()); err == nil {
 		m.calibrator = cal
+		m.driftNotice = ckDriftNotice(cal.Report(), time.Now())
 	}
 	if runs, err := trust.LoadRuns(trust.DefaultLogPath()); err == nil && len(runs) > 0 {
 		st := trust.Aggregate(runs, ckFixedSwarmN)
@@ -281,4 +286,52 @@ func ckSourceMatches(source, key string) bool {
 	}
 	ls, lk := strings.ToLower(source), strings.ToLower(key)
 	return ls == lk || strings.Contains(ls, lk) || strings.Contains(lk, ls)
+}
+
+// ckDriftWindow is how recent a drop or recovery must be to reach the first screen.
+const ckDriftWindow = 7 * 24 * time.Hour
+
+// ckDriftLine says what the cell's record did, worse since its drop or back to
+// normal since it recovered, and the record since a drop. "" with no drop.
+func ckDriftLine(s trust.Stat) (line, since string) {
+	switch {
+	case !s.Recovered.IsZero():
+		return fmt.Sprintf("back to normal at %s since %s", trust.KindLabel(s.Domain), s.Recovered.Local().Format("2 Jan")), ""
+	case !s.Changed.IsZero():
+		return fmt.Sprintf("worse at %s since %s", trust.KindLabel(s.Domain), s.Changed.Local().Format("2 Jan")),
+			fmt.Sprintf("%d of %d right since", s.SinceCorrect, s.SinceTotal)
+	}
+	return "", ""
+}
+
+// ckDriftNotice is one line naming at most three heads whose record dropped or
+// recovered within ckDriftWindow of now, newest first.
+func ckDriftNotice(stats []trust.Stat, now time.Time) string {
+	type event struct {
+		at   time.Time
+		text string
+	}
+	var events []event
+	for _, s := range stats {
+		at, word := s.Changed, "worse at"
+		if !s.Recovered.IsZero() {
+			at, word = s.Recovered, "back at"
+		}
+		if !at.IsZero() && now.Sub(at) <= ckDriftWindow {
+			events = append(events, event{at, fmt.Sprintf("%s %s %s", s.Source, word, trust.KindLabel(s.Domain))})
+		}
+	}
+	if len(events) == 0 {
+		return ""
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].at.After(events[j].at) })
+	parts := make([]string, 0, 3)
+	for _, e := range events[:min(3, len(events))] {
+		parts = append(parts, e.text)
+	}
+	line := "this week: " + strings.Join(parts, ", ")
+	if more := len(events) - len(parts); more > 0 {
+		line += fmt.Sprintf(", %d more in hyctl trust calibration", more)
+	}
+	return line
 }

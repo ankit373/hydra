@@ -416,14 +416,14 @@ func (m Cockpit) chatMain(t *ckThread, w, h int) string {
 		logH = 1
 	}
 	rows = append(rows, lipgloss.NewStyle().Width(w).Height(logH).
-		Render(ckVisibleLog(ckWithMark(t, w, logH), w, logH, t.scroll-1)))
+		Render(ckVisibleLog(ckWithMark(t, w, logH, m.metrics.driftNotice), w, logH, t.scroll-1)))
 	rows = append(rows, input)
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// ckWithMark puts the mark and the starters around a thread that has run
-// nothing yet; the mark only when the pane has room. Both go with the first task.
-func ckWithMark(t *ckThread, w, logH int) []string {
+// ckWithMark puts the mark, the starters and any drift notice around a thread
+// that has run nothing yet; the mark only when the pane has room.
+func ckWithMark(t *ckThread, w, logH int, notice string) []string {
 	log := t.displayLog()
 	if t.name != "" {
 		return log
@@ -431,6 +431,9 @@ func ckWithMark(t *ckThread, w, logH int) []string {
 	log = append(log[:len(log):len(log)], "")
 	for i, s := range ckStarters {
 		log = append(log, ckDimS.Render(truncate(fmt.Sprintf("%d %s", i+1, s), w)))
+	}
+	if notice != "" {
+		log = append(log, "", ckExpS.Render(truncate(notice, w)))
 	}
 	mark := strings.Split(Mark(), "\n")
 	if w < markWidth+1 || len(ckLogLines(log, w, ckLogEntryCap))+len(mark)+1 > logH {

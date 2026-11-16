@@ -3,6 +3,10 @@
 package tui
 
 import (
+	"fmt"
+	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -329,5 +333,75 @@ func TestModels_NarrowShowsOneWholePane(t *testing.T) {
 	}
 	if !strings.Contains(out, "esc back") {
 		t.Errorf("the focused detail does not say how to go back:\n%s", out)
+	}
+}
+
+// ckDriftCal is a calibrator whose qwen cell at summary ran at 0.92, then at
+// each later rate for 300 answers, seeded so the stream is fixed.
+func ckDriftCal(t *testing.T, rates ...float64) *trust.Calibrator {
+	t.Helper()
+	r := rand.New(rand.NewPCG(1876, 1))
+	var b strings.Builder
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	step := 0
+	write := func(rate float64, n int) {
+		for range n {
+			outcome := 2 // trust.OutcomeIncorrect
+			if r.Float64() < rate {
+				outcome = 1
+			}
+			fmt.Fprintf(&b, `{"ts":%q,"source":"ollama/qwen2.5-coder:7b","domain":"summary.general",`+
+				`"said_correct":true,"outcome":%d}`+"\n", start.Add(time.Duration(step)*time.Minute).Format(time.RFC3339), outcome)
+			step++
+		}
+	}
+	write(0.92, 2000)
+	for _, rate := range rates {
+		write(rate, 300)
+	}
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cal, err := trust.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cal
+}
+
+// qwenDetail renders the models detail with qwen selected.
+func qwenDetail(t *testing.T, cal *trust.Calibrator) (string, trust.Stat) {
+	t.Helper()
+	m := testCockpit()
+	m.metrics.calibrator = cal
+	for i, f := range m.flatRows() {
+		if f.r >= 0 && m.groups[f.g].rows[f.r].id == "ollama/qwen2.5-coder:7b" {
+			m.modelSel = i
+		}
+	}
+	return stripANSI(m.modelDetail(120)), cal.Report()[0]
+}
+
+func TestModelsView_ShowsChange(t *testing.T) {
+	out, s := qwenDetail(t, ckDriftCal(t, 0.60))
+	if s.Changed.IsZero() {
+		t.Fatal("the seeded drop was not found")
+	}
+	want := "worse at summary since " + s.Changed.Local().Format("2 Jan")
+	since := fmt.Sprintf("%d of %d right since", s.SinceCorrect, s.SinceTotal)
+	if !strings.Contains(out, want) || !strings.Contains(out, since) {
+		t.Errorf("detail lacks %q and %q:\n%s", want, since, out)
+	}
+}
+
+func TestModelsView_ShowsRecovery(t *testing.T) {
+	out, s := qwenDetail(t, ckDriftCal(t, 0.60, 0.92, 0.92, 0.92))
+	if s.Recovered.IsZero() {
+		t.Fatal("the seeded recovery was not found")
+	}
+	want := "back to normal at summary since " + s.Recovered.Local().Format("2 Jan")
+	if !strings.Contains(out, want) || strings.Contains(out, "worse at") {
+		t.Errorf("detail lacks %q, or still says worse:\n%s", want, out)
 	}
 }
