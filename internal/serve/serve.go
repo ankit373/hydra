@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 )
@@ -78,6 +79,11 @@ type Request struct {
 	// router adopts it as the run id, so the value a client is handed back is
 	// one `hyctl trace view` resolves rather than an unrelated random (#1149).
 	RequestID string
+
+	// Redact is the client's RedactHeader. Vault is always set: the router fills
+	// it when redaction runs, by header or by policy, and serve restores from it.
+	Redact bool
+	Vault  *policy.Vault
 
 	// OnEvent is set only when the client asked for a stream. A router that
 	// ignores it still answers correctly: its whole output then arrives when
@@ -231,6 +237,7 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 		writeError(w, statusFor(err), err.Error())
 		return
 	}
+	setRedacted(w.Header(), base)
 
 	body := map[string]any{
 		// The same value as the header, and a run id, so a client that logged
@@ -290,7 +297,12 @@ func parseTarget(h http.Header, in chatRequest) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling, Objective: obj, Conversation: conv, Checks: checks}
+	redact, err := redactRequested(h)
+	if err != nil {
+		return Request{}, err
+	}
+	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling, Objective: obj,
+		Conversation: conv, Checks: checks, Redact: redact, Vault: policy.NewVault()}
 	// Temperature is opt-in with the class header: serve ignored it before E1,
 	// and a client that never asked for the new contract must not get a 400.
 	if class != "" {
@@ -306,7 +318,7 @@ func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatReque
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
-	st := newStreamer(w, in.Model, base.RequestID)
+	st := newStreamer(w, in.Model, base)
 	ans, err := r.Chat(ctx, request(in, base, func(e Event) { st.event(e, cancel) }))
 	st.done = true
 
