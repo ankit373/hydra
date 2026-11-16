@@ -888,6 +888,7 @@ func cmdDispatch() *cobra.Command {
 		verifyRun    bool
 		checks       []string
 		maxEsc       int
+		requirePass  bool
 	)
 
 	cmd := &cobra.Command{
@@ -941,6 +942,9 @@ func cmdDispatch() *cobra.Command {
 			answerChecks, gen, err := parseChecks(checks, prompt)
 			if err != nil {
 				return err
+			}
+			if requirePass && (len(checks) == 0 || dryRun) {
+				return errors.New("--require-pass needs a --check and an answer to check, so not --dry-run")
 			}
 			if maxEsc < 0 {
 				return fmt.Errorf("--max-escalations must be 0 or more, got %d", maxEsc)
@@ -1342,12 +1346,17 @@ func cmdDispatch() *cobra.Command {
 			// Every way the answer reaches the screen ends here, so a check runs on all of them.
 			finish := func() error {
 				printOutputWarning(result.OutputProvenance)
-				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID)
+				var v verified
+				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID, &v)
 				genKind := ""
 				if cmd.Flags().Changed("kind") {
 					genKind = domain
 				}
-				genRun{want: gen, d: d, kind: genKind, runID: runID, maxUSD: maxUSD, localOnly: localOnly}.run(ctx, result, prompt)
+				genRun{want: gen, d: d, kind: genKind, runID: runID, maxUSD: maxUSD, localOnly: localOnly}.run(ctx, result, prompt, &v)
+				v.report()
+				if requirePass && v.status() != 0 {
+					return v.status()
+				}
 				return nil
 			}
 			if sr != nil && sr.Streamed() {
@@ -1414,6 +1423,7 @@ func cmdDispatch() *cobra.Command {
 		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file}). "+
 		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error. "+
 		"gen runs checks written for the request's --kind by a head of another family where one exists, gen:<check> one of them, e.g. gen:roundtrip; these only report")
+	cmd.Flags().BoolVar(&requirePass, "require-pass", false, "with --check, exit 1 when the answer failed a check and 2 when a check could not run, so a script can gate on it")
 	cmd.Flags().IntVar(&maxEsc, "max-escalations", 1, "with --check, how many stronger heads a failed check may ask; default from policy.yaml max_retries and escalate_on_fail, 0 turns it off")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")

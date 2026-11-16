@@ -93,19 +93,23 @@ type genRun struct {
 	localOnly bool
 }
 
-// run generates each check with a head PickGenerator chose, runs it on the answer and
-// prints a line per check and the label. It never fails the dispatch.
-func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string) {
+// run generates each check with a head PickGenerator chose, runs it on the answer,
+// prints a line per check and the label, and adds each verdict to v. It never fails the dispatch.
+func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string, v *verified) {
 	if !g.want.asked() {
 		return
 	}
+	notChecked := func(check string, err error) {
+		printGenNotChecked(check, err)
+		v.add(check, false, false, genWhy(err))
+	}
 	if g.kind == "" {
-		printGenNotChecked("gen", errors.New("no kind of work: name one with --kind"))
+		notChecked("gen", errors.New("no kind of work: name one with --kind"))
 		return
 	}
 	gens := g.want.generators(g.kind)
 	if len(gens) == 0 {
-		printGenNotChecked("gen", fmt.Errorf("no generated check for %s", g.kind))
+		notChecked("gen", fmt.Errorf("no generated check for %s", g.kind))
 		return
 	}
 	// Only heads that can run: a pick nothing can drive would leave every check not checked.
@@ -114,7 +118,7 @@ func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string) {
 	})
 	h, same, ok := checkgen.PickGenerator(heads, g.d.PricedScores(heads, g.kind), r.Head, nil, g.localOnly)
 	if !ok {
-		printGenNotChecked("gen", errors.New("no head can write the checks"))
+		notChecked("gen", errors.New("no head can write the checks"))
 		return
 	}
 	spend := &genSpend{maxUSD: g.maxUSD, spent: r.CostUSD, chat: g.d.Dispatch}
@@ -157,7 +161,7 @@ func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string) {
 			err = errors.New("nothing in this request to check")
 		}
 		if err != nil {
-			printGenNotChecked("gen:"+gen.Kind(), err)
+			notChecked("gen:"+gen.Kind(), err)
 			all = append(all, checkgen.Result{Spec: checkgen.Spec{Kind: gen.Kind()}, Err: err})
 			continue
 		}
@@ -167,6 +171,11 @@ func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string) {
 		}
 		for _, x := range res {
 			printGenResult(x)
+			detail := x.Verdict.Detail
+			if !x.Checked() {
+				detail = genWhy(x.Err)
+			}
+			v.add(x.Spec.Check(), x.Checked(), x.Verdict.Passed, detail)
 		}
 		all = append(all, res...)
 	}
@@ -210,11 +219,15 @@ func printFieldVerdicts(fields []checkgen.FieldVerdict) {
 	fmt.Fprintf(stdout, "    %s\n", dimStyle.Render(fmt.Sprintf("%d of %d fields ok", ok, len(fields))))
 }
 
-// printGenNotChecked says why a generated check did not run; a spent budget is named as such.
+// printGenNotChecked says why a generated check did not run.
 func printGenNotChecked(check string, err error) {
-	why := err.Error()
+	fmt.Fprintf(stdout, "  %s  %s  %s\n", warnStyle.Render("NOT CHECKED"), check, dimStyle.Render(genWhy(err)))
+}
+
+// genWhy names a spent budget as such.
+func genWhy(err error) string {
 	if errors.Is(err, errGenBudget) {
-		why = "budget"
+		return "budget"
 	}
-	fmt.Fprintf(stdout, "  %s  %s  %s\n", warnStyle.Render("NOT CHECKED"), check, dimStyle.Render(why))
+	return err.Error()
 }

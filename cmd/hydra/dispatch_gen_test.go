@@ -45,7 +45,8 @@ func TestDispatch_CheckGen_NoKindNotChecked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
 	}
-	if !strings.Contains(out, "NOT CHECKED  gen  no kind of work") || strings.Contains(out, "PASS") {
+	if !strings.Contains(out, "NOT CHECKED  gen  no kind of work") || strings.Contains(out, "PASS") ||
+		!strings.Contains(out, "not verified: gen: no kind of work") {
 		t.Fatalf("a dispatch with no kind did not say so:\n%s", out)
 	}
 }

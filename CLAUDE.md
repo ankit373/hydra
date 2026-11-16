@@ -483,6 +483,8 @@ hyctl trust joint ; hyctl trust joint --domain go --json
 hyctl dispatch --check ground "summarise this: <fenced source>"
 # Fetch every cited link (ledger-gated, the URL alone leaves); dead link or misquote fails
 hyctl dispatch --kind answer --check links "what did the regulator decide? cite your sources"
+# Gate a script on it: 0 passed, 1 a check failed, 2 a check could not run
+hyctl dispatch --check ground --require-pass "summarise this: <fenced source>"
 hyctl edit --file "$PWD/internal/auth/token.go" --enum MODERATE --prompt "rotate signing key"
 hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain <task_hash>
 

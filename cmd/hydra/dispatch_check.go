@@ -118,15 +118,56 @@ func checkRule(opts *dispatch.Options, checks []answerCheck, max int) *decide.On
 	return esc
 }
 
-// runChecks reports and files every answer esc judged, the served one r last.
-// It never fails the dispatch.
-func runChecks(ctx context.Context, checks []answerCheck, esc *decide.OnFail, r *dispatch.Result, prompt, enum, domain, runID string) {
+// verified sums up the served answer's checks. A check that could not run is
+// never a pass, so one alone keeps the answer from counting as verified.
+type verified struct {
+	failed, unchecked []string // "<check>: <reason>"
+}
+
+func (v *verified) add(check string, checked, passed bool, detail string) {
+	switch {
+	case !checked:
+		v.unchecked = append(v.unchecked, check+": "+oneLine(detail))
+	case !passed:
+		v.failed = append(v.failed, check+": "+oneLine(detail))
+	}
+}
+
+// status is the --require-pass exit code, the same ones `hyctl oracle ground` uses.
+func (v verified) status() exitStatus {
+	switch {
+	case len(v.failed) > 0:
+		return groundUnsupported
+	case len(v.unchecked) > 0:
+		return groundNotChecked
+	}
+	return 0
+}
+
+// report is the last line of a dispatch whose answer failed or was not checked.
+func (v verified) report() {
+	why := v.failed
+	if len(why) == 0 {
+		why = v.unchecked
+	}
+	if len(why) > 0 {
+		fmt.Fprintf(stdout, "  %s\n\n", warnStyle.Render("not verified: "+strings.Join(why, "; ")))
+	}
+}
+
+// runChecks reports and files every answer esc judged, the served one r last,
+// and adds the served answer's verdicts to v. It never fails the dispatch.
+func runChecks(ctx context.Context, checks []answerCheck, esc *decide.OnFail, r *dispatch.Result, prompt, enum, domain, runID string, v *verified) {
 	if len(checks) == 0 {
 		return
 	}
 	// A cached answer is served without reaching the hook, so it is judged here.
 	if len(esc.Answers()) == 0 {
 		esc.Judge(ctx, r)
+	}
+	served := esc.Verdicts()[len(esc.Verdicts())-len(checks):]
+	for k, c := range checks {
+		v.add(c.source, served[k].Checked, served[k].Passed, served[k].Detail)
 	}
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
