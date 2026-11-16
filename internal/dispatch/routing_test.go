@@ -34,7 +34,7 @@ func routingDispatcher() *Dispatcher {
 	}
 	return &Dispatcher{
 		cfg: &config.Config{}, heads: heads,
-		policy: policy.New(policy.DefaultRules(false)),
+		policy: policy.New(policy.DefaultRules("")),
 		budget: budget.NewRegistry(nil),
 	}
 }

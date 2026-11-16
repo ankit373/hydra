@@ -869,6 +869,7 @@ func cmdDispatch() *cobra.Command {
 		maxCost   float64
 		maxUSD    float64
 		noStream  bool
+		redact    bool
 		// swarm flags
 		doSwarm       bool
 		swarmMode     string
@@ -1041,6 +1042,7 @@ func cmdDispatch() *cobra.Command {
 			if d.PIILocalOnly() && touchesPII {
 				localOnly = true
 			}
+			redact = redact || (d.PIIRedact() && touchesPII)
 			// The code graph is loaded once and read twice: the rules want the
 			// dependent count, a measurement, and the defect model wants its
 			// own derived radius. Two loads of the same file would be a second
@@ -1083,7 +1085,8 @@ func cmdDispatch() *cobra.Command {
 			// only the plain one.
 			printRuleDecision(stdout, ruleDecision, dryRun)
 
-			if file != "" || irreversible || production || touchesPII {
+			// Redacted PII never reaches a hosted head, so it alone does not demand an ensemble.
+			if file != "" || irreversible || production || (touchesPII && !redact) {
 				radius := 1.0
 				if file != "" {
 					radius = g.BlastRadiusForFile(file)
@@ -1129,6 +1132,11 @@ func cmdDispatch() *cobra.Command {
 				EnumTier:     enumTier,
 			})
 
+			// Placeholders are restored inside Dispatch; the ensembles call heads directly.
+			if redact && (effectiveConf > 0 || doSwarm) {
+				return errors.New("--redact runs a single dispatch; it does not combine " +
+					"with --swarm or a confidence run (--confidence, --file, --irreversible, --production)")
+			}
 			// A check judges one answer and scores its span; an ensemble has neither yet.
 			if (len(checks) > 0 || sourceOnly) && (effectiveConf > 0 || doSwarm) {
 				return errors.New("--check and --source-only judge a single dispatch's answer; it does not combine " +
@@ -1286,6 +1294,7 @@ func cmdDispatch() *cobra.Command {
 				// next dispatch is ranked for (#885).
 				Domain:   domain,
 				Decision: &ruleDecision,
+				Redact:   redact,
 			}
 
 			// Streamed on a terminal only. A pipe keeps the buffered rendering
@@ -1307,7 +1316,8 @@ func cmdDispatch() *cobra.Command {
 
 			var sr *streamRenderer
 			// A streamed answer cannot be taken back once a check rejects it.
-			streamable := opts.Retry == nil && !sourceOnly
+			// Nor can a redacted one, whose placeholders are restored only at the end.
+			streamable := opts.Retry == nil && !sourceOnly && !redact
 			if !dryRun && !noStream && streamable && isatty.IsTerminal(os.Stdout.Fd()) {
 				w, h := terminalSize()
 				sr = newStreamRenderer(stdout, runID, w, h, d.CapturesPayloads())
@@ -1419,6 +1429,7 @@ func cmdDispatch() *cobra.Command {
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, result.Output)
 			fmt.Fprintln(stdout)
+			printRedaction(result)
 			return finish()
 		},
 	}
@@ -1434,6 +1445,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE, selects the tier when --tier is unset")
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
 	cmd.Flags().Float64Var(&maxUSD, "max-usd", 0, "spend cap for the request in USD: once the answer and its generated checks have spent it, the remaining checks are not checked (0 = none)")
+	cmd.Flags().BoolVar(&redact, "redact", false, "send a hosted model placeholders for detected emails, keys and numbers, and restore them in the answer locally")
 	cmd.Flags().BoolVar(&noStream, "no-stream", false, "print the answer in one block instead of as it arrives, and draw no fan-out panel (piped output never streams)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
@@ -3447,6 +3459,21 @@ func printPolicyAudit(r *security.Report) {
 // It prints after the output rather than before, so the warning is the last
 // thing on screen when the orchestration protocol's next step is to apply that
 // output to disk.
+// printRedaction says how many values a hosted model saw as placeholders, and
+// names any placeholder it wrote that Hydra never issued.
+func printRedaction(r *dispatch.Result) {
+	if r.Redacted == 0 {
+		return
+	}
+	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
+		"redacted: %s saw %d value(s) as placeholders; the answer above has them restored", r.Head.Name, r.Redacted)))
+	if len(r.Unrestored) > 0 {
+		fmt.Fprintf(stdout, "  %s the answer names placeholders Hydra never issued: %s\n",
+			warnStyle.Render("⚠"), util.SafeTerminal(strings.Join(r.Unrestored, ", ")))
+	}
+	fmt.Fprintln(stdout)
+}
+
 func printOutputWarning(p egress.Part) {
 	if p.Sens < egress.Secret {
 		return

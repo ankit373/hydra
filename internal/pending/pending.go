@@ -62,6 +62,7 @@ type Question struct {
 	MaxCostSource string   `json:"maxCostSource,omitempty"`
 	NoCache       bool     `json:"noCache,omitempty"`
 	Objective     string   `json:"objective,omitempty"`
+	Redact        bool     `json:"redact,omitempty"`
 }
 
 // Dir is where parked tasks live, alongside the run logs.
