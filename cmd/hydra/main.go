@@ -1406,6 +1406,7 @@ func cmdDispatch() *cobra.Command {
 			}
 			if sr != nil && sr.Streamed() {
 				sr.Finish(result.InputTokens, result.OutputTokens, result.Duration, result.TTFT)
+				printDriftNotice(result, domain)
 				return finish()
 			}
 			if sr != nil {
@@ -1426,6 +1427,7 @@ func cmdDispatch() *cobra.Command {
 				dimStyle.Render(fmt.Sprintf("(%d→%d tokens)", result.InputTokens, result.OutputTokens)),
 				result.Duration.Milliseconds(),
 			)
+			printDriftNotice(result, domain)
 			fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 56)))
 			fmt.Fprintln(stdout)
 			fmt.Fprintln(stdout, result.Output)
