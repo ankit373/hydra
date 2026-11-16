@@ -178,7 +178,9 @@ internal/otlp/          ← Run log → nested OpenTelemetry spans (OTLP/HTTP JS
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/signals/       ← Routing signals + a small closed expression language + priority-ordered
                           rules (registry/signals.yaml). Evaluated once per dispatch.
-internal/policy/        ← PII detection + local-only enforcement.
+internal/policy/        ← PII detection + local-only enforcement. `Redact` labels hits for storage;
+                          `RedactReversible` numbers them (<<EMAIL_1>>) into an in-memory `Vault` whose
+                          `Restore` puts values back and reports placeholders it never issued.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).
