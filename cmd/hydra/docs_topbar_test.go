@@ -30,7 +30,7 @@ func topbarMarkup(t *testing.T, page string) string {
 func docsPages(t *testing.T) []string {
 	t.Helper()
 	var pages []string
-	for _, glob := range []string{"*.html", "blog/*.html"} {
+	for _, glob := range []string{"*.html", "blog/*.html", "releases/*.html"} {
 		ms, err := filepath.Glob(filepath.Join("..", "..", "docs", glob))
 		if err != nil {
 			t.Fatal(err)

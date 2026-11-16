@@ -189,6 +189,7 @@ Settings live in `~/.hydra/config.toml`: [configuration](https://hydra.uvansa.co
 - [First principles](https://hydra.uvansa.com/first-principles.html): the math behind the router, and [the measured numbers](https://hydra.uvansa.com/first-principles.html#numbers)
 - [How Hydra compares](https://hydra.uvansa.com/#compare) with other gateways
 - [Blog](https://hydra.uvansa.com/blog/)
+- [Releases](https://hydra.uvansa.com/releases/): what changed in each release, upgrade notes and verified downloads ([Atom feed](https://hydra.uvansa.com/releases/feed.xml))
 - [Roadmap](https://github.com/ankit373/hydra/milestones): milestones and their open issues
 - [Package map](CLAUDE.md#directory-layout), for finding your way round the code
 - [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Licence: MIT](LICENSE)

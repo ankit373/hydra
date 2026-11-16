@@ -1,0 +1,49 @@
+{
+  "advisories": [],
+  "prs": {
+    "155": {
+      "author": "ankit373",
+      "issues": [
+        147
+      ],
+      "upgrade_notes": ""
+    }
+  },
+  "release": {
+    "assets": [
+      {
+        "digest": "sha256:04d8cf074956f20af7e72803ca5cfeb9d4567d7970c7333ecf52f67626cdc657",
+        "name": "checksums.txt",
+        "size": 486
+      },
+      {
+        "digest": "sha256:54b3cd4635310b65e425453a62eea03fe714ed95065d009adf5e0162d2a917da",
+        "name": "hydra_1.0.1_darwin_amd64.tar.gz",
+        "size": 3808872
+      },
+      {
+        "digest": "sha256:e3d98554490c8cb6356777757b03a0182e17237fd0caa9babee5b6d5eca36812",
+        "name": "hydra_1.0.1_darwin_arm64.tar.gz",
+        "size": 3532592
+      },
+      {
+        "digest": "sha256:62a131c6a9689edbf9bad48a8493ffc53e9b56489b490e6174dc626f6a857380",
+        "name": "hydra_1.0.1_linux_amd64.tar.gz",
+        "size": 3770829
+      },
+      {
+        "digest": "sha256:4701bb57d882df2bdbe30aeabddf7b155140e98b65908c347078f2bbf637522e",
+        "name": "hydra_1.0.1_linux_arm64.tar.gz",
+        "size": 3424289
+      },
+      {
+        "digest": "sha256:326660dc910434d9c23a61890cce3a36de67dcfe4983e623c87d8c3bc01f67c8",
+        "name": "hydra_1.0.1_windows_amd64.zip",
+        "size": 3873948
+      }
+    ],
+    "attested": false,
+    "published": "2026-07-25"
+  },
+  "version": "1.0.1"
+}

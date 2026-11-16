@@ -1,0 +1,132 @@
+{
+  "advisories": [],
+  "prs": {
+    "659": {
+      "author": "ankit373",
+      "issues": [],
+      "upgrade_notes": ""
+    }
+  },
+  "release": {
+    "assets": [
+      {
+        "digest": "sha256:2e2d4736e03edde0ce089bec6ab3765bc81025aba1a3e79520a54f89293ecc37",
+        "name": "checksums.txt",
+        "size": 1188
+      },
+      {
+        "digest": "sha256:f0d158cbad0d925497e45f0f9805d1f627c691e29b873088bd4ad04a33c8c944",
+        "name": "hydra-desktop_v1.4.0_darwin_universal.zip",
+        "size": 9990601
+      },
+      {
+        "digest": "sha256:ce29d89fa7642600149dd7a4e19476cc1bb2cb0b7e25f9de7aaba4b1d15da700",
+        "name": "hydra-desktop_v1.4.0_darwin_universal.zip.sha256",
+        "size": 108
+      },
+      {
+        "digest": "sha256:befc81be41e915130c67dd460a026e67063910844319400a44f7a128a4809e42",
+        "name": "hydra-desktop_v1.4.0_linux_amd64.tar.gz",
+        "size": 5027663
+      },
+      {
+        "digest": "sha256:79f41d84e16b12d004ec1029e9619247f69ac160d7b7b6b64c7672e4396ffb1b",
+        "name": "hydra-desktop_v1.4.0_linux_amd64.tar.gz.sha256",
+        "size": 106
+      },
+      {
+        "digest": "sha256:e04db938e2663ad49bd072281fd2cc55ad23b7e3dbd3605de425db0649d0658e",
+        "name": "hydra-desktop_v1.4.0_linux_arm64.tar.gz",
+        "size": 4557079
+      },
+      {
+        "digest": "sha256:ffbb9f27506997f665b1eb4de99bb1552df360247e8fe5fd56d1e36f826c30fb",
+        "name": "hydra-desktop_v1.4.0_linux_arm64.tar.gz.sha256",
+        "size": 106
+      },
+      {
+        "digest": "sha256:33eb13b96b987f8f37a2c60af5b0657bc28e0fc53eacc6a898d7d153f0472978",
+        "name": "hydra-desktop_v1.4.0_windows_amd64.zip",
+        "size": 5456886
+      },
+      {
+        "digest": "sha256:557813b188bb6043252d6b1eba8d8ad2c9d214faf48d1867406d3c42afe82e5b",
+        "name": "hydra-desktop_v1.4.0_windows_amd64.zip.sha256",
+        "size": 105
+      },
+      {
+        "digest": "sha256:0e1ec9e07b1073d23fe87d7e17c0bf93ea55137dc5d8c59b765e38eedfd26206",
+        "name": "hydra-desktop_v1.4.0_windows_arm64.zip",
+        "size": 4923534
+      },
+      {
+        "digest": "sha256:79eae8db044c0c672b32a81db2a80bdf34308d1526d142c20d7992f7854def16",
+        "name": "hydra-desktop_v1.4.0_windows_arm64.zip.sha256",
+        "size": 105
+      },
+      {
+        "digest": "sha256:5f5c1b6cf8be72573cad04259d35df9ae18b15505a2da55db96c832b4dfffa40",
+        "name": "hydra_1.4.0_darwin_amd64.sbom.json",
+        "size": 38025
+      },
+      {
+        "digest": "sha256:f034b351850a3a49d94823f559f9dfa5f00ed946cd141785d870f5d47a3a6603",
+        "name": "hydra_1.4.0_darwin_amd64.tar.gz",
+        "size": 5406647
+      },
+      {
+        "digest": "sha256:0da0cd3a704d1e741337d00554336e45f65ff2319511c9433f0df4a87a2b8022",
+        "name": "hydra_1.4.0_darwin_arm64.sbom.json",
+        "size": 38025
+      },
+      {
+        "digest": "sha256:7c25a897d51a0c285cffeb038db60509650f51f732d76e20a3f8f85ee16011f0",
+        "name": "hydra_1.4.0_darwin_arm64.tar.gz",
+        "size": 5009705
+      },
+      {
+        "digest": "sha256:cca3749a48bdec160edbe070fcf642c342bbef00664dd1bb8cfb848d50fe9a57",
+        "name": "hydra_1.4.0_linux_amd64.sbom.json",
+        "size": 37996
+      },
+      {
+        "digest": "sha256:441ce13abeb18eed6d637f78d1a03621b4deb1cccbce54046c5a4a7613514cb4",
+        "name": "hydra_1.4.0_linux_amd64.tar.gz",
+        "size": 5318855
+      },
+      {
+        "digest": "sha256:b2abec7de760fc6fa73bc64a25d2a3df19c71b7f707bd2b56d9f5a28b38aeba4",
+        "name": "hydra_1.4.0_linux_arm64.sbom.json",
+        "size": 37996
+      },
+      {
+        "digest": "sha256:9e9e1e09cf2bba04113f76ca6c1ee7037278d3689a31c57e399568890572a9de",
+        "name": "hydra_1.4.0_linux_arm64.tar.gz",
+        "size": 4825365
+      },
+      {
+        "digest": "sha256:3a94176e68966426d8e81cfc8feae91b03b52fabaf756e59c97f6b8ff4cd7e0d",
+        "name": "hydra_1.4.0_windows_amd64.sbom.json",
+        "size": 45241
+      },
+      {
+        "digest": "sha256:363f6de473afdf8fa2dc8d8c7ab3c9f709ee6baa2b481dafbb4c4310d378a8c4",
+        "name": "hydra_1.4.0_windows_amd64.zip",
+        "size": 5495032
+      },
+      {
+        "digest": "sha256:e263361f5be542244a30898b516e7bfc3e8b5a9700d5e3acce4e8a0a739f2f7c",
+        "name": "hydra_1.4.0_windows_arm64.sbom.json",
+        "size": 45241
+      },
+      {
+        "digest": "sha256:ce3d52204723cf756f73a01423a65adfa5d5515bd84027cd55f994ec591b41d2",
+        "name": "hydra_1.4.0_windows_arm64.zip",
+        "size": 4919360
+      }
+    ],
+    "attested": false,
+    "published": "2026-09-05"
+  },
+  "version": "1.4.0"
+}
