@@ -14,12 +14,12 @@ func OfflineCheck(isolation error) Check {
 	c := Check{Name: "Offline runner"}
 	if isolation != nil {
 		c.Status = "not available"
-		c.Detail = fmt.Sprintf("%v. Model-written code that must run offline is not run here, "+
-			"and reads as not checked, never a pass", isolation)
+		c.Detail = fmt.Sprintf("%v. Generated tests are not run here "+
+			"and read as not checked, never a pass", isolation)
 		return c
 	}
 	c.Status = "network off"
-	c.Detail = "model-written code that must run offline gets " + sandbox.NetworkMethod + ", with no credentials " +
-		"and bounded CPU, memory and time. It can still read and write your files"
+	c.Detail = "generated tests (--check gen:tests) run in " + sandbox.NetworkMethod + ", with no credentials " +
+		"and bounded CPU and time. They can still read and write your files"
 	return c
 }

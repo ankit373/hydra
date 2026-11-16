@@ -161,7 +161,9 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           gen:claims-ground with `ground.Check`, gen:claims-judge with one yes/no question per sentence.
                           Writing gets a rubric of yes/no items from the request, any item the request does not back
                           dropped, fewer than 3 not checked: gen:rubric-code (word cap, phrase present or absent, no
-                          model) and gen:rubric-judge (one question per item). `hyctl dispatch --check gen` runs the
+                          model) and gen:rubric-judge (one question per item). Code gets gen:tests (`--check gen:tests=<file>`): Go tests
+                          run with `go test` on a copy of the module, before and after the change, under `sandbox.Offline`;
+                          one that fails both times is suspect and dropped; another language or no isolation is not checked. `hyctl dispatch --check gen` runs the
                           default checks for `--kind`, `gen:<kind>` one by name; a head of another family writes them
                           (`PickGenerator`, every head priced by `Dispatcher.PricedScores`), and `--max-usd` stops the
                           rest as not checked. `--source-only` runs both claims checks for any kind as escalating

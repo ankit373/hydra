@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -24,6 +25,7 @@ type genChecks struct {
 	named  []string
 	skip   string // a spec kind already run another way, e.g. claims under --source-only
 	schema []checkgen.Field
+	file   string // gen:tests=<file>, the file under change
 }
 
 // useSchema reads --schema and asks for the fields check, naming in one line any keyword it does not read.
@@ -57,6 +59,16 @@ func (g *genChecks) parseGen(spec string) (ok bool, err error) {
 	kind, isGen := strings.CutPrefix(spec, "gen:")
 	if !isGen {
 		return false, nil
+	}
+	if k, file, hasFile := strings.Cut(kind, "="); hasFile {
+		if k != "tests" {
+			return true, fmt.Errorf("only gen:tests names a file, as gen:tests=<file>")
+		}
+		abs, err := filepath.Abs(file)
+		if err != nil {
+			return true, err
+		}
+		kind, g.file = k, abs
 	}
 	if _, found := checkgen.Named(kind); !found {
 		return true, fmt.Errorf("no generated check %q, want one of %s", kind, strings.Join(checkgen.SpecKinds, ", "))
@@ -196,7 +208,7 @@ func (g genRun) check(ctx context.Context, r *dispatch.Result, prompt string) ge
 		},
 	}
 	writer := checkgen.GenInfo{Head: h.ID, Family: provider.Family(h), SameFamily: same}
-	task := checkgen.Task{Text: prompt, Kind: g.kind, Writer: writer, Fields: g.want.schema,
+	task := checkgen.Task{Text: prompt, Kind: g.kind, File: g.want.file, Writer: writer, Fields: g.want.schema,
 		Ask: func(ctx context.Context, p string) (string, error) { return ask(ctx, writer, p) }}
 	span := runlog.Event{RunID: g.runID, SpanID: r.SpanID, Domain: g.kind}
 

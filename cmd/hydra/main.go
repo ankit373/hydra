@@ -1505,7 +1505,7 @@ func cmdDispatch() *cobra.Command {
 		"in its sentence that differs from the record; ledger-gated like links, only the id leaves, lookups cached a day), "+
 		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), sum:total=items[].amount or sum:total=subtotal,tax (the parts add up to the total), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file}). "+
 		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error. "+
-		"gen runs checks written for the request's --kind by a head of another family where one exists, gen:<check> one of them, e.g. gen:roundtrip; these only report")
+		"gen runs checks written for the request's --kind by a head of another family where one exists, gen:<check> one of them, e.g. gen:roundtrip, gen:tests=<file> Go tests for the file the answer replaces; these only report")
 	cmd.Flags().BoolVar(&requirePass, "require-pass", false, "with --check, exit 1 when the answer failed a check and 2 when a check could not run, so a script can gate on it")
 	cmd.Flags().BoolVar(&sourceOnly, "source-only", false, "answer only from the documents fenced in the prompt, refused without one: every sentence is checked against them "+
 		"(gen:claims-ground and gen:claims-judge, for any --kind), a failed reply reruns once on a stronger head, and if none passes "+

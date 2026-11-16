@@ -23,10 +23,12 @@ var SpecKinds = []string{"labels", "fields", "roundtrip", "claims", "rubric", "t
 
 // Task is what a generator reads: the request, its kind-of-work key, and the
 // writer PickGenerator chose, with Ask bound to that head. Fields, from a
-// schema the user gave, replaces asking the writer for the field list.
+// schema the user gave, replaces asking the writer for the field list. File is
+// the file under change, for a code check; empty when the request names none.
 type Task struct {
 	Text   string
 	Kind   string
+	File   string
 	Writer GenInfo
 	Ask    func(ctx context.Context, prompt string) (string, error)
 	Fields []Field
