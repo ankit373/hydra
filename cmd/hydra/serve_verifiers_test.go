@@ -100,7 +100,7 @@ func TestServeRouter_OnlyAVerifiedClassEscalates(t *testing.T) {
 				t.Fatal(err)
 			}
 			after := before
-			esc := r.escalationFor(ev, tc.req, &after)
+			esc := r.escalationFor(ev, tc.req, &after, nil)
 			if got := esc != nil; got != tc.want || (after.Escalate != nil) != tc.want {
 				t.Fatalf("escalation=%v Escalate set=%v, want %v", got, after.Escalate != nil, tc.want)
 			}
@@ -407,7 +407,7 @@ func TestEscalation_FreezesWhenTheGovernorRouted(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		esc := r.escalationFor(ev, req, &opts)
+		esc := r.escalationFor(ev, req, &opts, nil)
 		res := &dispatch.Result{Output: "wrong", Objective: tc.objective}
 		if next, _ := opts.Escalate(context.Background(), res); next != tc.want || esc.served() != res {
 			t.Errorf("objective %q: escalate=%v, want %v", tc.objective, next, tc.want)
@@ -447,7 +447,7 @@ func TestEscalation_ThePriorAloneNeverAccepts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	esc := r.escalationFor(ev, req, &opts)
+	esc := r.escalationFor(ev, req, &opts, nil)
 	res := &dispatch.Result{Output: "ok", Objective: rank.Quality, Head: provider.Head{ID: "h"},
 		Scores: map[string]rank.Score{"h": {Declared: 96, Effective: 96}}}
 	opts.Escalate(context.Background(), res)

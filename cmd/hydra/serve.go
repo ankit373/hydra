@@ -61,10 +61,15 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	if err != nil {
 		return serve.Answer{}, err
 	}
+	prompt := flattenConversation(req.Messages)
+	named, err := parseServedChecks(req.Checks, prompt)
+	if err != nil {
+		return serve.Answer{}, err
+	}
 	if r.Deprecated(req) {
 		r.notice.warn()
 	}
-	esc := r.escalationFor(ev, req, &opts)
+	esc := r.escalationFor(ev, req, &opts, named.verifiers())
 	// Before dispatch, because a stream's headers leave with its first frame.
 	if ev != nil && req.OnEvent != nil {
 		req.OnEvent(serve.Event{Kind: serve.EventEvidence, Evidence: ev})
@@ -74,7 +79,6 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	// process: one run per session gave a long-lived server a single
 	// ever-growing run, and `hyctl trace view` with no argument showed that
 	// instead of the last request (#1149).
-	prompt := flattenConversation(req.Messages)
 	opts.TaskID = runid.New()
 	runlog.DeclareRun(req.RequestID, opts.TaskID, prompt)
 	defer runlog.FinishRun(req.RequestID, opts.TaskID)
@@ -97,6 +101,18 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: ev}
 	if req.OnEvent == nil {
 		ans.Evidence = withObjective(ev, res)
+	}
+	if named.named() {
+		g := genRun{d: r.d, runID: req.RequestID, maxUSD: opts.MaxCostUSD, localOnly: r.localOnly}
+		if ev != nil {
+			g.kind = ev.TaskClass
+		}
+		var out serve.Evidence
+		if ans.Evidence != nil {
+			out = *ans.Evidence
+		}
+		out.CheckResult, out.CheckDetail = named.verdict(ctx, g, res, prompt)
+		ans.Evidence = &out
 	}
 	if res.Response != nil {
 		ans.ToolCalls = res.Response.ToolCalls
@@ -429,6 +445,12 @@ func cmdServe() *cobra.Command {
 			"objective route checked: until a verifier makes one --confidence sure, a head measured\n" +
 			"in that class to beat the last is asked, at most --max-escalations more, within the\n" +
 			"request's or policy.yaml's cost ceiling. With none measured better, the answer stands.\n\n" +
+			"X-Hydra-Check names a check per request, repeatable: ground, match:pattern=<re> or\n" +
+			"gen. ground and match join that escalation as a verifier does; gen runs after the\n" +
+			"answer and only reports. X-Hydra-Check-Result says passed, failed or not_checked and\n" +
+			"X-Hydra-Check-Detail why, also under `hydra` in the body. A streamed or tool-calling\n" +
+			"request is checked after the answer and never retried; a stream's verdict rides on\n" +
+			"its final chunk, since its headers have already left.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
 			"invisible; one after it ends the stream, because SSE cannot take back a partial and\n" +
 			"appending the next head's answer to it would compose a reply no head ever gave.\n\n" +

@@ -103,6 +103,8 @@ internal/workflow/      ← Multi-step tasks, each step routed on its own. A ste
 internal/serve/         ← OpenAI-compatible endpoint in front of the router, so any tool that
                           speaks OpenAI routes through Hydra. `hyctl serve`. Also
                           `POST /v1/decisions` and `/v1/systemone`, each answered in its own shape.
+                          `X-Hydra-Check` names a request's checks; the verdict comes back passed,
+                          failed or not_checked in `X-Hydra-Check-Result` (stream: final chunk) (#1889).
 internal/decide/        ← Routes one decision: the first source answers alone when it clears the
                           target, otherwise the SPRT asks on. Logs a `KindDecision` span per answer.
                           `Cascade` is the chat path's twin: a served class's answer is checked by its
@@ -542,6 +544,8 @@ hyctl serve ; hyctl serve --enum SIMPLE --local
 # implicit-default `hydra` request gets RFC 9745 Deprecation + Link and one stderr line)
 hyctl serve --objective quality ; hyctl serve --objective cost   # or X-Hydra-Objective per request
 # Each request is its own run, keyed to its chat (system + first user message, or X-Hydra-Conversation)
+# Per request: X-Hydra-Check: ground (or match:pattern=<re>, gen); the verdict comes back in
+# X-Hydra-Check-Result passed|failed|not_checked and X-Hydra-Check-Detail
 hyctl serve --addr 0.0.0.0:8788 --token "$HYDRA_SERVE_TOKEN"
 # Typed decisions on the same server; X-Hydra-Domain picks the calibration domain
 hyctl serve --confidence 0.9   # POST /v1/decisions or /v1/systemone

@@ -92,31 +92,55 @@ type genRun struct {
 	localOnly bool
 }
 
-// run generates each check with a head PickGenerator chose, runs it on the answer,
-// prints a line per check and the label, and adds each verdict to v. It never fails the dispatch.
+// genOutcome is what gen produced: a result per check, or err when none could be written.
+type genOutcome struct {
+	err     error
+	results []checkgen.Result
+	by      string // the head that wrote the checks
+	same    bool   // that head is the answer's own family
+	logErr  error  // verdicts that could not be logged
+}
+
+// run prints check's outcome, a line per check and the label, and adds each verdict to v.
+// It never fails the dispatch.
 func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string, v *verified) {
 	if !g.want.asked() {
 		return
 	}
-	notChecked := func(check string, err error) {
-		printGenNotChecked(check, err)
-		v.add(check, false, false, genWhy(err))
-	}
-	if g.kind == "" {
-		notChecked("gen", errors.New("no kind of work: name one with --kind"))
+	o := g.check(ctx, r, prompt)
+	v.addGen(o)
+	if o.err != nil {
+		printGenNotChecked("gen", o.err)
 		return
+	}
+	if o.logErr != nil {
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("verdict log: "+o.logErr.Error()))
+	}
+	for _, x := range o.results {
+		printGenResult(x)
+	}
+	note := ""
+	if o.same {
+		note = ", written by the answer's own family"
+	}
+	fmt.Fprintf(stdout, "  generated checks: %s  %s\n\n", checkgen.Label(o.results), dimStyle.Render("by "+o.by+note))
+}
+
+// check generates each check with a head PickGenerator chose and runs it on the answer.
+// It prints nothing, so serve can use it too.
+func (g genRun) check(ctx context.Context, r *dispatch.Result, prompt string) genOutcome {
+	if g.kind == "" {
+		return genOutcome{err: errors.New("no kind of work: name one with --kind")}
 	}
 	gens := g.want.generators(g.kind)
 	if len(gens) == 0 {
-		notChecked("gen", fmt.Errorf("no generated check for %s", g.kind))
-		return
+		return genOutcome{err: fmt.Errorf("no generated check for %s", g.kind)}
 	}
 	// Only heads that can run: a pick nothing can drive would leave every check not checked.
 	heads := runnableHeads(g.d)
 	h, same, ok := checkgen.PickGenerator(heads, g.d.PricedScores(heads, g.kind), r.Head, nil, g.localOnly)
 	if !ok {
-		notChecked("gen", errors.New("no head can write the checks"))
-		return
+		return genOutcome{err: errors.New("no head can write the checks")}
 	}
 	spend := &genSpend{maxUSD: g.maxUSD, spent: r.CostUSD, chat: g.d.Dispatch}
 	byID := map[string]provider.Head{}
@@ -151,36 +175,23 @@ func (g genRun) run(ctx context.Context, r *dispatch.Result, prompt string, v *v
 		Ask: func(ctx context.Context, p string) (string, error) { return ask(ctx, writer, p) }}
 	span := runlog.Event{RunID: g.runID, SpanID: r.SpanID, Domain: g.kind}
 
-	var all []checkgen.Result
+	o := genOutcome{by: h.ID, same: same}
+	var logErrs []error
 	for _, gen := range gens {
 		specs, err := gen.Generate(ctx, task)
 		if err == nil && len(specs) == 0 {
 			err = errors.New("nothing in this request to check")
 		}
 		if err != nil {
-			notChecked("gen:"+gen.Kind(), err)
-			all = append(all, checkgen.Result{Spec: checkgen.Spec{Kind: gen.Kind()}, Err: err})
+			o.results = append(o.results, checkgen.Result{Spec: checkgen.Spec{Kind: gen.Kind()}, Err: err})
 			continue
 		}
 		res, err := checkgen.Run(ctx, specs, r.Output, r.Head, span, env)
-		if err != nil {
-			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("verdict log: "+err.Error()))
-		}
-		for _, x := range res {
-			printGenResult(x)
-			detail := x.Verdict.Detail
-			if !x.Checked() {
-				detail = genWhy(x.Err)
-			}
-			v.add(x.Spec.Check(), x.Checked(), x.Verdict.Passed, detail)
-		}
-		all = append(all, res...)
+		logErrs = append(logErrs, err)
+		o.results = append(o.results, res...)
 	}
-	note := ""
-	if same {
-		note = ", written by the answer's own family"
-	}
-	fmt.Fprintf(stdout, "  generated checks: %s  %s\n\n", checkgen.Label(all), dimStyle.Render("by "+h.ID+note))
+	o.logErr = errors.Join(logErrs...)
+	return o
 }
 
 func printGenResult(r checkgen.Result) {
