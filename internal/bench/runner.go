@@ -257,7 +257,7 @@ func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, model
 	if err != nil {
 		return nil, err
 	}
-	row.Passed, row.Format, row.Detail = g.Passed, g.Format, g.Detail
+	row.Passed, row.Format, row.Timeout, row.Detail = g.Passed, g.Format, g.Timeout, g.Detail
 	if g.Passed {
 		row.Score = 1
 	}

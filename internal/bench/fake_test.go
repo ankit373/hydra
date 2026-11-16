@@ -31,6 +31,9 @@ func (fakeSuite) Prompt(it Item) (executor.Request, error) {
 }
 func (fakeSuite) Grade(_ context.Context, it Item, answer string) (Grade, error) {
 	gold, _ := it.Label()
+	if answer == "slow" {
+		return Grade{Timeout: true, Detail: "timeout"}, nil
+	}
 	if answer != "yes" && answer != "no" {
 		return Grade{Format: true, Detail: "not a label"}, nil
 	}
