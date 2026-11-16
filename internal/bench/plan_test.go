@@ -3,10 +3,14 @@
 package bench
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/executor"
 )
 
 func TestPlan_FreezesItemsArmsPricesAndABreadcrumb(t *testing.T) {
@@ -70,12 +74,12 @@ func TestPlan_FreezesItemsArmsPricesAndABreadcrumb(t *testing.T) {
 		}
 	}
 
-	arms, err := BuildArms(run, newFakeExec().For, nil)
+	arms, err := BuildArms(run, fakeSuite{}, newFakeExec().For, nil)
 	if err != nil || len(arms) != 3 || arms[StaticFallback].(*Direct).faults == nil || arms["frontier"].(*Direct).faults != nil {
 		t.Fatalf("BuildArms = %v, %v; want a fault plan on static-fallback only", arms, err)
 	}
 	run.Arms["frontier"] = ArmConfig{Models: []string{"openrouter:unpriced"}}
-	if _, err := BuildArms(run, newFakeExec().For, nil); err == nil {
+	if _, err := BuildArms(run, fakeSuite{}, newFakeExec().For, nil); err == nil {
 		t.Fatal("built an arm whose model has no price")
 	}
 }
@@ -104,5 +108,44 @@ func TestCfg8_WhatChangesTheRun(t *testing.T) {
 		if diff.cfg8() == base.cfg8() {
 			t.Errorf("changed %s kept the run id", name)
 		}
+	}
+}
+
+// checkSuite is fakeSuite with one check of its own, "ground", that echoes the item id.
+type checkSuite struct{ fakeSuite }
+
+func (checkSuite) Checks() []string { return []string{"ground"} }
+func (checkSuite) Check(_ context.Context, it Item, _ string) (string, error) {
+	return it.ID, nil
+}
+
+// A check arm calls no model and costs nothing; a check the suite lacks is refused.
+func TestBuildArms_CheckArmRunsTheSuitesOwnCheck(t *testing.T) {
+	c, err := ReadConfig(writeConfig(t, strings.Replace(testConfig, `arms = ["frontier", "cheapest", "static-fallback"]`,
+		"arms = [\"frontier\", \"ground\"]\nchecks = [\"ground\"]", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfgs, _ := c.ArmConfigs()
+	if cfgs["ground"].Kind != KindCheck || len(cfgs["ground"].Models) != 0 {
+		t.Fatalf("ground arm config %+v", cfgs["ground"])
+	}
+	run := Run{Arms: cfgs, Prices: testPrices("m-front")}
+	arms, err := BuildArms(run, checkSuite{}, newFakeExec().For, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := arms["ground"]
+	wc, _ := g.WorstCaseUSD(executor.Request{})
+	att, err := g.Call(context.Background(), Item{ID: "x/1"}, executor.Request{}, nil, nil)
+	if err != nil || att.Answer != "x/1" || len(att.Calls) != 0 || wc != 0 || g.Preflight(context.Background()) != nil {
+		t.Fatalf("check arm answered %+v, %v, worst case %v", att, err, wc)
+	}
+	if _, err := BuildArms(run, fakeSuite{}, newFakeExec().For, nil); err == nil {
+		t.Error("built a check arm on a suite with no checks")
+	}
+	c.Models["ground"] = "openrouter:m-front"
+	if _, err := c.ArmConfigs(); err == nil {
+		t.Error("an arm that is both a check and a model was accepted")
 	}
 }

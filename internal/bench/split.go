@@ -4,12 +4,14 @@ package bench
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -214,6 +216,29 @@ func Load(s Suite, ds Dataset, dataDir, splitsPath string) ([]Item, error) {
 		items[i] = Item{ID: r.ID, Class: s.Class(), Split: sr.Split, Rank: sr.Rank, Input: in, Gold: gold}
 	}
 	return items, nil
+}
+
+// LocalSplitsFile derives the split file of a LocalSplits suite into its data
+// directory and returns its path. Load then checks it like a committed one.
+func LocalSplitsFile(s Suite, ds Dataset, dataDir string) (string, error) {
+	rows, err := s.Rows(ds, dataDir)
+	if err != nil {
+		return "", err
+	}
+	split, err := AssignSplits(s.Name(), rows)
+	if err != nil {
+		return "", err
+	}
+	var b bytes.Buffer
+	if err := WriteSplits(&b, split); err != nil {
+		return "", err
+	}
+	// Temp and rename, so a second run reading the file never sees it half written.
+	path := filepath.Join(dataDir, "splits.tsv")
+	if err := os.WriteFile(path+".tmp", b.Bytes(), 0o644); err != nil {
+		return "", err
+	}
+	return path, os.Rename(path+".tmp", path)
 }
 
 // FirstByRank returns the first n items of one split in rank order: tiers nest,

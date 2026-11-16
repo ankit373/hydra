@@ -249,3 +249,44 @@ func TestBenchRun_ScoresAnExtractionArm(t *testing.T) {
 		t.Fatalf("items.jsonl:\n%s", rows)
 	}
 }
+
+// A local-splits suite derives its split file next to the data, and a ground-only run
+// prints recall and false flags with no model and no spend.
+func TestBenchRun_FaithBenchGroundPrintsRecallAndFalseFlags(t *testing.T) {
+	testutil.NewSandbox(t)
+	src := "../../internal/bench/suites/testdata/faithbench"
+	root, dir := t.TempDir(), t.TempDir()
+	data := bench.DataDir(root, "faithbench")
+	os.MkdirAll(data, 0o755)
+	var lock strings.Builder
+	lock.WriteString("[faithbench]\nrevision = \"fixture@1\"\nlicence = \"x\"\nlicence_verified = \"fixture\"\nlocal_splits = true\n")
+	entries, _ := os.ReadDir(src)
+	for _, e := range entries {
+		b, _ := os.ReadFile(filepath.Join(src, e.Name()))
+		os.WriteFile(filepath.Join(data, e.Name()), b, 0o644)
+		s := sha256.Sum256(b)
+		fmt.Fprintf(&lock, "[[faithbench.file]]\nname = %q\nurl = \"http://fixture\"\nsha256 = %q\n", e.Name(), hex.EncodeToString(s[:]))
+	}
+	lockPath, cfgPath := filepath.Join(dir, "datasets.lock"), filepath.Join(dir, "faith.toml")
+	os.WriteFile(lockPath, []byte(lock.String()), 0o644)
+	os.WriteFile(cfgPath, []byte(`tier = "full"
+track = "claims"
+suites = ["faithbench"]
+n_test = 100
+seed = 1
+max_usd = 1
+arms = ["ground"]
+checks = ["ground"]
+`), 0o644)
+	swap(t, &benchExec, func(provider.Head) executor.Executor { t.Fatal("the ground arm called a model"); return nil })
+	swap(t, &benchHost, func() bench.HostInfo { return bench.HostInfo{OS: "test"} })
+	out, _, err := run(t, "bench", "run", "--config", cfgPath, "--lock", lockPath, "--data-dir", root,
+		"--splits", filepath.Join(dir, "none"), "--results", filepath.Join(dir, "results"))
+	if err != nil || !strings.Contains(out, "$0.000000 spent") ||
+		!strings.Contains(out, "| faithbench | ground | none | 33.3 (6.1–79.2) of 3 | 33.3 (6.1–79.2) of 3 |") {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(data, "splits.tsv")); err != nil {
+		t.Fatalf("no split file next to the data: %v", err)
+	}
+}

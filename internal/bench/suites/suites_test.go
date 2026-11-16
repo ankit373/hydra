@@ -19,10 +19,11 @@ func fixtureLock(t *testing.T) map[string]bench.Dataset {
 	t.Helper()
 	lock := map[string]bench.Dataset{}
 	for suite, names := range map[string][]string{
-		"banking77": {"categories.json", "train.csv", "test.csv"},
-		"clinc150":  {"data_full.json"},
-		"gsm8k":     {"test.jsonl"},
-		"snips":     snipsFiles(),
+		"banking77":  {"categories.json", "train.csv", "test.csv"},
+		"clinc150":   {"data_full.json"},
+		"gsm8k":      {"test.jsonl"},
+		"snips":      snipsFiles(),
+		"faithbench": faithFiles(),
 	} {
 		ds := bench.Dataset{Revision: "fixture"}
 		for _, n := range names {
@@ -42,7 +43,7 @@ func fixtureLock(t *testing.T) map[string]bench.Dataset {
 func fixtureRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	for _, suite := range []string{"banking77", "clinc150", "gsm8k", "snips"} {
+	for _, suite := range []string{"banking77", "clinc150", "gsm8k", "snips", "faithbench"} {
 		dst := bench.DataDir(root, suite)
 		if err := os.MkdirAll(dst, 0o755); err != nil {
 			t.Fatal(err)

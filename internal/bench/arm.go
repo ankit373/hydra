@@ -37,10 +37,16 @@ var retryBackoff = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second
 
 const maxRetryAfter = time.Minute
 
+// Arm kinds: a direct arm calls models, a check arm runs the suite's own check.
+const (
+	KindDirect = "direct"
+	KindCheck  = "check"
+)
+
 // ArmConfig is what run.json freezes about an arm.
 type ArmConfig struct {
-	Kind      string   `json:"kind"`   // "direct"
-	Models    []string `json:"models"` // "<provider>:<model id>", in fallback order
+	Kind      string   `json:"kind"`   // KindDirect or KindCheck
+	Models    []string `json:"models"` // "<provider>:<model id>", in fallback order; none for a check
 	FaultRate float64  `json:"fault_rate,omitempty"`
 }
 
@@ -88,6 +94,34 @@ func headFor(spec string) (provider.Head, string, error) {
 	}
 	id := "bench/" + prov + "/" + model
 	return provider.Head{ID: id, Name: id, Provider: prov, Source: "env", Meta: map[string]string{"model": model}}, model, nil
+}
+
+// checkArm answers with the suite's own check: no model, no spend, no retry.
+type checkArm struct {
+	name string
+	c    Checker
+}
+
+func newCheckArm(name string, s Suite) (*checkArm, error) {
+	c, ok := s.(Checker)
+	if !ok || !slices.Contains(c.Checks(), name) {
+		return nil, fmt.Errorf("bench: suite %s has no check called %s", s.Name(), name)
+	}
+	return &checkArm{name: name, c: c}, nil
+}
+
+func (a *checkArm) Name() string                                   { return a.name }
+func (a *checkArm) Config() ArmConfig                              { return ArmConfig{Kind: KindCheck} }
+func (a *checkArm) Preflight(context.Context) error                { return nil }
+func (a *checkArm) WorstCaseUSD(executor.Request) (float64, error) { return 0, nil }
+
+// Call fails the run on a check error: the check is local code, so an error is a bug.
+func (a *checkArm) Call(ctx context.Context, it Item, _ executor.Request, _ *Budget, _ func(Call) error) (Attempt, error) {
+	ans, err := a.c.Check(ctx, it, a.name)
+	if err != nil {
+		return Attempt{}, fmt.Errorf("bench: check %s on %s: %w", a.name, it.ID, err)
+	}
+	return Attempt{Answer: ans, Decision: "accept"}, nil
 }
 
 // FaultPlan injects a 503 or 429 on the first head of static-fallback without calling

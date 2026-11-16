@@ -31,8 +31,11 @@ type Dataset struct {
 	Licence  string `toml:"licence"`
 	// LicenceVerified is "<LICENSE url at the pinned commit>, <date>", empty when
 	// nobody checked it; `hyctl bench table` refuses to publish such a suite.
-	LicenceVerified string      `toml:"licence_verified"`
-	Files           []LockEntry `toml:"file"`
+	LicenceVerified string `toml:"licence_verified"`
+	// LocalSplits: the licence keeps rows and labels out of the repository, so the
+	// split file is derived next to the data at run time, never committed.
+	LocalSplits bool        `toml:"local_splits"`
+	Files       []LockEntry `toml:"file"`
 }
 
 // ReadLock parses the lockfile, refusing a key it does not know rather than

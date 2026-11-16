@@ -89,7 +89,7 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	if err != nil {
 		return out, err
 	}
-	arms, err := BuildArms(*run, r.Exec, r.Sleep)
+	arms, err := BuildArms(*run, r.Suite, r.Exec, r.Sleep)
 	if err != nil {
 		return out, err
 	}
@@ -257,7 +257,7 @@ func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, model
 	if err != nil {
 		return nil, err
 	}
-	row.Passed, row.Format, row.Timeout, row.Detail = g.Passed, g.Format, g.Timeout, g.Detail
+	row.Passed, row.Format, row.Timeout, row.Detail, row.Detection = g.Passed, g.Format, g.Timeout, g.Detail, g.Detection
 	if g.Passed {
 		row.Score = 1
 	}

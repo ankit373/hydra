@@ -283,8 +283,14 @@ func cmdBenchRun() *cobra.Command {
 					return fmt.Errorf("bench: no suite is called %s", name)
 				}
 				s := mk()
+				data := bench.DataDir(dataDir, name)
 				splits := filepath.Join(splitsDir, name+".tsv")
-				items, err := bench.Load(s, lock[name], bench.DataDir(dataDir, name), splits)
+				if lock[name].LocalSplits {
+					if splits, err = bench.LocalSplitsFile(s, lock[name], data); err != nil {
+						return err
+					}
+				}
+				items, err := bench.Load(s, lock[name], data, splits)
 				if err != nil {
 					return err
 				}
@@ -293,7 +299,7 @@ func cmdBenchRun() *cobra.Command {
 					return err
 				}
 				if dryRun {
-					armMap, err := bench.BuildArms(run, benchExec, nil)
+					armMap, err := bench.BuildArms(run, s, benchExec, nil)
 					if err != nil {
 						return err
 					}
@@ -318,6 +324,11 @@ func cmdBenchRun() *cobra.Command {
 					return exitStatus(4)
 				case err != nil:
 					return err
+				}
+				if _, ok := s.(bench.Checker); ok {
+					if err := printDetection(out, o.Dir); err != nil {
+						return err
+					}
 				}
 			}
 			return nil
@@ -360,6 +371,18 @@ func printDryRun(out io.Writer, s bench.Suite, run bench.Run,
 	fmt.Fprintf(out, "  %s: %d items × %d arms (%s) = %d calls, worst case $%.6f; dry run, nothing called\n",
 		run.Suite, len(run.ItemIDs), len(run.ArmOrder), strings.Join(run.ArmOrder, ","),
 		len(run.ItemIDs)*len(run.ArmOrder), worst)
+	return nil
+}
+
+// printDetection writes summary.json and prints recall and false flags once a check suite's run is done.
+func printDetection(out io.Writer, dir string) error {
+	s, err := bench.Report(dir, benchStateDir())
+	if err != nil {
+		return err
+	}
+	if t := bench.DetectionTable([]bench.Summary{s}); t != "" && !s.Incomplete {
+		fmt.Fprint(out, t)
+	}
 	return nil
 }
 

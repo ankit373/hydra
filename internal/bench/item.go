@@ -58,6 +58,15 @@ type Grade struct {
 	Format  bool
 	Timeout bool // a fail that never finished; counted apart, since load causes it
 	Detail  string
+	// Detection is set by a suite that grades a check: recall and false flags count from it.
+	Detection *Detection
+}
+
+// Detection is one item of a check suite: whether the gold has something to catch
+// (Positive) and whether the answer flagged the item.
+type Detection struct {
+	Positive bool `json:"positive"`
+	Flagged  bool `json:"flagged"`
 }
 
 // Suite is one dataset with one verifier. Prompt is identical for every arm.
@@ -69,6 +78,13 @@ type Suite interface {
 	Labels() []string
 	Prompt(it Item) (executor.Request, error)
 	Grade(ctx context.Context, it Item, answer string) (Grade, error)
+}
+
+// Checker is a suite with checks of its own that answer an item with no model. Each
+// name in Checks can be an arm of kind "check", which costs nothing.
+type Checker interface {
+	Checks() []string
+	Check(ctx context.Context, it Item, check string) (string, error)
 }
 
 // Text and Label read an Item's raw fields back for a label suite.

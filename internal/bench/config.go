@@ -4,6 +4,7 @@ package bench
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -22,8 +23,10 @@ type Config struct {
 	Seed   uint64   `toml:"seed"`
 	// MaxUSD caps each suite's run; there is no "unlimited" spelling.
 	MaxUSD float64 `toml:"max_usd"`
-	// Arms is the rotation order; each is a [models] key or static-fallback.
-	Arms     []string          `toml:"arms"`
+	// Arms is the rotation order; each is a [models] key, a check or static-fallback.
+	Arms []string `toml:"arms"`
+	// Checks are arms the suite answers itself with that check, calling no model.
+	Checks   []string          `toml:"checks"`
 	Models   map[string]string `toml:"models"` // arm → "<provider>:<model id>"
 	Fallback *struct {
 		Arms      []string `toml:"arms"` // [models] keys, in fallback order
@@ -80,7 +83,7 @@ func (c *Config) ArmConfigs() (map[string]ArmConfig, error) {
 			if !(c.Fallback.FaultRate >= 0 && c.Fallback.FaultRate <= 1) {
 				return nil, fmt.Errorf("%s fault_rate %v is outside [0, 1]", name, c.Fallback.FaultRate)
 			}
-			ac := ArmConfig{Kind: "direct", FaultRate: c.Fallback.FaultRate}
+			ac := ArmConfig{Kind: KindDirect, FaultRate: c.Fallback.FaultRate}
 			for _, a := range c.Fallback.Arms {
 				if c.Models[a] == "" {
 					return nil, fmt.Errorf("%s names %s, which [models] does not define", name, a)
@@ -91,10 +94,17 @@ func (c *Config) ArmConfigs() (map[string]ArmConfig, error) {
 			continue
 		}
 		spec := c.Models[name]
+		if slices.Contains(c.Checks, name) {
+			if spec != "" {
+				return nil, fmt.Errorf("arm %s is both a check and a [models] entry", name)
+			}
+			out[name] = ArmConfig{Kind: KindCheck}
+			continue
+		}
 		if spec == "" {
 			return nil, fmt.Errorf("arm %s has no [models] entry", name)
 		}
-		out[name] = ArmConfig{Kind: "direct", Models: []string{spec}}
+		out[name] = ArmConfig{Kind: KindDirect, Models: []string{spec}}
 	}
 	for _, ac := range out {
 		for _, spec := range ac.Models {

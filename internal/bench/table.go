@@ -53,11 +53,37 @@ func Table(sums []Summary) string {
 				100*a.PassRate, 100*a.PassWilson[0], 100*a.PassWilson[1], delta, cost, v)
 		}
 	}
+	b.WriteString(DetectionTable(sums))
 	fmt.Fprintf(&b, "\nRuns: %s. Git: %s.", strings.Join(runs, ", "), strings.Join(shas, ", "))
 	if !priced.IsZero() {
 		fmt.Fprintf(&b, " Prices fetched %s.", priced.Format("2006-01-02"))
 	}
 	b.WriteString("\n\nCaveat: " + contamination + ".\n")
+	return b.String()
+}
+
+// DetectionTable is one row per (suite, arm) that graded a check, with its models;
+// empty when no arm did. The oracle is left out: the best arm per item detects nothing.
+func DetectionTable(sums []Summary) string {
+	var b strings.Builder
+	for _, s := range sums {
+		for _, arm := range armOrder(s.Arms) {
+			d := s.Arms[arm].Detection
+			if d == nil || arm == OracleArm {
+				continue
+			}
+			if b.Len() == 0 {
+				b.WriteString("\n| Suite | Arm | Models | Recall % (95% CI) | False flags % (95% CI) |\n|---|---|---|---|---|\n")
+			}
+			models := "none"
+			if ms := s.Breadcrumb.Arms[arm].Models; len(ms) > 0 {
+				models = strings.Join(ms, ", ")
+			}
+			fmt.Fprintf(&b, "| %s | %s | %s | %.1f (%.1f–%.1f) of %d | %.1f (%.1f–%.1f) of %d |\n",
+				s.Breadcrumb.Suite, arm, models, 100*d.Recall, 100*d.RecallWilson[0], 100*d.RecallWilson[1], d.Positives,
+				100*d.FalseFlagRate, 100*d.FalseFlagWilson[0], 100*d.FalseFlagWilson[1], d.Negatives)
+		}
+	}
 	return b.String()
 }
 
