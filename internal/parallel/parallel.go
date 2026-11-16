@@ -23,6 +23,7 @@ import (
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -77,6 +78,10 @@ type EditResult struct {
 	ValidatorPassed *bool  `json:"validator_passed"`
 	RolledBack      bool   `json:"rolled_back"`
 	Error           string `json:"error,omitempty"`
+	// Escalated and FirstHead mean what editor.Result's do: the validator
+	// failed FirstHead's answer and this is the one rerun.
+	Escalated bool   `json:"escalated"`
+	FirstHead string `json:"first_head,omitempty"`
 }
 
 // Result is a union type (either TextResult or EditResult) marshalled as JSON.
@@ -314,7 +319,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// before executing it, and a deadline is what bounds a slow head.
 	ctx, cancel := fp.Deadline(ctx)
 	defer cancel()
-	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
+	opts := dispatch.Options{
 		TierHint:      enumToTier(task.Enum),
 		RunID:         runID,
 		TaskID:        taskID,
@@ -324,7 +329,8 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		MaxMemoryMB:   fp.MaxMemoryMB,
 		MaxCPUSeconds: fp.MaxCPUSeconds,
 		PromptCache:   fp.PromptCache,
-	})
+	}
+	dispResult, err := d.Dispatch(ctx, editPrompt, opts)
 	if err != nil {
 		cleanupBackup()
 		// A deadline is the policy refusing, not the head failing, and the two
@@ -335,56 +341,102 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		return failEdit(task, "route_failed: "+err.Error())
 	}
 
+	e := &editTask{task: task, file: file, wsName: wsName, resolved: resolved, reg: reg,
+		origContent: origContent, origExisted: origExisted, backup: backup, fp: fp,
+		emb: d.Embedder(), runID: runID, taskID: taskID, cleanupBackup: cleanupBackup}
+	res, vout, failed := e.apply(ctx, dispResult)
+	if !failed || policy.Escalations(fp) == 0 {
+		return mustMarshal(res)
+	}
+	// Same rerun as `hyctl edit`, on this task's goroutine, so the file stays
+	// this task's alone: Run refuses two tasks on one file.
+	second, why := editor.Escalate(ctx, d, editPrompt, opts, dispResult, vout)
+	if second == nil {
+		res.Error += "; " + why
+		return mustMarshal(res)
+	}
+	// The rollback consumed the backup this task made; the rerun needs it back.
+	if createdBackup {
+		_ = os.WriteFile(backup, []byte(origContent), 0o644)
+	}
+	res, _, _ = e.apply(ctx, second)
+	res.Escalated, res.FirstHead = true, dispResult.Head.ID
+	return mustMarshal(res)
+}
+
+// editTask is what every answer to one edit task shares.
+type editTask struct {
+	task          Task
+	file, wsName  string
+	resolved      workspace.Resolved
+	reg           *workspace.Registry
+	origContent   string
+	origExisted   bool
+	backup        string
+	fp            policy.FilePolicy
+	emb           embed.Embedder
+	runID, taskID string
+	cleanupBackup func()
+}
+
+// apply writes r's answer, checks and records it, and rolls it back on any
+// failure. failed is a validator's verdict against it, with its output vout.
+func (e *editTask) apply(ctx context.Context, r *dispatch.Result) (res EditResult, vout string, failed bool) {
+	task, file, origContent, origExisted := e.task, e.file, e.origContent, e.origExisted
+	gitRoot, backup := e.resolved.GitRoot, e.backup
+	early := func(msg string) EditResult {
+		e.cleanupBackup()
+		return EditResult{Label: task.Label, Enum: task.Enum, Mode: "edit", Status: "fail", File: task.File, Error: msg}
+	}
+	rolledBack := func(msg string, passed *bool) EditResult {
+		rollback(file, origContent, origExisted, gitRoot, backup)
+		return EditResult{
+			Label: task.Label, Enum: task.Enum, Mode: "edit",
+			Status: "fail", File: file, Workspace: e.wsName, GitRoot: gitRoot,
+			Head: r.Head.ID, ValidatorPassed: passed, RolledBack: true, Error: msg,
+		}
+	}
+
 	// Parse
-	newContent := extractContent(dispResult.Output)
+	newContent := extractContent(r.Output)
 	newContent = stripOuterFence(newContent)
 	if strings.Contains(newContent, markerStart) || strings.Contains(newContent, markerEnd) {
-		cleanupBackup()
-		return failEdit(task, "marker_leakage")
+		return early("marker_leakage"), "", false
 	}
 	if newContent == "" {
-		cleanupBackup()
 		if origExisted {
-			return failEdit(task, "empty_replacement")
+			return early("empty_replacement"), "", false
 		}
-		return failEdit(task, "marker_parse_failed")
+		return early("marker_parse_failed"), "", false
 	}
 
 	// Atomic write
 	_ = os.MkdirAll(filepath.Dir(file), 0o755)
 	tmpF, err := os.CreateTemp(filepath.Dir(file), ".hydra-tmp.*")
 	if err != nil {
-		cleanupBackup()
-		return failEdit(task, "write_failed: "+err.Error())
+		return early("write_failed: " + err.Error()), "", false
 	}
 	tmpPath := tmpF.Name()
 	if _, werr := fmt.Fprint(tmpF, newContent+"\n"); werr != nil {
 		_ = tmpF.Close()
 		_ = os.Remove(tmpPath)
-		cleanupBackup()
-		return failEdit(task, "write_failed: "+werr.Error())
+		return early("write_failed: " + werr.Error()), "", false
 	}
 	_ = tmpF.Close()
 	if err := os.Rename(tmpPath, file); err != nil {
 		_ = os.Remove(tmpPath)
-		cleanupBackup()
-		return failEdit(task, "rename_failed: "+err.Error())
+		return early("rename_failed: " + err.Error()), "", false
 	}
 
-	added, removed := diffStats(file, origContent, resolved.GitRoot, backup, origExisted)
+	added, removed := diffStats(file, origContent, gitRoot, backup, origExisted)
 
 	// Enforce the diff-size cap policy declared: registry/policy.yaml's own
 	// doc comment calls it "reject edits changing > N% of file", and nothing
 	// rejected anything before this. A brand-new file has no "percent of
 	// itself changed" to measure, so the cap only applies to modifications.
 	if origExisted {
-		if why, over := fp.DiffExceeded(added, removed, strings.Count(origContent, "\n")+1); over {
-			rollback(file, origContent, origExisted, resolved.GitRoot, backup)
-			return mustMarshal(EditResult{
-				Label: task.Label, Enum: task.Enum, Mode: "edit",
-				Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-				Head: dispResult.Head.ID, RolledBack: true, Error: why,
-			})
+		if why, over := e.fp.DiffExceeded(added, removed, strings.Count(origContent, "\n")+1); over {
+			return rolledBack(why, nil), "", false
 		}
 	}
 
@@ -396,31 +448,26 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	var validatorPassed *bool
 	if validate {
 		ext := fileExt(file)
-		vtmpl := reg.ValidatorFor(ext)
-		if vtmpl == "" && (ext == "ts" || ext == "tsx") && resolved.GitRoot != "" {
-			vtmpl = tscTemplate(resolved.GitRoot)
+		vtmpl := e.reg.ValidatorFor(ext)
+		if vtmpl == "" && (ext == "ts" || ext == "tsx") && gitRoot != "" {
+			vtmpl = tscTemplate(gitRoot)
 		}
 		if vtmpl != "" {
-			rc, verr := runValidate(ctx, vtmpl, file, reg.ValidatorEnv())
+			rc, out, verr := runValidate(ctx, vtmpl, file, e.reg.ValidatorEnv())
 			if verr != nil {
 				// The deadline is the policy stopping the validator, not the
 				// validator rejecting the edit, the same distinction the
 				// dispatch above draws (#424). A validator that could not start
 				// is the third case, and none of them is a verdict, so
 				// validatorPassed stays nil and nothing is recorded.
-				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
 				reason := "validator_cancelled: " + verr.Error()
 				if errors.Is(verr, editor.ErrValidatorUnavailable) {
 					reason = verr.Error()
 				}
 				if errors.Is(verr, context.DeadlineExceeded) {
-					reason = fmt.Sprintf("max_wall_seconds_exceeded: policy allows %ds", fp.MaxWallSeconds)
+					reason = fmt.Sprintf("max_wall_seconds_exceeded: policy allows %ds", e.fp.MaxWallSeconds)
 				}
-				return mustMarshal(EditResult{
-					Label: task.Label, Enum: task.Enum, Mode: "edit",
-					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-					Head: dispResult.Head.ID, RolledBack: true, Error: reason,
-				})
+				return rolledBack(reason, nil), "", false
 			}
 			validatorPassed = boolp(rc == 0)
 			// The validator ran against the file this task had already written, so
@@ -430,22 +477,16 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 			// is recorded first, because the rollback below discards the content
 			// the verdict is about.
 			if rc != 0 {
-				editor.RecordVerifiedEdit(ctx, d.Embedder(), editor.VerifiedEdit{
+				editor.RecordVerifiedEdit(ctx, e.emb, editor.VerifiedEdit{
 					Prompt: task.Prompt, File: file, Enum: task.Enum,
-					Head: dispResult.Head.ID, Candidate: newContent,
+					Head: r.Head.ID, Candidate: newContent,
 					Passed: false, Detail: "validation_failed",
 				})
-				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
-				return mustMarshal(EditResult{
-					Label: task.Label, Enum: task.Enum, Mode: "edit",
-					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-					Head: dispResult.Head.ID, ValidatorPassed: validatorPassed,
-					RolledBack: true, Error: "validation_failed",
-				})
+				return rolledBack("validation_failed", validatorPassed), out, true
 			}
-			editor.RecordVerifiedEdit(ctx, d.Embedder(), editor.VerifiedEdit{
+			editor.RecordVerifiedEdit(ctx, e.emb, editor.VerifiedEdit{
 				Prompt: task.Prompt, File: file, Enum: task.Enum,
-				Head: dispResult.Head.ID, Candidate: newContent, Passed: true,
+				Head: r.Head.ID, Candidate: newContent, Passed: true,
 			})
 		}
 	}
@@ -453,13 +494,13 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// Same KindEdit shape hyctl edit produces (internal/editor/runlog.go), via
 	// the shared runlog.LogEdit, a parallel batch was writing files with no
 	// trace in the run log at all (#531).
-	runlog.LogEdit(runID, taskID, file, []byte(origContent), []byte(newContent+"\n"), added, removed)
-	return mustMarshal(EditResult{
+	runlog.LogEdit(e.runID, e.taskID, file, []byte(origContent), []byte(newContent+"\n"), added, removed)
+	return EditResult{
 		Label: task.Label, Enum: task.Enum, Mode: "edit",
-		Status: "ok", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-		Head: dispResult.Head.ID, LinesAdded: added, LinesRemoved: removed,
+		Status: "ok", File: file, Workspace: e.wsName, GitRoot: gitRoot,
+		Head: r.Head.ID, LinesAdded: added, LinesRemoved: removed,
 		ValidatorPassed: validatorPassed,
-	})
+	}, "", false
 }
 
 // persistResults writes results to logs/last_parallel.json.
@@ -632,7 +673,7 @@ func rollback(file, origContent string, origExisted bool, gitRoot, backup string
 // A non-nil error means the run was cancelled or ran past max_wall_seconds,
 // which is not an exit code: a killed validator exits non-zero exactly like a
 // failing one. env names the extra variables it may see.
-func runValidate(ctx context.Context, vtmpl, file string, env []string) (int, error) {
+func runValidate(ctx context.Context, vtmpl, file string, env []string) (int, string, error) {
 	var parts []string
 	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
 		parts = append(strings.Fields(vtmpl[:idx]), file)
@@ -641,22 +682,23 @@ func runValidate(ctx context.Context, vtmpl, file string, env []string) (int, er
 		parts = strings.Fields(vtmpl)
 	}
 	if len(parts) == 0 {
-		return 0, nil
+		return 0, "", nil
 	}
 	c := sandbox.Confine(exec.CommandContext(ctx, parts[0], parts[1:]...), env)
-	if err := c.Run(); err != nil {
+	out, err := c.CombinedOutput()
+	if err != nil {
 		if ctx.Err() != nil {
-			return 0, ctx.Err()
+			return 0, "", ctx.Err()
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode(), nil
+			return exitErr.ExitCode(), string(out), nil
 		}
 		// The command never started, so nothing judged the answer, and a
 		// failing exit code here would blame the head for a missing binary and
 		// record that as ground truth (#998).
-		return 0, fmt.Errorf("%w: %w", editor.ErrValidatorUnavailable, err)
+		return 0, "", fmt.Errorf("%w: %w", editor.ErrValidatorUnavailable, err)
 	}
-	return 0, nil
+	return 0, string(out), nil
 }
 
 func tscTemplate(gitRoot string) string {
