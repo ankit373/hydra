@@ -33,6 +33,7 @@ type headReceipt struct {
 	Decision    string         `json:"decision"`
 	Redacted    map[string]int `json:"redacted,omitempty"`
 	Restored    int            `json:"restored,omitempty"`
+	NamePass    string         `json:"name_pass,omitempty"`
 }
 
 // buildReceipt collects runID's exec events, one row per head asked, and adds
@@ -65,7 +66,7 @@ func buildReceipt(events []ledger.Event, runID string, chain ledger.ChainResult)
 		row[e.Tool] = len(rc.Heads)
 		rc.Heads = append(rc.Heads, headReceipt{
 			Head: e.Tool, Provider: p.Provider, Sink: p.Sink, Sensitivity: p.Sensitivity,
-			Decision: string(e.Decision), Redacted: p.Redacted,
+			Decision: string(e.Decision), Redacted: p.Redacted, NamePass: p.NamePass,
 		})
 	}
 	if len(rc.Heads) == 0 {
@@ -129,6 +130,9 @@ func printReceipt(rc egressReceipt) {
 			replaced = strings.Join(parts, ", ")
 		}
 		fmt.Fprintf(stdout, "    %s\n", dimStyle.Render(fmt.Sprintf("sent as placeholders: %s   restored: %d", replaced, h.Restored)))
+		if h.NamePass != "" {
+			fmt.Fprintf(stdout, "    %s\n", dimStyle.Render("name pass: "+util.SafeTerminal(h.NamePass)))
+		}
 	}
 	if rc.ChainIntact {
 		fmt.Fprintf(stdout, "\n  ledger chain: verified\n\n")

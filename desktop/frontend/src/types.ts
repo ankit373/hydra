@@ -822,6 +822,8 @@ export interface EventProvenance {
   redacted?: Record<string, number>
   /** Placeholders put back into the answer on this machine. */
   restored?: number
+  /** Whether a local model marked names first, and if not why. */
+  name_pass?: string
 }
 
 /** One raw ledger row, the evidence behind a finding. */

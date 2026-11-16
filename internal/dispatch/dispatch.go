@@ -209,6 +209,9 @@ type Options struct {
 	// Vault is the one to fill when redaction runs, so a caller that streams can
 	// restore from it; nil gets a fresh one per request.
 	Vault *policy.Vault
+	// RedactNames, with Redact, has a local head measured eligible on this
+	// machine mark names and addresses no pattern finds (#1881).
+	RedactNames bool
 }
 
 // Result is the outcome of a successful dispatch.
@@ -377,7 +380,7 @@ func resumeOptions(q pending.Question) Options {
 		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
 		System: q.System, Enum: q.Enum, Resource: q.Resource,
 		Domain: q.Domain, Temperature: q.Temperature, NoCache: q.NoCache,
-		Objective: rank.Objective(q.Objective), Redact: q.Redact,
+		Objective: rank.Objective(q.Objective), Redact: q.Redact, RedactNames: q.RedactNames,
 		MaxCostUSD: q.MaxCostUSD, MaxCostSource: q.MaxCostSource,
 		RunID: q.RunID, TaskID: q.TaskID,
 		AnsweredHead: q.Head,
@@ -568,8 +571,8 @@ func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
 
 // PIIRedact reports whether the configured pii policy redacts instead.
 func (d *Dispatcher) PIIRedact() bool {
-	p, ok := d.cfg.Policies["pii"]
-	return ok && p.Action == policy.PIIRedact
+	p := d.cfg.Policies["pii"].Action
+	return p == policy.PIIRedact || p == policy.PIIRedactNames
 }
 
 // CapturesPayloads reports whether prompt and response text is being stored.
@@ -806,6 +809,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	if opts.Redact || action.Redact {
 		vault = cmp.Or(opts.Vault, policy.NewVault())
 	}
+	var namePass string
+	if vault != nil && !opts.DryRun && (opts.RedactNames || action.Names) {
+		texts := []string{prompt, opts.System}
+		for _, m := range opts.Messages {
+			texts = append(texts, m.Content)
+		}
+		var err error
+		if namePass, err = d.namePass(ctx, texts, vault); err != nil {
+			return nil, err
+		}
+	}
 
 	// After the policy, before any head: a denied prompt stays denied, and a
 	// served one costs nothing at all. The outcome is carried to the dry run
@@ -1030,7 +1044,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		decision, lerr := ledger.CheckAndRecordDispatch(ledger.Dispatch{
 			Agent: "hydra-dispatch", HeadID: h.ID, Resource: opts.Resource,
 			Content: out.prompt, Class: out.class,
-			Provenance: provenanceRecord(out, h, rl.RunID(), vault),
+			Provenance: provenanceRecord(out, h, rl.RunID(), vault, namePass),
 		})
 		refuse := func(code GateCode, detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
@@ -1108,7 +1122,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Domain: opts.Domain, Temperature: opts.Temperature,
 				MaxCostUSD: opts.MaxCostUSD, MaxCostSource: opts.MaxCostSource,
 				NoCache: opts.NoCache, Objective: string(opts.Objective),
-				Redact: vault != nil,
+				Redact: vault != nil, RedactNames: namePass != "",
 			}
 			// A question that cannot be stored has not been asked, so this
 			// fails the dispatch rather than proceeding unapproved.
@@ -1699,7 +1713,7 @@ func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
 // Recorded per candidate rather than per dispatch on purpose. The sink is the
 // half that changes between candidates, and a fallback from a local head to a
 // remote one is exactly the transition an auditor needs to see.
-func provenanceRecord(out outgoing, h provider.Head, runID string, v *policy.Vault) *ledger.EventProvenance {
+func provenanceRecord(out outgoing, h provider.Head, runID string, v *policy.Vault, namePass string) *ledger.EventProvenance {
 	s := egress.Summarize(out.parts)
 	sink := string(egress.SinkRemote)
 	if h.LocalOnly {
@@ -1711,7 +1725,7 @@ func provenanceRecord(out outgoing, h provider.Head, runID string, v *policy.Vau
 		RunID: runID, Provider: h.Provider,
 	}
 	if out.redacted {
-		p.Redacted = v.Counts()
+		p.Redacted, p.NamePass = v.Counts(), namePass
 	}
 	return p
 }
