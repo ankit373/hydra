@@ -63,6 +63,7 @@ type Question struct {
 	NoCache       bool     `json:"noCache,omitempty"`
 	Objective     string   `json:"objective,omitempty"`
 	Redact        bool     `json:"redact,omitempty"`
+	RedactNames   bool     `json:"redactNames,omitempty"`
 }
 
 // Dir is where parked tasks live, alongside the run logs.

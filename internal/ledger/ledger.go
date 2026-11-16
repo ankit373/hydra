@@ -163,6 +163,8 @@ type EventProvenance struct {
 	// placeholders were put back into the answer (#1885).
 	Redacted map[string]int `json:"redacted,omitempty"`
 	Restored int            `json:"restored,omitempty"`
+	// NamePass says whether a local model marked names first, and if not why.
+	NamePass string `json:"name_pass,omitempty"`
 }
 
 // maxProvenanceItems bounds Sources and Origins. A payload assembled from
@@ -183,6 +185,7 @@ func (p *EventProvenance) sanitize() *EventProvenance {
 	out.Sink = SafeText(p.Sink)
 	out.RunID = SafeText(p.RunID)
 	out.Provider = SafeText(p.Provider)
+	out.NamePass = SafeText(p.NamePass)
 	if len(p.Redacted) > 0 {
 		out.Redacted = make(map[string]int, len(p.Redacted))
 		for k, n := range p.Redacted {

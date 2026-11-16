@@ -11,6 +11,7 @@ type Action struct {
 	Deny      bool   // block the request entirely
 	LocalOnly bool   // only route to heads where LocalOnly=true
 	Redact    bool   // send remote heads placeholders, restore the answer locally
+	Names     bool   // with Redact, a measured local head also marks names
 	TierCeil  string // do not use tiers above this (e.g. "standard")
 	Reason    string // human-readable explanation
 }
@@ -59,8 +60,9 @@ func (e *Engine) Evaluate(req Request) Action {
 
 // The [policies.pii] actions DefaultRules knows. Any other value adds no rule.
 const (
-	PIILocalOnly = "local-only"
-	PIIRedact    = "redact"
+	PIILocalOnly   = "local-only"
+	PIIRedact      = "redact"
+	PIIRedactNames = "redact-names"
 )
 
 // DefaultRules returns the baseline policy applied to every dispatch, for the
@@ -71,6 +73,8 @@ func DefaultRules(piiAction string) []Rule {
 		return []Rule{{Name: "pii-local-only", Condition: ContainsPII, Apply: Action{LocalOnly: true}}}
 	case PIIRedact:
 		return []Rule{{Name: "pii-redact", Condition: ContainsPII, Apply: Action{Redact: true}}}
+	case PIIRedactNames:
+		return []Rule{{Name: "pii-redact-names", Condition: ContainsPII, Apply: Action{Redact: true, Names: true}}}
 	}
 	return []Rule{}
 }

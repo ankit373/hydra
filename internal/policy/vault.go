@@ -20,6 +20,8 @@ type Vault struct {
 	next    map[string]int    // per kind, the last number handed out
 	// restored counts placeholders Restore put back, over the vault's life.
 	restored int
+	// extra are values no pattern finds, e.g. names a local model marked, by kind.
+	extra map[string]string
 }
 
 func NewVault() *Vault {
@@ -69,11 +71,12 @@ func (v *Vault) Keys() []string {
 // value gets one placeholder for the vault's life, so it reads the same each turn.
 func RedactReversible(text string, v *Vault) string {
 	spans, _ := redactionSpans(text)
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	spans = v.withExtra(text, spans)
 	if len(spans) == 0 {
 		return text
 	}
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	upper := strings.ToUpper(text)
 	var b strings.Builder
 	last := 0
@@ -84,6 +87,43 @@ func RedactReversible(text string, v *Vault) string {
 	}
 	b.WriteString(text[last:])
 	return b.String()
+}
+
+// AddValues makes every later RedactReversible replace these values too, as
+// kind. A value overlapping a pattern hit is left to the pattern (#1881).
+func (v *Vault) AddValues(kind string, values []string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.extra == nil {
+		v.extra = map[string]string{}
+	}
+	for _, s := range values {
+		v.extra[s] = kind
+	}
+}
+
+// withExtra adds each occurrence of an added value that no span already
+// touches, longest value first, and returns all spans in order.
+func (v *Vault) withExtra(text string, spans []redactSpan) []redactSpan {
+	if len(v.extra) == 0 {
+		return spans
+	}
+	values := slices.SortedFunc(maps.Keys(v.extra), func(a, b string) int { return len(b) - len(a) })
+	for _, val := range values {
+		for from := 0; ; {
+			i := strings.Index(text[from:], val)
+			if i < 0 {
+				break
+			}
+			s := redactSpan{start: from + i, end: from + i + len(val), name: v.extra[val]}
+			if !slices.ContainsFunc(spans, func(o redactSpan) bool { return s.start < o.end && o.start < s.end }) {
+				spans = append(spans, s)
+			}
+			from = s.end
+		}
+	}
+	slices.SortFunc(spans, func(a, b redactSpan) int { return a.start - b.start })
+	return spans
 }
 
 // keyFor skips a number whose key already appears in the text, so Restore can

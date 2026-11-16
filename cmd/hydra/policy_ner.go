@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,9 +18,8 @@ import (
 
 // cmdPolicyNER measures a head at the half of PII detection no pattern reaches.
 //
-// A command rather than something a dispatch does, and nothing routes on the
-// result yet: #901 is explicit that a measured classifier must not ship on
-// vibes, and this is the measurement that would earn it.
+// The saved report is what lets `dispatch --redact=names` ask a local head:
+// only one measured eligible on this machine, never one on vibes (#901, #1881).
 func cmdPolicyNER() *cobra.Command {
 	var headID string
 	var jsonOut bool
@@ -58,10 +56,14 @@ detector that reports clean because the head malfunctioned is worse than none.`,
 				return err
 			}
 
-			ask := headAsk(head, maxTokens)
+			ask := dispatch.HeadAsk(head, maxTokens)
 			started := time.Now()
 			rep, err := entity.Measure(ctx, ask)
 			if err != nil {
+				return err
+			}
+			// Kept per head, so --redact names can ask only a head measured eligible here.
+			if err := entity.SaveReport(dispatch.NERReportPath(), head.ID, rep, time.Now()); err != nil {
 				return err
 			}
 			if jsonOut {
@@ -107,30 +109,6 @@ func pickHead(heads []provider.Head, want string) (provider.Head, error) {
 	return provider.Head{}, fmt.Errorf("no routable local head, name one with --head, see: hyctl probe")
 }
 
-// headAsk sends one question to one head. Deliberately not a dispatch: naming a
-// head is the whole point, so routing would defeat it.
-func headAsk(head provider.Head, maxTokens int) entity.Ask {
-	exec := executor.For(head)
-	return func(ctx context.Context, system, text string) (string, error) {
-		resp, err := exec.Execute(ctx, nerRequest(head, maxTokens, system, text))
-		if err != nil {
-			return "", err
-		}
-		return resp.Output, nil
-	}
-}
-
-// nerRequest is built apart from the call so a test can read what is sent.
-// Greedy decoding is the whole of #1041: without it the same head measures
-// differently every run and the verdict is a coin flip rather than evidence.
-func nerRequest(head provider.Head, maxTokens int, system, text string) executor.Request {
-	greedy := 0.0
-	return executor.Request{
-		Prompt: text, System: system, Head: head,
-		MaxTokens: maxTokens, Temperature: &greedy,
-	}
-}
-
 func printNER(id string, r entity.Report, took time.Duration) {
 	verdict := "not eligible"
 	if r.Eligible() {
@@ -152,7 +130,7 @@ func printNER(id string, r entity.Report, took time.Duration) {
 		fmt.Fprintf(stdout, ", so its answers are not evidence")
 	}
 	fmt.Fprintf(stdout, "   (%s)\n\n", took.Round(time.Millisecond))
-	fmt.Fprintf(stdout, "  Nothing routes on this yet. It is the measurement that would earn it.\n\n")
+	fmt.Fprintf(stdout, "  Saved. `hyctl dispatch --redact=names` asks only a local model eligible here.\n\n")
 }
 
 func cmdPolicy() *cobra.Command {
