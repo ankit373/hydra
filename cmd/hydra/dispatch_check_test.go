@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"runtime"
 	"strings"
 	"testing"
@@ -168,5 +169,61 @@ func TestParseCheck_LinksIsALedgerGatedOracle(t *testing.T) {
 	c, err := parseCheck("links", "q")
 	if o, ok := c.oracle.(*linkcheck.Oracle); err != nil || !ok || o.Gate == nil || c.source != linkcheck.Source {
 		t.Fatalf("links = %+v, %v; want the link oracle behind the ledger gate", c, err)
+	}
+}
+
+var invoicePrompt = "Summarise this invoice.\n\n" +
+	util.WrapUntrusted("CONTEXT", "The invoice total is 120 dollars, due on 3 March.")
+
+// requirePass runs a --require-pass dispatch with a ground check and returns its exit code.
+func requirePass(t *testing.T, answer, prompt string) (exitStatus, string) {
+	t.Helper()
+	dispatchable(t, answer)
+	out, cobraOut, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--check", "ground", "--require-pass", prompt)
+	var status exitStatus
+	if err != nil && !errors.As(err, &status) {
+		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
+	}
+	return status, out
+}
+
+func TestDispatch_RequirePassFailsOnFailedCheck(t *testing.T) {
+	status, out := requirePass(t, "The total is 450 dollars.", invoicePrompt)
+	if status != 1 || !strings.Contains(out, "not verified: verifier:grounding") {
+		t.Errorf("exit = %d, want 1 and the reason:\n%s", status, out)
+	}
+}
+
+// A check that could not run is not a pass, and exits apart from a failure.
+func TestDispatch_RequirePassNotChecked(t *testing.T) {
+	status, out := requirePass(t, "The total is 450 dollars.", "summarise the invoice")
+	if status != 2 || !strings.Contains(out, "not verified: verifier:grounding") {
+		t.Errorf("exit = %d, want 2 and the reason:\n%s", status, out)
+	}
+}
+
+func TestDispatch_RequirePassPasses(t *testing.T) {
+	status, out := requirePass(t, "The total is 120 dollars.", invoicePrompt)
+	if status != 0 || strings.Contains(out, "not verified") {
+		t.Errorf("exit = %d, want 0 for a grounded answer:\n%s", status, out)
+	}
+}
+
+func TestDispatch_RequirePassRefusedWithoutCheck(t *testing.T) {
+	cliSandbox(t)
+	if _, _, err := run(t, "dispatch", "--require-pass", "q"); err == nil || !strings.Contains(err.Error(), "needs a --check") {
+		t.Fatalf("err = %v, want --require-pass refused without a check", err)
+	}
+}
+
+// Without the flag the exit stays 0, but the answer still says it is not verified.
+func TestDispatch_NotVerifiedLineWithoutFlag(t *testing.T) {
+	dispatchable(t, "The total is 450 dollars.")
+	out, cobraOut, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--check", "ground", invoicePrompt)
+	if err != nil {
+		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(out, "not verified: verifier:grounding") || !strings.Contains(out, "450") {
+		t.Errorf("no not-verified line for a failed check:\n%s", out)
 	}
 }
