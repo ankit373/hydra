@@ -86,6 +86,9 @@ func ClopperPearsonLower(k, n int, alpha float64) (float64, error) {
 	return 1 - u, err
 }
 
+// Z95 is the two-sided 95% normal quantile, the z every Wilson caller here uses.
+const Z95 = 1.959964
+
 // Wilson is the score interval for k successes in n trials. It stays inside [0, 1]
 // where the normal approximation does not, and n = 0, no evidence, is the whole range.
 func Wilson(k, n int, z float64) (lo, hi float64, err error) {
