@@ -174,3 +174,19 @@ func TestDispatch_CheckGen_OnlyTestsNamesAFile(t *testing.T) {
 		t.Fatalf("err = %v, want gen:labels=<file> refused", err)
 	}
 }
+
+// The writer names a total beside the field list, so plain gen adds a sum check that catches a made-up total.
+func TestDispatch_CheckGenAddsTheWritersSum(t *testing.T) {
+	s, _ := dispatchable(t, `{"items": [{"amount": 40}, {"amount": 2.50}], "total": 45.00}`)
+	s.FakeBinary(t, "claude", testutil.EchoScript(`{"fields": [{"name": "items", "type": "list", "required": true},
+{"name": "total", "type": "number", "required": true}], "sums": {"total": "items[].amount"}}`))
+	out, cobraOut, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--kind", "extraction", "--check", "gen", "Pull the invoice lines and total as JSON.")
+	if err != nil {
+		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
+	}
+	for _, want := range []string{"PASS  gen:fields", "FAIL  gen:sum-total", "adds up to 42.50", "generated checks: some failed"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output has no %q:\n%s", want, out)
+		}
+	}
+}

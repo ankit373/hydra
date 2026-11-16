@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/oracle"
@@ -133,4 +135,63 @@ func readAmount(v any) (amount, bool) {
 		a.decimals = len(frac)
 	}
 	return a, true
+}
+
+// sumGen is the sum check the writer names beside the field list. fieldsGen writes
+// its specs, so plain gen runs it; named alone it takes the same field list.
+type sumGen struct{}
+
+// sumBody is one generated sum, in the form --check sum: takes.
+type sumBody struct {
+	Sum string `json:"sum"`
+}
+
+func init() {
+	if err := Register("extraction", sumGen{}); err != nil {
+		panic(err)
+	}
+}
+
+func (sumGen) Kind() string        { return "sum" }
+func (sumGen) OnlyWhenNamed() bool { return true }
+
+func (sumGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
+	specs, err := fieldsGen{}.Generate(ctx, task)
+	return slices.DeleteFunc(specs, func(s Spec) bool { return s.Kind != "sum" }), err
+}
+
+func (sumGen) Oracle(s Spec, _ Env) (oracle.Oracle, error) {
+	var b sumBody
+	if err := json.Unmarshal(s.Body, &b); err != nil {
+		return nil, fmt.Errorf("checkgen sum: spec %s: %w", s.ID, err)
+	}
+	return NewSum(b.Sum)
+}
+
+// keepSums is each sum as total=parts, by total, whose total is a listed number field and
+// whose every part is a listed number field or a listed list's items; the rest are dropped.
+func keepSums(sums map[string]string, fields []Field) []string {
+	types := make(map[string]string, len(fields))
+	for _, f := range fields {
+		types[f.Name] = f.Type
+	}
+	partOK := func(p string) bool {
+		name, rest, _ := strings.Cut(p, ".")
+		if list, each := strings.CutSuffix(name, "[]"); each {
+			return types[list] == "list"
+		}
+		return rest == "" && types[name] == "number"
+	}
+	var out []string
+	for _, total := range slices.Sorted(maps.Keys(sums)) {
+		parts := strings.Split(sums[total], ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		if types[total] != "number" || slices.Contains(parts, total) || slices.ContainsFunc(parts, func(p string) bool { return !partOK(p) }) {
+			continue
+		}
+		out = append(out, total+"="+strings.Join(parts, ","))
+	}
+	return out
 }

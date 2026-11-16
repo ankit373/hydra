@@ -153,7 +153,10 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           chunk on the first chunk's head and `MergeObjects` joins them, a key two chunks give reported,
                           never overwritten. `SameValue` is the one
                           field comparison, also used by the bench's extraction suite. `SumOracle` (`--check sum:`)
-                          adds an answer's parts and compares them with its total, no model. gen:roundtrip re-extracts the
+                          adds an answer's parts and compares them with its total, no model. The writer may name sums
+                          beside the field list; `keepSums` keeps those whose total is a listed number and whose parts
+                          are listed numbers or a listed list's items, and each runs as gen:sum-<total> through that same
+                          `SumOracle`. gen:roundtrip re-extracts the
                           same fields with the check's head and compares required fields, a `FieldVerdict` each (agreed,
                           differs, not_compared); `MergeFields` folds that into the fields list when both ran. A paid call, so `For` leaves
                           it out and it runs only when `Named`. Answers, summaries and
