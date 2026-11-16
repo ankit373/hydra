@@ -234,3 +234,26 @@ func TestParseCheck_CitationsIsALedgerGatedOracle(t *testing.T) {
 		t.Fatalf("citations = %+v, %v; want the citations oracle behind the ledger gate, with a cache", c, err)
 	}
 }
+
+func TestDispatch_CheckSum_InventedTotalFailsWithBothNumbers(t *testing.T) {
+	dispatchable(t, `{"items": [{"amount": 40}, {"amount": 2.5}], "total": 45.00}`)
+
+	out, cobraOut, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--max-escalations", "0",
+		"--check", "sum:total=items[].amount", "pull the line amounts and total from this receipt as JSON")
+	if err != nil {
+		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(out, "FAIL") || !strings.Contains(out, "verifier:sum:total=items[].amount") ||
+		!strings.Contains(out, "total is 45.00 but items[].amount adds up to 42.50") {
+		t.Errorf("an invented total was not failed with both numbers:\n%s", out)
+	}
+}
+
+func TestDispatch_CheckSum_BadSpecRefusedBeforeRouting(t *testing.T) {
+	cliSandbox(t)
+
+	_, _, err := run(t, "dispatch", "--check", "sum:total", "q")
+	if err == nil || !strings.Contains(err.Error(), "sum takes") {
+		t.Fatalf("err = %v, want the sum spec refused", err)
+	}
+}
