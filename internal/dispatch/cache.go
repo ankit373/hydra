@@ -213,7 +213,7 @@ func (d *Dispatcher) serveCached(opts Options, out cache.Outcome) *Result {
 	taskID := runid.ResolveTask(opts.TaskID)
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID,
-		SpanID: runlog.SpanIDFor(taskID), Detail: opts.Enum,
+		SpanID: runlog.SpanIDFor(taskID), Detail: opts.Enum, Meta: conversationMeta(opts),
 	})
 	logCacheHit(rl, taskID, runlog.NewSpanID(), &out.Hit)
 

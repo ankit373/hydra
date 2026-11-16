@@ -527,6 +527,7 @@ hyctl serve ; hyctl serve --enum SIMPLE --local
 # Opt-in routing by objective (quality becomes the default in v2.0.0; until then an
 # implicit-default `hydra` request gets RFC 9745 Deprecation + Link and one stderr line)
 hyctl serve --objective quality ; hyctl serve --objective cost   # or X-Hydra-Objective per request
+# Each request is its own run, keyed to its chat (system + first user message, or X-Hydra-Conversation)
 hyctl serve --addr 0.0.0.0:8788 --token "$HYDRA_SERVE_TOKEN"
 # Typed decisions on the same server; X-Hydra-Domain picks the calibration domain
 hyctl serve --confidence 0.9   # POST /v1/decisions or /v1/systemone

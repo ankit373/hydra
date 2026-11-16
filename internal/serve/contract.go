@@ -27,6 +27,9 @@ const (
 	// BasisHeader says whether the answering head's P(pass) was measured in
 	// this class or is the catalogue's prior.
 	BasisHeader = "X-Hydra-P-Pass-Basis"
+	// ConversationHeader names the chat a request continues, for a client
+	// whose opening messages change between turns. Request only.
+	ConversationHeader = "X-Hydra-Conversation"
 
 	// DeprecationHeader (RFC 9745) marks a reply whose route relied on the
 	// implicit `hydra` default, which v2.0.0 changes (#1206).
@@ -107,6 +110,18 @@ func explicitClass(h http.Header) (string, error) {
 		class = c
 	}
 	return class, nil
+}
+
+// maxConversationKey bounds the header, since it is written to every run.
+const maxConversationKey = 128
+
+// conversation reads ConversationHeader; empty means the client sent none.
+func conversation(h http.Header) (string, error) {
+	c := strings.TrimSpace(h.Get(ConversationHeader))
+	if len(c) > maxConversationKey {
+		return "", fmt.Errorf("%s is %d bytes, over the %d byte limit", ConversationHeader, len(c), maxConversationKey)
+	}
+	return c, nil
 }
 
 // objective reads ObjectiveHeader; empty means the client left it to the route.
