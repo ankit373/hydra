@@ -112,3 +112,46 @@ func TestTrustCalibration_ShowsChangeJSON(t *testing.T) {
 		t.Errorf("json carries since on every row and changed only where one was found:\n%s", out)
 	}
 }
+
+// A source that dropped and came back shows both dates.
+func TestTrustCalibration_ShowsRecovery(t *testing.T) {
+	populated(t)
+	r := rand.New(rand.NewPCG(1875, 1))
+	var b strings.Builder
+	const n = 3300
+	start := time.Now().UTC().Add(-time.Hour - n*time.Minute)
+	for i := range n {
+		rate, outcome := 0.92, 2
+		if i >= 2000 && i < 2300 {
+			rate = 0.70
+		}
+		if r.Float64() < rate {
+			outcome = 1
+		}
+		fmt.Fprintf(&b, `{"ts":%q,"source":"back","domain":"go","said_correct":true,"outcome":%d}`+"\n",
+			start.Add(time.Duration(i)*time.Minute).Format(time.RFC3339), outcome)
+	}
+	if err := os.MkdirAll(filepath.Dir(trust.DefaultPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(trust.DefaultPath(), []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := run(t, "trust", "calibration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := cal.Report()[0]
+	if s.Changed.IsZero() || s.Recovered.IsZero() {
+		t.Fatalf("changed %v recovered %v, want both", s.Changed, s.Recovered)
+	}
+	changed, back := s.Changed.Local().Format(time.DateOnly), s.Recovered.Local().Format(time.DateOnly)
+	if !strings.Contains(out, "recovered") || !strings.Contains(out, changed+" "+back) {
+		t.Errorf("want the change %s and the recovery %s on the row:\n%s", changed, back, out)
+	}
+}

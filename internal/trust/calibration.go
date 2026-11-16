@@ -47,9 +47,11 @@ type confusion struct {
 	// record since its last change can stand in for the whole history.
 	drift *drift.Detector
 	// seen is the domain step this cell was last caught up to; changed is when
-	// the current segment's change was found, zero when it has none.
-	seen    int64
-	changed time.Time
+	// the last change was found, recovered when the rate came back after it,
+	// zero until then and again on the next drop.
+	seen      int64
+	changed   time.Time
+	recovered time.Time
 }
 
 func newConfusion() *confusion {
@@ -102,10 +104,12 @@ type Stat struct {
 	// which is a shape, not a measurement (#1142).
 	Discriminating bool `json:"discriminating"`
 	// Since* is the said-correct record since the cell's last detected change,
-	// the whole record when there is none. Changed is when it was found.
+	// the whole record when there is none. Changed is when it was found, and
+	// Recovered when the rate came back after it.
 	SinceCorrect int       `json:"since_correct"`
 	SinceTotal   int       `json:"since_total"`
 	Changed      time.Time `json:"changed,omitzero"`
+	Recovered    time.Time `json:"recovered,omitzero"`
 }
 
 // Calibrator maintains an online confusion posterior per (source, domain) and
@@ -224,6 +228,7 @@ func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outco
 		conf.seen = step - 1
 		c.store[key] = conf
 	}
+	from := conf.drift.Best
 	// Only a said-correct verdict is a pass or fail; any other step is idle.
 	if gap := int(step - conf.seen - 1); saidCorrect {
 		conf.drift.Idle(gap)
@@ -232,11 +237,14 @@ func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outco
 		conf.drift.Idle(gap + 1)
 	}
 	conf.seen = step
+	// A recovery is a rise after a change, or a fall back to the first segment,
+	// which is how a false alarm is taken back. It is dated once.
+	pending := !conf.changed.IsZero() && conf.recovered.IsZero()
 	switch {
-	case conf.drift.Best == 0: // back on the cell's first segment: no change stands
-		conf.changed = time.Time{}
+	case pending && (conf.drift.Best == 0 || conf.drift.Changed() && conf.drift.Rose(from)):
+		conf.recovered = ts
 	case conf.drift.Changed():
-		conf.changed = ts
+		conf.changed, conf.recovered = ts, time.Time{}
 	}
 	switch {
 	case saidCorrect && actual == OutcomeCorrect:
@@ -381,6 +389,7 @@ func (c *Calibrator) Report() []Stat {
 			SinceCorrect:   sinceCorrect,
 			SinceTotal:     sinceTotal,
 			Changed:        conf.changed,
+			Recovered:      conf.recovered,
 		})
 	}
 	c.mu.RUnlock()
