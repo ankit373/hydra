@@ -19,7 +19,7 @@ import (
 )
 
 // SpecKinds are the shapes a generated check can take, one per generator.
-var SpecKinds = []string{"labels", "fields", "roundtrip", "claims", "rubric", "tests"}
+var SpecKinds = []string{"labels", "fields", "roundtrip", "sum", "claims", "rubric", "tests"}
 
 // Task is what a generator reads: the request, its kind-of-work key, and the
 // writer PickGenerator chose, with Ask bound to that head. Fields, from a
