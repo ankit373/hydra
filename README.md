@@ -113,7 +113,7 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 | Analyse | compare numbers, explain a trend | a script recomputes the figures | any command via `--check cmd:...` or `hyctl oracle verify` |
 | Code | edit, generate, review | tests, build, lint; a file many others depend on needs more confidence | `hyctl edit`, `hyctl vet`, `hyctl graph blast`, `hyverify` |
 
-`--check` judges one answer. It does not combine with `--swarm` or `--confidence`, and each verdict goes to the eval corpus under the request's kind. When a check really fails, the request reruns once on a model measured stronger at that kind of work, sent the rejected answer and the error; a check that could not run never reruns. Both answers are filed under the model that wrote them. `--max-escalations` sets how many reruns (default from `max_retries` and `escalate_on_fail` in `policy.yaml`, `0` turns it off), and `--max-cost` covers the rerun too.
+`--check` judges one answer. It does not combine with `--swarm` or `--confidence`, and each verdict goes to the eval corpus under the request's kind. When a check really fails, the request reruns once on a model measured stronger at that kind of work, sent the rejected answer and the error; a check that could not run never reruns. With `--tier` or `--enum` the first answer still comes from that tier, and the rerun may go to a stronger model outside it. Both answers are filed under the model that wrote them. `--max-escalations` sets how many reruns (default from `max_retries` and `escalate_on_fail` in `policy.yaml`, `0` turns it off), and `--max-cost` covers the rerun too.
 
 ---
 
