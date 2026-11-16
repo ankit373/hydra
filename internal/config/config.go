@@ -18,7 +18,7 @@ import (
 
 // Policy is a named routing rule applied before dispatch.
 type Policy struct {
-	Action string `toml:"action"` // "local-only", "budget-cap", etc.
+	Action string `toml:"action"` // "local-only", "redact", "budget-cap", etc.
 }
 
 // Egress governs what may leave the machine once content classifies secret.

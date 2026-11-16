@@ -194,6 +194,8 @@ internal/signals/       ← Routing signals + a small closed expression language
 internal/policy/        ← PII detection + local-only enforcement. `Redact` labels hits for storage;
                           `RedactReversible` numbers them (<<EMAIL_1>>) into an in-memory `Vault` whose
                           `Restore` puts values back and reports placeholders it never issued.
+                          `hyctl dispatch --redact` or `[policies.pii] action = "redact"` sends remote heads
+                          that form and restores the answer before checks; local heads get the original.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).

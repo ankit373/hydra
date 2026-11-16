@@ -202,6 +202,10 @@ type Options struct {
 	// Retry builds the prompt a head asked after an escalation is sent, from the
 	// rejected answer and Escalate's reason. Nil resends prompt unchanged.
 	Retry func(prompt string, failed *Result, reason string) string
+
+	// Redact sends a remote head numbered placeholders for every detected value
+	// and restores the answer locally; a local head gets the original (#1882).
+	Redact bool
 }
 
 // Result is the outcome of a successful dispatch.
@@ -251,6 +255,11 @@ type Result struct {
 	// CostUSD is this call's price, set once from CallCost: every cost row,
 	// runlog span and caller reads it rather than pricing the call again.
 	CostUSD float64
+
+	// Redacted is how many distinct values the answering head saw as
+	// placeholders; Unrestored the placeholders it wrote that Hydra never issued.
+	Redacted   int
+	Unrestored []string
 
 	// Cache is the stored answer this result was served from, nil when a head
 	// actually ran. Callers label it rather than passing it off as fresh work:
@@ -361,7 +370,7 @@ func resumeOptions(q pending.Question) Options {
 		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
 		System: q.System, Enum: q.Enum, Resource: q.Resource,
 		Domain: q.Domain, Temperature: q.Temperature, NoCache: q.NoCache,
-		Objective:  rank.Objective(q.Objective),
+		Objective: rank.Objective(q.Objective), Redact: q.Redact,
 		MaxCostUSD: q.MaxCostUSD, MaxCostSource: q.MaxCostSource,
 		RunID: q.RunID, TaskID: q.TaskID,
 		AnsweredHead: q.Head,
@@ -550,6 +559,12 @@ func (d *Dispatcher) Embedder() embed.Embedder {
 // --local, which was config-blind on that path (#500).
 func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
 
+// PIIRedact reports whether the configured pii policy redacts instead.
+func (d *Dispatcher) PIIRedact() bool {
+	p, ok := d.cfg.Policies["pii"]
+	return ok && p.Action == policy.PIIRedact
+}
+
 // CapturesPayloads reports whether prompt and response text is being stored.
 // A surface that collapses an abandoned partial away needs it: without capture
 // the span still opens but holds no text, so offering to go and read it would
@@ -629,7 +644,7 @@ func PIILocalOnly(cfg *config.Config) bool { return piiLocalOnly(cfg) }
 // piiLocalOnly reports whether cfg's pii policy forces local-only routing.
 func piiLocalOnly(cfg *config.Config) bool {
 	p, ok := cfg.Policies["pii"]
-	return ok && p.Action == "local-only"
+	return ok && p.Action == policy.PIILocalOnly
 }
 
 // New builds a Dispatcher from the saved config and a (possibly cached) machine probe.
@@ -653,7 +668,6 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	}
 
 	result := cachedProbe(ctx)
-	localOnly := piiLocalOnly(cfg)
 
 	// Seeded from the discovered heads, not from models.yaml alone: Record is
 	// called with a head id, and those only partly overlap the registry's own
@@ -673,7 +687,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	return &Dispatcher{
 		cfg:     cfg,
 		heads:   result.Heads,
-		policy:  policy.New(policy.DefaultRules(localOnly)),
+		policy:  policy.New(policy.DefaultRules(cfg.Policies["pii"].Action)),
 		pricing: prices,
 		price:   headPrice(prices),
 		budget:  budgetReg,
@@ -779,6 +793,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	if action.Deny {
 		return nil, fmt.Errorf("dispatch denied by policy: %s", action.Reason)
+	}
+	// One vault per request, so fallbacks and escalations reuse its placeholders.
+	var vault *policy.Vault
+	if opts.Redact || action.Redact {
+		vault = policy.NewVault()
 	}
 
 	// After the policy, before any head: a denied prompt stays denied, and a
@@ -985,6 +1004,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, of),
 			Meta:   attemptMeta(i, of, last, lastReason),
 		})
+		// What this head is sent: placeholders when it is remote and redaction is on.
+		out := outgoing{prompt: sentPrompt, parts: sentParts, system: opts.System, msgs: opts.Messages, class: class}
+		if vault != nil && !h.LocalOnly {
+			out = redactOutgoing(out, vault, rules)
+		}
 		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
 		// let any other verdict through, which stopped being safe the moment
 		// Deny was not the only one that withholds permission, a pending
@@ -998,8 +1022,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// re-parses the identical policy file from disk once per candidate.
 		decision, lerr := ledger.CheckAndRecordDispatch(ledger.Dispatch{
 			Agent: "hydra-dispatch", HeadID: h.ID, Resource: opts.Resource,
-			Content: sentPrompt, Class: class,
-			Provenance: provenanceRecord(sentParts, h),
+			Content: out.prompt, Class: out.class,
+			Provenance: provenanceRecord(out.parts, h),
 		})
 		refuse := func(code GateCode, detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
@@ -1036,7 +1060,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		if h.LocalOnly {
 			sink.Kind = egress.SinkLocal
 		}
-		if v := egress.Guard(sentParts, sink, strict); v.Decision != egress.Allow {
+		if v := egress.Guard(out.parts, sink, strict); v.Decision != egress.Allow {
 			refuse(GateEgress, "egress denied: "+v.Reason)
 			_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
 				Agent: "hydra-dispatch", Tool: h.ID, Resource: opts.Resource,
@@ -1077,6 +1101,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Domain: opts.Domain, Temperature: opts.Temperature,
 				MaxCostUSD: opts.MaxCostUSD, MaxCostSource: opts.MaxCostSource,
 				NoCache: opts.NoCache, Objective: string(opts.Objective),
+				Redact: vault != nil,
 			}
 			// A question that cannot be stored has not been asked, so this
 			// fails the dispatch rather than proceeding unapproved.
@@ -1096,7 +1121,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		if opts.MaxCostUSD > 0 {
-			estInputTokens := len(sentPrompt) / 4
+			estInputTokens := len(out.prompt) / 4
 			estCost := CallCost(d.pricing, h, pricing.Usage{In: estInputTokens, Out: estInputTokens / 2})
 			if limit := opts.MaxCostUSD - escalatedUSD; estCost > limit {
 				// Named only when the caller said where the ceiling came from.
@@ -1150,12 +1175,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			onDelta = func(d string) { emit(StreamDelta, d, "") }
 		}
 		resp, err := executor.Stream(ctx, exec, executor.Request{
-			Prompt:        sentPrompt,
+			Prompt:        out.prompt,
 			Head:          h,
 			MaxTokens:     opts.MaxTokens,
 			Temperature:   opts.Temperature,
-			System:        opts.System,
-			Messages:      opts.Messages,
+			System:        out.system,
+			Messages:      out.msgs,
 			Tools:         opts.Tools,
 			ToolChoice:    opts.ToolChoice,
 			MaxMemoryMB:   opts.MaxMemoryMB,
@@ -1206,15 +1231,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		d.health.Pass(h.ID)
+		// Restored before anything reads the answer: checks, the cache, the caller.
+		var unrestored []string
+		if out.redacted {
+			unrestored = restoreResponse(resp, vault)
+		}
 		r := &Result{Output: resp.Output, Head: h, Fallbacks: candidates[i+1:], Retries: i, Attempts: attempts, Gates: gates, Response: resp,
 			Domain: domain, Scores: scores, Objective: opts.Objective, SpanID: span,
 			CostUSD: CallCost(d.pricing, h, usageOf(resp))}
+		if out.redacted {
+			r.Redacted, r.Unrestored = vault.Len(), unrestored
+		}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
 		})
 		recordOutputFinding(r.OutputProvenance, h)
 		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
-		inRef, outRef := d.capturePayloads(sentPrompt, opts, resp)
+		inRef, outRef := d.capturePayloads(out.prompt, opts, resp)
 		d.captureRecall(span, prompt)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,

@@ -1354,6 +1354,16 @@ hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--swarm</span>
         <p>Coverage is measured, not claimed. Against the <a href="https://github.com/microsoft/presidio-research">presidio-research</a> synthetic set, some detector fires on 18.7% of the 1,387 texts that carry PII: 100% of emails, SSNs and IBANs, 93% of cards and IP addresses, and 69% of phone numbers. The gap is names, street addresses and organisations, 1,509 spans with no pattern to write, which is what a trained NER model is for. Phone numbers are recognised by a country code, a bracketed area code, the 3-3-4 grouping or a leading trunk zero; a bare run of digits is refused for the same reason nine bare digits are not read as an SSN. Re-run the figures with <span class="fx">go test ./internal/policy -run TestPII_Recall -v</span>.</p>
         <p><span class="fx">hyctl policy ner --head &lt;id&gt;</span> measures whether a model can read the half no pattern reaches. It asks 470 labelled texts and reports recall and false positives apart, because each alone is easy to pass. On one machine a 7B scored 0.87 recall at 0.00 false positives, while a 0.5B scored 0.86 recall and said yes to <b>94%</b> of the negatives. Both are judged on the 95% interval, so a model is eligible only when the sample is large enough to say so. Decoding is pinned greedy, and an answer that is neither yes nor no is counted apart, never read as a no. <b>Nothing routes on this yet</b>, by design: it is the measurement that would earn it.</p>
       </div>
+      <div class="sub"><div class="lbl">Redact instead</div>
+        <p>Local-only keeps the whole request on your machine, so a stronger hosted model never works on it. <span class="fx">--redact</span> sends the hosted model numbered placeholders instead, and puts the real values back into the answer on your machine:</p>
+        <pre translate="no">$ hyctl dispatch <span class="fl">--redact</span> <span class="s">"draft a reply to sam.lee@example.com about the late refund"</span>
+
+  <span class="c"># the hosted model sees: draft a reply to &lt;&lt;EMAIL_1&gt;&gt; about the late refund</span>
+  Hi, I have passed your refund to finance. We will write to sam.lee@example.com by Friday.
+
+  redacted: mistral-large saw 1 value(s) as placeholders; the answer above has them restored</pre>
+        <p>A local model gets the original text. The map from placeholder to value stays in memory and is never sent or written. A value keeps its placeholder across fallbacks and reruns, the answer is restored before any check reads it, and a placeholder the model invented is named. Set <span class="fx">[policies.pii] action = "redact"</span> to do this for every prompt with PII. A file the <a href="#egress">egress gate</a> calls secret still goes only to a local model. It runs on a single dispatch, not with <span class="fx">--swarm</span> or a confidence run, and the answer prints once restored rather than streaming.</p>
+      </div>
     </section>
 
     <section class="doc" id="egress">

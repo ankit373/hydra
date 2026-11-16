@@ -26,7 +26,7 @@ func rlDispatcher(heads ...provider.Head) *Dispatcher {
 	return &Dispatcher{
 		cfg:     &config.Config{},
 		heads:   heads,
-		policy:  policy.New(policy.DefaultRules(false)),
+		policy:  policy.New(policy.DefaultRules("")),
 		pricing: pricing.Load(),
 	}
 }

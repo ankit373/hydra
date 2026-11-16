@@ -49,7 +49,7 @@ func liveDispatcher(heads ...provider.Head) *Dispatcher {
 	return &Dispatcher{
 		cfg:    &config.Config{},
 		heads:  heads,
-		policy: policy.New(policy.DefaultRules(false)),
+		policy: policy.New(policy.DefaultRules("")),
 		budget: budget.NewRegistry(nil),
 	}
 }
@@ -489,7 +489,7 @@ func TestDispatch_PIIForcesLocalOnlyAndSaysSoWhenNothingIsLocal(t *testing.T) {
 	dd := &Dispatcher{
 		cfg:    &config.Config{},
 		heads:  []provider.Head{echoHead(t, s, "cloud", 90)},
-		policy: policy.New(policy.DefaultRules(true)), // local-only PII rule armed
+		policy: policy.New(policy.DefaultRules(policy.PIILocalOnly)), // local-only PII rule armed
 		budget: budget.NewRegistry(nil),
 	}
 
@@ -513,7 +513,7 @@ func TestDispatch_PrecomputedClassificationOverridesFreshDetection(t *testing.T)
 	dd := &Dispatcher{
 		cfg:    &config.Config{},
 		heads:  []provider.Head{echoHead(t, s, "cloud", 90)},
-		policy: policy.New(policy.DefaultRules(true)), // local-only PII rule armed
+		policy: policy.New(policy.DefaultRules(policy.PIILocalOnly)), // local-only PII rule armed
 		budget: budget.NewRegistry(nil),
 	}
 
@@ -541,7 +541,7 @@ func TestDispatch_NoHeadsErrorIsMatchableAndPhrasesAnEmptyTierClearly(t *testing
 	dd := &Dispatcher{
 		cfg:    &config.Config{},
 		heads:  []provider.Head{echoHead(t, s, "cloud", 90)},
-		policy: policy.New(policy.DefaultRules(true)),
+		policy: policy.New(policy.DefaultRules(policy.PIILocalOnly)),
 		budget: budget.NewRegistry(nil),
 	}
 

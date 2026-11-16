@@ -287,7 +287,7 @@ func TestResume_DispatchesWithWhatTheTaskWasParkedUnder(t *testing.T) {
 	parked := Options{
 		Domain: "classification.banking77", Temperature: &warm, NoCache: true,
 		MaxCostUSD: 0.25, MaxCostSource: "X-Hydra-Max-Cost-USD",
-		RunID: "run-rt", TaskID: "task-rt", Objective: rank.Quality,
+		RunID: "run-rt", TaskID: "task-rt", Objective: rank.Quality, Redact: true,
 	}
 	if _, err := liveDispatcher(echoHead(t, s, "gated", 95)).Dispatch(context.Background(), "classify", parked); err == nil {
 		t.Fatal("the task was not parked")
@@ -299,8 +299,8 @@ func TestResume_DispatchesWithWhatTheTaskWasParkedUnder(t *testing.T) {
 	got := resumeOptions(q)
 	if got.Domain != parked.Domain || got.Temperature == nil || *got.Temperature != warm || !got.NoCache ||
 		got.MaxCostUSD != parked.MaxCostUSD || got.MaxCostSource != parked.MaxCostSource || got.AnsweredHead != "gated" ||
-		got.Objective != parked.Objective {
-		t.Errorf("resume would dispatch with Domain=%q Temperature=%s NoCache=%v MaxCostUSD=%v from %q head=%q objective=%q, want what was parked",
-			got.Domain, showTemp(got.Temperature), got.NoCache, got.MaxCostUSD, got.MaxCostSource, got.AnsweredHead, got.Objective)
+		got.Objective != parked.Objective || !got.Redact {
+		t.Errorf("resume would dispatch with Domain=%q Temperature=%s NoCache=%v MaxCostUSD=%v from %q head=%q objective=%q redact=%v, want what was parked",
+			got.Domain, showTemp(got.Temperature), got.NoCache, got.MaxCostUSD, got.MaxCostSource, got.AnsweredHead, got.Objective, got.Redact)
 	}
 }

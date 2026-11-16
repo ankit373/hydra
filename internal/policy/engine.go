@@ -10,6 +10,7 @@ package policy
 type Action struct {
 	Deny      bool   // block the request entirely
 	LocalOnly bool   // only route to heads where LocalOnly=true
+	Redact    bool   // send remote heads placeholders, restore the answer locally
 	TierCeil  string // do not use tiers above this (e.g. "standard")
 	Reason    string // human-readable explanation
 }
@@ -56,16 +57,20 @@ func (e *Engine) Evaluate(req Request) Action {
 
 // ── Default rule set ──────────────────────────────────────────────────────────
 
-// DefaultRules returns the baseline policy applied to every dispatch.
-// Users extend this by prepending or appending custom rules.
-func DefaultRules(localOnlyEnabled bool) []Rule {
-	rules := []Rule{}
-	if localOnlyEnabled {
-		rules = append(rules, Rule{
-			Name:      "pii-local-only",
-			Condition: ContainsPII,
-			Apply:     Action{LocalOnly: true},
-		})
+// The [policies.pii] actions DefaultRules knows. Any other value adds no rule.
+const (
+	PIILocalOnly = "local-only"
+	PIIRedact    = "redact"
+)
+
+// DefaultRules returns the baseline policy applied to every dispatch, for the
+// configured [policies.pii] action. Users extend this by adding rules.
+func DefaultRules(piiAction string) []Rule {
+	switch piiAction {
+	case PIILocalOnly:
+		return []Rule{{Name: "pii-local-only", Condition: ContainsPII, Apply: Action{LocalOnly: true}}}
+	case PIIRedact:
+		return []Rule{{Name: "pii-redact", Condition: ContainsPII, Apply: Action{Redact: true}}}
 	}
-	return rules
+	return []Rule{}
 }

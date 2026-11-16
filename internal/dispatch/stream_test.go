@@ -66,7 +66,7 @@ func streamDispatcher(t *testing.T, heads ...provider.Head) *Dispatcher {
 	t.Setenv("USERPROFILE", home)
 	return &Dispatcher{
 		cfg: &config.Config{}, heads: heads,
-		policy: policy.New(policy.DefaultRules(false)), pricing: pricing.Load(),
+		policy: policy.New(policy.DefaultRules("")), pricing: pricing.Load(),
 	}
 }
 

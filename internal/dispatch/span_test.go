@@ -51,7 +51,7 @@ func TestDispatch_SpanCarriesTokensAndIdentity(t *testing.T) {
 
 	d := &Dispatcher{
 		cfg: &config.Config{}, heads: []provider.Head{servingHead(t)},
-		policy: policy.New(policy.DefaultRules(false)), pricing: pricing.Load(),
+		policy: policy.New(policy.DefaultRules("")), pricing: pricing.Load(),
 	}
 	if _, err := d.Dispatch(context.Background(), "hello", Options{
 		RunID: "run-span", TaskID: "task-span", MaxTokens: 64, Enum: "SIMPLE",
@@ -112,7 +112,7 @@ func TestDispatch_CostRowJoinsTheSpan(t *testing.T) {
 
 	d := &Dispatcher{
 		cfg: &config.Config{}, heads: []provider.Head{servingHead(t)},
-		policy: policy.New(policy.DefaultRules(false)), pricing: pricing.Load(),
+		policy: policy.New(policy.DefaultRules("")), pricing: pricing.Load(),
 	}
 	if _, err := d.Dispatch(context.Background(), "hello", Options{
 		RunID: "run-join", TaskID: "task-join",
@@ -196,7 +196,7 @@ func TestLogDispatch_WritesCacheTokens(t *testing.T) {
   "usage":{"prompt_tokens":1000,"completion_tokens":7,"prompt_tokens_details":{"cached_tokens":900}}}`
 	d := &Dispatcher{
 		cfg: &config.Config{}, heads: []provider.Head{servingHeadWith(t, body)},
-		policy: policy.New(policy.DefaultRules(false)), pricing: pricing.Load(),
+		policy: policy.New(policy.DefaultRules("")), pricing: pricing.Load(),
 	}
 	if _, err := d.Dispatch(context.Background(), "hello", Options{RunID: "run-cache", TaskID: "task-cache"}); err != nil {
 		t.Fatal(err)

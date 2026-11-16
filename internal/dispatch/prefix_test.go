@@ -46,7 +46,7 @@ func TestDispatch_SamePromptBuildsIdenticalPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := &Dispatcher{
-		cfg: &config.Config{}, policy: policy.New(policy.DefaultRules(false)), pricing: pricing.Load(),
+		cfg: &config.Config{}, policy: policy.New(policy.DefaultRules("")), pricing: pricing.Load(),
 		heads: []provider.Head{{ID: "anthropic", Name: "Claude", Provider: "anthropic",
 			Source: "env", AuthReady: true, CapScore: 90, Meta: map[string]string{}}},
 	}

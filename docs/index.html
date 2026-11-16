@@ -109,6 +109,7 @@
       "Off-policy evaluation (hyctl trace evaluate), what a routing policy you never ran would have cost, with a confidence interval, refusing where the log cannot answer",
       "OpenTelemetry export (hyctl trace export --otlp), a run as nested OTLP spans for Langfuse, Grafana or Jaeger, keeping the fallback chain a collector would otherwise see flat, with HYDRA_OTLP_HEADERS for a hosted collector's auth; nothing leaves the machine by default",
       "hyctl workflow, an ordered multi-step task with each step routed on its own, so sorting can run on a cheap model and the final write-up on a strong one, and steps that do not need each other run at the same time. Every step carries a dispatch's own caps, policy.yaml's max_cost_usd and max_wall_seconds plus --max-cost, --local and --dry-run, because a workflow spends a dispatch's money once per step. State is written before every step, so a killed run resumes from where it stopped rather than restarting, and a heartbeat beside the record tells a dead run from a live one and is claimed exclusively, so a second resume over a live workflow is refused instead of dispatching every remaining step twice",
+      "Redact, send, restore (hyctl dispatch --redact), a hosted model works on placeholders for the detected values, and the answer comes back with the real values put back locally; a local model gets the original",
       "hyctl ask, tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
       "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
@@ -212,7 +213,7 @@
       "name": "What data leaves my machine when I use Hydra?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Only the prompt you send, and only to the model that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the verified example corpus all stay in ~/.hydra on your own disk. An egress gate refuses to send a file classified as secret, such as .env or ~/.aws/credentials, to any model outside your machine, and a local-only policy pins sensitive work to models running on your hardware. Traces go to an OpenTelemetry collector only when you pass --otlp with an endpoint."
+        "text": "Only the prompt you send, and only to the model that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the verified example corpus all stay in ~/.hydra on your own disk. An egress gate refuses to send a file classified as secret, such as .env or ~/.aws/credentials, to any model outside your machine, and a local-only policy pins sensitive work to models running on your hardware. With --redact, a hosted model sees numbered placeholders for detected emails, keys, card numbers and the like, and the real values are put back into the answer on your machine. Traces go to an OpenTelemetry collector only when you pass --otlp with an endpoint."
       }
     },
     {
@@ -1094,7 +1095,7 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
     </div>
     <div class="faq-item">
       <h3>What data leaves my machine when I use Hydra?</h3>
-      <p>Only the prompt you send, and only to the model that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the verified example corpus all stay in ~/.hydra on your own disk. An egress gate refuses to send a file classified as secret, such as .env or ~/.aws/credentials, to any model outside your machine, and a local-only policy pins sensitive work to models running on your hardware. Traces go to an OpenTelemetry collector only when you pass --otlp with an endpoint.</p>
+      <p>Only the prompt you send, and only to the model that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the verified example corpus all stay in ~/.hydra on your own disk. An egress gate refuses to send a file classified as secret, such as .env or ~/.aws/credentials, to any model outside your machine, and a local-only policy pins sensitive work to models running on your hardware. With --redact, a hosted model sees numbered placeholders for detected emails, keys, card numbers and the like, and the real values are put back into the answer on your machine. Traces go to an OpenTelemetry collector only when you pass --otlp with an endpoint.</p>
     </div>
     <div class="faq-item">
       <h3>Can Hydra route between local models like Ollama and llama.cpp?</h3>
