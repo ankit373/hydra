@@ -267,7 +267,9 @@ def fetch_prs(numbers):
 def fetch_release(version):
     try:
         rel = json.loads(gh("api", f"repos/{REPO}/releases/tags/v{version}"))
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as err:
+        if "HTTP 404" not in (err.stderr or ""):
+            raise
         return None  # not published yet: the page says so and links the tag
     assets = sorted(
         ({"name": a["name"], "size": a["size"], "digest": a.get("digest") or ""} for a in rel["assets"]),
@@ -279,8 +281,10 @@ def fetch_release(version):
         try:
             attested = bool(probe) and int(gh("api", f"repos/{REPO}/attestations/{probe['digest']}",
                                               "--jq", ".attestations|length")) > 0
-        except subprocess.CalledProcessError:
-            attested = False  # 404: nothing attested
+        except subprocess.CalledProcessError as err:
+            if "HTTP 404" not in (err.stderr or ""):
+                raise  # a rate limit must not turn into "not attested" on the page
+            attested = False
     return {"published": rel["published_at"][:10], "assets": assets, "attested": attested}
 
 
