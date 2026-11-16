@@ -3467,14 +3467,18 @@ func printPolicyAudit(r *security.Report) {
 // printRedaction says how many values a hosted model saw as placeholders, and
 // names any placeholder it wrote that Hydra never issued.
 func printRedaction(r *dispatch.Result) {
+	if r.RedactionMiss != "" && r.Head.LocalOnly {
+		fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render("redacted: "+r.RedactionMiss+", so "+r.Head.Name+" reran it locally"))
+		return
+	}
 	if r.Redacted == 0 {
 		return
 	}
 	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 		"redacted: %s saw %d value(s) as placeholders; the answer above has them restored", r.Head.Name, r.Redacted)))
-	if len(r.Unrestored) > 0 {
-		fmt.Fprintf(stdout, "  %s the answer names placeholders Hydra never issued: %s\n",
-			warnStyle.Render("⚠"), util.SafeTerminal(strings.Join(r.Unrestored, ", ")))
+	if r.RedactionMiss != "" {
+		fmt.Fprintf(stdout, "  %s %s, and no local model could rerun it\n",
+			warnStyle.Render("⚠"), util.SafeTerminal(r.RedactionMiss))
 	}
 	fmt.Fprintln(stdout)
 }

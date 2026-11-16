@@ -263,6 +263,10 @@ type Result struct {
 	// placeholders; Unrestored the placeholders it wrote that Hydra never issued.
 	Redacted   int
 	Unrestored []string
+	// RedactionMiss says why a redacted answer could not use a value. On a
+	// local head's answer it is why the request was rerun there; on a remote
+	// one, no local head could rerun it.
+	RedactionMiss string
 
 	// Cache is the stored answer this result was served from, nil when a head
 	// actually ran. Callers label it rather than passing it off as fresh work:
@@ -1236,14 +1240,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		d.health.Pass(h.ID)
 		// Restored before anything reads the answer: checks, the cache, the caller.
 		var unrestored []string
+		var miss string
 		if out.redacted {
-			unrestored = restoreResponse(resp, vault)
+			unrestored, miss = restoreResponse(resp, vault)
 		}
 		r := &Result{Output: resp.Output, Head: h, Fallbacks: candidates[i+1:], Retries: i, Attempts: attempts, Gates: gates, Response: resp,
 			Domain: domain, Scores: scores, Objective: opts.Objective, SpanID: span,
 			CostUSD: CallCost(d.pricing, h, usageOf(resp))}
 		if out.redacted {
-			r.Redacted, r.Unrestored = vault.Len(), unrestored
+			r.Redacted, r.Unrestored, r.RedactionMiss = vault.Len(), unrestored, miss
 		}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
@@ -1268,6 +1273,21 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		})
 		_ = d.logDispatch(r, prompt, opts, firstPick{head: first, prob: actProb, step: i}, span)
 		d.recordBudget(r)
+		if miss != "" {
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindScore, TaskID: taskID, SpanID: span, ParentSpanID: taskSpan,
+				Head: h.ID, Model: h.Name,
+				Score: &runlog.Score{Name: "redaction", Value: 0, Source: "redaction", Comment: miss},
+			})
+			if local, ok := d.rerunLocal(ctx, prompt, opts, miss); ok {
+				_ = rl.Append(runlog.Event{
+					Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
+					Head: h.ID, Model: resp.Model, Tier: tier, Status: "rerun",
+					Detail: "rerun on local head " + local.Head.ID + ": " + miss,
+				})
+				return local, nil
+			}
+		}
 		// Paid for and logged above, so a rejected answer is still on the books;
 		// what it must not become is the cached or handed-off one.
 		if opts.Escalate != nil {
