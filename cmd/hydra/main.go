@@ -890,6 +890,7 @@ func cmdDispatch() *cobra.Command {
 		verifyRun    bool
 		checks       []string
 		schemaPath   string
+		maxFields    int
 		maxEsc       int
 		requirePass  bool
 		sourceOnly   bool
@@ -961,6 +962,11 @@ func cmdDispatch() *cobra.Command {
 					return err
 				}
 			}
+			if maxFields < 1 {
+				return fmt.Errorf("--max-fields must be 1 or more, got %d", maxFields)
+			}
+			// A schema wider than --max-fields is asked for a chunk at a time and merged (#1869).
+			chunks := gen.chunks(maxFields)
 			if maxEsc < 0 {
 				return fmt.Errorf("--max-escalations must be 0 or more, got %d", maxEsc)
 			}
@@ -1320,18 +1326,35 @@ func cmdDispatch() *cobra.Command {
 				gen.skip = "claims"
 			}
 			esc := checkRule(&opts, answerChecks, maxEsc)
+			chunked := len(chunks) > 1 && !dryRun
+			if chunked {
+				// No chunk is a whole answer, so the checks judge the merged object once, with no rerun.
+				opts.Escalate, opts.Retry = nil, nil
+			}
 
 			var sr *streamRenderer
 			// A streamed answer cannot be taken back once a check rejects it.
 			// Nor can a redacted one, whose placeholders are restored only at the end.
 			streamable := opts.Retry == nil && !sourceOnly && !redact
-			if !dryRun && !noStream && streamable && isatty.IsTerminal(os.Stdout.Fd()) {
+			if !dryRun && !noStream && streamable && !chunked && isatty.IsTerminal(os.Stdout.Fd()) {
 				w, h := terminalSize()
 				sr = newStreamRenderer(stdout, runID, w, h, d.CapturesPayloads())
 				opts.OnStream = sr.Handle
 			}
 
-			result, err := d.Dispatch(ctx, prompt, opts)
+			var result *dispatch.Result
+			if chunked {
+				var problems []string
+				result, problems, err = chunkedDispatch(ctx, d.Dispatch, prompt, opts, chunks)
+				if err == nil {
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf("--schema: %d fields in %d chunks, each on %s", len(gen.schema), len(chunks), result.Head.ID)))
+				}
+				for _, p := range problems {
+					fmt.Fprintf(stdout, "  %s\n", warnStyle.Render("--schema: "+p))
+				}
+			} else {
+				result, err = d.Dispatch(ctx, prompt, opts)
+			}
 			// A parked task is not a failure, but it is not success either:
 			// nothing ran. Print what is being asked and how to answer, then
 			// exit non-zero so a script cannot mistake it for completed work.
@@ -1488,6 +1511,7 @@ func cmdDispatch() *cobra.Command {
 		"(gen:claims-ground and gen:claims-judge, for any --kind), a failed reply reruns once on a stronger head, and if none passes "+
 		"hyctl prints \""+notCoveredReply+"\" with the failed sentences instead of the reply and exits 1 (2 when it could not check)")
 	cmd.Flags().StringVar(&schemaPath, "schema", "", "JSON Schema file whose top-level properties, types and required list are the fields check's field list, with no model call to write it; implies --check gen:fields")
+	cmd.Flags().IntVar(&maxFields, "max-fields", 30, "with --schema, ask for at most this many fields per call; a wider schema is split into chunks on one head and merged")
 	cmd.Flags().IntVar(&maxEsc, "max-escalations", 1, "with --check, how many stronger heads a failed check may ask; default from policy.yaml max_retries and escalate_on_fail, 0 turns it off")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
