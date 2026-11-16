@@ -395,6 +395,7 @@ hyctl dispatch --check ground "..."     <span class="c"># check the answer again
 hyctl dispatch --check links "what did the regulator decide? cite your sources"   <span class="c"># each link must resolve and hold the quote; only the URL is sent</span>
 hyctl dispatch --check citations "list the key papers on retrieval-augmented generation"   <span class="c"># every DOI and arXiv id must exist and match its quoted title</span>
 hyctl dispatch --check match:labels=labels.txt "label this ticket: ..."   <span class="c"># the answer must be one of the labels</span>
+hyctl dispatch --check 'sum:total=items[].amount' "pull the line amounts and total from this receipt as JSON"   <span class="c"># the lines must add up to the total</span>
 hyctl dispatch --check 'cmd:check-jsonschema --schemafile invoice.json {file}' "pull the invoice fields as JSON"
 hyctl dispatch --kind classification --check gen "is this ticket billing, bug or how-to? ..."   <span class="c"># checks written for the request by another model</span>
 hyctl dispatch --kind extraction --check gen:fields "pull vendor, total and date as JSON: ..."   <span class="c"># a verdict on every field, each broken one listed</span>
@@ -915,7 +916,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="fl">--kind</span> cl
         <div class="pill-row">
           <span class="mp"><b>--enum</b> / <b>--tier</b></span><span class="mp"><b>--kind</b> summary, extraction, code&hellip;</span><span class="mp"><b>--dry-run</b></span><span class="mp"><b>--local</b></span>
           <span class="mp"><b>--file</b> raise bar by blast radius</span><span class="mp"><b>--a2a</b> handoff.json</span><span class="mp"><b>--system</b></span>
-          <span class="mp"><b>--no-stream</b></span><span class="mp"><b>--check</b> ground, match:labels=&lt;file&gt;, cmd:&lt;command {answer}&gt;, gen; a real fail reruns once on a stronger model</span><span class="mp"><b>--max-escalations</b> 0 turns the rerun off</span><span class="mp"><b>--require-pass</b> exit 1 on a failed check, 2 when one could not run</span><span class="mp"><b>--max-usd</b> cap for answer and generated checks</span>
+          <span class="mp"><b>--no-stream</b></span><span class="mp"><b>--check</b> ground, match:labels=&lt;file&gt;, sum:total=items[].amount, cmd:&lt;command {answer}&gt;, gen; a real fail reruns once on a stronger model</span><span class="mp"><b>--max-escalations</b> 0 turns the rerun off</span><span class="mp"><b>--require-pass</b> exit 1 on a failed check, 2 when one could not run</span><span class="mp"><b>--max-usd</b> cap for answer and generated checks</span>
         </div>
       </div>
     </section>

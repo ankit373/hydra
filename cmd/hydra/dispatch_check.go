@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ankit373/hydra/internal/cache"
+	"github.com/ankit373/hydra/internal/checkgen"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/decide"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -25,7 +26,7 @@ import (
 
 // dispatchChecks are the checks that read the answer itself, so a dispatch,
 // which writes no file, can still run them.
-var dispatchChecks = []string{"ground", "links", "citations", "match:labels=<file>", "match:pattern=<re>", "cmd:<command with {answer} or {file}>"}
+var dispatchChecks = []string{"ground", "links", "citations", "match:labels=<file>", "match:pattern=<re>", "sum:<total>=<list>[].<field> or sum:<total>=<field>,<field>", "cmd:<command with {answer} or {file}>"}
 
 // answerCheck is one parsed --check, built before anything routes.
 type answerCheck struct {
@@ -68,6 +69,12 @@ func parseCheck(spec, prompt string) (answerCheck, error) {
 		return answerCheck{oracle: o, source: o.Key()}, nil
 	case kind == "match":
 		return parseMatch(arg)
+	case kind == "sum":
+		o, err := checkgen.NewSum(arg)
+		if err != nil {
+			return answerCheck{}, err
+		}
+		return answerCheck{oracle: o, source: o.Source}, nil
 	case kind == "cmd":
 		// Without a placeholder the command never sees the answer, which is why --verify is refused.
 		if !strings.Contains(arg, "{answer}") && !strings.Contains(arg, "{file}") {
