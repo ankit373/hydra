@@ -3,6 +3,7 @@
 package sysinfo
 
 import (
+	"runtime"
 	"testing"
 	"testing/fstest"
 )
@@ -61,6 +62,24 @@ func TestParseLoadavg(t *testing.T) {
 	} {
 		if got, ok := parseLoadavg(tc.raw); got != tc.want || ok != tc.ok {
 			t.Errorf("%q: got (%v, %v), want (%v, %v)", tc.raw, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// The live readers run on the machine itself; only what holds everywhere is asserted.
+func TestPowerAndLoad_ReadThisMachine(t *testing.T) {
+	if on, known := OnACPower(); !known && on {
+		t.Errorf("OnACPower = on with known false; an unknown state must not read as mains")
+	}
+	v, ok := LoadAverage()
+	switch runtime.GOOS {
+	case "linux", "darwin":
+		if !ok || v < 0 {
+			t.Errorf("LoadAverage = %v, %v; want a reading on %s", v, ok, runtime.GOOS)
+		}
+	default:
+		if ok {
+			t.Errorf("LoadAverage read %v on %s, which has no reader", v, runtime.GOOS)
 		}
 	}
 }
