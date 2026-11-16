@@ -20,11 +20,30 @@ import (
 // "this response contained an AWS key" is a finding; the key itself is a
 // liability.
 func Redact(prompt string) (string, []string) {
-	type span struct {
-		start, end int
-		name       string
+	spans, names := redactionSpans(prompt)
+	if len(spans) == 0 {
+		return prompt, nil
 	}
-	var spans []span
+	var b strings.Builder
+	last := 0
+	for _, s := range spans {
+		b.WriteString(prompt[last:s.start])
+		fmt.Fprintf(&b, "[REDACTED:%s]", s.name)
+		last = s.end
+	}
+	b.WriteString(prompt[last:])
+	return b.String(), names
+}
+
+type redactSpan struct {
+	start, end int
+	name       string
+}
+
+// redactionSpans is the one detection walk behind Redact and RedactReversible:
+// every validated hit, overlaps merged, in order, plus the detectors that fired.
+func redactionSpans(prompt string) ([]redactSpan, []string) {
+	var spans []redactSpan
 	var names []string
 	for _, d := range detectors {
 		hit := false
@@ -32,7 +51,7 @@ func Redact(prompt string) (string, []string) {
 			if d.valid != nil && !d.valid(prompt, loc) {
 				continue
 			}
-			spans = append(spans, span{start: loc[0], end: loc[1], name: d.name})
+			spans = append(spans, redactSpan{start: loc[0], end: loc[1], name: d.name})
 			hit = true
 		}
 		if hit {
@@ -40,29 +59,25 @@ func Redact(prompt string) (string, []string) {
 		}
 	}
 	if len(spans) == 0 {
-		return prompt, nil
+		return nil, nil
 	}
 
 	// Detectors overlap by design, an "authorization: Bearer eyJ..." hit is
-	// also a jwt hit. Emitting both placeholders would corrupt the text, so
-	// overlapping spans merge into the earliest-starting, widest one.
+	// also a jwt hit, so overlapping spans merge into the earliest, widest one.
 	sort.Slice(spans, func(i, j int) bool {
 		if spans[i].start != spans[j].start {
 			return spans[i].start < spans[j].start
 		}
 		return spans[i].end > spans[j].end
 	})
-
-	var b strings.Builder
+	merged := spans[:0]
 	last := 0
 	for _, s := range spans {
 		if s.start < last {
-			continue // already inside a placeholder
+			continue // already inside an earlier span
 		}
-		b.WriteString(prompt[last:s.start])
-		fmt.Fprintf(&b, "[REDACTED:%s]", s.name)
+		merged = append(merged, s)
 		last = s.end
 	}
-	b.WriteString(prompt[last:])
-	return b.String(), names
+	return merged, names
 }

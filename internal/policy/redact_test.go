@@ -136,3 +136,90 @@ func TestRedact_AgreesWithContainsPII(t *testing.T) {
 		}
 	}
 }
+
+// Redact then Restore gives back the original, for the samples above and for
+// every line of the secret fixtures (#1880).
+func TestRedactReversible_RoundTrip(t *testing.T) {
+	texts := []string{
+		"mail a@b.com, key AKIAIOSFODNN7EXAMPLE, ssn 123-45-6789, done",
+		"Authorization: Bearer eyJhbGciOi.eyJzdWIiOi.SflKxwRJSM",
+		"no secrets here at all",
+	}
+	for _, fx := range loadSecretFixtures(t) {
+		texts = append(texts, fx.text)
+	}
+	for i, in := range texts {
+		v := NewVault()
+		red := RedactReversible(in, v)
+		if red == in && len(DetectPII(Request{Prompt: in})) > 0 {
+			t.Errorf("text %d: nothing replaced", i)
+		}
+		got, unknown := v.Restore(red)
+		if got != in {
+			t.Errorf("text %d: round trip changed the text", i)
+		}
+		if len(unknown) > 0 {
+			t.Errorf("text %d: restore reported %v", i, unknown)
+		}
+	}
+}
+
+func TestRedactReversible_SameValueSamePlaceholder(t *testing.T) {
+	v := NewVault()
+	first := RedactReversible("write to a@b.com and c@d.org", v)
+	second := RedactReversible("did a@b.com reply?", v)
+	if first != "write to <<EMAIL_1>> and <<EMAIL_2>>" {
+		t.Errorf("first = %q", first)
+	}
+	if second != "did <<EMAIL_1>> reply?" {
+		t.Errorf("second turn = %q, want the same placeholder for the same value", second)
+	}
+	if v.Len() != 2 {
+		t.Errorf("vault holds %d values, want 2", v.Len())
+	}
+}
+
+func TestRestore_ReportsUnknownPlaceholder(t *testing.T) {
+	v := NewVault()
+	RedactReversible("mail a@b.com", v)
+	got, unknown := v.Restore("sent to <<EMAIL_1>> and <<EMAIL_7>>, see FILE_2")
+	if got != "sent to a@b.com and <<EMAIL_7>>, see FILE_2" {
+		t.Errorf("restored = %q", got)
+	}
+	if len(unknown) != 1 || unknown[0] != "<<EMAIL_7>>" {
+		t.Errorf("unknown = %v, want [<<EMAIL_7>>]; a bare word is not reported", unknown)
+	}
+}
+
+func TestRestore_ToleratesCaseChange(t *testing.T) {
+	v := NewVault()
+	RedactReversible("mail a@b.com", v)
+	for _, answer := range []string{"<<email_1>>", "<< EMAIL_1 >>", "<EMAIL_1>", "EMAIL_1", "Email_1"} {
+		if got, unknown := v.Restore(answer); got != "a@b.com" || len(unknown) > 0 {
+			t.Errorf("Restore(%q) = %q, %v", answer, got, unknown)
+		}
+	}
+}
+
+func TestRedactReversible_SecondDetectionPassFindsNothing(t *testing.T) {
+	for i, fx := range loadSecretFixtures(t) {
+		red := RedactReversible(fx.text, NewVault())
+		if left := DetectPII(Request{Prompt: red}); len(left) > 0 {
+			t.Errorf("fixture %d: placeholders still trip %v", i+1, left)
+		}
+	}
+}
+
+// A key that the text already uses is skipped, so the user's own EMAIL_1 is
+// never overwritten by Restore.
+func TestRedactReversible_SkipsKeysTheTextAlreadyUses(t *testing.T) {
+	v := NewVault()
+	in := "column EMAIL_1 holds a@b.com"
+	red := RedactReversible(in, v)
+	if red != "column EMAIL_1 holds <<EMAIL_2>>" {
+		t.Errorf("redacted = %q", red)
+	}
+	if got, _ := v.Restore(red); got != in {
+		t.Errorf("round trip = %q", got)
+	}
+}
