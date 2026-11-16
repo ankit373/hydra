@@ -588,15 +588,15 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
 <section class="blk wrap reveal" id="universe">
   <div class="klabel"><span>Where Hydra fits</span><b>what decides, and when</b></div>
   <h2 class="big">Most gateways decide <span class="grad">before the call</span>.<br>Hydra can also check after it.</h2>
-  <p class="lede">Gateways pick a model by rules or a predicted score, and retry only on an HTTP error. Eval tools score answers <b>after</b> the fact. Local runtimes each manage only <b>their own</b> models. Hydra picks a model from its measured record on that kind of task, and can check the answer before you get it. Plot the field on two axes, hosted↔local and cost routing↔checked answers, and one quadrant sits empty. <b>Hover any star.</b></p>
+  <p class="lede">Gateways pick a model by rules or a predicted score, and retry only on an HTTP error. Eval tools score answers <b>after</b> the fact. Local runtimes each manage only <b>their own</b> models. Hydra picks a model from its measured record on that kind of task, and can check the answer before you get it. Plot the field on two axes, hosted↔local and cost routing↔checked answers, and one quadrant is sparse. <b>Hover any star.</b></p>
 
   <div class="galaxy-frame">
-    <canvas id="galaxy" aria-label="Constellation of AI infrastructure tools plotted on two axes; Hydra alone occupies the local-first, checked-answer quadrant"></canvas>
+    <canvas id="galaxy" aria-label="Constellation of AI infrastructure tools plotted on two axes; few tools sit in the local-first, checked-answer quadrant"></canvas>
     <div class="axislbl left">hosted · proxy-first</div>
     <div class="axislbl right">local-first · on-device</div>
     <div class="axislbl top">checked answers</div>
     <div class="axislbl bottom">cost · latency routing</div>
-    <div class="quadtag"><span class="em">the empty quadrant</span><br>local-first × checked<br>→ Hydra, alone</div>
+    <div class="quadtag"><span class="em">a sparse quadrant</span><br>local-first × checked<br>→ few tools do both</div>
     <div class="gtip" id="gtip"><span class="cat" id="gtipCat"></span><br><span class="nm" id="gtipNm"></span><div class="tg" id="gtipTg"></div></div>
   </div>
   <div class="glegend">
@@ -727,7 +727,7 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
     </div>
   </div>
   <div style="text-align:center;margin-top:var(--hy-space-8);">
-    <a class="btn btn-lg" href="/first-principles.html">Derive it yourself: six interactive proofs on the First Principles page →</a>
+    <a class="btn btn-lg" href="/first-principles.html">The math behind it, interactive, on the First Principles page →</a>
   </div>
 </section>
 
@@ -1569,7 +1569,7 @@ function onVisible(el,cb,opts){
 
 /* ══════════════════════════════════════════════════════════════════════════
    2 · UNIVERSE, constellation galaxy. Two axes: hosted↔local × cost↔trust.
-       Hydra alone in the local-first + trust quadrant, lit aqua with a halo.
+       Hydra in the local-first + trust quadrant, lit aqua with a halo.
    ══════════════════════════════════════════════════════════════════════════*/
 (function galaxy(){
   var cv=$('#galaxy'); if(!cv) return;
@@ -1613,7 +1613,7 @@ function onVisible(el,cb,opts){
     {n:'Google Gemini',c:'frontier',x:0.12,y:-0.96,r:2.2,t:'Hosted models, a destination, not a router'},
     {n:'Mistral',c:'frontier',x:0.30,y:-0.93,r:2.0,t:'Hosted models, a destination, not a router'},
     {n:'Meta Llama',c:'frontier',x:0.02,y:-0.86,r:2.0,t:'Open-weights models, a destination'},
-    // Hydra, local + trust (top-right, alone)
+    // Hydra, local + trust (top-right)
     {n:'Hydra',c:'hyctl',x:0.60,y:0.58,r:6.2,t:'Provider-neutral · picks by measured record · can check the answer',hyctl:true}
   ];
   STARS.forEach(function(s,i){s.ph=Math.random()*6.283;s.sp=0.4+Math.random()*0.6;
@@ -1622,7 +1622,7 @@ function onVisible(el,cb,opts){
     s.px=0;s.py=0;s.lx=0;s.ly=0;s.idx=i;});       // cached screen pos + eased gravitational lean
   /* constellation links: connect each star to its 1-2 nearest SAME-category
      neighbours (sparse graph, computed once from locked base positions). Hydra
-     is alone in its quadrant, so it links to nothing, it stays the focal point. */
+     links to nothing, so it stays the focal point. */
   var LINKCATS=['gateway','eval','local','frontier'];
   var links=[],heat={};
   LINKCATS.forEach(function(cat){
