@@ -80,10 +80,59 @@ func verify(ctx context.Context, s Spec, answer, domain string, env Env) Result 
 	switch c := o.(type) {
 	case *fieldsOracle:
 		r.Fields = c.last
+	case *roundtripOracle:
+		r.Fields = c.last
 	case *claimsOracle:
 		r.Sentences = c.Last
 	}
 	return r
+}
+
+// MergeFields is one verdict per field when an answer's fields check and round trip both
+// ran: a failure from either stands, else in the source, agreed by a second model, or both.
+// With only one of the two it is that check's list; with neither, nil. Nothing is re-run.
+func MergeFields(results []Result) (fields []FieldVerdict, merged bool) {
+	var src, rt []FieldVerdict
+	for _, r := range results {
+		switch {
+		case !r.Checked():
+		case r.Spec.Kind == "fields" && src == nil:
+			src = r.Fields
+		case r.Spec.Kind == "roundtrip" && rt == nil:
+			rt = r.Fields
+		}
+	}
+	if src == nil || rt == nil {
+		return append(src, rt...), false
+	}
+	byName := make(map[string]FieldVerdict, len(rt))
+	for _, f := range rt {
+		byName[f.Name] = f
+	}
+	for _, f := range src {
+		other, ok := byName[f.Name]
+		delete(byName, f.Name)
+		agreed := ok && other.Status == FieldAgreed
+		switch {
+		case f.failed():
+		case other.Status == FieldDiffers:
+			f = other
+		case f.InSource && agreed:
+			f.Status = FieldInSourceAndAgreed
+		case f.InSource:
+			f.Status = FieldInSource
+		case agreed:
+			f.Status = FieldAgreed
+		}
+		fields = append(fields, f)
+	}
+	// A field only the round trip's list named, kept in its order.
+	for _, f := range rt {
+		if _, ok := byName[f.Name]; ok {
+			fields = append(fields, f)
+		}
+	}
+	return fields, true
 }
 
 func record(r Result, answer string, answering provider.Head, span runlog.Event) error {

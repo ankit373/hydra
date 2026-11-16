@@ -35,7 +35,7 @@ func (r *reExtract) ask(_ context.Context, gen GenInfo, prompt string) (string, 
 	return r.reply, nil
 }
 
-func roundtripOf(t *testing.T, r *reExtract) roundtripOracle {
+func roundtripOf(t *testing.T, r *reExtract) *roundtripOracle {
 	t.Helper()
 	specs, err := roundtripGen{}.Generate(context.Background(), Task{
 		Text: order, Writer: GenInfo{Head: "local:qwen", Family: "qwen"},
@@ -48,7 +48,7 @@ func roundtripOf(t *testing.T, r *reExtract) roundtripOracle {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return o.(roundtripOracle)
+	return o.(*roundtripOracle)
 }
 
 const reExtracted = `{"order_date": "2026-03-02", "ship_date": "2026-03-09", "city": "Lisbon"}`
@@ -112,5 +112,47 @@ func TestRoundTrip_NotCheckedWithoutAModelOrAnswer(t *testing.T) {
 	}
 	if v, err := roundtripOf(t, &reExtract{reply: reExtracted}).Verify(context.Background(), "the 2nd of March", trust.Task{}); err != nil || v.Passed {
 		t.Errorf("a prose answer: %+v, %v", v, err)
+	}
+}
+
+func TestRoundtrip_PerFieldAgreement(t *testing.T) {
+	o := roundtripOf(t, &reExtract{reply: reExtracted})
+	answer := `{"order_date": "2026-03-02", "ship_date": "2026-03-02", "city": "Porto"}`
+	if v, err := o.Verify(context.Background(), answer, trust.Task{}); err != nil || v.Passed {
+		t.Fatalf("verdict %+v, %v; want a fail on ship_date", v, err)
+	}
+	if want := "order_date=agreed ship_date=differs city=not_compared"; statuses(o.last) != want {
+		t.Fatalf("fields = %q, want %q", statuses(o.last), want)
+	}
+	if d := o.last[1].Detail; !strings.Contains(d, `"2026-03-02"`) || !strings.Contains(d, `"2026-03-09"`) {
+		t.Errorf("differs detail %q does not show both values", d)
+	}
+}
+
+func TestFieldVerdicts_MergeBothChecks(t *testing.T) {
+	ran := func(kind string, fields ...FieldVerdict) Result {
+		return Result{Spec: Spec{Kind: kind}, Fields: fields}
+	}
+	fields := ran("fields",
+		FieldVerdict{Name: "vendor", Status: FieldOK, InSource: true},
+		FieldVerdict{Name: "total", Status: FieldOK, InSource: true},
+		FieldVerdict{Name: "paid", Status: FieldOK},
+		FieldVerdict{Name: "date", Status: FieldOK, InSource: true},
+		FieldVerdict{Name: "ref", Status: FieldMissing, Detail: "is missing"},
+		FieldVerdict{Name: "note", Status: FieldAbsent})
+	roundtrip := ran("roundtrip",
+		FieldVerdict{Name: "vendor", Status: FieldAgreed},
+		FieldVerdict{Name: "total", Status: FieldDiffers, Detail: `answer "9", re-extracted "12"`},
+		FieldVerdict{Name: "paid", Status: FieldAgreed},
+		FieldVerdict{Name: "date", Status: FieldNotCompared},
+		FieldVerdict{Name: "ref", Status: FieldDiffers},
+		FieldVerdict{Name: "note", Status: FieldNotCompared})
+	got, merged := MergeFields([]Result{fields, {Spec: Spec{Kind: "fields"}, Err: errNoModel}, roundtrip})
+	want := "vendor=in_source_and_agreed total=differs paid=agreed date=in_source ref=missing note=absent"
+	if !merged || statuses(got) != want {
+		t.Fatalf("merged=%v fields=%q, want %q", merged, statuses(got), want)
+	}
+	if only, merged := MergeFields([]Result{fields}); merged || len(only) != 6 || only[0].Status != FieldOK {
+		t.Errorf("fields check alone = %q, merged=%v; want its own list unchanged", statuses(only), merged)
 	}
 }
