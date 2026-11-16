@@ -203,7 +203,7 @@ type Options struct {
 type Result struct {
 	Output    string
 	Head      provider.Head
-	Fallbacks []provider.Head // remaining candidates after the selected head
+	Fallbacks []provider.Head // candidates after Head; an answer's also lists those only an escalation asks
 	Retries   int
 
 	// Attempts is every candidate that was tried and did not answer, in the
@@ -863,11 +863,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// pinned tier is an instruction and is left as resolved (#782).
 	var requirement float64
 	var scores map[string]rank.Score
+	// climb is every routable head outside a pinned tier, which only an
+	// escalation past a rejected answer may ask (#1836).
+	var climb []provider.Head
 	switch {
-	case tier != "" || opts.Head != "":
+	case opts.Head != "":
 		if opts.DryRun {
 			scores = d.explain(candidates, domain)
 		}
+	case tier != "":
+		climb = outside(d.selectHeads("", localOnly, domain), candidates)
+		scores = d.explain(slices.Concat(candidates, climb), domain)
 	case opts.Objective == rank.Quality:
 		candidates, scores = rank.Strongest(candidates, d.explain(candidates, domain), d.price)
 	default:
@@ -934,9 +940,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	var escalatedUSD float64
 	// asked is every head escalated past, whose families a tie-break avoids.
 	var asked []provider.Head
-	if opts.Escalate != nil {
-		// Escalation swaps its next head into place, so it reorders a copy.
-		candidates = slices.Clone(candidates)
+	// Escalation swaps its next head into place, so it reorders a copy. A failed
+	// head falls back only within chain; the climb past it is escalation's alone.
+	chain := len(candidates)
+	if opts.Escalate != nil || len(climb) > 0 {
+		candidates = slices.Concat(candidates, climb)
 	}
 	// Refusals the request itself caused, against heads actually sent, so a
 	// run that sent nothing can say it was the request and not the heads.
@@ -951,6 +959,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			}
 			candidates[i], candidates[i+j] = candidates[i+j], candidates[i]
 			h = candidates[i]
+		} else if i >= chain {
+			break
 		}
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
@@ -959,12 +969,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// One span per attempt. Two attempts on one head are then distinct,
 		// which the old head-derived identity could not express.
 		span := runlog.NewSpanID()
+		of := chain
+		if last != nil {
+			of = len(candidates)
+		}
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindHeadSelected, TaskID: taskID,
 			SpanID: span, ParentSpanID: taskSpan,
 			Head: h.ID, Model: h.Name, Tier: tier,
-			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
-			Meta:   attemptMeta(i, len(candidates), last, lastReason),
+			Detail: fmt.Sprintf("candidate %d of %d", i+1, of),
+			Meta:   attemptMeta(i, of, last, lastReason),
 		})
 		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
 		// let any other verdict through, which stopped being safe the moment
@@ -1187,7 +1201,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		d.health.Pass(h.ID)
-		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Gates: gates, Response: resp,
+		r := &Result{Output: resp.Output, Head: h, Fallbacks: candidates[i+1:], Retries: i, Attempts: attempts, Gates: gates, Response: resp,
 			Domain: domain, Scores: scores, Objective: opts.Objective, SpanID: span,
 			CostUSD: CallCost(d.pricing, h, usageOf(resp))}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
@@ -1270,16 +1284,25 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
 		Level: runlog.LevelError, Status: "failed",
-		Detail: fmt.Sprintf("all %d heads failed", len(candidates)),
+		Detail: fmt.Sprintf("all %d heads failed", chain),
 	})
-	switch n := len(candidates); {
+	switch n := chain; {
 	case tooWarm == n && n > 0:
 		return nil, fmt.Errorf("%w: temperature %g is above what every candidate head accepts",
 			executor.ErrUnaskable, *opts.Temperature)
 	case sent == 0 && overCost > 0:
 		lastErr = overCeiling{lastErr}
 	}
-	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
+	return nil, fmt.Errorf("all heads failed (tried %d): %w", chain, lastErr)
+}
+
+// outside is every head in all that is not in in, in all's order.
+func outside(all, in []provider.Head) []provider.Head {
+	seen := make(map[string]bool, len(in))
+	for _, h := range in {
+		seen[h.ID] = true
+	}
+	return slices.DeleteFunc(all, func(h provider.Head) bool { return seen[h.ID] })
 }
 
 // attemptMeta is a head_selected event's Meta; past a rejected answer it names

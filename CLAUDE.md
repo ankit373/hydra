@@ -109,6 +109,7 @@ internal/decide/        ← Routes one decision: the first source answers alone 
                           one stronger head, a check that could not run is "not checked" and never escalates.
                           `policy.Escalations` reads its count from `max_retries` / `escalate_on_fail`.
                           `hyctl dispatch --check` uses it (#1587): reruns once, filed per head; `--max-escalations`.
+                          A pinned tier is ranked against every head, so the rerun can leave the tier (#1836).
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against

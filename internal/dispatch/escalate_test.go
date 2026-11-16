@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -292,5 +293,75 @@ func TestEscalate_NeverToAWeakerOrUnmeasuredHead(t *testing.T) {
 		climbing{answeringHead(t, "unmeasured", "c", 99), -1, 0.03})
 	if got := judgedHeads(t, d); strings.Join(got, ",") != "h1" {
 		t.Errorf("escalation asked %v, want h1 alone", got)
+	}
+}
+
+// pinnedClimb is a tier-4 head and a measured-stronger tier-1 head; tier 4 pins
+// only the first, and serves counts what the second was asked.
+func pinnedClimb(t *testing.T, cheap provider.Head) (*Dispatcher, *atomic.Int32) {
+	t.Helper()
+	var serves atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		serves.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"strong"}}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	strong := provider.Head{ID: "strong", Name: "strong", Provider: "openai", Source: "env", Endpoint: srv.URL, AuthReady: true, CapScore: 96}
+	return climbingDispatcher(t, climbing{cheap, 90, 0.01}, climbing{strong, 99, 0.05}), &serves
+}
+
+// #1836: a pinned tier still runs its own head, and is ranked against every
+// head, so its answer carries the measured scores an escalation climbs on.
+func TestDispatch_APinnedTierRanksEveryHead(t *testing.T) {
+	testutil.NewSandbox(t)
+	d, _ := pinnedClimb(t, answeringHead(t, "cheap", "cheap", 80))
+	for _, dry := range []bool{false, true} {
+		res, err := d.Dispatch(context.Background(), "hi", Options{TierHint: "4", Domain: climbClass, DryRun: dry})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Head.ID != "cheap" || !res.Scores["cheap"].Measured() || !res.Scores["strong"].Measured() {
+			t.Errorf("dry run %v: ran %s with scores %+v; want cheap, both heads measured", dry, res.Head.ID, res.Scores)
+		}
+		// The dry run's chain is the tier's own; an answer also lists the climb.
+		if got := ids(res.Fallbacks); dry && len(got) != 0 || !dry && strings.Join(got, ",") != "strong" {
+			t.Errorf("dry run %v: fallbacks %v", dry, got)
+		}
+	}
+}
+
+// A rejected answer from a pinned tier climbs to the head measured to beat it.
+func TestDispatch_APinnedTierEscalatesPastTheTier(t *testing.T) {
+	testutil.NewSandbox(t)
+	d, _ := pinnedClimb(t, answeringHead(t, "cheap", "cheap", 80))
+	var judged []string
+	res, err := d.Dispatch(context.Background(), "hi", Options{
+		TierHint: "4", Domain: climbClass,
+		Escalate: func(_ context.Context, r *Result) (bool, string) {
+			judged = append(judged, r.Head.ID)
+			return r.Head.ID == "cheap", "rejected"
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(judged, ",") != "cheap,strong" || res.Head.ID != "strong" {
+		t.Errorf("judged %v, served %s; want cheap then strong", judged, res.Head.ID)
+	}
+}
+
+// A head that fails falls back within the pinned tier only, never up past it.
+func TestDispatch_APinnedTierFailureDoesNotClimb(t *testing.T) {
+	testutil.NewSandbox(t)
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(down.Close)
+	cheap := provider.Head{ID: "cheap", Name: "cheap", Provider: "openai", Source: "env", Endpoint: down.URL, AuthReady: true, CapScore: 80}
+	d, serves := pinnedClimb(t, cheap)
+	_, err := d.Dispatch(context.Background(), "hi", Options{TierHint: "4", Domain: climbClass})
+	if err == nil || serves.Load() != 0 || !strings.Contains(err.Error(), "tried 1") {
+		t.Errorf("err %v, strong asked %d times; a failed pinned tier must not climb", err, serves.Load())
 	}
 }
