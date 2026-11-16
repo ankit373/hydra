@@ -1468,7 +1468,7 @@ func cmdDispatch() *cobra.Command {
 		"each fetch is asked of the MCP ledger first and recorded, and a denied fetch or no network is not checked), "+
 		"citations (each DOI is looked up at doi.org and each arXiv id at the arXiv API: one that does not exist fails, and so does a quoted title "+
 		"in its sentence that differs from the record; ledger-gated like links, only the id leaves, lookups cached a day), "+
-		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file}). "+
+		"match:labels=<file> or match:pattern=<re> (a closed label set or pattern), sum:total=items[].amount or sum:total=subtotal,tax (the parts add up to the total), cmd:<command> (exit 0 passes; the command is split on spaces and gets the answer as {answer} or a file as {file}). "+
 		"A failed check reruns on a head measured stronger at this kind of work, with the rejected answer and the error. "+
 		"gen runs checks written for the request's --kind by a head of another family where one exists, gen:<check> one of them, e.g. gen:roundtrip; these only report")
 	cmd.Flags().BoolVar(&requirePass, "require-pass", false, "with --check, exit 1 when the answer failed a check and 2 when a check could not run, so a script can gate on it")
