@@ -69,6 +69,7 @@
       "hyctl trust outcome, trains every model that voted in a past run once its answer is known, including the dissenters, because a model that disagreed with an answer that turned out wrong is the only evidence that measures specificity",
       "hyctl edit, applies a change and then runs the language validator against the file it just wrote, so the pass or fail is about the content the model actually produced. That verdict trains calibration and fills the oracle-verified corpus, rejections included",
       "hyctl trust reliability, checks the stated probability against reality: when Hydra says 90%, is it right 90% of the time? It reports this as a Brier score decomposed into calibration and discrimination plus a reliability diagram, and it refuses to report below twenty judged runs",
+      "hyctl compare, puts two models side by side on one kind of work from your own checked answers, and names one ahead only when the 95% bounds do not overlap",
       "hyctl trust joint, reports per kind of work how often two checks passed the same wrong answer, so a test suite and a linter that fail together are not counted as two pieces of evidence",
       "Blast-radius aware routing for code: a dependency graph raises the required probability of a correct answer for widely depended-on files",
       "Local MCP accountability ledger, records and gates what each agent's tools touch",

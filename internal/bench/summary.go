@@ -25,7 +25,6 @@ const (
 	resamples = 10000
 	margin    = 0.02
 	alpha     = 0.05
-	wilsonZ   = 1.959964
 )
 
 // contamination is in every summary's caveats and every table's footer.
@@ -312,7 +311,7 @@ func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
 	if a.N > 0 {
 		a.PassRate = float64(a.Passed) / float64(a.N)
 	}
-	lo, hi, err := stats.Wilson(a.Passed, a.N, wilsonZ)
+	lo, hi, err := stats.Wilson(a.Passed, a.N, stats.Z95)
 	if err != nil {
 		return a, err
 	}
