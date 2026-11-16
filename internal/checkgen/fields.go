@@ -18,8 +18,10 @@ import (
 )
 
 const fieldsPrompt = "The request below asks for structured output. List the fields the answer must have, " +
-	`as a JSON array of {"name": string, "type": "string"|"number"|"bool"|"list", "required": bool, ` +
-	`"from_source": bool}. Set from_source when the value must be copied from the document in the request.` + "\n\n"
+	`as one JSON object {"fields": [{"name": string, "type": "string"|"number"|"bool"|"list", "required": bool, ` +
+	`"from_source": bool}], "sums": {"TOTAL": "LIST[].KEY" or "FIELD,FIELD"}}, with field names in place of the capitals. ` +
+	`Set from_source when the value must be copied from the document in the request. ` +
+	`Add sums only for a total that should equal the sum of other fields; leave it out otherwise.` + "\n\n"
 
 var fieldTypes = []string{"string", "number", "bool", "list"}
 
@@ -60,10 +62,9 @@ func (fieldsGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	var listed []Field
-	start, end := strings.Index(reply, "["), strings.LastIndex(reply, "]")
-	if start < 0 || end < start || json.Unmarshal([]byte(reply[start:end+1]), &listed) != nil {
-		return nil, fmt.Errorf("checkgen fields: writer did not reply with a JSON list: %.80q", reply)
+	listed, sums, err := parseFieldList(reply)
+	if err != nil {
+		return nil, err
 	}
 	body := fieldsBody{Source: sourceOf(task.Text)}
 	seen := map[string]bool{}
@@ -81,7 +82,34 @@ func (fieldsGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []Spec{s}, nil
+	specs := []Spec{s}
+	for _, sum := range keepSums(sums, body.Fields) {
+		total, _, _ := strings.Cut(sum, "=")
+		s, err := NewSpec("sum", total, sumBody{Sum: sum}, task, task.Writer)
+		if err != nil {
+			return nil, err
+		}
+		specs = append(specs, s)
+	}
+	return specs, nil
+}
+
+// parseFieldList reads the writer's {"fields": [...], "sums": {...}}, or a bare field array.
+func parseFieldList(reply string) ([]Field, map[string]string, error) {
+	var obj struct {
+		Fields []Field           `json:"fields"`
+		Sums   map[string]string `json:"sums"`
+	}
+	if i := strings.Index(reply, "{"); i >= 0 {
+		if err := json.NewDecoder(strings.NewReader(reply[i:])).Decode(&obj); err == nil && len(obj.Fields) > 0 {
+			return obj.Fields, obj.Sums, nil
+		}
+	}
+	start, end := strings.Index(reply, "["), strings.LastIndex(reply, "]")
+	if start < 0 || end < start || json.Unmarshal([]byte(reply[start:end+1]), &obj.Fields) != nil {
+		return nil, nil, fmt.Errorf("checkgen fields: writer did not reply with a JSON list: %.80q", reply)
+	}
+	return obj.Fields, nil, nil
 }
 
 // schemaSpec is the fields spec for the user's schema: no writer call, and a value is

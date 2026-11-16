@@ -88,3 +88,74 @@ func TestSumCheck_RoundingTolerance(t *testing.T) {
 		}
 	}
 }
+
+// sumSpecs runs fieldsGen with the writer replying reply and returns each spec's check and sum.
+func sumSpecs(t *testing.T, reply string) []string {
+	t.Helper()
+	specs, err := fieldsGen{}.Generate(context.Background(), Task{Text: "Pull the invoice as JSON.", Kind: "extraction",
+		Ask: func(context.Context, string) (string, error) { return reply, nil }})
+	if err != nil || len(specs) == 0 || specs[0].Kind != "fields" {
+		t.Fatalf("specs = %+v, %v", specs, err)
+	}
+	var out []string
+	for _, s := range specs[1:] {
+		o, err := sumGen{}.Oracle(s, Env{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, s.Check()+" "+o.(*SumOracle).Source)
+	}
+	return out
+}
+
+const invoiceList = `"fields": [{"name": "items", "type": "list", "required": true}, {"name": "subtotal", "type": "number"},
+ {"name": "tax", "type": "number"}, {"name": "total", "type": "number", "required": true}, {"name": "vendor", "type": "string"}]`
+
+func TestFieldsGen_KeepsValidSums(t *testing.T) {
+	got := sumSpecs(t, `{`+invoiceList+`, "sums": {"total": "items[].amount", "subtotal": " items[].amount "}}`)
+	want := []string{"gen:sum-subtotal verifier:sum:subtotal=items[].amount", "gen:sum-total verifier:sum:total=items[].amount"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("sums = %q, want %q", got, want)
+	}
+	if got := sumSpecs(t, `{`+invoiceList+`, "sums": {"total": "subtotal, tax"}}`); len(got) != 1 || !strings.HasSuffix(got[0], "total=subtotal,tax") {
+		t.Errorf("field list sum = %q", got)
+	}
+	// The bare array the writer used to send still reads, with no sums.
+	if got := sumSpecs(t, `[{"name": "total", "type": "number"}]`); len(got) != 0 {
+		t.Errorf("bare array gave sums %q", got)
+	}
+}
+
+func TestFieldsGen_DropsSumOnUnknownField(t *testing.T) {
+	for _, sums := range []string{
+		`{"grand_total": "items[].amount"}`, // total not listed
+		`{"vendor": "items[].amount"}`,      // total not a number
+		`{"total": "lines[].amount"}`,       // list not listed
+		`{"total": "vendor,tax"}`,           // part not a number
+		`{"total": "subtotal.net"}`,         // a number has no keys
+		`{"total": "total,tax"}`,            // total adds itself
+		`{"total": "subtotal,,tax"}`,        // empty part
+	} {
+		if got := sumSpecs(t, `{`+invoiceList+`, "sums": `+sums+`}`); len(got) != 0 {
+			t.Errorf("%s kept as %q", sums, got)
+		}
+	}
+}
+
+func TestSumGen_FailsAnInventedTotal(t *testing.T) {
+	specs, err := sumGen{}.Generate(context.Background(), Task{Text: "Pull the invoice as JSON.", Kind: "extraction",
+		Ask: func(context.Context, string) (string, error) {
+			return `{` + invoiceList + `, "sums": {"total": "items[].amount"}}`, nil
+		}})
+	if err != nil || len(specs) != 1 {
+		t.Fatalf("specs = %+v, %v; want only the sum", specs, err)
+	}
+	o, err := sumGen{}.Oracle(specs[0], Env{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := o.Verify(context.Background(), `{"items": [{"amount": 40}, {"amount": 2.5}], "total": 45.00}`, trust.Task{})
+	if err != nil || v.Passed || !strings.Contains(v.Detail, "adds up to 42.50") {
+		t.Fatalf("verdict %+v, %v; want the made-up total caught", v, err)
+	}
+}
