@@ -363,3 +363,87 @@ func TestSmoke_RefusesAFrontierOnlyRun(t *testing.T) {
 		t.Fatal("the oracle's p_disc counted as a measurement")
 	}
 }
+
+// fieldSuite tallies one field per item, a number on even items and a code on odd ones:
+// right when the label is, flagged when the answer is "no", so its check catches a wrong
+// "no" and misses a wrong "yes".
+type fieldSuite struct{ fakeSuite }
+
+func (s fieldSuite) Grade(ctx context.Context, it Item, answer string) (Grade, error) {
+	g, err := s.fakeSuite.Grade(ctx, it, answer)
+	f := &FieldTally{}
+	switch {
+	case g.Passed:
+		f.Right = 1
+		if answer == "no" {
+			f.RightFlagged = 1
+		}
+	case answer == "no":
+		f.Wrong, f.WrongFlagged = 1, 1
+	default:
+		f.Wrong = 1
+	}
+	kind := KindNumber
+	if n := it.ID[len(it.ID)-1] - '0'; n%2 == 1 {
+		kind = KindCode
+	}
+	g.Fields = map[string]FieldTally{kind: *f}
+	return g, err
+}
+
+// A fixture run with four known wrong fields, three of them flagged, reports 75% caught.
+func TestSummarize_CountsTheWrongFieldsTheChecksCaught(t *testing.T) {
+	exec := newFakeExec()
+	for _, q := range []string{"q000", "q002", "q004"} {
+		exec.set("bench/openrouter/m-cheap", q, reply{answer: "no"}) // wrong, flagged
+	}
+	exec.set("bench/openrouter/m-cheap", "q001", reply{answer: "yes"}) // wrong, missed
+	r := testRunner(t, 10, exec, "frontier", "cheapest")
+	r.Suite = fieldSuite{}
+	o, err := r.Execute(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Report(o.Dir, r.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := s.Arms["cheapest"].Fields
+	counts := func(d DetectionStats) [4]int { return [4]int{d.Positives, d.Caught, d.Negatives, d.FalseFlags} }
+	if c == nil || counts(c.DetectionStats) != [4]int{4, 3, 6, 4} || c.Recall != 0.75 || c.Accuracy != 0.6 || c.FalseFlagRate != 4.0/6 {
+		t.Fatalf("cheapest fields %+v, want 4 wrong, 3 caught, 6 right, 4 flagged", c)
+	}
+	if lo, hi, _ := stats.Wilson(3, 4, stats.Z95); c.RecallWilson != [2]float64{lo, hi} {
+		t.Errorf("caught interval %v, want Wilson(3, 4)", c.RecallWilson)
+	}
+	num, code := c.ByKind[KindNumber], c.ByKind[KindCode]
+	if counts(num.DetectionStats) != [4]int{3, 3, 2, 0} || num.Recall != 1 || num.CostPerVerified != nil ||
+		counts(code.DetectionStats) != [4]int{1, 0, 4, 4} || code.Recall != 0 {
+		t.Errorf("by kind: number %+v code %+v; want every wrong number caught and the wrong code missed", num, code)
+	}
+	if c.CostPerVerified == nil || *c.CostPerVerified != s.Arms["cheapest"].CostUSD/3 {
+		t.Errorf("cost per verified field %v, want the spend over 3 unflagged fields", c.CostPerVerified)
+	}
+	if f := s.Arms["frontier"].Fields; f == nil || f.Positives != 0 || f.Recall != 0 || f.RecallWilson != [2]float64{0, 1} {
+		t.Errorf("frontier, with no wrong field, %+v", f)
+	}
+	table := Table([]Summary{s})
+	for _, want := range []string{"| cheapest | all | 10 | 60.0 | 75.0 (30.1–95.4) | 66.7 |", "| cheapest | code | 5 | 80.0 | 0.0 (0.0–79.3) | 100.0 | — |",
+		"| cheapest | number | 5 | 40.0 | 100.0 (", "| frontier | all | 10 | 100.0 | — | 50.0 |"} {
+		if !strings.Contains(table, want) {
+			t.Errorf("table has no %q:\n%s", want, table)
+		}
+	}
+}
+
+func TestFieldKind(t *testing.T) {
+	for v, want := range map[string]string{
+		"42": KindNumber, "1,200.50": KindNumber, "$45.00": KindNumber, "-3": KindNumber, "12%": KindNumber,
+		"HLF-1O": KindCode, "INV-2041": KindCode, "USD": KindCode, "B07XJ8C8F5": KindCode, "2026-11-16": KindCode,
+		"Lisbon": KindText, "7 pm": KindText, "the blue room": KindText, "A": KindText, "": KindText,
+	} {
+		if got := FieldKind(v); got != want {
+			t.Errorf("FieldKind(%q) = %s, want %s", v, got, want)
+		}
+	}
+}

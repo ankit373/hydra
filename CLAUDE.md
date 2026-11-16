@@ -175,6 +175,8 @@ internal/stats/         ← Pure maths, one implementation each: seeded paired b
                           Imported by ope, entity, budget, trust, `hyctl compare` and the benchmark
                           harness.
 internal/bench/         ← Benchmark harness: pinned datasets, committed splits, scored arms. `hyctl bench`.
+                          Snips also tallies each field against the gold and the fields check, by
+                          `FieldKind` (number, code, text), so the table shows the share of wrong fields caught.
                           `replay/` runs acceptance policies on cached labelled answers over seeded
                           splits, with no model calls. `hyctl bench replay`. A check arm (`checks` in
                           the config) answers with the suite's own check, no model; a check suite

@@ -258,6 +258,7 @@ func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, model
 		return nil, err
 	}
 	row.Passed, row.Format, row.Timeout, row.Detail, row.Detection = g.Passed, g.Format, g.Timeout, g.Detail, g.Detection
+	row.Fields = g.Fields
 	if g.Passed {
 		row.Score = 1
 	}

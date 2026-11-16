@@ -4,6 +4,8 @@ package bench
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,6 +56,7 @@ func Table(sums []Summary) string {
 		}
 	}
 	b.WriteString(DetectionTable(sums))
+	b.WriteString(fieldTable(sums))
 	fmt.Fprintf(&b, "\nRuns: %s. Git: %s.", strings.Join(runs, ", "), strings.Join(shas, ", "))
 	if !priced.IsZero() {
 		fmt.Fprintf(&b, " Prices fetched %s.", priced.Format("2006-01-02"))
@@ -82,6 +85,43 @@ func DetectionTable(sums []Summary) string {
 			fmt.Fprintf(&b, "| %s | %s | %s | %.1f (%.1f–%.1f) of %d | %.1f (%.1f–%.1f) of %d |\n",
 				s.Breadcrumb.Suite, arm, models, 100*d.Recall, 100*d.RecallWilson[0], 100*d.RecallWilson[1], d.Positives,
 				100*d.FalseFlagRate, 100*d.FalseFlagWilson[0], 100*d.FalseFlagWilson[1], d.Negatives)
+		}
+	}
+	return b.String()
+}
+
+const fieldHeader = "\n| Suite | Arm | Field kind | Fields | Field accuracy % | Wrong fields caught % (95% CI) | Right fields flagged % | $ / verified field |\n" +
+	"|---|---|---|---|---|---|---|---|\n"
+
+// fieldTable is, per arm whose suite tallies fields, a row for all fields then one per
+// kind, or nothing when no suite tallies fields.
+func fieldTable(sums []Summary) string {
+	var b strings.Builder
+	row := func(suite, arm, kind string, f FieldCatch) {
+		cost := "—"
+		if f.CostPerVerified != nil {
+			cost = strconv.FormatFloat(*f.CostPerVerified, 'g', 5, 64)
+		}
+		caught := "—" // no wrong field, nothing to catch
+		if f.Positives > 0 {
+			caught = fmt.Sprintf("%.1f (%.1f–%.1f)", 100*f.Recall, 100*f.RecallWilson[0], 100*f.RecallWilson[1])
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %d | %.1f | %s | %.1f | %s |\n", suite, arm, kind, f.Positives+f.Negatives,
+			100*f.Accuracy, caught, 100*f.FalseFlagRate, cost)
+	}
+	for _, s := range sums {
+		for _, arm := range armOrder(s.Arms) {
+			f := s.Arms[arm].Fields
+			if f == nil {
+				continue
+			}
+			if b.Len() == 0 {
+				b.WriteString(fieldHeader)
+			}
+			row(s.Breadcrumb.Suite, arm, "all", *f)
+			for _, kind := range slices.Sorted(maps.Keys(f.ByKind)) {
+				row(s.Breadcrumb.Suite, arm, kind, f.ByKind[kind])
+			}
 		}
 	}
 	return b.String()

@@ -168,6 +168,14 @@ func (o *fieldsOracle) Verify(_ context.Context, candidate string, _ trust.Task)
 	return oracle.Verdict{Passed: true}, nil
 }
 
+// JudgeFields runs the fields check on answer with no spec, for a caller that already
+// has the field list and the source, as the bench does. Not a JSON object is no verdicts.
+func JudgeFields(fields []Field, source, answer string) []FieldVerdict {
+	o := &fieldsOracle{fieldsBody: fieldsBody{Fields: fields, Source: source}}
+	_, _ = o.Verify(context.Background(), answer, trust.Task{}) // it never errors
+	return o.last
+}
+
 func judgeField(f Field, v any, src source) FieldVerdict {
 	fv := FieldVerdict{Name: f.Name, Status: FieldOK}
 	switch {

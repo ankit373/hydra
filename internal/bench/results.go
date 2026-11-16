@@ -33,7 +33,8 @@ type Result struct {
 	Timeout bool    `json:"timeout,omitempty"`
 	Detail  string  `json:"detail,omitempty"`
 	// Detection is the grade's, on a check suite only.
-	Detection *Detection `json:"detection,omitempty"`
+	Detection *Detection            `json:"detection,omitempty"`
+	Fields    map[string]FieldTally `json:"fields,omitempty"`
 	// CostUSD is money: only a spend row carries it, one per call that may have been
 	// billed, written as the call returns. A result row lists its calls and adds 0.
 	CostUSD float64   `json:"cost_usd"`

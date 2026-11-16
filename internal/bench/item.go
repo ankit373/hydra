@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/ankit373/hydra/internal/executor"
 )
@@ -60,6 +62,7 @@ type Grade struct {
 	Detail  string
 	// Detection is set by a suite that grades a check: recall and false flags count from it.
 	Detection *Detection
+	Fields    map[string]FieldTally // an extraction suite's field counts by FieldKind; nil elsewhere
 }
 
 // Detection is one item of a check suite: whether the gold has something to catch
@@ -67,6 +70,47 @@ type Grade struct {
 type Detection struct {
 	Positive bool `json:"positive"`
 	Flagged  bool `json:"flagged"`
+}
+
+// FieldTally counts one answer's fields, right or wrong against the gold, and how many
+// of each the checks flagged, that is, did not mark verified.
+type FieldTally struct {
+	Right        int `json:"right"`
+	Wrong        int `json:"wrong"`
+	RightFlagged int `json:"right_flagged"`
+	WrongFlagged int `json:"wrong_flagged"`
+}
+
+func (t *FieldTally) add(o FieldTally) {
+	t.Right, t.Wrong = t.Right+o.Right, t.Wrong+o.Wrong
+	t.RightFlagged, t.WrongFlagged = t.RightFlagged+o.RightFlagged, t.WrongFlagged+o.WrongFlagged
+}
+
+// The kinds FieldKind sorts a value into, so the share caught shows apart for amounts,
+// for identifiers and codes, which two models can misread the same way, and for text.
+const (
+	KindNumber = "number"
+	KindCode   = "code"
+	KindText   = "text"
+)
+
+var (
+	numberValue = regexp.MustCompile(`^[-+]?[$€£]?\d[\d,]*(\.\d+)?%?$`)
+	codeValue   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9./_-]*$`)
+	capsValue   = regexp.MustCompile(`^[A-Z][A-Z0-9./_-]+$`)
+)
+
+// FieldKind is number for an amount, code for one token holding a digit or written in
+// capitals (HLF-1O, INV-2041, USD), and text for the rest.
+func FieldKind(v string) string {
+	v = strings.TrimSpace(v)
+	switch {
+	case numberValue.MatchString(v):
+		return KindNumber
+	case codeValue.MatchString(v) && strings.ContainsAny(v, "0123456789"), capsValue.MatchString(v):
+		return KindCode
+	}
+	return KindText
 }
 
 // Suite is one dataset with one verifier. Prompt is identical for every arm.
