@@ -187,7 +187,27 @@ func printGenResult(r checkgen.Result) {
 		status = warnStyle.Render("FAIL")
 	}
 	detail, _, _ := strings.Cut(r.Verdict.Detail, "\n")
+	if len(r.Fields) > 0 {
+		detail = "" // the field lines below say it one field at a time
+	}
 	fmt.Fprintf(stdout, "  %s  %s  %s\n", status, r.Spec.Check(), dimStyle.Render(detail))
+	printFieldVerdicts(r.Fields)
+}
+
+// printFieldVerdicts is a line per field that is not ok, then how many are.
+func printFieldVerdicts(fields []checkgen.FieldVerdict) {
+	if len(fields) == 0 {
+		return
+	}
+	ok := 0
+	for _, f := range fields {
+		if f.Status == checkgen.FieldOK {
+			ok++
+			continue
+		}
+		fmt.Fprintf(stdout, "    %-14s %s  %s\n", f.Status, f.Name, dimStyle.Render(f.Detail))
+	}
+	fmt.Fprintf(stdout, "    %s\n", dimStyle.Render(fmt.Sprintf("%d of %d fields ok", ok, len(fields))))
 }
 
 // printGenNotChecked says why a generated check did not run; a spent budget is named as such.

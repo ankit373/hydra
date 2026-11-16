@@ -86,7 +86,7 @@ func (fieldsGen) Oracle(s Spec, _ Env) (oracle.Oracle, error) {
 	if err := json.Unmarshal(s.Body, &b); err != nil {
 		return nil, fmt.Errorf("checkgen fields: spec %s: %w", s.ID, err)
 	}
-	return fieldsOracle(b), nil
+	return &fieldsOracle{fieldsBody: b}, nil
 }
 
 // sourceOf is every span Hydra fenced into the request, the only text a value may be copied from.
@@ -98,34 +98,72 @@ func sourceOf(text string) string {
 	return strings.Join(parts, "\n")
 }
 
-type fieldsOracle fieldsBody
+// A field's status. Unverified is a from-source value with no fenced source to check it against.
+const (
+	FieldOK          = "ok"
+	FieldAbsent      = "absent" // optional, not given
+	FieldMissing     = "missing"
+	FieldWrongType   = "wrong_type"
+	FieldNotInSource = "not_in_source"
+	FieldUnverified  = "unverified"
+)
 
-// Verify fails on the first broken field: not JSON, missing, wrong type, or not in the source.
-func (o fieldsOracle) Verify(_ context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
+// FieldVerdict is one field's result.
+type FieldVerdict struct {
+	Name, Status, Detail string
+}
+
+func (f FieldVerdict) failed() bool {
+	return f.Status == FieldMissing || f.Status == FieldWrongType || f.Status == FieldNotInSource
+}
+
+// fieldsOracle keeps every field's verdict from the last Verify.
+type fieldsOracle struct {
+	fieldsBody
+	last []FieldVerdict
+}
+
+// Verify walks every field and fails when any is missing, of the wrong type, or not in the source.
+func (o *fieldsOracle) Verify(_ context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
+	o.last = make([]FieldVerdict, 0, len(o.Fields))
 	got, ok := DecodeObject(candidate)
 	if !ok {
 		return oracle.Verdict{Detail: "the answer is not a JSON object"}, nil
 	}
 	src := source{text: fold(o.Source), numbers: numbersIn(o.Source)}
+	var broken []string
 	for _, f := range o.Fields {
-		v, ok := got[f.Name]
-		if !ok || v == nil {
-			if f.Required {
-				return oracle.Verdict{Detail: fmt.Sprintf("field %q is missing", f.Name)}, nil
-			}
-			continue
-		}
-		if t := typeOf(v); t != f.Type {
-			return oracle.Verdict{Detail: fmt.Sprintf("field %q is a %s, want a %s", f.Name, t, f.Type)}, nil
-		}
-		if f.FromSource && src.text != "" && !src.has(v) {
-			return oracle.Verdict{Detail: fmt.Sprintf("field %q is not in the source", f.Name)}, nil
+		fv := judgeField(f, got[f.Name], src)
+		o.last = append(o.last, fv)
+		if fv.failed() {
+			broken = append(broken, fmt.Sprintf("field %q %s", f.Name, fv.Detail))
 		}
 	}
-	if o.Source == "" && slices.ContainsFunc(o.Fields, func(f Field) bool { return f.FromSource }) {
+	if len(broken) > 0 {
+		return oracle.Verdict{Detail: strings.Join(broken, "; ")}, nil
+	}
+	if slices.ContainsFunc(o.last, func(f FieldVerdict) bool { return f.Status == FieldUnverified }) {
 		return oracle.Verdict{Passed: true, Detail: "no fenced source, so values were not checked against one"}, nil
 	}
 	return oracle.Verdict{Passed: true}, nil
+}
+
+func judgeField(f Field, v any, src source) FieldVerdict {
+	fv := FieldVerdict{Name: f.Name, Status: FieldOK}
+	switch {
+	case v == nil && f.Required:
+		fv.Status, fv.Detail = FieldMissing, "is missing"
+	case v == nil:
+		fv.Status = FieldAbsent
+	case typeOf(v) != f.Type:
+		fv.Status, fv.Detail = FieldWrongType, fmt.Sprintf("is a %s, want a %s", typeOf(v), f.Type)
+	case !f.FromSource:
+	case src.text == "":
+		fv.Status, fv.Detail = FieldUnverified, "no fenced source"
+	case !src.has(v):
+		fv.Status, fv.Detail = FieldNotInSource, "is not in the source"
+	}
+	return fv
 }
 
 // DecodeObject reads an answer as one JSON object, from inside its first ``` block
