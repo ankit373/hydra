@@ -1082,6 +1082,17 @@ docs/sitemap.xml   ← lastmod date + any new public URLs
 docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 ```
 
+`docs/releases/` is generated, never edited: `python3 docs/releases/generate.py` builds one page
+per release, the index, `feed.xml` and the sitemap's `RELEASE-URLS` block from `CHANGELOG.md`,
+`docs/releases/data/vX.Y.Z.json` (what GitHub knows: PR authors, linked issues, `## Upgrade notes`
+sections and `BREAKING CHANGE:` footers from PR bodies, release files and digests, provenance,
+published advisories; refresh with `generate.py fetch vX.Y.Z`) and an optional hand-written
+`docs/releases/notes/vX.Y.Z.md` (`## Summary`, `## Highlights`, `## Upgrade notes`, `## Security`).
+Without notes a page says its summary was generated and invents nothing. The CI step `Release
+pages up to date` runs `generate.py --check`, and `cmd/hydra/docs_releases_test.go` fails when a
+CHANGELOG release has no page or the newest page is not the manifest's version. Release pages use
+`docs/assets/docs.css`, the layout they share with `docs.html`, plus `releases.css`.
+
 ### What triggers an update
 
 | Change | Files to update |
