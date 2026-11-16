@@ -55,9 +55,12 @@ type Example struct {
 	TS string `json:"ts"`
 
 	TaskHash string `json:"task_hash"`
-	Domain   string `json:"domain"`
-	Source   string `json:"source"` // the oracle that produced the verdict
-	Head     string `json:"head,omitempty"`
+	// Task is the instruction, kept verbatim like Candidate so a verified answer
+	// can be shown with its question. Empty on examples written before #1661.
+	Task   string `json:"task,omitempty"`
+	Domain string `json:"domain"`
+	Source string `json:"source"` // the oracle that produced the verdict
+	Head   string `json:"head,omitempty"`
 
 	// Enum and Tier are the routing decision this example judges. Recorded
 	// rather than re-derived: routing.yaml is editable, so the map in force
@@ -287,11 +290,17 @@ func Add(path string, e Example) (bool, error) {
 		e.TS = time.Now().UTC().Format(time.RFC3339)
 	}
 	e.CandidateHash = Hash(e.Candidate)
+	if strings.TrimSpace(e.Task) == "" {
+		e.Task = ""
+	}
+	if e.TaskHash == "" {
+		e.TaskHash = TaskHashFor(e.Task)
+	}
 	if e.TaskHash == "" {
 		e.TaskHash = taskHashFallback(e.Domain, e.Source)
 	}
 	if !e.PII {
-		e.PII = policy.Classify(e.Candidate).PII
+		e.PII = policy.Classify(e.Candidate).PII || policy.Classify(e.Task).PII
 	}
 	// Half a pair is unusable either way, and keeping it would make every
 	// reader re-check what the writer already knows.

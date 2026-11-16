@@ -392,3 +392,48 @@ func TestAdd_RestoresAMissingGuardAndKeepsAnExistingOne(t *testing.T) {
 		t.Errorf(".gitignore = %q, want the user's own content untouched", raw)
 	}
 }
+
+func TestAdd_KeepsTask(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "examples.jsonl")
+	e := ex("summary", "Revenue rose 4%.", true)
+	e.Task = "  Summarise the Q3 report in one line.\n"
+	if _, err := Add(p, e); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(p)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %d, err=%v", len(got), err)
+	}
+	if got[0].Task != e.Task || got[0].TaskHash != TaskHashFor(e.Task) || got[0].PII {
+		t.Errorf("task %q, hash %q, pii %v; want it verbatim, keyed by TaskHashFor", got[0].Task, got[0].TaskHash, got[0].PII)
+	}
+	// The task is held to the candidate's rule: PII in either marks the row.
+	pii := ex("summary", "Done.", true)
+	pii.Task = "email alice.smith@example.com the summary"
+	if _, err := Add(p, pii); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := Load(p); len(got) != 2 || !got[1].PII {
+		t.Errorf("PII in the task did not mark the example: %+v", got)
+	}
+	blank := ex("summary", "Other.", true)
+	blank.Task = " \n"
+	if _, err := Add(p, blank); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := Load(p); got[2].Task != "" || got[2].TaskHash != taskHashFallback("summary", "verifier:go") {
+		t.Errorf("a blank task is no task: %+v", got[2])
+	}
+}
+
+func TestLoad_OldExampleWithoutTask(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "examples.jsonl")
+	old := `{"v":1,"ts":"2026-01-02T03:04:05Z","task_hash":"abc","domain":"go","source":"verifier:go","candidate_hash":"def","candidate":"package a","passed":true}` + "\n"
+	if err := os.WriteFile(p, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(p)
+	if err != nil || len(got) != 1 || got[0].Task != "" || got[0].TaskHash != "abc" || !got[0].Passed {
+		t.Fatalf("old example: %+v, %v", got, err)
+	}
+}

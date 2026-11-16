@@ -31,6 +31,9 @@ func TestDispatch_CheckFilesAnExampleUnderItsKind(t *testing.T) {
 	if e := examples[0]; e.Domain != "summary.general" || !e.Passed || e.Source != "verifier:grounding" || e.Head == "" {
 		t.Errorf("example = %+v, want a passing grounding example under summary.general with its head", e)
 	}
+	if e := examples[0]; e.Task != prompt || e.TaskHash != evalset.TaskHashFor(prompt) {
+		t.Errorf("task = %q, hash %q; want the dispatched prompt", e.Task, e.TaskHash)
+	}
 
 	stats, _, err := run(t, "eval", "stats")
 	if err != nil {

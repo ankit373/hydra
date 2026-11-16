@@ -449,7 +449,7 @@ func RecordVerifiedEdit(ctx context.Context, emb embed.Embedder, v VerifiedEdit)
 	// Never fail an edit because its example could not be filed. The edit is the
 	// work; the corpus entry is a record of it.
 	_, _ = evalset.Add(evalset.DefaultPath(), evalset.Example{
-		TaskHash:   evalset.TaskHashFor(v.Prompt),
+		Task:       v.Prompt,
 		Domain:     trust.DomainForFile(v.File),
 		Source:     validatorSource,
 		Candidate:  v.Candidate,
