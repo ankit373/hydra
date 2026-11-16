@@ -60,6 +60,8 @@ type Verdict struct {
 	Grounded bool `json:"grounded"`
 	// Unsupported names the spans that did not, which is the whole diagnostic.
 	Unsupported []Claim `json:"unsupported,omitempty"`
+	// Supported are the claims found, for Index.Locate. Not in the JSON, whose shape scripts read.
+	Supported []Claim `json:"-"`
 	// Overlap is the share of the answer's content words present in the
 	// context. Reported and deliberately not part of the verdict: a good
 	// summary in fresh words has low overlap, so gating on it would fail
@@ -119,6 +121,7 @@ func Check(answer, prompt string) Verdict {
 		seen[key] = true
 		v.Claims++
 		if ok {
+			v.Supported = append(v.Supported, Claim{Text: text, Kind: kind})
 			return
 		}
 		v.Grounded = false
@@ -193,8 +196,9 @@ var months = map[string]int{"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "j
 // dateClaim is one written date or day range. Each day lists the canonical
 // forms that would support it: one, or two for an ambiguous 03/04/2026.
 type dateClaim struct {
-	text string
-	days [][]string
+	text       string
+	days       [][]string
+	start, end int
 }
 
 // dates finds the written dates in text and returns text with them blanked, so
@@ -222,7 +226,7 @@ func dates(text string) ([]dateClaim, string) {
 		default:
 			year, days = g(14), monthDays(g(11), g(12), g(13))
 		}
-		d := dateClaim{text: text[m[0]:m[1]]}
+		d := dateClaim{text: text[m[0]:m[1]], start: m[0], end: m[1]}
 		for _, readings := range days {
 			var keys []string
 			for _, r := range readings {
@@ -390,12 +394,44 @@ func isNameWord(w string) bool {
 // lowerWords is text as lowercase words without their punctuation, for
 // matching a name case-insensitively and across line breaks.
 func lowerWords(text string) []string {
-	fields := strings.Fields(text)
-	out := make([]string, 0, len(fields))
-	for _, f := range fields {
-		if core, _ := nameWord(f); core != "" {
-			out = append(out, strings.ToLower(core))
+	spans := wordSpans(text)
+	out := make([]string, len(spans))
+	for i, w := range spans {
+		out[i] = w.word
+	}
+	return out
+}
+
+// wordSpans are lowerWords with where each word's core sits in text.
+func wordSpans(text string) []textSpan {
+	var out []textSpan
+	for _, f := range fieldSpans(text) {
+		field := text[f.start:f.end]
+		core, _ := nameWord(field)
+		if core == "" {
+			continue
 		}
+		at := f.start + len(field) - len(strings.TrimLeft(field, opening))
+		out = append(out, textSpan{start: at, end: at + len(core), word: strings.ToLower(core)})
+	}
+	return out
+}
+
+// fieldSpans are strings.Fields as offsets into text.
+func fieldSpans(text string) []textSpan {
+	var out []textSpan
+	from := -1
+	for i, r := range text {
+		switch {
+		case !unicode.IsSpace(r) && from < 0:
+			from = i
+		case unicode.IsSpace(r) && from >= 0:
+			out = append(out, textSpan{start: from, end: i})
+			from = -1
+		}
+	}
+	if from >= 0 {
+		out = append(out, textSpan{start: from, end: len(text)})
 	}
 	return out
 }
@@ -472,7 +508,30 @@ var ellipsis = regexp.MustCompile(`\.\.\.|…`)
 // normalise lowercases text, collapses its whitespace and straightens curly
 // apostrophes, the differences a faithful quote may have from its source.
 func normalise(text string) string {
-	return strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(text, "’", "'")), " "))
+	n, _ := normaliseMapped(text)
+	return n
+}
+
+// normaliseMapped is normalise plus, for each byte of the result, the offset in text it came from.
+func normaliseMapped(text string) (string, []int) {
+	var b strings.Builder
+	var at []int
+	for i, f := range fieldSpans(text) {
+		if i > 0 {
+			b.WriteByte(' ')
+			at = append(at, f.start)
+		}
+		for j, r := range text[f.start:f.end] {
+			if r == '’' {
+				r = '\''
+			}
+			n, _ := b.WriteRune(unicode.ToLower(r))
+			for range n {
+				at = append(at, f.start+j)
+			}
+		}
+	}
+	return b.String(), at
 }
 
 // citations are the numbers the answer cited rather than measured: #843 is a
@@ -565,31 +624,46 @@ const minDigits = 2
 // wrong here, where `internal/awsconf` matching `internal/executor` on the
 // shared first half is the exact failure this is meant to catch.
 func tokenize(text string) []string {
-	var out []string
-	var b strings.Builder
-	flush := func() {
-		if b.Len() > 0 {
-			out = append(out, strings.Trim(b.String(), ".-_/"))
-			b.Reset()
-		}
+	spans := tokenSpans(text)
+	out := make([]string, len(spans))
+	for i, t := range spans {
+		out[i] = text[t.start:t.end]
 	}
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) ||
-			r == '.' || r == '/' || r == '_' || r == '-' {
-			b.WriteRune(r)
+	return out
+}
+
+// textSpan is a run of text by byte offset; word is its lowercase form where one is kept.
+type textSpan struct {
+	start, end int
+	word       string
+}
+
+// tokenSpans are tokenize's tokens as offsets into text, trimmed of leading and trailing .-_/.
+func tokenSpans(text string) []textSpan {
+	var out []textSpan
+	from := -1
+	flush := func(to int) {
+		if from < 0 {
+			return
+		}
+		tok := text[from:to]
+		lead := len(tok) - len(strings.TrimLeft(tok, ".-_/"))
+		if t := strings.Trim(tok, ".-_/"); t != "" {
+			out = append(out, textSpan{start: from + lead, end: from + lead + len(t)})
+		}
+		from = -1
+	}
+	for i, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '.' || r == '/' || r == '_' || r == '-' {
+			if from < 0 {
+				from = i
+			}
 			continue
 		}
-		flush()
+		flush(i)
 	}
-	flush()
-
-	kept := out[:0]
-	for _, t := range out {
-		if t != "" {
-			kept = append(kept, t)
-		}
-	}
-	return kept
+	flush(len(text))
+	return out
 }
 
 // tokens is the supporting set: every token in the text, lowercased, plus the

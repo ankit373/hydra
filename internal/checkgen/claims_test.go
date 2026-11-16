@@ -233,3 +233,16 @@ func TestClaims_PassFailUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestClaims_SupportedSentenceListsItsLines(t *testing.T) {
+	prompt := "Summarise this report.\n" + util.WrapUntrusted("DOCUMENT", "Acme Supplies sold 1,200 units in March.\nCosts fell by 3.5 percent.")
+	specs, err := claimsGen{}.Generate(context.Background(), Task{Text: prompt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := lastVerdicts(t, specs[0], Env{}, "Acme Supplies sold 1,200 units and costs fell by 3.5 percent. Sales went well overall.")
+	if len(got) != 2 || len(got[0].Sources) != 1 || got[0].Sources[0].Label != "DOCUMENT" ||
+		got[0].Sources[0].StartLine != 1 || got[0].Sources[0].EndLine != 2 || got[1].Sources != nil {
+		t.Fatalf("verdicts = %+v; want the first sentence backed by DOCUMENT lines 1-2 and the second by nothing", got)
+	}
+}

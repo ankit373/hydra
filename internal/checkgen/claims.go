@@ -96,16 +96,19 @@ const (
 )
 
 // SentenceVerdict is one sentence's result. N counts from 1. Ground fills Unsupported, the judge Why.
+// Sources are where a sentence ground passed sits in the request; the judge gives none.
 type SentenceVerdict struct {
 	N           int
 	Text        string
 	Status      string
 	Unsupported []ground.Claim
 	Why         string
+	Sources     []ground.Span
 }
 
 // groundSentence checks one sentence with ground.Check. A sentence naming nothing checkable is skipped.
 func groundSentence(prompt string) sentenceCheck {
+	var index *ground.Index // built on the first sentence, once per check
 	return func(_ context.Context, sentence string) (SentenceVerdict, error) {
 		v := ground.Check(sentence, prompt)
 		switch {
@@ -114,7 +117,14 @@ func groundSentence(prompt string) sentenceCheck {
 		case v.Claims == 0:
 			return SentenceVerdict{Status: StatusNothingToCheck}, nil
 		case v.Grounded:
-			return SentenceVerdict{Status: StatusSupported}, nil
+			if index == nil {
+				index = ground.NewIndex(prompt)
+			}
+			var spans []ground.Span
+			for _, c := range v.Supported {
+				spans = append(spans, index.Locate(c)...)
+			}
+			return SentenceVerdict{Status: StatusSupported, Sources: ground.MergeSpans(spans)}, nil
 		}
 		return SentenceVerdict{Status: StatusNotSupported, Unsupported: v.Unsupported, Why: v.Detail()}, nil
 	}
