@@ -127,6 +127,26 @@ func TestExitCodes_MissingConfigFails(t *testing.T) {
 	}
 }
 
+// dispatch --require-pass exits as `hyctl oracle ground` does: 1 failed, 2 not checked.
+func TestExitCodes_DispatchRequirePass(t *testing.T) {
+	for _, tc := range []struct {
+		name, answer, prompt string
+		want                 int
+	}{
+		{"grounded", "The total is 120 dollars.", invoicePrompt, 0},
+		{"failed", "The total is 450 dollars.", invoicePrompt, 1},
+		{"not checked", "The total is 450 dollars.", "summarise the invoice", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := dispatchable(t, tc.answer)
+			code, out := runBinary(t, s, "dispatch", "--no-stream", "--tier", "6", "--check", "ground", "--require-pass", tc.prompt)
+			if code != tc.want {
+				t.Errorf("exited %d, want %d:\n%s", code, tc.want, out)
+			}
+		})
+	}
+}
+
 // The MCP gate's exit code is what a caller branches on to stop an agent
 // touching a file, and `ask` withholds permission exactly as `deny` does.
 //
