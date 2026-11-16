@@ -16,8 +16,8 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/graph"
-	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
@@ -33,7 +33,12 @@ type ckMetrics struct {
 	todayReqs int
 
 	todayActualTok, todayEstTok int
-	savedTodayUSD, baseTodayUSD float64
+
+	// perPassed is cost per passed answer over ckPassedDays; checked counts
+	// the checked answers, so a short history can say how far it has to go.
+	perPassed   cost.PassedReport
+	perPassedOK bool
+	checked     int
 
 	byModelToday []cost.GroupRow
 	byTierToday  []cost.GroupRow
@@ -74,23 +79,21 @@ type ckRunCost struct {
 // real consensus sample counts against.
 const ckFixedSwarmN = 5
 
-// ckPricer is the per-tier cost lookup the savings math needs. An interface
-// rather than *pricing.DB keeps the arithmetic testable without a resolvable
-// registry/pricing.yaml on disk.
-type ckPricer interface {
-	EstimateCost(tier, inputTokens, outputTokens int) float64
-}
+// ckPassedDays is the window cost per passed answer is measured over.
+const ckPassedDays = 30
 
 // ckLoadMetrics reads the real logs once, one cost.jsonl pass feeds spend,
 // per-model stats, usage groupings, and the run join.
-func ckLoadMetrics(pr *pricing.DB) ckMetrics {
+func ckLoadMetrics() ckMetrics {
 	m := ckMetrics{
 		stats:       map[string]*ckModelStat{},
 		localModels: map[string]bool{},
 		runCost:     map[string]ckRunCost{},
 	}
 	if rows, err := cost.LoadAll(); err == nil {
-		m.fold(rows, pr, time.Now().UTC())
+		// No verdict log means nothing was checked, which the panel says.
+		passed, _ := evalset.VerdictBySpan(evalset.VerdictsPath())
+		m.fold(rows, passed, time.Now().UTC())
 	}
 	if cal, err := trust.New(trust.DefaultPath()); err == nil {
 		m.calibrator = cal
@@ -108,11 +111,12 @@ func ckLoadMetrics(pr *pricing.DB) ckMetrics {
 }
 
 // fold aggregates the cost rows relative to now (UTC, matching cost.Summary's
-// day boundary).
-func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
+// day boundary). passed is the verdict log by span.
+func (m *ckMetrics) fold(rows []cost.Row, passed map[string]bool, now time.Time) {
 	day := now.Format("2006-01-02")
 	month := now.Format("2006-01")
-	var today []cost.Row
+	since := now.AddDate(0, 0, -(ckPassedDays - 1)).Format("2006-01-02")
+	var today, window []cost.Row
 	nonLocal := map[string]bool{}
 
 	for _, r := range rows {
@@ -165,6 +169,9 @@ func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
 		if strings.HasPrefix(r.TS, day) {
 			today = append(today, r)
 		}
+		if len(r.TS) >= 10 && r.TS[:10] >= since {
+			window = append(window, r)
+		}
 	}
 	// A model with any non-local row must not claim "local · free".
 	for model := range nonLocal {
@@ -174,7 +181,7 @@ func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
 	m.todayReqs = len(today)
 	m.spendUSD = cost.SummaryFromRows(rows).Today.EstCostUSD
 	m.todayActualTok, m.todayEstTok = cost.TokenSourceShare(today)
-	m.savedTodayUSD, m.baseTodayUSD = ckSavings(today, pr)
+	m.perPassed, m.checked, m.perPassedOK = cost.PerPassedAnswer(window, passed)
 	m.byModelToday = cost.ByModel(today)
 	m.byTierToday = cost.GroupBy(today, func(r cost.Row) string { return "T" + strconv.Itoa(r.Tier) })
 	m.byDay = cost.ByDay(cost.FilterDays(rows, 14))
@@ -187,23 +194,6 @@ func ckLocalExecutor(e string) bool { return e == "local" || e == "ollama" }
 
 // ckGraphPath locates graph.json the same way the CLI does.
 func ckGraphPath() string { return filepath.Join(config.ScriptHome(), "graph.json") }
-
-// ckSavings compares what was actually spent against what the same tokens
-// would have cost routed entirely to tier 1, the "one frontier model for
-// everything" baseline Hydra exists to beat. Both sides come from real rows
-// priced through the same pricing DB, so the comparison is like-for-like.
-// saved may be ≤ 0; the renderer decides how to say that honestly.
-func ckSavings(rows []cost.Row, pr ckPricer) (saved, baseline float64) {
-	if pr == nil {
-		return 0, 0
-	}
-	var actual float64
-	for _, r := range rows {
-		actual += r.EstCostUSD
-		baseline += pr.EstimateCost(1, r.PromptTokens, r.ResponseTokens)
-	}
-	return baseline - actual, baseline
-}
 
 // ckBlastFor computes the real change impact of a file: the dependent count and
 // percolation factor from the code graph. Returns ok=false when there is no

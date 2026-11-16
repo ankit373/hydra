@@ -26,7 +26,7 @@ func TestFold_PerModelStatsAndRunJoin(t *testing.T) {
 		{TS: day + "T10:00:00Z", Model: "qwen (Ollama)", Executor: "local", Tier: 10,
 			WallMS: 500, PromptTokens: 100, ResponseTokens: 50, TokensSource: "actual", RunID: "r1", SwarmMode: "best"},
 		{TS: "2020-01-01T00:00:00Z", Model: "qwen (Ollama)", Executor: "local", Tier: 10, WallMS: 100},
-	}, stubPricer{}, now)
+	}, nil, now)
 
 	// Keyed canonically, not by the logged name: "qwen (Ollama)" is the port
 	// provider's display form of head ollama/qwen, and the fold now keys the way

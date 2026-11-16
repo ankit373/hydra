@@ -98,40 +98,9 @@
 .lede{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);max-width:66ch;margin:var(--hy-space-4) 0 0;}
 .lede b{color:var(--hy-color-text-default);font-weight:600;}
 
-/* savings engine */
+/* fee panel */
 .engine{margin-top:var(--hy-space-8);border:1px solid var(--hy-color-border-default);border-radius:20px;overflow:hidden;
   background:linear-gradient(180deg,color-mix(in srgb,var(--hy-color-surface-card) 70%,transparent),color-mix(in srgb,var(--hy-color-surface-raised) 70%,transparent));}
-.engine .top{padding:var(--hy-space-6) var(--hy-space-8) var(--hy-space-1);}
-.slabel{display:flex;justify-content:space-between;align-items:flex-end;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-text-muted);}
-.slabel .amt{font-size:clamp(var(--hy-font-size-2xl),4vw,var(--hy-font-size-3xl));font-weight:800;letter-spacing:-1px;color:var(--hy-color-text-default);}
-.slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:6px;margin:var(--hy-space-4) 0 2px;
-  background:linear-gradient(90deg,var(--hy-color-accent-strong),var(--hy-color-brand-mid),var(--hy-color-brand-end));cursor:pointer;}
-.slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--hy-color-text-default);
-  box-shadow:0 0 0 4px color-mix(in srgb,var(--hy-color-accent-default) 25%,transparent),0 0 16px color-mix(in srgb,var(--hy-color-accent-default) 70%,transparent);cursor:pointer;}
-.slider::-moz-range-thumb{width:20px;height:20px;border:0;border-radius:50%;background:var(--hy-color-text-default);
-  box-shadow:0 0 0 4px color-mix(in srgb,var(--hy-color-accent-default) 25%,transparent),0 0 16px color-mix(in srgb,var(--hy-color-accent-default) 70%,transparent);cursor:pointer;}
-.srange{display:flex;justify-content:space-between;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-1);}
-
-/* the flow bar */
-.flowbar{margin:var(--hy-space-6) var(--hy-space-8) var(--hy-space-1);height:58px;border-radius:12px;background:color-mix(in srgb,var(--hy-color-surface-base) 55%,transparent);
-  border:1px solid var(--hy-color-border-subtle);display:flex;overflow:hidden;position:relative;}
-.flowbar .seg{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--hy-font-family-mono);
-  font-size:var(--hy-font-size-xs);font-weight:600;transition:width var(--hy-motion-duration-base) ease;white-space:nowrap;overflow:hidden;}
-.flowbar .keep{background:linear-gradient(90deg,var(--hy-color-status-success),var(--hy-color-accent-strong));color:var(--hy-color-text-inverse);}
-.flowbar .pay{background:linear-gradient(90deg,var(--hy-color-brand-mid),var(--hy-color-brand-end));color:var(--hy-color-text-inverse);}
-.flowbar .rest{flex:1;color:var(--hy-color-text-subtle);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);display:flex;align-items:center;padding-left:var(--hy-space-3);}
-
-.stat3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--hy-color-border-subtle);margin-top:var(--hy-space-6);
-  border-top:1px solid var(--hy-color-border-subtle);}
-@media(max-width:680px){.stat3{grid-template-columns:1fr;}}
-.stat3 .s{background:var(--hy-color-surface-raised);padding:var(--hy-space-6) var(--hy-space-6);}
-.stat3 .t{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1.5px;text-transform:uppercase;color:var(--hy-color-text-subtle);}
-.stat3 .n{font-size:clamp(var(--hy-font-size-2xl),4vw,var(--hy-font-size-3xl));font-weight:800;letter-spacing:-1px;margin-top:var(--hy-space-2);}
-.stat3 .frontier .n{color:var(--hy-color-text-muted);text-decoration:line-through;text-decoration-color:var(--hy-color-status-danger);text-decoration-thickness:2px;}
-.stat3 .keepn .n{color:var(--hy-color-status-success);}
-.stat3 .payn .n{color:var(--hy-color-accent-secondary);}
-.stat3 .d{font-size:var(--hy-font-size-sm);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-1);}
-
 .feebar{display:flex;align-items:center;gap:var(--hy-space-4);flex-wrap:wrap;justify-content:center;padding:var(--hy-space-4) var(--hy-space-6);
   border-top:1px solid var(--hy-color-border-subtle);background:color-mix(in srgb,var(--hy-color-accent-default) 5%,transparent);}
 .feebar .lab{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-text-muted);}
@@ -210,38 +179,20 @@
   <div class="scrollhint">↓ so what <em>do</em> you pay?</div>
 </section>
 
-<!-- SAVINGS ENGINE -->
+<!-- FEE -->
 <section class="blk wrap reveal" id="engine-sec">
   <div class="klabel"><span>the only bill</span><b>goes to the model providers</b></div>
-  <h2 class="big">Move the slider. <span class="gcheap">Watch what we take.</span></h2>
-  <p class="lede">Send everything to one top model and you pay its price on every task. Hydra sends each task to a model with a good measured record on that kind of work, often a smaller or local one. With a target set, it stops asking as soon as the answer is checked. <b>Whatever you spend, Hydra's fee stays at zero.</b></p>
+  <h2 class="big">You pay the providers. <span class="gcheap">Hydra takes nothing.</span></h2>
+  <p class="lede">Hydra sends each task to a model with a good measured record on that kind of work, often a smaller or local one. With a target set, it stops asking as soon as the answer is checked. <b>Whatever you spend, Hydra's fee stays at zero.</b></p>
 
   <div class="engine">
-    <div class="top">
-      <div class="slabel"><span>your monthly spend, everything → frontier</span><span class="amt tnum" id="e-frontier">$1,000</span></div>
-      <input id="e-slider" class="slider" type="range" min="0" max="100" step="1" value="50" aria-label="Your monthly frontier-model spend">
-      <div class="srange"><span>$100</span><span>$1,000</span><span>$10,000</span></div>
-    </div>
-
-    <div class="flowbar" aria-hidden="true">
-      <div class="seg keep" id="e-seg-keep">you keep</div>
-      <div class="seg pay" id="e-seg-pay">providers</div>
-      <div class="rest" id="e-seg-rest">$0 → Hydra</div>
-    </div>
-
-    <div class="stat3">
-      <div class="s frontier"><div class="t">frontier-only bill</div><div class="n tnum" id="e-num-frontier">$1,000</div><div class="d">the naive way: one expensive model for everything</div></div>
-      <div class="s payn"><div class="t">example · to providers</div><div class="n tnum" id="e-num-pay">$200</div><div class="d">models with a good record on the task · free local fallback</div></div>
-      <div class="s keepn"><div class="t">you keep</div><div class="n tnum" id="e-num-keep">$800</div><div class="d">in this example, if 80% of spend moved</div></div>
-    </div>
-
     <div class="feebar">
       <span class="lab">Hydra's fee</span>
       <span class="fee tnum">$0.00</span>
       <span class="always">always. It never moves.</span>
     </div>
   </div>
-  <p class="enote">Illustration only: it assumes 80% of the spend moves to lower-cost or local models, which is not a measured or typical figure. Your real numbers come from <span style="color:var(--hy-color-accent-strong)">hyctl stats</span>.</p>
+  <p class="enote">No savings figure here: a number that assumes what you would have spent elsewhere is a guess. Once 30 of your answers have been checked, the usage view in <span style="color:var(--hy-color-accent-strong)">hyctl</span> shows what each passed answer cost, with its pass rate and a 95% interval, beside the best single model on your own record for the same kind of work.</p>
 </section>
 
 <!-- FREE, NO ASTERISKS -->
@@ -300,40 +251,6 @@
   var body=encodeURIComponent("Hi Ankit,\n\nWe'd like to explore customising Hydra for our stack:\n\n- What we want:\n- Our stack:\n- Rough timeline:\n\nThanks!");
   var a=document.getElementById('contact');
   if(a){ a.href='mailto:'+addr+'?subject='+subject+'&body='+body; }
-
-  // ── savings engine ──
-  var EFF=0.80, MAX=10000;
-  var sl=document.getElementById('e-slider');
-  var elFrontierTop=document.getElementById('e-frontier'),
-      elFrontier=document.getElementById('e-num-frontier'),
-      elPay=document.getElementById('e-num-pay'),
-      elKeep=document.getElementById('e-num-keep'),
-      segKeep=document.getElementById('e-seg-keep'),
-      segPay=document.getElementById('e-seg-pay'),
-      segRest=document.getElementById('e-seg-rest');
-  function money(n){ return '$'+Math.round(n).toLocaleString(); }
-  function spendFor(t){ // log map $100 → $10,000
-    var v=100*Math.pow(100, t/100);
-    // round to a clean step
-    var step = v<1000?10 : v<3000?50 : 100;
-    return Math.round(v/step)*step;
-  }
-  function render(){
-    var F=spendFor(+sl.value);
-    var pay=F*(1-EFF), keep=F*EFF;
-    elFrontierTop.textContent=money(F);
-    elFrontier.textContent=money(F);
-    elPay.textContent=money(pay);
-    elKeep.textContent=money(keep);
-    // flow bar: total fills proportional to F/MAX; within it keep vs pay
-    var fill=Math.max(0.06, F/MAX); // fraction of the bar used
-    segKeep.style.width=(fill*EFF*100)+'%';
-    segPay.style.width=(fill*(1-EFF)*100)+'%';
-    segKeep.textContent = fill>0.18 ? 'you keep' : '';
-    segPay.textContent  = fill>0.10 ? 'providers' : '';
-  }
-  if(sl){ sl.addEventListener('input',render); render(); }
-
 
   // ── aurora background ──
   var cv=document.getElementById('aurora');
