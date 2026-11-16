@@ -227,3 +227,10 @@ func TestDispatch_NotVerifiedLineWithoutFlag(t *testing.T) {
 		t.Errorf("no not-verified line for a failed check:\n%s", out)
 	}
 }
+
+func TestParseCheck_CitationsIsALedgerGatedOracle(t *testing.T) {
+	c, err := parseCheck("citations", "q")
+	if o, ok := c.oracle.(*linkcheck.Citations); err != nil || !ok || o.Gate == nil || o.CacheDir == "" || c.source != linkcheck.CitationsSource {
+		t.Fatalf("citations = %+v, %v; want the citations oracle behind the ledger gate, with a cache", c, err)
+	}
+}

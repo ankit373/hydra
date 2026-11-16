@@ -124,6 +124,8 @@ internal/oracle/        ← Checks as calibrated evidence: any command (tests, a
 internal/linkcheck/     ← `--check links`: each URL in an answer must resolve, and a quote in its sentence must be
                           on the page. Asks the ledger (`ledger.Network`) before each fetch; only the URL leaves.
                           No links, a denied fetch or no network is not checked, never a pass (#1860).
+                          `--check citations` shares the fetch: each DOI (doi.org) and arXiv id must exist and
+                          match a quoted title; lookups cached a day under $HYDRA_HOME/cache/citations (#1861).
 internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, claims, rubric, tests), stored once
                           at $HYDRA_HOME/evalset/checks/, run on one answer with a verdict per check, named
                           gen:<kind> or gen:<kind>-<variant>. An oracle reaches the spec's writer head at check

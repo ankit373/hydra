@@ -85,7 +85,7 @@ func TestLinksCheck_DeniedByLedgerIsNotChecked(t *testing.T) {
 	if err := os.WriteFile(ledger.DefaultPolicyPath(), []byte(pol), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := verify(t, LedgerGate, "See "+u+"/ok for details.")
+	_, _, err := verify(t, LedgerGate(Source), "See "+u+"/ok for details.")
 	if !errors.Is(err, errDenied) {
 		t.Fatalf("err = %v, want not checked: the ledger denied the fetch", err)
 	}
@@ -99,7 +99,7 @@ func TestLinksCheck_DeniedByLedgerIsNotChecked(t *testing.T) {
 func TestLinksCheck_AllowedFetchIsRecorded(t *testing.T) {
 	testutil.NewSandbox(t)
 	u := site(t).URL
-	if passed, _, err := verify(t, LedgerGate, "See "+u+"/ok and "+u+"/ok again."); err != nil || !passed {
+	if passed, _, err := verify(t, LedgerGate(Source), "See "+u+"/ok and "+u+"/ok again."); err != nil || !passed {
 		t.Fatalf("passed %v, err %v", passed, err)
 	}
 	events, err := ledger.Load(ledger.DefaultPath())
