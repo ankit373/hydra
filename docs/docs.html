@@ -763,7 +763,7 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
       <h2>How discovery works <span class="tagline">no plugins, no config</span></h2>
       <p class="sum">Hydra finds every model on your machine across <b>three channels</b> in under two seconds, scores each with a CapScore, and routes across all of them. Provider-neutral: it routes <i>away</i> from expensive models, never toward a favored vendor.</p>
       <div class="chan-flow">
-        <div class="chan"><span class="cnt">13+</span><h3>PATH scan</h3><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs, Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
+        <div class="chan"><span class="cnt">3</span><h3>PATH scan</h3><div class="how">executables on $PATH</div><p>Finds installed CLI agents: Claude Code, Codex and Antigravity. <a href="https://github.com/ankit373/hydra/blob/main/CONTRIBUTING.md#ways-to-contribute">Others can be added</a>.</p></div>
         <div class="chan"><span class="cnt">14</span><h3>Env vars</h3><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable model.</p></div>
         <div class="chan"><span class="cnt">2</span><h3>Port scan</h3><div class="how">localhost servers</div><p>Queries Ollama (11434), LM Studio (1234), a LiteLLM proxy (4000) and a llama.cpp server (8080), and enumerates every model each one serves.</p></div>
       </div>
@@ -776,15 +776,8 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
         <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">C</span>Claude Code</div><div class="meta">cli · <span class="tier">expert</span></div><div class="desc">Anthropic's agent, top reasoning routing level.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">A</span>Antigravity (agy)</div><div class="meta">cli · <span class="tier">expert</span></div><div class="desc">Claude-family model registry; a first-class model.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Cx</span>OpenAI Codex</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Strong code generation.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Cu</span>Cursor</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">IDE agent, routable from Hydra.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">W</span>Windsurf</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Agentic IDE.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">G</span>Gemini CLI</div><div class="meta">cli · <span class="tier">standard-complex</span></div><div class="desc">Google's coding CLI.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Co</span>GitHub Copilot</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Copilot in the terminal.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Cy</span>Sourcegraph Cody</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Context-aware assistant.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Am</span>Amp</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Agentic coding tool.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Ct</span>Continue</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Open-source assistant.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">K</span>Amazon Kiro</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">AWS's agentic IDE.</div></div>
       </div>
+      <p>These three were found by <span class="fx">hyctl probe</span> and answered a request on a clean setup. <a href="https://github.com/ankit373/hydra/blob/main/CONTRIBUTING.md#ways-to-contribute">Others can be added</a>.</p>
       <div class="callout">Hydra sends each request to a model measured capable at that task type, and moves to another model when that model fails, or when the answer fails its check (with a <code translate="no">--confidence</code> target, or the validator <code translate="no">hyctl edit</code> runs).</div>
     </section>
 
@@ -862,7 +855,7 @@ $ hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--enum</span
         <table class="ladder">
           <thead><tr><th>Channel</th><th>What it finds</th></tr></thead>
           <tbody>
-            <tr><td class="k">PATH scan</td><td>13+ CLI tools: Claude Code, Codex, Cursor, Kiro, Windsurf, Gemini, Copilot, Cody, Amp, Continue, and the Ollama binary.</td></tr>
+            <tr><td class="k">PATH scan</td><td>CLI agents: Claude Code, Codex and Antigravity. <a href="https://github.com/ankit373/hydra/blob/main/CONTRIBUTING.md#ways-to-contribute">Others can be added</a>.</td></tr>
             <tr><td class="k">Port scan</td><td>Ollama (11434), LM Studio (1234), LiteLLM (4000), llama.cpp (8080). It asks each server and lists every installed model. Move one with <span class="fx">OLLAMA_HOST</span>, <span class="fx">HYDRA_LMSTUDIO_HOST</span>, <span class="fx">LITELLM_PROXY_URL</span> or <span class="fx">LLAMA_ARG_HOST</span>/<span class="fx">LLAMA_ARG_PORT</span>.</td></tr>
             <tr><td class="k">Env vars</td><td>14 API providers: Anthropic, OpenAI, Google, xAI, Groq, Together, Fireworks, Mistral, DeepSeek, Bedrock, Azure, Perplexity, Cohere, Replicate.</td></tr>
           </tbody>
