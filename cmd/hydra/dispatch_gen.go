@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/checkgen"
@@ -16,10 +18,32 @@ import (
 )
 
 // genChecks is what --check gen (every default generator) and gen:<kind> (one, by spec kind) asked for.
+// schema is --schema's field list, which the fields check uses instead of asking a model.
 type genChecks struct {
-	all   bool
-	named []string
-	skip  string // a spec kind already run another way, e.g. claims under --source-only
+	all    bool
+	named  []string
+	skip   string // a spec kind already run another way, e.g. claims under --source-only
+	schema []checkgen.Field
+}
+
+// useSchema reads --schema and asks for the fields check, naming in one line any keyword it does not read.
+func (g *genChecks) useSchema(path string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("--schema: %w", err)
+	}
+	fields, unread, err := checkgen.SchemaFields(raw)
+	if err != nil {
+		return fmt.Errorf("--schema %s: %w", path, err)
+	}
+	if len(unread) > 0 {
+		fmt.Fprintf(stdout, "  %s\n", warnStyle.Render("--schema: not checked, these keywords are not read: "+strings.Join(unread, ", ")))
+	}
+	g.schema = fields
+	if !slices.Contains(g.named, "fields") {
+		g.named = append(g.named, "fields")
+	}
+	return nil
 }
 
 func (g genChecks) asked() bool { return g.all || len(g.named) > 0 }
@@ -172,7 +196,7 @@ func (g genRun) check(ctx context.Context, r *dispatch.Result, prompt string) ge
 		},
 	}
 	writer := checkgen.GenInfo{Head: h.ID, Family: provider.Family(h), SameFamily: same}
-	task := checkgen.Task{Text: prompt, Kind: g.kind, Writer: writer,
+	task := checkgen.Task{Text: prompt, Kind: g.kind, Writer: writer, Fields: g.want.schema,
 		Ask: func(ctx context.Context, p string) (string, error) { return ask(ctx, writer, p) }}
 	span := runlog.Event{RunID: g.runID, SpanID: r.SpanID, Domain: g.kind}
 
