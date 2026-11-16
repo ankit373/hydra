@@ -5327,9 +5327,9 @@ func cmdTrustCalibration() *cobra.Command {
 				fmt.Fprintln(stdout, "\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
 				return nil
 			}
-			fmt.Fprintf(stdout, "\n  %-28s %-16s %6s %6s %7s %7s %8s   %11s %s\n",
-				"Source", "Domain", "n", "neg", "se", "sp", "D(nats)", "since", "changed")
-			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 110))
+			fmt.Fprintf(stdout, "\n  %-28s %-16s %6s %6s %7s %7s %8s   %11s %-10s %s\n",
+				"Source", "Domain", "n", "neg", "se", "sp", "D(nats)", "since", "changed", "recovered")
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 120))
 			mute, recent := 0, 0
 			weekAgo := time.Now().AddDate(0, 0, -7)
 			for _, s := range stats {
@@ -5338,7 +5338,10 @@ func cmdTrustCalibration() *cobra.Command {
 					mute++
 					mark = " ·"
 				}
-				changed := ""
+				changed, recovered := "", ""
+				if !s.Recovered.IsZero() {
+					recovered = s.Recovered.Local().Format(time.DateOnly)
+				}
 				if !s.Changed.IsZero() {
 					changed = s.Changed.Local().Format(time.DateOnly)
 					if s.Changed.After(weekAgo) {
@@ -5346,9 +5349,9 @@ func cmdTrustCalibration() *cobra.Command {
 					}
 				}
 				// The mark stays beside D, the number it explains.
-				fmt.Fprintf(stdout, "  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f%-2s %11s %s\n",
+				fmt.Fprintf(stdout, "  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f%-2s %11s %-10s %s\n",
 					s.Source, truncLabel(s.Domain, 16), s.N, s.Neg, s.Se, s.Sp, s.D, mark,
-					fmt.Sprintf("%d/%d", s.SinceCorrect, s.SinceTotal), changed)
+					fmt.Sprintf("%d/%d", s.SinceCorrect, s.SinceTotal), changed, recovered)
 			}
 			if recent > 0 {
 				fmt.Fprintf(stdout, "\n  %s\n", warnStyle.Render(fmt.Sprintf(

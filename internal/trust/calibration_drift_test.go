@@ -159,3 +159,59 @@ func TestCalibrator_OldSnapshotSchemaReplays(t *testing.T) {
 		t.Errorf("since-total %d, want a detector built from all 300", total)
 	}
 }
+
+// minute is the timestamp writeLog gives the record at step m.
+func minute(m int) time.Time { return time.Date(2026, 11, 1, 0, m, 0, 0, time.UTC) }
+
+func TestCalibration_RecordsRecovery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+	writeLog(t, path, 1, [2]float64{0.92, 2000}, [2]float64{0.70, 300}, [2]float64{0.92, 1000})
+
+	c, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := c.Report()[0]
+	if s.Changed.Before(minute(2000)) || s.Changed.After(minute(2300)) {
+		t.Errorf("changed %v, want it dated within the drop", s.Changed)
+	}
+	if s.Recovered.Before(minute(2300)) || s.Recovered.After(minute(2500)) {
+		t.Errorf("recovered %v, want it dated within 200 answers of the rate coming back", s.Recovered)
+	}
+}
+
+func TestCalibration_NewChangeClearsRecovery(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+	writeLog(t, path, 1, [2]float64{0.92, 2000}, [2]float64{0.70, 300},
+		[2]float64{0.92, 1000}, [2]float64{0.60, 300})
+
+	c, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := c.Report()[0]
+	if !s.Recovered.IsZero() {
+		t.Errorf("recovered %v survived the second drop", s.Recovered)
+	}
+	if s.Changed.Before(minute(3300)) {
+		t.Errorf("changed %v, want the second drop's date", s.Changed)
+	}
+}
+
+// A model that got better was not broken, so a rise alone dates nothing.
+func TestCalibration_RiseIsNotAChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+	writeLog(t, path, 1, [2]float64{0.70, 2000}, [2]float64{0.92, 1000})
+
+	c, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := c.Report()[0]
+	if !s.Changed.IsZero() || !s.Recovered.IsZero() {
+		t.Errorf("changed %v recovered %v after a rise, want neither", s.Changed, s.Recovered)
+	}
+	if s.SinceTotal >= 3000 {
+		t.Errorf("since %d, want routing to read the record after the rise", s.SinceTotal)
+	}
+}

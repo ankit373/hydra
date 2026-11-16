@@ -221,3 +221,22 @@ func TestSnapshot_APreNormalizationCheckpointFoldsIntoTheCellReadersAsk(t *testi
 		t.Errorf("after ten more: %d cells, first N=%v; want 1 cell of 80", len(rows), rows[0].N)
 	}
 }
+
+func TestCalibrationSnapshot_RoundTripsRecovered(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+	writeLog(t, path, 1, [2]float64{0.92, 2000}, [2]float64{0.70, 300}, [2]float64{0.92, 1000})
+
+	full, err := New(path) // replays and writes the snapshot
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, got := full.Report()[0], resumed.Report()[0]
+	if want.Recovered.IsZero() || !got.Recovered.Equal(want.Recovered) || !got.Changed.Equal(want.Changed) {
+		t.Errorf("from the snapshot changed %v recovered %v, from replay %v %v",
+			got.Changed, got.Recovered, want.Changed, want.Recovered)
+	}
+}

@@ -105,6 +105,26 @@ func (d *Detector) Since() (passes, fails int) {
 // Changed reports whether the last step found a change.
 func (d *Detector) Changed() bool { return d.Moved }
 
+// Rose reports whether the current segment passes more often than the one that
+// began at from did before it, so a change from there was a rise, not a drop.
+func (d *Detector) Rose(from int64) bool {
+	var prev, cur Segment
+	for _, s := range d.Segments {
+		switch s.Start {
+		case from:
+			prev = s
+		case d.Best:
+			cur = s
+		}
+	}
+	// Every segment also counts what its younger ones saw, so take those off.
+	passes, fails := prev.Passes-cur.Passes, prev.Fails-cur.Fails
+	if passes+fails == 0 || cur.Passes+cur.Fails == 0 {
+		return false
+	}
+	return float64(cur.Passes)/float64(cur.Passes+cur.Fails) > float64(passes)/float64(passes+fails)
+}
+
 // fold merges the lowest-weight segment into an older neighbour, keeping the
 // longer record, so a long stable segment is never the one cut. The fresh
 // segment is never folded.

@@ -27,9 +27,10 @@ type snapshotEntry struct {
 	TN     float64 `json:"tn"`
 	FN     float64 `json:"fn"`
 
-	Drift   *drift.Detector `json:"drift"`
-	Seen    int64           `json:"seen"`
-	Changed time.Time       `json:"changed,omitzero"`
+	Drift     *drift.Detector `json:"drift"`
+	Seen      int64           `json:"seen"`
+	Changed   time.Time       `json:"changed,omitzero"`
+	Recovered time.Time       `json:"recovered,omitzero"`
 }
 
 // snapshotFile is a checkpoint: the confusion-matrix state as of a byte offset
@@ -75,7 +76,7 @@ func loadSnapshot(path string, jsonl *os.File, jsonlSize int64) (store map[calib
 			return nil, nil, 0, false
 		}
 		store[keyFor(e.Source, e.Domain)] = &confusion{TP: e.TP, FP: e.FP, TN: e.TN, FN: e.FN,
-			drift: e.Drift, seen: e.Seen, changed: e.Changed}
+			drift: e.Drift, seen: e.Seen, changed: e.Changed, recovered: e.Recovered}
 	}
 	return store, snap.Steps, snap.Offset, true
 }
@@ -86,7 +87,7 @@ func saveSnapshot(path string, store map[calibKey]*confusion, steps map[string]i
 	entries := make([]snapshotEntry, 0, len(store))
 	for k, c := range store {
 		entries = append(entries, snapshotEntry{Source: k.source, Domain: k.domain, TP: c.TP, FP: c.FP, TN: c.TN, FN: c.FN,
-			Drift: c.drift, Seen: c.seen, Changed: c.changed})
+			Drift: c.drift, Seen: c.seen, Changed: c.changed, Recovered: c.recovered})
 	}
 	data, err := json.Marshal(snapshotFile{Schema: snapshotSchema, Offset: offset, Steps: steps, Entries: entries})
 	if err != nil {

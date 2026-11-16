@@ -131,3 +131,27 @@ func TestDetector_RecoveredRateIsTriedAgain(t *testing.T) {
 		t.Error("idle steps made the fresh segment most probable without reporting a change")
 	}
 }
+
+func TestDetector_RoseTellsDirection(t *testing.T) {
+	for _, tc := range []struct {
+		after float64
+		rose  bool
+	}{{0.70, false}, {0.99, true}} {
+		r, d := stream(7), New(1, 1)
+		for range 2000 {
+			d.Observe(r.Float64() < 0.85)
+		}
+		for range 500 {
+			from := d.Best
+			if d.Observe(r.Float64() < tc.after); d.Changed() {
+				if got := d.Rose(from); got != tc.rose {
+					t.Errorf("rate 0.85 to %.2f: Rose %v, want %v", tc.after, got, tc.rose)
+				}
+				break
+			}
+		}
+		if d.Best == 0 {
+			t.Errorf("rate 0.85 to %.2f: no change found", tc.after)
+		}
+	}
+}
