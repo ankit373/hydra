@@ -244,7 +244,7 @@ func TestReleasePlease_BumpsEveryDocsVersionPin(t *testing.T) {
 func TestMergify_ReleasePleaseFilesAllowTheExtraFiles(t *testing.T) {
 	var anchor string
 	for _, c := range conditionStrings(mergifyConfig(t)["shared"]) {
-		if strings.HasPrefix(c, "-files~=^(?!(") {
+		if strings.HasPrefix(c, "-files~=^(?!(CHANGELOG") {
 			anchor = c
 		}
 	}
@@ -253,7 +253,7 @@ func TestMergify_ReleasePleaseFilesAllowTheExtraFiles(t *testing.T) {
 	}
 	inner := strings.TrimSuffix(strings.TrimPrefix(anchor, "-files~=^(?!("), ")$)")
 	allowed := regexp.MustCompile("^(" + inner + ")$")
-	files := []string{"CHANGELOG.md", ".release-please-manifest.json"}
+	files := append([]string{"CHANGELOG.md", ".release-please-manifest.json"}, releasePagePaths(t)...)
 	for _, pkg := range loadReleasePleaseConfig(t).Packages {
 		for _, f := range pkg.ExtraFiles {
 			files = append(files, f.Path)
@@ -262,6 +262,40 @@ func TestMergify_ReleasePleaseFilesAllowTheExtraFiles(t *testing.T) {
 	for _, f := range files {
 		if !allowed.MatchString(f) {
 			t.Errorf("release-please's PR changes %s, which release_please_files does not allow", f)
+		}
+	}
+}
+
+// releasePagePaths is what release-please.yml renders onto the release PR for the
+// newest version (docs/releases/generate.py), so the queue must accept each one.
+func releasePagePaths(t *testing.T) []string {
+	t.Helper()
+	v := "v" + changelogVersions(t)[0]
+	return []string{"docs/sitemap.xml", "docs/releases/index.html", "docs/releases/feed.xml",
+		"docs/releases/" + v + ".html", "docs/releases/data/" + v + ".json"}
+}
+
+// The refresh PR from release-notes.yml is queued on its files: the generated pages,
+// and not the generator or a hand-written notes file.
+func TestMergify_ReleaseNotesFilesAreTheGeneratedPagesOnly(t *testing.T) {
+	var anchor string
+	for _, c := range conditionStrings(mergifyConfig(t)["shared"]) {
+		if strings.HasPrefix(c, "-files~=^(?!(docs/sitemap") {
+			anchor = c
+		}
+	}
+	if anchor == "" {
+		t.Fatal("no release_notes_files condition in .mergify.yml; this test no longer checks what it thinks")
+	}
+	allowed := regexp.MustCompile("^(" + strings.TrimSuffix(strings.TrimPrefix(anchor, "-files~=^(?!("), ")$)") + ")$")
+	for _, f := range releasePagePaths(t) {
+		if !allowed.MatchString(f) {
+			t.Errorf("release-notes.yml writes %s, which release_notes_files does not allow", f)
+		}
+	}
+	for _, f := range []string{"docs/releases/generate.py", "docs/releases/notes/v1.9.0.md", "docs/index.html", ".github/workflows/ci.yml"} {
+		if allowed.MatchString(f) {
+			t.Errorf("release_notes_files allows %s; the bot's PR must carry generated pages only", f)
 		}
 	}
 }
