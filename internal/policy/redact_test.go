@@ -223,3 +223,46 @@ func TestRedactReversible_SkipsKeysTheTextAlreadyUses(t *testing.T) {
 		t.Errorf("round trip = %q", got)
 	}
 }
+
+// A placeholder split across pieces comes out whole and restored; text that
+// cannot be one passes straight through.
+func TestStreamRestorer_JoinsASplitPlaceholder(t *testing.T) {
+	v := NewVault()
+	RedactReversible("mail a@b.com", v)
+	rs := v.Stream()
+	var out strings.Builder
+	for _, piece := range []string{"Sent to <<EMA", "IL_1", ">>, then <<EMAIL_9>> and", " done."} {
+		out.WriteString(rs.Push(piece))
+	}
+	out.WriteString(rs.Flush())
+	if want := "Sent to a@b.com, then <<EMAIL_9>> and done."; out.String() != want {
+		t.Errorf("streamed %q, want %q", out.String(), want)
+	}
+	if rs.Flush() != "" {
+		t.Error("a second Flush returned text")
+	}
+}
+
+// An empty or nil vault has nothing to restore, so nothing is held back.
+func TestStreamRestorer_EmptyVaultHoldsNothing(t *testing.T) {
+	for _, v := range []*Vault{nil, NewVault()} {
+		if got := v.Stream().Push("<<EMA"); got != "<<EMA" {
+			t.Errorf("Push = %q, want it passed through", got)
+		}
+	}
+	if (*Vault)(nil).Len() != 0 {
+		t.Error("a nil vault reports values")
+	}
+}
+
+// A run longer than any placeholder is released rather than held.
+func TestStreamRestorer_ReleasesALongRun(t *testing.T) {
+	v := NewVault()
+	RedactReversible("mail a@b.com", v)
+	rs := v.Stream()
+	long := strings.Repeat("WORD_", 10) + "1"
+	got := rs.Push(long + " ")
+	if !strings.HasPrefix(long+" ", got) || len(got) < len(long)-len("<< EMAIL_1 >>") {
+		t.Errorf("Push released %q of %q", got, long)
+	}
+}

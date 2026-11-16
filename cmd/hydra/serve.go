@@ -215,6 +215,8 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		OnStream:     streamEvents(req.OnEvent),
 		RunID:        req.RequestID,
 		Conversation: cmp.Or(req.Conversation, conversationKey(req.Messages)),
+		Redact:       req.Redact,
+		Vault:        req.Vault,
 	}
 	fp := servePolicy()
 	opts.MaxCostUSD, opts.MaxCostSource = requestCeiling(fp, req.MaxCostUSD)

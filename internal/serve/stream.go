@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/policy"
 )
 
 // EventKind names what happened while the router worked.
@@ -55,9 +56,11 @@ type Event struct {
 // 200 and an empty stream reads it as the model saying nothing, where a 400
 // naming an unknown routing key is something its user can act on.
 type streamer struct {
-	w     http.ResponseWriter
-	id    string
-	asked string // the model the client named, until a head is known
+	w       http.ResponseWriter
+	id      string
+	asked   string // the model the client named, until a head is known
+	req     Request
+	restore *policy.StreamRestorer // per attempt; a failed head's held tail is dropped
 
 	model    string
 	evidence *Evidence
@@ -67,8 +70,8 @@ type streamer struct {
 	done     bool // Chat has returned; a late event writes nothing
 }
 
-func newStreamer(w http.ResponseWriter, asked, id string) *streamer {
-	return &streamer{w: w, id: id, asked: asked}
+func newStreamer(w http.ResponseWriter, asked string, req Request) *streamer {
+	return &streamer{w: w, id: req.RequestID, asked: asked, req: req, restore: req.Vault.Stream()}
 }
 
 // event folds one router event into the stream. cancel stops the dispatch when
@@ -82,11 +85,12 @@ func (s *streamer) event(e Event, cancel func()) {
 		s.evidence = e.Evidence
 
 	case EventDelta:
-		if e.Text == "" {
+		text := s.restore.Push(e.Text)
+		if text == "" {
 			return
 		}
 		s.begin(e.Head, e.Model)
-		s.frame(chunk{Delta: delta{Content: e.Text}})
+		s.frame(chunk{Delta: delta{Content: text}})
 		s.sent = true
 
 	case EventAttemptFailed:
@@ -94,6 +98,7 @@ func (s *streamer) event(e Event, cancel func()) {
 		// gone out, so the next head's answer is the only one the client sees.
 		// That is the common fallback, and the whole point of one.
 		if !s.sent {
+			s.restore = s.req.Vault.Stream()
 			return
 		}
 		// A head that failed after emitting cannot be taken back. Appending the
@@ -123,6 +128,8 @@ func (s *streamer) finish(ans Answer, usage bool) {
 	// arrives here, as one delta.
 	if !s.sent && ans.Output != "" {
 		s.frame(chunk{Delta: delta{Content: ans.Output}})
+	} else if tail := s.restore.Flush(); tail != "" {
+		s.frame(chunk{Delta: delta{Content: tail}})
 	}
 	if len(ans.ToolCalls) > 0 {
 		s.frame(chunk{Delta: delta{ToolCalls: toolFrames(ans.ToolCalls)}})
@@ -180,6 +187,7 @@ func (s *streamer) begin(head, model string) {
 	// which is the one thing a stream must not do.
 	h.Set("X-Accel-Buffering", "no")
 	setEvidenceHeaders(h, s.evidence)
+	setRedacted(h, s.req)
 	s.w.WriteHeader(http.StatusOK)
 
 	role := "assistant"

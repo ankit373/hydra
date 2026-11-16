@@ -206,6 +206,9 @@ type Options struct {
 	// Redact sends a remote head numbered placeholders for every detected value
 	// and restores the answer locally; a local head gets the original (#1882).
 	Redact bool
+	// Vault is the one to fill when redaction runs, so a caller that streams can
+	// restore from it; nil gets a fresh one per request.
+	Vault *policy.Vault
 }
 
 // Result is the outcome of a successful dispatch.
@@ -797,7 +800,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// One vault per request, so fallbacks and escalations reuse its placeholders.
 	var vault *policy.Vault
 	if opts.Redact || action.Redact {
-		vault = policy.NewVault()
+		vault = cmp.Or(opts.Vault, policy.NewVault())
 	}
 
 	// After the policy, before any head: a denied prompt stays denied, and a
