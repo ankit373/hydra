@@ -889,6 +889,7 @@ func cmdDispatch() *cobra.Command {
 		production   bool
 		verifyRun    bool
 		checks       []string
+		schemaPath   string
 		maxEsc       int
 		requirePass  bool
 		sourceOnly   bool
@@ -954,6 +955,11 @@ func cmdDispatch() *cobra.Command {
 			}
 			if requirePass && ((len(checks) == 0 && !sourceOnly) || dryRun) {
 				return errors.New("--require-pass needs a --check or --source-only, and an answer to check, so not --dry-run")
+			}
+			if schemaPath != "" {
+				if err := gen.useSchema(schemaPath); err != nil {
+					return err
+				}
 			}
 			if maxEsc < 0 {
 				return fmt.Errorf("--max-escalations must be 0 or more, got %d", maxEsc)
@@ -1372,8 +1378,11 @@ func cmdDispatch() *cobra.Command {
 			// Every way the answer reaches the screen ends here, so a check runs on all of them.
 			runGen := func(v *verified) {
 				genKind := ""
-				if cmd.Flags().Changed("kind") {
+				switch {
+				case cmd.Flags().Changed("kind"):
 					genKind = domain
+				case schemaPath != "":
+					genKind = "extraction" // a schema says what kind of work this is
 				}
 				genRun{want: gen, d: d, kind: genKind, runID: runID, maxUSD: maxUSD, localOnly: localOnly}.run(ctx, result, prompt, v)
 			}
@@ -1478,6 +1487,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVar(&sourceOnly, "source-only", false, "answer only from the documents fenced in the prompt, refused without one: every sentence is checked against them "+
 		"(gen:claims-ground and gen:claims-judge, for any --kind), a failed reply reruns once on a stronger head, and if none passes "+
 		"hyctl prints \""+notCoveredReply+"\" with the failed sentences instead of the reply and exits 1 (2 when it could not check)")
+	cmd.Flags().StringVar(&schemaPath, "schema", "", "JSON Schema file whose top-level properties, types and required list are the fields check's field list, with no model call to write it; implies --check gen:fields")
 	cmd.Flags().IntVar(&maxEsc, "max-escalations", 1, "with --check, how many stronger heads a failed check may ask; default from policy.yaml max_retries and escalate_on_fail, 0 turns it off")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")

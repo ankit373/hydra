@@ -352,6 +352,7 @@ hyctl dispatch --kind classification --check gen "is this ticket billing, bug or
 hyctl dispatch --kind extraction --check gen:fields "pull vendor, total and date as JSON: ..."   <span class="c"># a verdict on every field, each broken one listed</span>
 hyctl dispatch --check ground --require-pass "..."   <span class="c"># exit 0 passed, 1 a check failed, 2 a check could not run</span>
 hyctl dispatch --kind writing.support --source-only "reply to this customer: ... &lt;fenced policy&gt;"   <span class="c"># only what the docs say, or "the documents given do not cover this"</span>
+hyctl dispatch --schema invoice.schema.json "pull the invoice fields as JSON: ..."   <span class="c"># check every field the schema lists, no extra model call</span>
 
 <span class="c"># Serve the router to anything that speaks OpenAI</span>
 hyctl serve                             <span class="c"># OpenAI-compatible endpoint, loopback only</span>
@@ -868,7 +869,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="fl">--kind</span> cl
         <div class="pill-row">
           <span class="mp"><b>--enum</b> / <b>--tier</b></span><span class="mp"><b>--kind</b> summary, extraction, code&hellip;</span><span class="mp"><b>--dry-run</b></span><span class="mp"><b>--local</b></span>
           <span class="mp"><b>--file</b> raise bar by blast radius</span><span class="mp"><b>--a2a</b> handoff.json</span><span class="mp"><b>--system</b></span>
-          <span class="mp"><b>--no-stream</b></span><span class="mp"><b>--check</b> ground, match:labels=&lt;file&gt;, sum:total=items[].amount, cmd:&lt;command {answer}&gt;, gen; a real fail reruns once on a stronger model</span><span class="mp"><b>--max-escalations</b> 0 turns the rerun off</span><span class="mp"><b>--require-pass</b> exit 1 on a failed check, 2 when one could not run</span><span class="mp"><b>--max-usd</b> cap for answer and generated checks</span>
+          <span class="mp"><b>--no-stream</b></span><span class="mp"><b>--check</b> ground, match:labels=&lt;file&gt;, sum:total=items[].amount, cmd:&lt;command {answer}&gt;, gen; a real fail reruns once on a stronger model</span><span class="mp"><b>--schema</b> JSON Schema file as the fields check's field list</span><span class="mp"><b>--max-escalations</b> 0 turns the rerun off</span><span class="mp"><b>--require-pass</b> exit 1 on a failed check, 2 when one could not run</span><span class="mp"><b>--max-usd</b> cap for answer and generated checks</span>
         </div>
       </div>
     </section>

@@ -102,7 +102,7 @@ func (o *roundtripOracle) Verify(ctx context.Context, candidate string, _ trust.
 	var differ []string
 	for _, f := range o.body.Fields {
 		fv := FieldVerdict{Name: f.Name, Status: FieldNotCompared}
-		if a, b := ours[f.Name], theirs[f.Name]; f.Required && (a == nil || b == nil || !SameValue(a, b)) {
+		if a, b := fieldValue(ours, f.Name), fieldValue(theirs, f.Name); f.Required && (a == nil || b == nil || !SameValue(a, b)) {
 			fv.Status, fv.Detail = FieldDiffers, fmt.Sprintf("answer %v, re-extracted %v", show(a), show(b))
 			differ = append(differ, f.Name+": "+fv.Detail)
 		} else if f.Required {

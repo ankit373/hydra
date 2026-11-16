@@ -3,6 +3,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -110,5 +112,40 @@ func TestDispatch_FieldsAndRoundtripMergePerField(t *testing.T) {
 	}
 	if n := regexp.MustCompile(`(?m)^ {4}\S+ +vendor  `).FindAllString(out, -1); len(n) != 1 {
 		t.Errorf("vendor printed %d times, want once:\n%s", len(n), out)
+	}
+}
+
+// The schema is the field list, so the writer model is never asked for one.
+func TestDispatch_SchemaSkipsWriterCall(t *testing.T) {
+	s, _ := dispatchable(t, `{"vendor": "Apex", "total": 1200.5}`)
+	// Asked, the writer would add a field the schema does not have.
+	s.FakeBinary(t, "claude", testutil.EchoScript(`[{"name": "writer_field", "type": "string", "required": true}]`))
+	schema := filepath.Join(t.TempDir(), "invoice.schema.json")
+	body := `{"required": ["vendor", "total"], "patternProperties": {}, "properties": {"vendor": {"type": "string"}, "total": {"type": "number"}}}`
+	if err := os.WriteFile(schema, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prompt := "Pull vendor and total as JSON.\n" + util.WrapUntrusted("DOCUMENT", "Acme Ltd, total 1,200.50")
+	out, cobraOut, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--schema", schema, prompt)
+	if err != nil {
+		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(out, "FAIL  gen:fields") || !strings.Contains(out, "not_in_source  vendor") ||
+		!strings.Contains(out, "these keywords are not read: patternProperties") {
+		t.Errorf("the schema's fields were not checked:\n%s", out)
+	}
+	if strings.Contains(out, "writer_field") {
+		t.Errorf("the writer was asked for a field list the schema already gave:\n%s", out)
+	}
+}
+
+func TestDispatch_BadSchemaRefusedBeforeRouting(t *testing.T) {
+	cliSandbox(t)
+	schema := filepath.Join(t.TempDir(), "deep.json")
+	if err := os.WriteFile(schema, []byte(`{"properties": {"a": {"type": "object", "properties": {"b": {"type": "object"}}}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := run(t, "dispatch", "--schema", schema, "q"); err == nil || !strings.Contains(err.Error(), "more than one level") {
+		t.Fatalf("err = %v, want deep nesting refused", err)
 	}
 }
