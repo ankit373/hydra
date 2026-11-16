@@ -389,7 +389,7 @@ hyctl dispatch --dry-run "..." <span class="c"># preview routing without executi
 hyctl dispatch --kind summary "..."  <span class="c"># rank models on their record for this kind of work</span>
 hyctl dispatch --local "..."   <span class="c"># local models only, no API calls</span>
 hyctl dispatch --swarm --swarm-mode best "..."   <span class="c"># fan out to many models, judge best</span>
-hyctl dispatch --confidence 0.95 "..."  <span class="c"># SPRT: sample until this P(correct) is reached</span>
+hyctl dispatch --confidence 0.95 "..."  <span class="c"># SPRT: ask until its estimate clears this target</span>
 hyctl dispatch --check ground "..."     <span class="c"># check the answer against the context the prompt fenced</span>
 hyctl dispatch --check match:labels=labels.txt "label this ticket: ..."   <span class="c"># the answer must be one of the labels</span>
 hyctl dispatch --check 'cmd:check-jsonschema --schemafile invoice.json {file}' "pull the invoice fields as JSON"
@@ -933,8 +933,8 @@ hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</sp
     </section>
 
     <section class="doc" id="confidence">
-      <h2><span class="cmd">dispatch --confidence</span> <span class="tagline">route to a P(correct)</span></h2>
-      <p class="sum">Sample models <b>adaptively</b> until a target confidence is reached, then stop.</p>
+      <h2><span class="cmd">dispatch --confidence</span> <span class="tagline">ask until the estimate clears a target</span></h2>
+      <p class="sum">Ask models <b>adaptively</b> until Hydra's estimate that the answer is correct clears your target, then stop. The estimate is only as good as the calibration behind it, so it is not a guarantee. A mode that accepts only under a stated error bound is planned in <a href="https://github.com/ankit373/hydra/issues/1549">#1549</a>.</p>
       <div class="sub"><div class="lbl">How it works</div><p>Instead of always asking a fixed number of models, an <b>SPRT</b> (sequential probability ratio test) asks them one at a time, in most-evidence-per-dollar order, adds up the calibrated log-likelihood ratio of their votes, and stops as soon as it crosses the boundary your target implies. <span class="fx">--file</span> raises the bar by blast radius.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"does this contract let either side cancel early? quote the clause"</span>
 hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
@@ -1407,9 +1407,9 @@ config.toml to allow it out</pre>
     </section>
 
     <section class="doc" id="math">
-      <h2>The math <span class="tagline">why the router isn't vibes</span></h2>
-      <p class="sum">Six results run the router: Wald's SPRT, calibration diagnostic power (KL), the Bayes defect-cost bar, Molloy-Reed percolation-κ, Amdahl optimal parallelism, and context entropy, each stated, derived, and interactive.</p>
-      <a class="more" href="/first-principles.html">Open First Principles, six interactive proofs →</a>
+      <h2>The math <span class="tagline">what each part rests on</span></h2>
+      <p class="sum">Six ideas behind the router: Wald's SPRT, calibration diagnostic power (KL), the Bayes defect-cost bar, Molloy-Reed percolation-κ, Amdahl optimal parallelism, and context entropy. Each is marked proven, measured or modeled, and each is interactive.</p>
+      <a class="more" href="/first-principles.html">Open First Principles, the math behind it, interactive →</a>
     </section>
 
   </main>
