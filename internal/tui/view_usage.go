@@ -28,7 +28,7 @@ func (m Cockpit) usageBody(w, h int) string {
 	tiles := lipgloss.JoinHorizontal(lipgloss.Top,
 		ckBoxS.Render(m.usageToday()), " ",
 		ckBoxS.Render(m.usageMonth()), " ",
-		ckBoxS.Render(m.usageSaved()))
+		ckBoxS.Render(m.usagePerPassed()))
 	if lipgloss.Width(tiles) > w {
 		// Too narrow for three boxes: the same three facts as compact lines,
 		// so nothing is silently dropped.
@@ -61,16 +61,15 @@ func (m Cockpit) usageTilesCompact(w int) string {
 			runs, plural(runs), m.metrics.todayReqs, plural(m.metrics.todayReqs)))
 	month := ckLabelS.Render("MONTH ") + ckCheapS.Render(fmt.Sprintf("$%.4f", m.metrics.monthUSD)) +
 		ckDimS.Render(fmt.Sprintf(" · %d request%s (UTC month)", m.metrics.monthReqs, plural(m.metrics.monthReqs)))
-	saved, base := m.metrics.savedTodayUSD, m.metrics.baseTodayUSD
-	savedLine := ckLabelS.Render("SAVED ") + ckFaintS.Render("— · no priced requests today")
-	switch {
-	case base > 0 && saved > 0:
-		savedLine = ckLabelS.Render("SAVED ") + ckCheapS.Render(fmt.Sprintf("$%.4f (%.0f%%)", saved, saved/base*100)) +
-			ckDimS.Render(fmt.Sprintf(" vs all-tier-1 $%.4f", base))
-	case base > 0:
-		savedLine = ckLabelS.Render("SAVED ") + ckDimS.Render(fmt.Sprintf("$0.0000 (0%%) · tier-1 rate $%.4f", base))
+	passLine := ckLabelS.Render("PER PASS ") + ckFaintS.Render("— · "+m.checkedSoFar())
+	if m.metrics.perPassedOK {
+		passLine = ckLabelS.Render("PER PASS ") + ckCheapS.Render(ckPassLine(m.metrics.perPassed.Routed))
+		if k, ok := ckBestKind(m.metrics.perPassed); ok {
+			passLine += ckDimS.Render(fmt.Sprintf(" · on %s routed %s, best single %s %s",
+				ckSafe(k.Kind), ckPassLine(k.Routed), ckSafe(k.Best), ckPassLine(k.BestRecord)))
+		}
 	}
-	return ckFrame(strings.Join([]string{" " + today, " " + month, " " + savedLine, ""}, "\n"), w, 4)
+	return ckFrame(strings.Join([]string{" " + today, " " + month, " " + passLine, ""}, "\n"), w, 4)
 }
 
 // usageToday: today's spend, run/request counts, and the token-provenance
@@ -103,25 +102,53 @@ func (m Cockpit) usageMonth() string {
 		ckFaintS.Render("calendar month, UTC") + "\n "
 }
 
-// usageSaved: what today's work would have cost had every request hit tier 1.
-// The three figures shown (saved $, %, and the tier-1 total) all derive from
-// the same two numbers, so they cannot contradict each other.
-func (m Cockpit) usageSaved() string {
-	title := ckLabelS.Render("SAVED vs ALL-FRONTIER") + "\n\n "
-	saved, base := m.metrics.savedTodayUSD, m.metrics.baseTodayUSD
-	switch {
-	case base <= 0:
+// usagePerPassed is cost per passed answer for the routing used and, on the
+// busiest kind of work, the routing beside the best single model on that same
+// kind. Below cost.MinChecked checked answers it shows no figure at all.
+func (m Cockpit) usagePerPassed() string {
+	title := ckLabelS.Render("PER PASSED ANSWER") + "\n\n "
+	if !m.metrics.perPassedOK {
 		return title + ckFaintS.Render("—") + "\n " +
-			ckFaintS.Render("no priced requests today") + "\n " +
-			ckFaintS.Render("nothing to compare yet") + "\n "
-	case saved <= 0:
-		return title + ckDimS.Render("$0.0000 (0%)") + "\n " +
-			ckDimS.Render(fmt.Sprintf("tier-1 rate: $%.4f", base)) + "\n " +
-			ckFaintS.Render("today's spend is not below it") + "\n "
+			ckFaintS.Render("not enough checked answers yet") + "\n " +
+			ckFaintS.Render(m.checkedSoFar()) + "\n "
 	}
-	return title + ckCheapS.Bold(true).Render(fmt.Sprintf("$%.4f (%.0f%%)", saved, saved/base*100)) + "\n " +
-		ckDimS.Render(fmt.Sprintf("all-tier-1 would be $%.4f", base)) + "\n " +
-		ckFaintS.Render("same tokens, tier-1 rates") + "\n "
+	rep := m.metrics.perPassed
+	out := title + ckCheapS.Bold(true).Render(ckPassLine(rep.Routed)) + "\n " +
+		ckDimS.Render(fmt.Sprintf("routed · %d checked, last %d days", rep.Routed.Answers, ckPassedDays)) + "\n "
+	k, ok := ckBestKind(rep)
+	if !ok {
+		return out + ckFaintS.Render("no single model has enough checked") + "\n " +
+			ckFaintS.Render("answers on one task type yet")
+	}
+	return out + ckDimS.Render(fmt.Sprintf("on %s, routed:", ckSafe(k.Kind))) + "\n " +
+		ckDimS.Render(ckPassLine(k.Routed)) + "\n " +
+		ckDimS.Render(fmt.Sprintf("best single model, %s:", ckSafe(k.Best))) + "\n " +
+		ckDimS.Render(ckPassLine(k.BestRecord))
+}
+
+// checkedSoFar says how far a short history is from the minimum.
+func (m Cockpit) checkedSoFar() string {
+	return fmt.Sprintf("%d of %d checked, last %d days", m.metrics.checked, cost.MinChecked, ckPassedDays)
+}
+
+// ckPassLine is a record's cost per passed answer, always beside its pass rate
+// and 95% interval, so a cheap route that fails more cannot look like a win.
+func ckPassLine(r cost.PassRecord) string {
+	per := "no passes"
+	if c, ok := r.PerPassed(); ok {
+		per = fmt.Sprintf("$%.4f", c)
+	}
+	return fmt.Sprintf("%s · %.0f%% passed (%.0f–%.0f%%)", per, r.Rate()*100, r.Lo*100, r.Hi*100)
+}
+
+// ckBestKind is the busiest kind of work that has a best single model.
+func ckBestKind(rep cost.PassedReport) (cost.KindRecord, bool) {
+	for _, k := range rep.Kinds {
+		if k.Best != "" {
+			return k, true
+		}
+	}
+	return cost.KindRecord{}, false
 }
 
 // ckUsageNameW / ckUsageBarW are the breakdown's fixed column budgets.
