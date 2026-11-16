@@ -149,3 +149,28 @@ func TestDispatch_BadSchemaRefusedBeforeRouting(t *testing.T) {
 		t.Fatalf("err = %v, want deep nesting refused", err)
 	}
 }
+
+// gen:tests needs the file under change and runs Go only; anything else is not checked.
+func TestDispatch_CheckGenTests_NotCheckedWithoutAGoFile(t *testing.T) {
+	for check, want := range map[string]string{
+		"gen":              "NOT CHECKED  gen:tests  no file under change",
+		"gen:tests=app.py": "NOT CHECKED  gen:tests  generated tests cover Go only for now, so app.py is not checked",
+	} {
+		genHeads(t, "def f(): pass")
+		out, cobraOut, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--kind", "code", "--check", check, "fix f")
+		if err != nil {
+			t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
+		}
+		if !strings.Contains(out, want) || strings.Contains(out, "PASS") {
+			t.Errorf("--check %s printed:\n%s\nwant %q", check, out, want)
+		}
+	}
+}
+
+func TestDispatch_CheckGen_OnlyTestsNamesAFile(t *testing.T) {
+	genHeads(t, "refund")
+	_, _, err := run(t, "dispatch", "--no-stream", "--tier", "6", "--check", "gen:labels=x.txt", genPrompt)
+	if err == nil || !strings.Contains(err.Error(), "only gen:tests names a file") {
+		t.Fatalf("err = %v, want gen:labels=<file> refused", err)
+	}
+}

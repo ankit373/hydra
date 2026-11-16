@@ -685,27 +685,7 @@ func extractContent(raw string, m markers) string {
 			return strings.TrimPrefix(parts[1], "\n")
 		}
 	}
-	return soleFencedBlock(raw)
-}
-
-// soleFencedBlock returns raw when it is exactly one fenced block. Inner fences
-// make the outer pair ambiguous, so that answer is refused rather than guessed.
-func soleFencedBlock(raw string) string {
-	// SplitLines drops \r, as the marker path does, so a CRLF reply is not written as CRLF.
-	lines := util.SplitLines(strings.TrimSpace(raw))
-	if len(lines) < 2 {
-		return ""
-	}
-	first, last := lines[0], lines[len(lines)-1]
-	if !strings.HasPrefix(first, "```") || last != "```" {
-		return ""
-	}
-	for _, l := range lines[1 : len(lines)-1] {
-		if strings.HasPrefix(l, "```") {
-			return ""
-		}
-	}
-	return strings.Join(lines, "\n")
+	return util.SoleFencedBlock(raw)
 }
 
 func extractBetween(raw string, m markers) string {
