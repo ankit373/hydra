@@ -104,3 +104,61 @@ func TestDispatch_RedactKeepsSecretFilesLocal(t *testing.T) {
 		t.Error("with nothing local, a .env resource was sent redacted instead of refused")
 	}
 }
+
+func redactPair(t *testing.T, hostedAnswer string) (*Dispatcher, *promptRecorder) {
+	t.Helper()
+	testutil.NewSandbox(t)
+	away, _ := recordingHead(t, "away", hostedAnswer)
+	home, homeRec := recordingHead(t, "home", "answered locally")
+	home.LocalOnly, home.CapScore = true, 40
+	return liveDispatcher(away, home), homeRec
+}
+
+func TestDispatch_UnknownPlaceholderReroutesLocal(t *testing.T) {
+	d, homeRec := redactPair(t, "Sent to <<EMAIL_7>>.")
+	res, err := d.Dispatch(context.Background(), redactPrompt, Options{Redact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Head.ID != "home" || homeRec.sent() != redactPrompt {
+		t.Errorf("answered by %q, local head sent %q; want a local rerun on the original", res.Head.ID, homeRec.sent())
+	}
+	if !strings.Contains(res.RedactionMiss, "<<EMAIL_7>>") {
+		t.Errorf("RedactionMiss = %q, want it to name the made-up placeholder", res.RedactionMiss)
+	}
+}
+
+func TestDispatch_CannotSeeReroutesLocal(t *testing.T) {
+	d, _ := redactPair(t, "I cannot see the domain of <<EMAIL_1>>, so I cannot say.")
+	res, err := d.Dispatch(context.Background(), redactPrompt, Options{Redact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Head.ID != "home" || !strings.Contains(res.RedactionMiss, "<<EMAIL_1>>") {
+		t.Errorf("answered by %q with miss %q, want a local rerun naming <<EMAIL_1>>", res.Head.ID, res.RedactionMiss)
+	}
+}
+
+// A plain answer that uses the placeholder is not a miss.
+func TestDispatch_UsedPlaceholderStaysHosted(t *testing.T) {
+	d, homeRec := redactPair(t, "Sent to <<EMAIL_1>>.")
+	res, err := d.Dispatch(context.Background(), redactPrompt, Options{Redact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Head.ID != "away" || res.RedactionMiss != "" || homeRec.sent() != "" {
+		t.Errorf("answered by %q, miss %q: a usable answer was rerun", res.Head.ID, res.RedactionMiss)
+	}
+}
+
+func TestDispatch_NoLocalHeadAddsNote(t *testing.T) {
+	testutil.NewSandbox(t)
+	away, _ := recordingHead(t, "away", "Sent to <<EMAIL_7>>.")
+	res, err := liveDispatcher(away).Dispatch(context.Background(), redactPrompt, Options{Redact: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Head.ID != "away" || !strings.Contains(res.RedactionMiss, "<<EMAIL_7>>") {
+		t.Errorf("answered by %q with miss %q, want the hosted answer and a note", res.Head.ID, res.RedactionMiss)
+	}
+}

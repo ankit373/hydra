@@ -3,7 +3,9 @@
 package policy
 
 import (
+	"maps"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +32,13 @@ func (v *Vault) Len() int {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return len(v.byKey)
+}
+
+// Keys lists the placeholder keys the vault issued, e.g. EMAIL_1, sorted.
+func (v *Vault) Keys() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return slices.Sorted(maps.Keys(v.byKey))
 }
 
 // RedactReversible replaces every hit Redact would replace with <<KIND_N>>. One

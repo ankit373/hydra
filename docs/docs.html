@@ -1363,7 +1363,7 @@ hyctl dispatch <span class="fl">--dry-run</span> <span class="fl">--swarm</span>
   Hi, I have passed your refund to finance. We will write to sam.lee@example.com by Friday.
 
   redacted: mistral-large saw 1 value(s) as placeholders; the answer above has them restored</pre>
-        <p>A local model gets the original text. The map from placeholder to value stays in memory and is never sent or written. A value keeps its placeholder across fallbacks and reruns, the answer is restored before any check reads it, and a placeholder the model invented is named. Set <span class="fx">[policies.pii] action = "redact"</span> to do this for every prompt with PII. A file the <a href="#egress">egress gate</a> calls secret still goes only to a local model. It runs on a single dispatch, not with <span class="fx">--swarm</span> or a confidence run, and the answer prints once restored rather than streaming.</p>
+        <p>A local model gets the original text. The map from placeholder to value stays in memory and is never sent or written. A value keeps its placeholder across fallbacks and reruns, and the answer is restored before any check reads it. When the hosted answer needed a real value, say whether an IBAN is German, the request reruns on a local model with the original text; with no local model, the answer says which placeholder it could not use. Set <span class="fx">[policies.pii] action = "redact"</span> to do this for every prompt with PII. A file the <a href="#egress">egress gate</a> calls secret still goes only to a local model. It runs on a single dispatch, not with <span class="fx">--swarm</span> or a confidence run, and the answer prints once restored rather than streaming.</p>
       </div>
     </section>
 
