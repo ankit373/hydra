@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "sentences": [
+    {
+      "n": 1,
+      "text": "Units sold were 1,200 and growth was 1.9 percent.",
+      "status": "supported",
+      "unsupported": [],
+      "sources": [
+        {
+          "label": "report",
+          "start_line": 2,
+          "end_line": 3
+        }
+      ]
+    },
+    {
+      "n": 2,
+      "text": "Growth was 4.5 percent.",
+      "status": "not_supported",
+      "unsupported": [
+        {
+          "text": "4.5",
+          "kind": "number"
+        }
+      ],
+      "sources": []
+    },
+    {
+      "n": 3,
+      "text": "The team worked hard.",
+      "status": "nothing_to_check",
+      "unsupported": [],
+      "sources": []
+    }
+  ],
+  "supported": 1,
+  "not_supported": 1,
+  "nothing_to_check": 1
+}

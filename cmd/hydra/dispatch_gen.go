@@ -192,6 +192,7 @@ func printGenResult(r checkgen.Result) {
 	}
 	fmt.Fprintf(stdout, "  %s  %s  %s\n", status, r.Spec.Check(), dimStyle.Render(detail))
 	printFieldVerdicts(r.Fields)
+	printSentences(r.Sentences)
 }
 
 // printFieldVerdicts is a line per field that is not ok, then how many are.

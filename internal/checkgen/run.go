@@ -31,6 +31,8 @@ type Result struct {
 	Verdict oracle.Verdict
 	Fields  []FieldVerdict
 	Err     error
+	// Sentences is a claims check's verdict per sentence; nil for every other kind.
+	Sentences []SentenceVerdict
 }
 
 // Checked says whether the check ran, so a broken oracle is never read as a pass.
@@ -75,8 +77,11 @@ func verify(ctx context.Context, s Spec, answer, domain string, env Env) Result 
 		return r
 	}
 	r.Verdict, r.Err = o.Verify(ctx, answer, trust.Task{Domain: domain})
-	if f, ok := o.(*fieldsOracle); ok {
-		r.Fields = f.last
+	switch c := o.(type) {
+	case *fieldsOracle:
+		r.Fields = c.last
+	case *claimsOracle:
+		r.Sentences = c.Last
 	}
 	return r
 }

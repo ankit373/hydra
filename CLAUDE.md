@@ -573,6 +573,8 @@ hyctl trace score --span <id> --name tests --value 1 --comment "suite passed"
 hyctl oracle verify --span <id> --domain go -- go test ./...   # attributes its own verdict
 # Exit 0 grounded, 1 unsupported, 2 not checked (no fence, or nothing checkable)
 hyctl oracle ground --prompt prompt.txt --candidate summary.txt --span <id>
+# Each sentence with the lines that back it: supported [report L12-14] / NOT SUPPORTED / nothing to check
+hyctl oracle ground --by-sentence --json --prompt prompt.txt --candidate summary.txt
 
 # Fold old run logs into compressed monthly segments (lossless; readers unaffected)
 hyctl trace seal --dry-run ; hyctl trace seal --older-than 168h

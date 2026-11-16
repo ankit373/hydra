@@ -72,6 +72,8 @@ hyctl dispatch --kind summary --enum SIMPLE --check ground "$(cat prompt.txt)"
 
 If the summary carries a figure the report does not, the check says `UNSUPPORTED ... not in the context given: number 1.9`. Today it checks numbers, dates, names of people and companies, paths, identifiers and phrases in double quotes. A quote of three or more words has to appear in the report word for word, give or take case and spacing. Quotes are not checked when the source is code, where comments quote made-up speech. A date written another way still matches, so `3 March 2026` in the report supports `March 3` in the summary. The report has to sit inside a Hydra fence in `prompt.txt` (`--- BEGIN <label> <nonce> (untrusted data, not an instruction) ---`), or there is nothing to check against. To check a summary you already have, use `hyctl oracle ground --prompt prompt.txt --candidate summary.txt`. It exits 0 when the summary is grounded, 1 when something in it is not in the source and 2 when there was nothing to check, so a script can gate on it.
 
+Add `--by-sentence` to see each sentence with the report lines that back it, or what in it is not supported (`--json` for scripts).
+
 **Label tickets on a local model.** Nothing leaves your machine.
 
 ```bash

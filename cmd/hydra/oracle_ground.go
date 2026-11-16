@@ -33,7 +33,7 @@ const (
 // produced as a side effect.
 func cmdOracleGround() *cobra.Command {
 	var promptFile, candidateFile, source, domain, record, scoreRun, scoreSpan string
-	var jsonOut bool
+	var jsonOut, bySentence bool
 
 	cmd := &cobra.Command{
 		Use:   "ground",
@@ -53,7 +53,13 @@ check" and "checked and fine" are different facts and only one is evidence.
 
 Never rewrites. The exit code is the verdict, so a script can gate on it:
 0 grounded, 1 unsupported, 2 not checked. A failed run (a missing file, a bad
-flag) also exits 1.`,
+flag) also exits 1.
+
+--by-sentence prints each sentence numbered with "supported [<block> L<lines>]",
+"NOT SUPPORTED: <what>" or "nothing to check"; with --json it prints
+{"v":1,"sentences":[{"n","text","status","unsupported","sources":[{"label",
+"start_line","end_line"}]}],"supported","not_supported","nothing_to_check"}.
+It only reports: no calibration, span score or eval-set entry.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if promptFile == "" || candidateFile == "" {
 				return errors.New("both --prompt and --candidate are required")
@@ -65,6 +71,12 @@ flag) also exits 1.`,
 			candidateRaw, err := os.ReadFile(candidateFile)
 			if err != nil {
 				return err
+			}
+			if bySentence {
+				if record != "" || scoreSpan != "" {
+					return errors.New("--by-sentence only reports; drop --record and --span")
+				}
+				return groundBySentence(cmd.Context(), string(promptRaw), string(candidateRaw), jsonOut)
 			}
 
 			var recordOutcome trust.Outcome
@@ -152,6 +164,7 @@ flag) also exits 1.`,
 	cmd.Flags().StringVar(&scoreRun, "run", "", "run holding the span to score (default: newest)")
 	cmd.Flags().StringVar(&scoreSpan, "span", "", "span this verdict judges, so `hyctl trace view` can show it")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+	cmd.Flags().BoolVar(&bySentence, "by-sentence", false, "check one sentence at a time and show each with the source lines that back it")
 	return cmd
 }
 
