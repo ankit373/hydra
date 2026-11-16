@@ -135,6 +135,9 @@ type RecentCall struct {
 	TaskID  string  `json:"taskId"`
 }
 
+// loadCostRows is cost.LoadAll, a var so a test can count the reads (#1832).
+var loadCostRows = cost.LoadAll
+
 // GetDashboard assembles the Dashboard view.
 //
 // Every figure routes through the same cost/trust logic the CLI uses,
@@ -146,7 +149,7 @@ func (a *API) GetDashboard() (*Dashboard, error) {
 	// reports that as an error because the CLI wants to say "has anything
 	// dispatched yet?". For a GUI that is the ordinary first-launch state, not a
 	// failure, the window must open on an empty dashboard, not an error dialog.
-	rows, err := cost.LoadAll()
+	rows, err := loadCostRows()
 	if err != nil && !errors.Is(err, cost.ErrNoLog) {
 		return nil, err
 	}
