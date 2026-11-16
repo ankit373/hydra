@@ -23,7 +23,7 @@ func TestViewUsage_TilesCohere(t *testing.T) {
 	for _, want := range []string{
 		"TODAY", "$0.0300", "3 runs · 2 requests",
 		"THIS MONTH", "$0.0700", "3 requests",
-		"SAVED vs ALL-FRONTIER",
+		"PER PASSED ANSWER", "not enough checked answers yet",
 		"BY MODEL · today",
 		"CONTEXT BUDGET",
 	} {
@@ -52,7 +52,7 @@ func usageMetrics(t *testing.T) ckMetrics {
 		{TS: now.AddDate(0, 0, -6).Format("2006-01-02") + "T10:00:00Z", Tier: 7, Model: "Gemini Flash", Executor: "agy",
 			PromptTokens: 1000, ResponseTokens: 500, EstCostUSD: 0.04, TokensSource: "estimated", RunID: "r3"},
 	}
-	m.fold(rows, stubPricer{}, now)
+	m.fold(rows, nil, now)
 	return m
 }
 
@@ -86,71 +86,69 @@ func TestUsageToday_TokenHonesty(t *testing.T) {
 	}
 }
 
-// SAVED must cohere: saved = tier1 − actual and the % = saved/tier1. When the
-// baseline cannot be priced, the tile renders "—", never a fabricated figure.
-func TestUsageSaved_MathCoheres(t *testing.T) {
+// Below cost.MinChecked checked answers the tile shows no figure, only how far
+// the history has to go, and no surface compares against a model nobody ran.
+func TestUsagePerPassed_ThinHistoryShowsNoFigure(t *testing.T) {
+	now := fixedNow()
+	day := now.Format("2006-01-02")
+	rows, passed := checkedRows(day, "summarise", "ollama/qwen", cost.MinChecked-1, 0.001, 1)
 	m := testCockpit()
-	m.metrics = usageMetrics(t)
-	out := stripANSI(m.usageSaved())
+	m.metrics = ckMetrics{stats: map[string]*ckModelStat{}, localModels: map[string]bool{}, runCost: map[string]ckRunCost{}}
+	m.metrics.fold(rows, passed, now)
 
-	base := m.metrics.baseTodayUSD
-	saved := m.metrics.savedTodayUSD
-	if base <= 0 || saved <= 0 {
-		t.Fatalf("fixture: base=%v saved=%v", base, saved)
+	out := stripANSI(m.usagePerPassed())
+	want := fmt.Sprintf("%d of %d checked", cost.MinChecked-1, cost.MinChecked)
+	for _, s := range []string{"not enough checked answers yet", want} {
+		if !strings.Contains(out, s) {
+			t.Errorf("thin history tile missing %q:\n%s", s, out)
+		}
 	}
-	wantPct := fmt.Sprintf("(%.0f%%)", saved/base*100)
-	if !strings.Contains(out, wantPct) {
-		t.Errorf("the %% does not cohere with the two $ figures: want %s in\n%s", wantPct, out)
+	if strings.Contains(out, "$") || strings.Contains(out, "%") {
+		t.Errorf("thin history tile shows a figure:\n%s", out)
 	}
-	if !strings.Contains(out, fmt.Sprintf("$%.4f", base)) {
-		t.Errorf("the tier-1 total is not shown:\n%s", out)
-	}
-
-	// No pricing → no baseline → an honest dash.
-	none := testCockpit()
-	none.metrics = ckMetrics{}
-	out = stripANSI(none.usageSaved())
-	if !strings.Contains(out, "—") {
-		t.Errorf("an unpriceable baseline did not render a dash:\n%s", out)
-	}
-
-	// Spend above the tier-1 estimate must not claim a saving.
-	worse := testCockpit()
-	worse.metrics.savedTodayUSD, worse.metrics.baseTodayUSD = -0.01, 0.02
-	out = stripANSI(worse.usageSaved())
-	if !strings.Contains(out, "$0.0000 (0%)") || !strings.Contains(out, "not below") {
-		t.Errorf("negative savings not handled honestly:\n%s", out)
+	compact := stripANSI(m.usageTilesCompact(60))
+	if !strings.Contains(compact, want) || strings.Contains(strings.ToLower(compact), "saved") {
+		t.Errorf("compact tiles not honest about thin history:\n%s", compact)
 	}
 }
 
-// The savings arithmetic itself: like-for-like via the same pricer, and the
-// baseline is zero when no pricer resolves.
-func TestCkSavings(t *testing.T) {
-	rows := []cost.Row{
-		{Tier: 10, PromptTokens: 1000, ResponseTokens: 500, EstCostUSD: 0.0001},
-		{Tier: 8, PromptTokens: 2000, ResponseTokens: 1000, EstCostUSD: 0.0004},
+// With enough history the tile pairs cost per passed answer with its pass rate
+// and interval, and names the best single model measured here, never a vendor.
+func TestUsagePerPassed_PairsCostWithPassRate(t *testing.T) {
+	now := fixedNow()
+	day := now.Format("2006-01-02")
+	rows, passed := checkedRows(day, "extract", "ollama/qwen", 40, 0.002, 0.75)
+	m := testCockpit()
+	m.metrics = ckMetrics{stats: map[string]*ckModelStat{}, localModels: map[string]bool{}, runCost: map[string]ckRunCost{}}
+	m.metrics.fold(rows, passed, now)
+
+	out := stripANSI(m.usagePerPassed())
+	// 40 answers at $0.002 = $0.08 over 30 passes.
+	for _, s := range []string{"$0.0027 · 75% passed (", "40 checked", "on extract, routed:", "best single model, ollama/qwen:"} {
+		if !strings.Contains(out, s) {
+			t.Errorf("tile missing %q:\n%s", s, out)
+		}
 	}
-	saved, baseline := ckSavings(rows, stubPricer{})
-	if baseline <= 0 || saved <= 0 || saved > baseline {
-		t.Errorf("saved=%v baseline=%v", saved, baseline)
+	if strings.Contains(strings.ToLower(out), "saved") || strings.Contains(strings.ToLower(out), "would") {
+		t.Errorf("tile claims a hypothetical saving:\n%s", out)
 	}
-	if saved, base := ckSavings(rows, nil); saved != 0 || base != 0 {
-		t.Errorf("nil pricer: %v/%v", saved, base)
-	}
-	// Spending more than tier-1 yields a negative saving, reported raw; the
-	// tile decides how to word it.
-	expensive := []cost.Row{{Tier: 1, PromptTokens: 100, ResponseTokens: 50, EstCostUSD: 999}}
-	if saved, _ := ckSavings(expensive, stubPricer{}); saved >= 0 {
-		t.Errorf("overspend hidden: saved=%v", saved)
+	compact := stripANSI(m.usageTilesCompact(200))
+	if !strings.Contains(compact, "PER PASS $0.0027 · 75% passed (") || !strings.Contains(compact, "on extract routed $0.0027 · 75% passed (60–86%), best single ollama/qwen $0.0027") {
+		t.Errorf("compact tiles lost the comparison:\n%s", compact)
 	}
 }
 
-// stubPricer prices tiers deterministically, so the arithmetic is tested
-// without a resolvable registry/pricing.yaml on disk.
-type stubPricer struct{}
-
-func (stubPricer) EstimateCost(tier, in, out int) float64 {
-	return float64(in+out) * 0.00002 / float64(tier)
+// checkedRows is n checked answers of one kind on one model, the first
+// passRate*n of them passed.
+func checkedRows(day, kind, model string, n int, usd, passRate float64) ([]cost.Row, map[string]bool) {
+	rows := make([]cost.Row, n)
+	passed := make(map[string]bool, n)
+	for i := range rows {
+		span := "s" + strconv.Itoa(i)
+		rows[i] = cost.Row{TS: day + "T08:00:00Z", Model: model, Domain: kind, SpanID: span, EstCostUSD: usd}
+		passed[span] = float64(i) < passRate*float64(n)
+	}
+	return rows, passed
 }
 
 // BY MODEL marks local models "local · free" instead of a $0 that looks like

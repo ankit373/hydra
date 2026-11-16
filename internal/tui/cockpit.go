@@ -183,7 +183,7 @@ func NewCockpit() Cockpit {
 	pr := pricing.Load()
 	heads := ckHeadsFrom(probed.Heads, pr)
 	pct, hist, known := ckClaudePct()
-	metrics := ckLoadMetrics(pr)
+	metrics := ckLoadMetrics()
 
 	m := Cockpit{
 		mode:         "ask",
