@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Hydra releases</title>
+  <id>https://hydra.uvansa.com/releases/</id>
+  <link href="https://hydra.uvansa.com/releases/"/>
+  <link rel="self" href="https://hydra.uvansa.com/releases/feed.xml"/>
+  <updated>2026-11-13T00:00:00Z</updated>
+  <author><name>Hydra</name></author>
+  <entry>
+    <title>Hydra 1.8.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.8.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.8.0.html"/>
+    <updated>2026-11-13T00:00:00Z</updated>
+    <summary>7 new, 2 fixed. Most of the work is in website and docs, desktop app, routing.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.7.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.7.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.7.0.html"/>
+    <updated>2026-11-12T00:00:00Z</updated>
+    <summary>One change, in install and upgrade: Release pull request; it lists what shipped.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.6.1</title>
+    <id>https://hydra.uvansa.com/releases/v1.6.1.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.6.1.html"/>
+    <updated>2026-11-04T00:00:00Z</updated>
+    <summary>One change, in project: Gate the Mergify queues on the CLA as a queue condition, not on Mergify&#x27;s own draft.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.6.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.6.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.6.0.html"/>
+    <updated>2026-11-03T00:00:00Z</updated>
+    <summary>1 new, 5 fixed. Most of the work is in project, website and docs, install and upgrade.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.5.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.5.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.5.0.html"/>
+    <updated>2026-09-28T00:00:00Z</updated>
+    <summary>One change, in install and upgrade: Streaming and tool calls on every dialect, hyctl serve, measured routing, hyctl vet, and the public blog.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.4.2</title>
+    <id>https://hydra.uvansa.com/releases/v1.4.2.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.4.2.html"/>
+    <updated>2026-09-07T00:00:00Z</updated>
+    <summary>2 fixed. Most of the work is in install and upgrade.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.4.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.4.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.4.0.html"/>
+    <updated>2026-09-05T00:00:00Z</updated>
+    <summary>One change, in install and upgrade: MCP server trust registry, security dashboard, chat-first desktop app.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.3.1</title>
+    <id>https://hydra.uvansa.com/releases/v1.3.1.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.3.1.html"/>
+    <updated>2026-08-20T00:00:00Z</updated>
+    <summary>One change, in install and upgrade: ARM64 desktop builds, HUD Dashboard, Fleet fixes, security dashboard, calibration leaderboard, agent-tree fix.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.2.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.2.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.2.0.html"/>
+    <updated>2026-08-07T00:00:00Z</updated>
+    <summary>One change, in install and upgrade: Desktop app, multi-arch distribution, 90% coverage.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.1.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.1.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.1.0.html"/>
+    <updated>2026-08-03T00:00:00Z</updated>
+    <summary>One change, in install and upgrade: Never shipped, squash merge erased the release.</summary>
+  </entry>
+  <entry>
+    <title>Hydra 1.0.1</title>
+    <id>https://hydra.uvansa.com/releases/v1.0.1.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.0.1.html"/>
+    <updated>2026-07-25T00:00:00Z</updated>
+    <summary>One change, in install and upgrade: hyctl CLI + working brew/npm/npx/pip/curl install paths.</summary>
+  </entry>
+</feed>

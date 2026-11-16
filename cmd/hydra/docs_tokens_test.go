@@ -31,7 +31,7 @@ func siteSources(t *testing.T) map[string]string {
 	for _, page := range docsPages(t) {
 		out["docs/"+page] = repoFile(t, "docs", page)
 	}
-	for _, f := range []string{"site.css", "site.js", "print.css"} {
+	for _, f := range []string{"site.css", "docs.css", "releases.css", "site.js", "print.css"} {
 		out["docs/assets/"+f] = repoFile(t, "docs", "assets", f)
 	}
 	return out

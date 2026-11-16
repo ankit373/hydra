@@ -6,7 +6,7 @@ import { readdirSync } from 'node:fs'
 
 // Every page under docs/, found rather than listed, so a new page is checked from day one.
 const DOCS = new URL('../docs/', import.meta.url)
-const PAGES = ['', 'blog/'].flatMap((dir) => readdirSync(new URL(dir, DOCS))
+const PAGES = ['', 'blog/', 'releases/'].flatMap((dir) => readdirSync(new URL(dir, DOCS))
   .filter((f) => f.endsWith('.html') && !f.startsWith('google')).map((f) => dir + f))
 const WIDTHS = [320, 390, 768, 1024, 1180, 1440]
 const PHONE = { width: 390, height: 844 }

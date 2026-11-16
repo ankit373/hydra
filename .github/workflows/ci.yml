@@ -364,6 +364,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The release pages are built from CHANGELOG.md and docs/releases/data, never edited.
+      - name: Release pages up to date
+        run: python3 docs/releases/generate.py --check
+
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
