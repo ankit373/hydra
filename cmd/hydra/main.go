@@ -1497,7 +1497,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().Float64Var(&swarmMaxCost, "swarm-max-cost", 0, "refuse swarm if preflight cost estimate exceeds this USD")
 	cmd.Flags().StringVar(&swarmJudge, "swarm-judge-tier", "", "tier for judge head in best mode (default: tier 1 / cortex)")
 	// trust / SPRT flags
-	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble until this P(correct) is reached, e.g. 0.95")
+	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble: ask heads until the estimate that the answer is right clears this target, e.g. 0.95 (an estimate, not a guarantee)")
 	// The real value, not a claim about it in the description: the flag defaulted
 	// to "" while --help promised "default", so the refusal quoted an empty
 	// domain and printed two commands ending in a bare `--domain ` (#732).
