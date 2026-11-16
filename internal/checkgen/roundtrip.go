@@ -58,28 +58,31 @@ func (roundtripGen) Oracle(s Spec, env Env) (oracle.Oracle, error) {
 	if env.Ask == nil {
 		return nil, errNoModel
 	}
-	var required []string
+	required := 0
 	for _, f := range b.Fields {
 		if f.Required {
-			required = append(required, f.Name)
+			required++
 		}
 	}
-	if len(required) == 0 {
+	if required == 0 {
 		return nil, fmt.Errorf("checkgen roundtrip: spec %s has no required field to compare", s.ID)
 	}
-	return roundtripOracle{body: b, required: required, gen: s.Generator, ask: env.Ask}, nil
+	return &roundtripOracle{body: b, required: required, gen: s.Generator, ask: env.Ask}, nil
 }
 
+// roundtripOracle keeps every field's verdict from the last Verify, like fieldsOracle.
 type roundtripOracle struct {
 	body     fieldsBody
-	required []string
+	required int
 	gen      GenInfo
 	ask      func(ctx context.Context, gen GenInfo, prompt string) (string, error)
+	last     []FieldVerdict
 }
 
 // Verify passes when the answer and the second extraction agree on every required field.
 // A second extraction that is not a JSON object leaves the answer not checked.
-func (o roundtripOracle) Verify(ctx context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
+func (o *roundtripOracle) Verify(ctx context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
+	o.last = nil
 	ours, ok := DecodeObject(candidate)
 	if !ok {
 		return oracle.Verdict{Detail: "the answer is not a JSON object"}, nil
@@ -97,16 +100,20 @@ func (o roundtripOracle) Verify(ctx context.Context, candidate string, _ trust.T
 		return oracle.Verdict{}, fmt.Errorf("checkgen roundtrip: %s did not reply with a JSON object: %.80q", o.gen.Head, reply)
 	}
 	var differ []string
-	for _, name := range o.required {
-		a, b := ours[name], theirs[name]
-		if a == nil || b == nil || !SameValue(a, b) {
-			differ = append(differ, fmt.Sprintf("%s: answer %v, re-extracted %v", name, show(a), show(b)))
+	for _, f := range o.body.Fields {
+		fv := FieldVerdict{Name: f.Name, Status: FieldNotCompared}
+		if a, b := ours[f.Name], theirs[f.Name]; f.Required && (a == nil || b == nil || !SameValue(a, b)) {
+			fv.Status, fv.Detail = FieldDiffers, fmt.Sprintf("answer %v, re-extracted %v", show(a), show(b))
+			differ = append(differ, f.Name+": "+fv.Detail)
+		} else if f.Required {
+			fv.Status = FieldAgreed
 		}
+		o.last = append(o.last, fv)
 	}
 	if len(differ) > 0 {
 		return oracle.Verdict{Detail: "fields differ: " + strings.Join(differ, "; ")}, nil
 	}
-	return oracle.Verdict{Passed: true, Detail: fmt.Sprintf("all %d required fields agree", len(o.required))}, nil
+	return oracle.Verdict{Passed: true, Detail: fmt.Sprintf("all %d required fields agree", o.required)}, nil
 }
 
 func show(v any) string {

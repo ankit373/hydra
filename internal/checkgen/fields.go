@@ -99,22 +99,42 @@ func sourceOf(text string) string {
 }
 
 // A field's status. Unverified is a from-source value with no fenced source to check it against.
+// Agreed, differs and not_compared come from the round trip; the in_source ones from MergeFields.
 const (
-	FieldOK          = "ok"
-	FieldAbsent      = "absent" // optional, not given
-	FieldMissing     = "missing"
-	FieldWrongType   = "wrong_type"
-	FieldNotInSource = "not_in_source"
-	FieldUnverified  = "unverified"
+	FieldOK                = "ok"
+	FieldAbsent            = "absent" // optional, not given
+	FieldMissing           = "missing"
+	FieldWrongType         = "wrong_type"
+	FieldNotInSource       = "not_in_source"
+	FieldUnverified        = "unverified"
+	FieldAgreed            = "agreed"
+	FieldDiffers           = "differs"
+	FieldNotCompared       = "not_compared" // optional, so the round trip does not compare it
+	FieldInSource          = "in_source"
+	FieldInSourceAndAgreed = "in_source_and_agreed"
 )
 
-// FieldVerdict is one field's result.
+// FieldVerdict is one field's result. InSource is set when the value was found in the fenced source.
 type FieldVerdict struct {
 	Name, Status, Detail string
+	InSource             bool
 }
 
 func (f FieldVerdict) failed() bool {
-	return f.Status == FieldMissing || f.Status == FieldWrongType || f.Status == FieldNotInSource
+	switch f.Status {
+	case FieldMissing, FieldWrongType, FieldNotInSource, FieldDiffers:
+		return true
+	}
+	return false
+}
+
+// Good says the field passed: ok, or found in the source, or agreed by a second model.
+func (f FieldVerdict) Good() bool {
+	switch f.Status {
+	case FieldOK, FieldInSource, FieldAgreed, FieldInSourceAndAgreed:
+		return true
+	}
+	return false
 }
 
 // fieldsOracle keeps every field's verdict from the last Verify.
@@ -162,6 +182,8 @@ func judgeField(f Field, v any, src source) FieldVerdict {
 		fv.Status, fv.Detail = FieldUnverified, "no fenced source"
 	case !src.has(v):
 		fv.Status, fv.Detail = FieldNotInSource, "is not in the source"
+	default:
+		fv.InSource = true
 	}
 	return fv
 }
