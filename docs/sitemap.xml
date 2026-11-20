@@ -83,9 +83,15 @@
   <!-- GENERATED:RELEASE-URLS -->
   <url>
     <loc>https://hydra.uvansa.com/releases/</loc>
-    <lastmod>2026-11-13</lastmod>
+    <lastmod>2026-11-20</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://hydra.uvansa.com/releases/v1.9.0.html</loc>
+    <lastmod>2026-11-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://hydra.uvansa.com/releases/v1.8.0.html</loc>
