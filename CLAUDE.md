@@ -193,6 +193,8 @@ internal/bench/         ← Benchmark harness: pinned datasets, committed splits
                           splits, with no model calls. `hyctl bench replay`. A check arm (`checks` in
                           the config) answers with the suite's own check, no model; a check suite
                           (faithbench) reports recall and false flags per arm with Wilson intervals.
+                          A model arm is `bedrock:`, `openrouter:` or `ollama:` (local, no key, a $0
+                          `local` price row, thinking off, labelled local in the table).
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/embed/         ← Vectors from an embedding model already on the machine. No new dependency.
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.
