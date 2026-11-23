@@ -27,11 +27,13 @@ type Result struct {
 	Split  string `json:"split"`
 	Arm    string `json:"arm"`
 	Attempt
-	Passed  bool    `json:"passed"`
-	Score   float64 `json:"score"` // 1/0 for classification
-	Format  bool    `json:"format_fail,omitempty"`
-	Timeout bool    `json:"timeout,omitempty"`
-	Detail  string  `json:"detail,omitempty"`
+	Passed bool    `json:"passed"`
+	Score  float64 `json:"score"` // 1/0 for classification
+	Format bool    `json:"format_fail,omitempty"`
+	// Grader marks a spend row for the grader's second model, billed to the pair it graded.
+	Grader  bool   `json:"grader,omitempty"`
+	Timeout bool   `json:"timeout,omitempty"`
+	Detail  string `json:"detail,omitempty"`
 	// Detection is the grade's, on a check suite only.
 	Detection *Detection            `json:"detection,omitempty"`
 	Fields    map[string]FieldTally `json:"fields,omitempty"`

@@ -93,8 +93,14 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	if err != nil {
 		return out, err
 	}
+	grader := arms[GraderArm] // nil unless the config named a grader_model
 	for _, name := range run.ArmOrder {
 		if err := arms[name].Preflight(ctx); err != nil {
+			return out, err
+		}
+	}
+	if grader != nil {
+		if err := grader.Preflight(ctx); err != nil {
 			return out, err
 		}
 	}
@@ -138,7 +144,7 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 		if done[pairKey{p.Item.ID, p.Arm}] {
 			continue
 		}
-		row, err := r.one(ctx, arms[p.Arm], p, budget, models, last, w)
+		row, err := r.one(ctx, arms[p.Arm], grader, p, budget, models, last, w)
 		out.Spent = budget.Spent()
 		if row == nil {
 			return out, err
@@ -224,17 +230,20 @@ func (r *Runner) openRun(id, base, path string) (*Run, error) {
 // one makes a single (item, arm) call and returns its result row. Every call that may
 // have been billed is already in items.jsonl as its own spend row by then, so the
 // result row adds no money, and a nil row with an error has lost none.
-func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, models map[string]string,
+func (r *Runner) one(ctx context.Context, arm, grader Arm, p pair, budget *Budget, models map[string]string,
 	last time.Time, w *resultsWriter) (*Result, error) {
 	req, err := r.Suite.Prompt(p.Item)
 	if err != nil {
 		return nil, err
 	}
 	started := r.Now()
-	spend := func(c Call) error {
-		return w.write(&Result{Seq: p.Seq, ItemID: p.Item.ID, Split: p.Item.Split.String(), Arm: p.Arm,
-			Attempt: Attempt{Calls: []Call{c}, ErrKind: spendRow}, CostUSD: c.CostUSD, Started: started, Retryable: true})
+	spender := func(grader bool) func(Call) error {
+		return func(c Call) error {
+			return w.write(&Result{Seq: p.Seq, ItemID: p.Item.ID, Split: p.Item.Split.String(), Arm: p.Arm, Grader: grader,
+				Attempt: Attempt{Calls: []Call{c}, ErrKind: spendRow}, CostUSD: c.CostUSD, Started: started, Retryable: true})
+		}
 	}
+	spend := spender(false)
 	att, err := arm.Call(ctx, p.Item, req, budget, spend)
 	if err != nil {
 		return nil, err
@@ -253,7 +262,13 @@ func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, model
 		row.Retryable = att.transient
 		return row, nil
 	}
-	g, err := r.Suite.Grade(ctx, p.Item, att.Answer)
+	g, err := r.grade(ctx, grader, p, att.Answer, budget, spender(true))
+	var ge *GraderError
+	if errors.As(err, &ge) {
+		// Like an arm's own transport error: a flaky second model says nothing about the item.
+		row.ErrKind, row.Retryable, row.Detail = ge.Kind, ge.Transient, ge.Error()
+		return row, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +278,25 @@ func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, model
 		row.Score = 1
 	}
 	return row, nil
+}
+
+// grade is the suite's grade, with the grader's second model behind it when the suite can use one.
+func (r *Runner) grade(ctx context.Context, grader Arm, p pair, answer string, budget *Budget, spend func(Call) error) (Grade, error) {
+	sg, ok := r.Suite.(SecondGrader)
+	if grader == nil || !ok {
+		return r.Suite.Grade(ctx, p.Item, answer)
+	}
+	ask := func(ctx context.Context, req executor.Request) (string, error) {
+		att, err := grader.Call(ctx, p.Item, req, budget, spend)
+		switch {
+		case err != nil:
+			return "", err
+		case att.ErrKind != "":
+			return "", &GraderError{Kind: att.ErrKind, Transient: att.transient}
+		}
+		return att.Answer, nil
+	}
+	return sg.GradeWithSecond(ctx, p.Item, answer, ask)
 }
 
 // contract checks what a direct call must never report: estimated tokens, more output

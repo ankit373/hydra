@@ -105,6 +105,12 @@ func MergeFields(results []Result) (fields []FieldVerdict, merged bool) {
 	if src == nil || rt == nil {
 		return append(src, rt...), false
 	}
+	return MergeVerdicts(src, rt), true
+}
+
+// MergeVerdicts is one verdict per field from the fields check's list and the round trip's: a
+// failure from either stands, else in the source, agreed by a second model, or both.
+func MergeVerdicts(src, rt []FieldVerdict) (fields []FieldVerdict) {
 	byName := make(map[string]FieldVerdict, len(rt))
 	for _, f := range rt {
 		byName[f.Name] = f
@@ -132,7 +138,7 @@ func MergeFields(results []Result) (fields []FieldVerdict, merged bool) {
 			fields = append(fields, f)
 		}
 	}
-	return fields, true
+	return fields
 }
 
 func record(r Result, answer string, answering provider.Head, span runlog.Event) error {

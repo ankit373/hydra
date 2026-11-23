@@ -367,10 +367,22 @@ func printDryRun(out io.Writer, s bench.Suite, run bench.Run,
 			}
 			worst += wc
 		}
+		if g, ok := arms[bench.GraderArm]; ok {
+			// One second-model call per answer, so as many as there are arms.
+			wc, err := g.WorstCaseUSD(req)
+			if err != nil {
+				return err
+			}
+			worst += wc * float64(len(run.ArmOrder))
+		}
 	}
-	fmt.Fprintf(out, "  %s: %d items × %d arms (%s) = %d calls, worst case $%.6f; dry run, nothing called\n",
+	grader := ""
+	if g, ok := run.Arms[bench.GraderArm]; ok {
+		grader = ", plus a second model per answer (" + g.Models[0] + ")"
+	}
+	fmt.Fprintf(out, "  %s: %d items × %d arms (%s) = %d calls%s, worst case $%.6f; dry run, nothing called\n",
 		run.Suite, len(run.ItemIDs), len(run.ArmOrder), strings.Join(run.ArmOrder, ","),
-		len(run.ItemIDs)*len(run.ArmOrder), worst)
+		len(run.ItemIDs)*len(run.ArmOrder), grader, worst)
 	return nil
 }
 

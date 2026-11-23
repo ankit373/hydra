@@ -97,17 +97,24 @@ const fieldHeader = "\n| Suite | Arm | Field kind | Fields | Field accuracy % | 
 // kind, or nothing when no suite tallies fields.
 func fieldTable(sums []Summary) string {
 	var b strings.Builder
-	row := func(suite, arm, kind string, f FieldCatch) {
+	line := func(suite, arm, kind string, f FieldCatch, d DetectionStats, perVerified *float64) {
 		cost := "—"
-		if f.CostPerVerified != nil {
-			cost = strconv.FormatFloat(*f.CostPerVerified, 'g', 5, 64)
+		if perVerified != nil {
+			cost = strconv.FormatFloat(*perVerified, 'g', 5, 64)
 		}
 		caught := "—" // no wrong field, nothing to catch
-		if f.Positives > 0 {
-			caught = fmt.Sprintf("%.1f (%.1f–%.1f)", 100*f.Recall, 100*f.RecallWilson[0], 100*f.RecallWilson[1])
+		if d.Positives > 0 {
+			caught = fmt.Sprintf("%.1f (%.1f–%.1f)", 100*d.Recall, 100*d.RecallWilson[0], 100*d.RecallWilson[1])
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %d | %.1f | %s | %.1f | %s |\n", suite, arm, kind, f.Positives+f.Negatives,
-			100*f.Accuracy, caught, 100*f.FalseFlagRate, cost)
+		fmt.Fprintf(&b, "| %s | %s | %s | %d | %.1f | %s | %.1f | %s |\n", suite, arm, kind, d.Positives+d.Negatives,
+			100*f.Accuracy, caught, 100*d.FalseFlagRate, cost)
+	}
+	// A second model's row sits under the source-check row it adds to, so the two read side by side.
+	row := func(suite, arm, kind string, f FieldCatch) {
+		line(suite, arm, kind, f, f.DetectionStats, f.CostPerVerified)
+		if f.WithSecond != nil {
+			line(suite, arm+" + second model", kind, f, f.WithSecond.DetectionStats, f.WithSecond.CostPerVerified)
+		}
 	}
 	for _, s := range sums {
 		for _, arm := range armOrder(s.Arms) {

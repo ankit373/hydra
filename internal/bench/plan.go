@@ -44,6 +44,19 @@ func Plan(c *Config, s Suite, ds Dataset, splitsPath string, all []Item, nTest i
 			used[m], cutoffs[m] = p, c.Cutoffs[m]
 		}
 	}
+	if c.GraderModel != "" {
+		prov, m, _ := ParseGrader(c.GraderModel) // ReadConfig parsed it already
+		chosen[GraderArm] = ArmConfig{Kind: KindDirect, Models: []string{c.GraderModel}}
+		if prov == "ollama" {
+			used[m] = Price{Model: m, Ref: "local", Source: "local"}
+		} else {
+			p, ok := prices[m]
+			if !ok {
+				return Run{}, nil, fmt.Errorf("bench: %s has no price in the snapshot", m)
+			}
+			used[m], cutoffs[m] = p, c.Cutoffs[m]
+		}
+	}
 	tests := FirstByRank(all, SplitTest, nTest)
 	if len(tests) == 0 {
 		return Run{}, nil, fmt.Errorf("bench: %s has no test items", s.Name())
