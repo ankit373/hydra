@@ -146,7 +146,9 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           strict yes or no. Classification gets a labels check: the set the request lists, with any
                           label the writer invented dropped. Extraction gets a fields check: valid JSON, required fields,
                           types, and values found in the fenced source, all without a model, with a `FieldVerdict` per
-                          field on `Result.Fields` (ok, absent, missing, wrong_type, not_in_source, unverified). `SchemaFields` reads a
+                          field on `Result.Fields` (ok, absent, missing, wrong_type, bad_format, not_in_source, unverified). `bad_format` is a string breaking its
+                          schema `pattern`/`format`, with the lookalike swap (O/0, I/l/1, S/5, B/8, Z/2) that would fit, or the odd
+                          value in a list of strings that has one where the other values have the other class. `SchemaFields` reads a
                           JSON Schema (`hyctl dispatch --schema`) as that field list, objects one level deep as dotted
                           names, so no model writes it. `ChunkFields` splits a wider list than `--max-fields` (30) in
                           schema order, an object's fields kept together; `cmd/hydra`'s `chunkedDispatch` asks each
