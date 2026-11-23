@@ -730,55 +730,62 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestRollback_RestoresFromEachSource(t *testing.T) {
-	t.Run("from the backup", func(t *testing.T) {
-		dir := t.TempDir()
-		file := filepath.Join(dir, "a.txt")
-		backup := file + ".hydra-bak"
-		if err := os.WriteFile(backup, []byte("original\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(file, []byte("bad edit\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+// The backup is a verbatim copy of the user's source, so other users must not
+// read it (#1945).
+func TestEdit_BackupIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are not POSIX permission bits here")
+	}
+	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	writeWorkspaceYAML(t, repo, "/usr/bin/true {file}") // git: "false", so a backup is made
+	file := filepath.Join(repo, "main.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-		rollback(file, "original\n", true, "", backup)
+	got := runEdit(t, Task{Label: "x", Enum: "MODERATE", File: file, Prompt: "x", Validate: boolPtr(false)})
 
-		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
-			t.Errorf("file = %q after rollback", raw)
-		}
-		if _, err := os.Stat(backup); err == nil {
-			t.Error("the backup survived; the next edit would see a stale baseline")
-		}
-	})
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v, want ok", got)
+	}
+	fi, err := os.Stat(file + ".hydra-bak")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("backup mode = %o, want 600", fi.Mode().Perm())
+	}
+}
 
-	t.Run("a file that did not exist is removed", func(t *testing.T) {
-		dir := t.TempDir()
-		file := filepath.Join(dir, "created.txt")
-		if err := os.WriteFile(file, []byte("bad edit\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+// A backup an earlier run left is review's baseline, not this run's snapshot:
+// a failed edit must restore the file from memory and leave it alone (#1945).
+func TestEdit_RollbackIgnoresAStaleBackup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the workspace validator template is a POSIX command line here")
+	}
+	repo := editSandbox(t, marked("this will not validate"))
+	writeWorkspaceYAML(t, repo, "/usr/bin/false {file}")
+	file := filepath.Join(repo, "a.go")
+	original := "package main\n// current\n"
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stale := file + ".hydra-bak"
+	if err := os.WriteFile(stale, []byte("package main\n// from an older run\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-		rollback(file, "", false, "", file+".hydra-bak")
+	got := runEdit(t, Task{Label: "x", Enum: "MODERATE", File: file, Prompt: "x"})
 
-		if _, err := os.Stat(file); err == nil {
-			t.Error("a file the edit created was left behind after rollback")
-		}
-	})
-
-	t.Run("from the in-memory snapshot", func(t *testing.T) {
-		dir := t.TempDir()
-		file := filepath.Join(dir, "a.txt")
-		if err := os.WriteFile(file, []byte("bad edit\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		rollback(file, "original\n", true, "", file+".hydra-bak")
-
-		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
-			t.Errorf("file = %q, want the snapshot restored", raw)
-		}
-	})
+	if got.Status != "fail" || !got.RolledBack {
+		t.Fatalf("result = %+v, want a rolled back failure", got)
+	}
+	if raw, _ := os.ReadFile(file); string(raw) != original {
+		t.Errorf("file = %q, want the content from before this run, not the stale backup", raw)
+	}
+	if raw, _ := os.ReadFile(stale); !strings.Contains(string(raw), "older run") {
+		t.Errorf("the older run's backup was changed or removed: %q", raw)
+	}
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -989,22 +996,6 @@ func TestRollbackAndDiffStats_UseGitInARepository(t *testing.T) {
 	added, removed := diffStats(file, original, repo, file+".hydra-bak", true)
 	if added != 2 || removed != 0 {
 		t.Errorf("diffStats = (%d, %d), want (2, 0) from git numstat", added, removed)
-	}
-
-	// rollback restores from the index, not from a backup that does not exist.
-	rollback(file, original, true, repo, file+".hydra-bak")
-	if raw, _ := os.ReadFile(file); string(raw) != original {
-		t.Errorf("file = %q after rollback, want the committed content", raw)
-	}
-
-	// An untracked file has nothing in the index, so rollback removes it.
-	untracked := filepath.Join(repo, "new.go")
-	if err := os.WriteFile(untracked, []byte("created by the edit\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	rollback(untracked, "", false, repo, untracked+".hydra-bak")
-	if _, err := os.Stat(untracked); err == nil {
-		t.Error("an untracked file the edit created survived rollback")
 	}
 
 	// And its line count comes from the file itself, since git has no baseline
