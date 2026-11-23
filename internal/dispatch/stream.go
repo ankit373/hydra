@@ -32,7 +32,7 @@ type StreamEvent struct {
 
 	// Text is set on StreamDelta only.
 	Text string
-	// Reason is set on StreamAttemptFailed only.
+	// Reason is set on StreamAttemptFailed only: executor.Reason, one redacted line.
 	Reason string
 
 	// SpanID identifies the attempt, so an abandoned partial stays reachable
