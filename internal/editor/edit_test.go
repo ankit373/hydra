@@ -562,7 +562,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		rollback(file, "original\n", true)
+		Rollback(file, "original\n", true)
 
 		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
 			t.Errorf("file = %q after rollback, want this edit's snapshot", raw)
@@ -578,7 +578,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		rollback(file, "", false)
+		Rollback(file, "", false)
 		if _, err := os.Stat(file); err == nil {
 			t.Error("a file the edit created was left behind")
 		}
@@ -590,7 +590,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		rollback(file, "original\n", true)
+		Rollback(file, "original\n", true)
 		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
 			t.Errorf("file = %q, want the snapshot restored", raw)
 		}
@@ -832,7 +832,7 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 	if err := os.WriteFile(file, []byte("a bad edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rollback(file, original, true)
+	Rollback(file, original, true)
 
 	raw, err := os.ReadFile(file)
 	if err != nil {
@@ -847,7 +847,7 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 	if err := os.WriteFile(untracked, []byte("created by the edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rollback(untracked, "", false)
+	Rollback(untracked, "", false)
 	if _, err := os.Stat(untracked); err == nil {
 		t.Error("an untracked file the edit created survived the rollback")
 	}
