@@ -52,7 +52,7 @@ func (e *CLIExecutor) ExecuteStream(ctx context.Context, req Request, onDelta On
 	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("cli exec %s: %w, stderr: %s", req.Head.ID, err, stderr.String())
+		return nil, &CLIError{Head: req.Head.ID, Err: err, Stderr: stderr.String()}
 	}
 
 	// Trimmed for the Response the same way Execute trims it, while the deltas
