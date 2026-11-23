@@ -733,11 +733,8 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 // The backup is a verbatim copy of the user's source, so other users must not
 // read it (#1945).
 func TestEdit_BackupIsPrivate(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file modes are not POSIX permission bits here")
-	}
 	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
-	writeWorkspaceYAML(t, repo, "/usr/bin/true {file}") // git: "false", so a backup is made
+	writeWorkspaceYAML(t, repo, "true {file}") // git: "false", so a backup is made
 	file := filepath.Join(repo, "main.go")
 	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -752,7 +749,8 @@ func TestEdit_BackupIsPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fi.Mode().Perm() != 0o600 {
+	// Windows has no permission bits to read back.
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Errorf("backup mode = %o, want 600", fi.Mode().Perm())
 	}
 }
@@ -760,11 +758,9 @@ func TestEdit_BackupIsPrivate(t *testing.T) {
 // A backup an earlier run left is review's baseline, not this run's snapshot:
 // a failed edit must restore the file from memory and leave it alone (#1945).
 func TestEdit_RollbackIgnoresAStaleBackup(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the workspace validator template is a POSIX command line here")
-	}
-	repo := editSandbox(t, marked("this will not validate"))
-	writeWorkspaceYAML(t, repo, "/usr/bin/false {file}")
+	repo := editSandbox(t, marked("package main\n// current\n\nfunc main() {}\n"))
+	writeWorkspaceYAML(t, repo, "true {file}")
+	writePolicyYAML(t, 1) // any growth trips the diff-size cap, which rolls the edit back
 	file := filepath.Join(repo, "a.go")
 	original := "package main\n// current\n"
 	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
@@ -775,7 +771,7 @@ func TestEdit_RollbackIgnoresAStaleBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := runEdit(t, Task{Label: "x", Enum: "MODERATE", File: file, Prompt: "x"})
+	got := runEdit(t, Task{Label: "x", Enum: "MODERATE", File: file, Prompt: "x", Validate: boolPtr(false)})
 
 	if got.Status != "fail" || !got.RolledBack {
 		t.Fatalf("result = %+v, want a rolled back failure", got)
