@@ -195,6 +195,9 @@ internal/bench/         ← Benchmark harness: pinned datasets, committed splits
                           (faithbench) reports recall and false flags per arm with Wilson intervals.
                           A model arm is `bedrock:`, `openrouter:` or `ollama:` (local, no key, a $0
                           `local` price row, thinking off, labelled local in the table).
+                          `hyctl bench redaction`: each task in bench/redaction/tasks.jsonl on one model
+                          with `--redact`'s placeholders off and on, graded the same way; pass rates with
+                          Wilson intervals and the exact McNemar p per kind of work.
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/embed/         ← Vectors from an embedding model already on the machine. No new dependency.
 internal/retrieve/      ← Hybrid recall: BM25 ⊕ vectors, fused on rank. A floor that needs no model.

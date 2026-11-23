@@ -49,7 +49,7 @@ func cmdBench() *cobra.Command {
 		Use:   "bench",
 		Short: "Benchmark harness: pinned datasets, committed splits, scored arms",
 	}
-	cmd.AddCommand(cmdBenchFetch(), cmdBenchRun(), cmdBenchReport(), cmdBenchTable(), cmdBenchReplay())
+	cmd.AddCommand(cmdBenchFetch(), cmdBenchRun(), cmdBenchReport(), cmdBenchTable(), cmdBenchReplay(), cmdBenchRedaction())
 	return cmd
 }
 
@@ -388,3 +388,85 @@ func printDetection(out io.Writer, dir string) error {
 
 // benchStateDir holds each run's lock and state, outside the repository.
 func benchStateDir() string { return filepath.Join(config.Dir(), "bench", "runs") }
+
+func cmdBenchRedaction() *cobra.Command {
+	var model, tasksPath, outPath string
+	var maxUSD float64
+	cmd := &cobra.Command{
+		Use:   "redaction --model <provider>:<model id>",
+		Short: "Answer quality with --redact on and off: each task twice on one model, graded the same way",
+		Long: "Asks the model every task in --tasks as is, then with its values replaced by\n" +
+			"placeholders and the answer restored, as dispatch does for a hosted model. Prints the\n" +
+			"worst-case cost first and refuses a run that could cross --max-usd; an ollama: model costs $0.\n\n" +
+			"Exit code 2: --max-usd stopped the run.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			tasks, err := bench.ReadRedactTasks(tasksPath)
+			if err != nil {
+				return err
+			}
+			lookup, fetched := benchPrices()
+			prices, err := bench.SnapshotFor(model, lookup, fetched)
+			if err != nil {
+				return err
+			}
+			arm, err := bench.NewDirect("redaction", bench.ArmConfig{Kind: bench.KindDirect, Models: []string{model}},
+				prices, benchExec, nil, benchSleep)
+			if err != nil {
+				return err
+			}
+			if err := arm.Preflight(cmd.Context()); err != nil {
+				return err
+			}
+			worst, err := bench.RedactWorstCase(arm, tasks)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "  %d tasks × 2 on %s: worst case $%.6f, cap $%.2f\n", len(tasks), model, worst, maxUSD)
+			var spent float64
+			rows, err := bench.RunRedaction(cmd.Context(), arm, tasks, bench.NewBudget(maxUSD, 0),
+				func(c bench.Call) error { spent += c.CostUSD; return nil })
+			fmt.Fprintf(stdout, "  %d tasks answered, $%.6f spent\n", len(rows), spent)
+			if errors.Is(err, bench.ErrBudget) {
+				fmt.Fprintf(stdout, "  stopped: %v\n", err)
+				return exitStatus(2)
+			}
+			if err != nil {
+				return err
+			}
+			if outPath != "" {
+				if err := writeJSONL(outPath, rows); err != nil {
+					return err
+				}
+			}
+			t, err := bench.RedactTable(rows, model)
+			if err != nil {
+				return err
+			}
+			fmt.Fprint(stdout, "\n"+t)
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&model, "model", "", "the model, e.g. ollama:qwen3:8b or openrouter:<id>")
+	f.StringVar(&tasksPath, "tasks", "bench/redaction/tasks.jsonl", "the task file")
+	f.Float64Var(&maxUSD, "max-usd", 0, "spend cap, checked before every call (a local model needs none)")
+	f.StringVar(&outPath, "out", "", "also write each task's answers and grades here as JSONL")
+	_ = cmd.MarkFlagRequired("model")
+	return cmd
+}
+
+// writeJSONL writes one task per line.
+func writeJSONL(path string, rows []bench.RedactRow) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(f)
+	for _, r := range rows {
+		if err := enc.Encode(r); err != nil {
+			f.Close()
+			return err
+		}
+	}
+	return f.Close()
+}

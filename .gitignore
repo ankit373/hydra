@@ -10,6 +10,7 @@ logs/
 # silently swallowed them: the tests passed locally against files git had
 # never seen, and failed on all three CI runners.
 !internal/formats/testdata/*.jsonl
+!bench/redaction/tasks.jsonl
 # Same reason: the PII recall corpus is a fixture the measurement is read from,
 # not a log. Without it every recall figure in the README is unverifiable.
 !internal/policy/testdata/*.jsonl

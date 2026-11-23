@@ -54,6 +54,26 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   keyed by id. A local number is a number for that local model, not for a hosted one.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).
 
+## redaction
+
+`hyctl bench redaction` measures what `--redact` costs in answer quality. It asks one model
+each task in `redaction/tasks.jsonl` twice at temperature 0: as is, and with every value
+redaction replaces turned into a placeholder and the answer restored, the way dispatch does
+for a hosted model. Both answers get the same checks: the task's `match` pattern and, for
+summaries, `ground` against the source.
+
+```bash
+hyctl bench redaction --model ollama:qwen3:8b                    # local, $0
+hyctl bench redaction --model openrouter:<id> --max-usd 0.50      # hosted, worst case printed first
+```
+
+- The 30 tasks are made up (support, HR, finance). Each plants emails, phones, IBANs, card
+  numbers, SSNs or IPs, and says what the answer needs: `copy` repeats a value, `read` needs
+  a fact inside one (a domain, the last four digits, a country), `around` needs none of them.
+- The table gives the pass rate off and on per kind of work and per need, each with a 95%
+  Wilson interval, the pairs only one side passed, and the exact McNemar p on those pairs.
+- `--out` writes every task's answers and grades as JSONL.
+
 ## replay
 
 `hyctl bench replay` judges acceptance policies on answers you already have, so many

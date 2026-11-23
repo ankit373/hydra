@@ -144,6 +144,9 @@ func (c *Config) ModelIDs() []string {
 	return out
 }
 
+// localPrice is a local model's row: $0, and named local rather than a list price.
+var localPrice = Price{Ref: "local", Source: "local"}
+
 // Overrides turns [prices] into snapshot rows, refusing one without a source or date,
 // and gives each local model a $0 row marked local.
 func (c *Config) Overrides() (map[string]Price, error) {
@@ -153,7 +156,7 @@ func (c *Config) Overrides() (map[string]Price, error) {
 			if _, ok := c.Prices[m]; ok {
 				return nil, fmt.Errorf("bench: %s runs locally, so [prices.%q] does not apply", m, m)
 			}
-			out[m] = Price{Ref: "local", Source: "local"}
+			out[m] = localPrice
 		}
 	}
 	for m, o := range c.Prices {
