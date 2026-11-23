@@ -128,7 +128,7 @@ describe('the first-run key form', () => {
     const onWorking = vi.fn()
     render(<AddKey onWorking={onWorking} />)
     fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'openai' } })
-    fireEvent.change(screen.getByPlaceholderText('Paste your key'), { target: { value: PASTED } })
+    fireEvent.change(await screen.findByPlaceholderText('Paste your key'), { target: { value: PASTED } })
     fireEvent.click(screen.getByRole('button', { name: 'Save and check' }))
 
     expect(await screen.findByText('Works. gpt-4o answered.')).toBeInTheDocument()
@@ -140,7 +140,7 @@ describe('the first-run key form', () => {
     const onWorking = vi.fn()
     render(<AddKey onWorking={onWorking} />)
     fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'openai' } })
-    fireEvent.change(screen.getByPlaceholderText('Paste your key'), { target: { value: PASTED } })
+    fireEvent.change(await screen.findByPlaceholderText('Paste your key'), { target: { value: PASTED } })
     fireEvent.click(screen.getByRole('button', { name: 'Save and check' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('rejected this key')
@@ -153,7 +153,7 @@ describe('the first-run key form', () => {
     const onWorking = vi.fn()
     render(<AddKey onWorking={onWorking} />)
     fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'openai' } })
-    fireEvent.change(screen.getByPlaceholderText('Paste your key'), { target: { value: PASTED } })
+    fireEvent.change(await screen.findByPlaceholderText('Paste your key'), { target: { value: PASTED } })
     fireEvent.click(screen.getByRole('button', { name: 'Save and check' }))
 
     await waitFor(() => expect(onWorking).toHaveBeenCalledTimes(1))
@@ -162,7 +162,7 @@ describe('the first-run key form', () => {
   it('links to where the chosen provider issues keys', async () => {
     render(<AddKey onWorking={() => {}} />)
     fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'anthropic' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Open Anthropic' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Anthropic' }))
     expect(openExternal).toHaveBeenCalledWith('https://anthropic.example/keys')
   })
 })
