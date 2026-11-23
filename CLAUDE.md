@@ -876,6 +876,9 @@ Do not poll with `gh pr checks --watch`; a short background poll loop costs far 
 
 - PRs land through the Mergify queue: label `ready`, or the maintainer comments `@mergifyio queue`
 - PRs to `main` need CI green; release-please's PR also needs the maintainer's approval
+- A docs-only PR into `main` (only `docs/`, `*.md` or `registry/*.yaml`) runs Go on Linux and the
+  cheap checks; the desktop, cross-compile and release jobs still report success but build
+  nothing (`changes` job, `scripts/ci-scope.sh`). The merge queue and other base branches run everything
 - Merge strategy: **Squash and merge** everywhere, clean linear history
 - Never force-push to `release/*` or `main`
 
