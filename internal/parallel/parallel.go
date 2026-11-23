@@ -271,12 +271,8 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// and diff-size rules see the file's real shape instead of always
 	// matching on the zero value.
 	origContent, origExisted := readFile(file)
-	backup := file + ".hydra-bak"
-	createdBackup := false
-	if resolved.GitRoot == "" && origExisted && !fileExists(backup) {
-		_ = os.WriteFile(backup, []byte(origContent), 0o644)
-		createdBackup = true
-	}
+	backup := editor.BackupPath(file)
+	createdBackup := resolved.GitRoot == "" && origExisted && editor.WriteBackup(backup, origContent)
 	cleanupBackup := func() {
 		if createdBackup {
 			_ = os.Remove(backup)
@@ -355,9 +351,9 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		res.Error += "; " + why
 		return mustMarshal(res)
 	}
-	// The rollback consumed the backup this task made; the rerun needs it back.
+	// The failed attempt removed the backup this task made; the rerun needs it back.
 	if createdBackup {
-		_ = os.WriteFile(backup, []byte(origContent), 0o644)
+		editor.WriteBackup(backup, origContent)
 	}
 	res, _, _ = e.apply(ctx, second)
 	res.Escalated, res.FirstHead = true, dispResult.Head.ID
@@ -389,7 +385,8 @@ func (e *editTask) apply(ctx context.Context, r *dispatch.Result) (res EditResul
 		return EditResult{Label: task.Label, Enum: task.Enum, Mode: "edit", Status: "fail", File: task.File, Error: msg}
 	}
 	rolledBack := func(msg string, passed *bool) EditResult {
-		rollback(file, origContent, origExisted, gitRoot, backup)
+		editor.Rollback(file, origContent, origExisted)
+		e.cleanupBackup()
 		return EditResult{
 			Label: task.Label, Enum: task.Enum, Mode: "edit",
 			Status: "fail", File: file, Workspace: e.wsName, GitRoot: gitRoot,
@@ -648,24 +645,6 @@ func stripOuterFence(s string) string {
 		end--
 	}
 	return strings.Join(lines[start:end+1], "\n")
-}
-
-func rollback(file, origContent string, origExisted bool, gitRoot, backup string) {
-	if gitRoot != "" {
-		if exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run() == nil {
-			_ = exec.Command("git", "-C", gitRoot, "checkout", "--", file).Run()
-			return
-		}
-	}
-	if fileExists(backup) {
-		_ = os.Rename(backup, file)
-		return
-	}
-	if !origExisted {
-		_ = os.Remove(file)
-		return
-	}
-	_ = os.WriteFile(file, []byte(origContent), 0o644)
 }
 
 // runValidate splits the validator template around {file} to prevent
