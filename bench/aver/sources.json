@@ -1,0 +1,200 @@
+{
+  "humaneval": {
+    "kind": "code",
+    "problems": {
+      "url": "https://github.com/evalplus/humanevalplus_release/releases/download/v0.1.10/HumanEvalPlus.jsonl.gz",
+      "sha256": "272720b90ac375502c8ed23cd791c2a93dfb22a911641a494da74a426c09f101"
+    },
+    "samples": [
+      {
+        "head": "gpt-4",
+        "dir": "gpt-4_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/gpt-4_temp_0.0.zip",
+        "sha256": "7281a89bfd683ec83ea8bdaf19e2c2d230cda2a4818ddb0761974a52f1172520"
+      },
+      {
+        "head": "chatgpt",
+        "dir": "chatgpt_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/chatgpt_temp_0.0.zip",
+        "sha256": "456a49813ad3afac920b92e53d921cf0a2693f06cb980a85a2ef2e55a717dd47"
+      },
+      {
+        "head": "code-llama-34b",
+        "dir": "code-llama-34b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/code-llama-34b_temp_0.0.zip",
+        "sha256": "ee68f6199704ead3586efcf17c38c772c3bac0f3011170367019aa9f17e919da"
+      },
+      {
+        "head": "code-llama-13b",
+        "dir": "code-llama-13b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/code-llama-13b_temp_0.0.zip",
+        "sha256": "f73f004315dcab4fdf5a941c2429890de63e475b8873e4047fb0f9d26433f977"
+      },
+      {
+        "head": "code-llama-7b",
+        "dir": "code-llama-7b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/code-llama-7b_temp_0.0.zip",
+        "sha256": "3bebde78baf5b0ef1f7bbdb45bc31534195288abf20a691081ac91e11f6a42bf"
+      },
+      {
+        "head": "mistral-7b",
+        "dir": "mistral-7b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/mistral-7b_temp_0.0.zip",
+        "sha256": "5c66098f79234ec9e259145bf5c1f03070c2e6daa13e2833edf348ffbbebe24f"
+      },
+      {
+        "head": "vicuna-13b",
+        "dir": "vicuna-13b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/vicuna-13b_temp_0.0.zip",
+        "sha256": "87d416afa8c0f5f07cde42cac2a249b5a9e3e2072c2d99f616ab55f539eba98e"
+      },
+      {
+        "head": "vicuna-7b",
+        "dir": "vicuna-7b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.1.0/vicuna-7b_temp_0.0.zip",
+        "sha256": "3099aca52281ce976395fa5c4636909fd616af6b6d76d72dc2c44ba171124b46"
+      }
+    ]
+  },
+  "mbpp": {
+    "kind": "code",
+    "problems": {
+      "url": "https://github.com/evalplus/mbppplus_release/releases/download/v0.2.0/MbppPlus.jsonl.gz",
+      "sha256": "af43697e8791c4c149bdfd6b489d8b5412507551ac20e28a439f650b8225db63"
+    },
+    "samples": [
+      {
+        "head": "gpt-4-1106-preview",
+        "dir": "gpt-4-1106-preview_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/gpt-4-1106-preview_temp_0.0.zip",
+        "sha256": "4e060bf3473b09b763567e042c693fd99d4922d9602124dcb70ab184bcbb252d"
+      },
+      {
+        "head": "gpt-3.5-turbo",
+        "dir": "gpt-3.5-turbo_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/gpt-3.5-turbo_temp_0.0.zip",
+        "sha256": "44c228692d438ffe788cee12a997d711d1e87ea4a904c2149fea9cb2f9f1f7cf"
+      },
+      {
+        "head": "code-llama-34b",
+        "dir": "code-llama-34b_temp_0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/code-llama-34b_temp_0.zip",
+        "sha256": "e3be3bbd8aeff29ed2e96de30abaf6d8cff7353d0bb2ee6c81f7214276a6e336"
+      },
+      {
+        "head": "code-llama-13b",
+        "dir": "code-llama-13b_temp_0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/code-llama-13b_temp_0.zip",
+        "sha256": "8ed04801135a01326292f68538797e6e4ed454563a89c3422a3359a53a9badd4"
+      },
+      {
+        "head": "code-llama-7b",
+        "dir": "code-llama-7b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/code-llama-7b_temp_0.0.zip",
+        "sha256": "bf39d862bda3c3f669e3ede6160484425afeead83631fb7b38459de1839b2257"
+      },
+      {
+        "head": "mistral-7b",
+        "dir": "mistral-7b_temp_0.0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/mistral-7b_temp_0.0.zip",
+        "sha256": "5d93dd60bae72549484f48fe1560ac134681b2d79612e0eceb810153a2495dcb"
+      },
+      {
+        "head": "wizardcoder-34b",
+        "dir": "wizardcoder-34b_temp_0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/wizardcoder-34b_temp_0.zip",
+        "sha256": "2bd7627967f0d7043cfd91200f43315b6139ddc93bb0375b383c4bca7429f38c"
+      },
+      {
+        "head": "deepseek-coder-33b-instruct",
+        "dir": "deepseek-coder-33b-instruct_temp_0",
+        "url": "https://github.com/evalplus/evalplus/releases/download/v0.2.0/deepseek-coder-33b-instruct_temp_0.zip",
+        "sha256": "4e99d8ceff14d0ce88048606e7ff8e453a0732fb6e224b422569193d14066ce2"
+      }
+    ]
+  },
+  "gsm8k": {
+    "kind": "math",
+    "gold": {
+      "url": "https://raw.githubusercontent.com/openai/grade-school-math/3101c7d5072418e28b9008a6636bde82a006892c/grade_school_math/data/test.jsonl",
+      "sha256": "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14"
+    },
+    "models": [
+      {
+        "head": "Llama-2-7b-hf",
+        "repo": "open-llm-leaderboard-old/details_meta-llama__Llama-2-7b-hf",
+        "revision": "297e285fda3d6fb174210a88a941e99e98056f34",
+        "file": "2023-12-02T13-00-54.924067/details_harness|gsm8k|5_2023-12-02T13-00-54.924067.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_meta-llama__Llama-2-7b-hf/resolve/297e285fda3d6fb174210a88a941e99e98056f34/2023-12-02T13-00-54.924067/details_harness%7Cgsm8k%7C5_2023-12-02T13-00-54.924067.parquet",
+        "sha256": "dbcc3f02dd22826c9f82f3bb0a1e13e5427a33fe67d1edd43bde26da93be71a2"
+      },
+      {
+        "head": "Llama-2-13b-hf",
+        "repo": "open-llm-leaderboard-old/details_meta-llama__Llama-2-13b-hf",
+        "revision": "0335fc4acc9a8eda4d616f93d53dee577bff076f",
+        "file": "2023-12-02T13-11-49.394544/details_harness|gsm8k|5_2023-12-02T13-11-49.394544.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_meta-llama__Llama-2-13b-hf/resolve/0335fc4acc9a8eda4d616f93d53dee577bff076f/2023-12-02T13-11-49.394544/details_harness%7Cgsm8k%7C5_2023-12-02T13-11-49.394544.parquet",
+        "sha256": "9371249631b9f9c88748366f4a437f148d6044f0afc9570cd88dcea27b34e4d6"
+      },
+      {
+        "head": "Llama-2-70b-hf",
+        "repo": "open-llm-leaderboard-old/details_meta-llama__Llama-2-70b-hf",
+        "revision": "101de062efac85539ad6d289c96ec763d61e4787",
+        "file": "2023-12-03T01-14-42.713769/details_harness|gsm8k|5_2023-12-03T01-14-42.713769.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_meta-llama__Llama-2-70b-hf/resolve/101de062efac85539ad6d289c96ec763d61e4787/2023-12-03T01-14-42.713769/details_harness%7Cgsm8k%7C5_2023-12-03T01-14-42.713769.parquet",
+        "sha256": "351581242231695f5ccfc55a70c51a9d54e2813eec686dbf65ced2d41683803e"
+      },
+      {
+        "head": "Mistral-7B-v0.1",
+        "repo": "open-llm-leaderboard-old/details_mistralai__Mistral-7B-v0.1",
+        "revision": "7b4f5b61de1f8f11f143aa59f90349d79b8d16e5",
+        "file": "2023-12-02T13-02-14.153054/details_harness|gsm8k|5_2023-12-02T13-02-14.153054.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_mistralai__Mistral-7B-v0.1/resolve/7b4f5b61de1f8f11f143aa59f90349d79b8d16e5/2023-12-02T13-02-14.153054/details_harness%7Cgsm8k%7C5_2023-12-02T13-02-14.153054.parquet",
+        "sha256": "5afa4888786bbcf8c72a6ae26d65440e9117c99c6487d5ec657ae44546635eb0"
+      },
+      {
+        "head": "Mixtral-8x7B-v0.1",
+        "repo": "open-llm-leaderboard-old/details_mistralai__Mixtral-8x7B-v0.1",
+        "revision": "16af2ad182b956e94b1beefbfef1c3bf6084dce2",
+        "file": "2024-01-04T16-34-48.985318/details_harness|gsm8k|5_2024-01-04T16-34-48.985318.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_mistralai__Mixtral-8x7B-v0.1/resolve/16af2ad182b956e94b1beefbfef1c3bf6084dce2/2024-01-04T16-34-48.985318/details_harness%7Cgsm8k%7C5_2024-01-04T16-34-48.985318.parquet",
+        "sha256": "3fd0c5bced2fff0058fa3b92969bcaba5398eb748c2f6e91cc425155da4d030d"
+      },
+      {
+        "head": "Yi-6B",
+        "repo": "open-llm-leaderboard-old/details_01-ai__Yi-6B",
+        "revision": "d7774e4e16ec1c907ad05ae5a44897c30bfeba71",
+        "file": "2023-11-08T12-58-11.094136/details_harness|gsm8k|5_2023-11-08T12-58-11.094136.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_01-ai__Yi-6B/resolve/d7774e4e16ec1c907ad05ae5a44897c30bfeba71/2023-11-08T12-58-11.094136/details_harness%7Cgsm8k%7C5_2023-11-08T12-58-11.094136.parquet",
+        "sha256": "a4a4a0eb9e7680d1b37ecee586b83244497313655d958f8ba468663939a29de4"
+      },
+      {
+        "head": "Yi-34B",
+        "repo": "open-llm-leaderboard-old/details_01-ai__Yi-34B",
+        "revision": "7ed6744a3c59fb5e2fd3cd84c65b824c3249caad",
+        "file": "2023-11-08T19-46-38.378007/details_harness|gsm8k|5_2023-11-08T19-46-38.378007.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_01-ai__Yi-34B/resolve/7ed6744a3c59fb5e2fd3cd84c65b824c3249caad/2023-11-08T19-46-38.378007/details_harness%7Cgsm8k%7C5_2023-11-08T19-46-38.378007.parquet",
+        "sha256": "6b538eca343d6b64b6e59a0103ffd4fb9a94427ae1a80a2076a421153e1531d9"
+      },
+      {
+        "head": "Qwen-14B",
+        "repo": "open-llm-leaderboard-old/details_Qwen__Qwen-14B",
+        "revision": "8cccb84d56a602b15c615d6852082b18edca1ef4",
+        "file": "2023-11-15T04-46-20.928178/details_harness|gsm8k|5_2023-11-15T04-46-20.928178.parquet",
+        "url": "https://huggingface.co/datasets/open-llm-leaderboard-old/details_Qwen__Qwen-14B/resolve/8cccb84d56a602b15c615d6852082b18edca1ef4/2023-11-15T04-46-20.928178/details_harness%7Cgsm8k%7C5_2023-11-15T04-46-20.928178.parquet",
+        "sha256": "1d67e61082cc8b04df2d4f536c37e73bc26b749065fa08bff083b6530a966b49"
+      }
+    ]
+  },
+  "ragtruth": {
+    "kind": "grounded",
+    "responses": {
+      "url": "https://raw.githubusercontent.com/ParticleMedia/RAGTruth/c103204b9ce28d6bbad859304bf30de72b8ed8fe/dataset/response.jsonl",
+      "sha256": "e4c2e4ac24fff676d8984cc61c35d791612fadc58015335d97dd632375e18073"
+    },
+    "sources": {
+      "url": "https://raw.githubusercontent.com/ParticleMedia/RAGTruth/c103204b9ce28d6bbad859304bf30de72b8ed8fe/dataset/source_info.jsonl",
+      "sha256": "0dffc26ea9f3c1c3d7c7e8336b56ef1646e3cec876edffcca3c9c624d12d578b"
+    }
+  }
+}
