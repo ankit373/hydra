@@ -99,6 +99,10 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           `Verify` is the no-model gate a pack must pass first: smaller than the turns it covers,
                           valid state, every ref stored, rules the extractor's byte for byte, and nothing a model
                           wrote that `ground.Check` cannot find in the originals; a fail says why (`inflated`).
+                          `RunProbes` then asks the local head the state's own questions (rules, files, what is open, each
+                          decision and why) plus three it writes, of the full turns and of the pack, and needs 0.8 to agree:
+                          paths and numbers exactly, prose by word overlap. Turns too big for the head's window, or a window
+                          it does not report, are probed per group and the verdict is `Partial`, never swapped in automatically.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,

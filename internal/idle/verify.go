@@ -24,6 +24,12 @@ type Verdict struct {
 	ConstraintsExact bool           `json:"constraints_exact"`
 	TokensBefore     int            `json:"tokens_before"`
 	TokensAfter      int            `json:"tokens_after"`
+	// The probe fields are set by RunProbes. SameHead says the head that
+	// answered also wrote the pack, so agreement is weaker evidence.
+	Probes     int  `json:"probes,omitempty"`
+	ProbeAgree int  `json:"probe_agree,omitempty"`
+	Partial    bool `json:"partial,omitempty"`
+	SameHead   bool `json:"same_head,omitempty"`
 }
 
 // Verify runs the checks that need no model, stopping at the first fail: the
