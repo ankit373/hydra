@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/aver"
 )
 
 // averRow is one candidate with two checks; lint is free and tests cost 0.01.
@@ -32,7 +34,7 @@ func averFixture(tasks int) []Row {
 
 func calibrated(t *testing.T, name string, alpha float64, cal []Row) Policy {
 	t.Helper()
-	p, err := New(name, Options{Alpha: alpha})
+	p, err := New(name, Options{Alpha: alpha, Delta: aver.DefaultDelta})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,11 +104,37 @@ func TestReplay_AverMissingVerdictIsNotRun(t *testing.T) {
 }
 
 func TestReplay_AverRefusesCalibrationWithNoVerdicts(t *testing.T) {
-	p, err := New("aver_product", Options{Alpha: 0.05})
+	p, err := New("aver_product", Options{Alpha: 0.05, Delta: aver.DefaultDelta})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := p.Calibrate([]Row{{Task: "t", Kind: "k", Head: "h"}}); err == nil {
 		t.Fatal("calibrated on rows with no verdicts")
+	}
+}
+
+func TestReplay_DeltaReachesTheFit(t *testing.T) {
+	// With delta 0.5 the cheap head's q̄ is 1 - 0.25^(1/40) = 0.0341, so one free
+	// lint pass is worth 29.3 and clears bar 20 alone; at 0.05 it is worth 11.4.
+	cal := averFixture(80)
+	task := []Row{averRow("x", "cheap", 1, true, true, true)}
+	order := []string{"cheap", "dear"}
+	loose, err := New("aver_product_perhead", Options{Alpha: 0.1, Delta: 0.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := loose.Calibrate(cal); err != nil {
+		t.Fatal(err)
+	}
+	if o := loose.Decide(task, order); o.Accepted == nil || o.Spent != 1 {
+		t.Fatalf("delta 0.5 should accept on lint alone, without paying for tests: %+v", o)
+	}
+	if o := calibrated(t, "aver_product_perhead", 0.1, cal).Decide(task, order); o.Spent != 1.01 {
+		t.Fatalf("delta 0.05 needs both checks: %+v", o)
+	}
+	for _, d := range []float64{-0.1, 1, 2} {
+		if _, err := Run(cal, Config{Policies: []string{"aver_product"}, Alphas: []float64{0.1}, Seeds: []uint64{0}, Delta: d}); err == nil {
+			t.Errorf("delta %v accepted", d)
+		}
 	}
 }

@@ -28,6 +28,7 @@ type Policy interface {
 // Options configure a policy. A baseline that has no use for alpha ignores it.
 type Options struct {
 	Alpha float64
+	Delta float64 // chance a calibrated bound is wrong, for the AVER policies
 	Check string
 }
 

@@ -76,7 +76,9 @@ One JSON line per (task, head) candidate:
   accepted once their product reaches N/alpha, N the heads in the order. `aver_product_perhead`
   fits a bound per head, `aver_product` one pooled over heads. Checks run strongest evidence per
   dollar first, a head that cannot reach the bar is not bought, and an answer stops as soon as the
-  bar is out of reach. Here a check missing from `verdicts` did not run. Bounds hold at delta 0.05.
+  bar is out of reach. Bounds hold with chance 1 - `--delta` (default 0.05).
+- In the AVER policies a check missing from `verdicts` did not run, unlike the older policies where
+  it did not pass: calibration only sees verdicts that exist, so a missing one has no calibrated e.
 - False accept per task is wrong accepted answers over all test tasks, with a two-sided 95%
   Clopper-Pearson interval. The table shows the mean over splits, the first seed's interval,
   the worst split and the share of splits over alpha, then refusal, cost per task and cost per

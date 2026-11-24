@@ -9,9 +9,6 @@ import (
 	"github.com/ankit373/hydra/internal/aver"
 )
 
-// averDelta is the chance that any calibrated bound in a kind is wrong.
-const averDelta = 0.05
-
 // pooledHead stands in for every head when the product is fitted pooled.
 const pooledHead = "*"
 
@@ -20,12 +17,15 @@ const pooledHead = "*"
 // A head that cannot reach the bar even if every check passes is not bought.
 type averProduct struct {
 	alpha   float64
+	delta   float64
 	perHead bool
 	cells   map[[2]string][]aver.Cell // (kind, head) -> usable cells, cheapest evidence first
 }
 
 func newAverProduct(perHead bool) func(Options) (Policy, error) {
-	return func(o Options) (Policy, error) { return &averProduct{alpha: o.Alpha, perHead: perHead}, nil }
+	return func(o Options) (Policy, error) {
+		return &averProduct{alpha: o.Alpha, delta: o.Delta, perHead: perHead}, nil
+	}
 }
 
 func (p *averProduct) head(h string) string {
@@ -45,7 +45,7 @@ func (p *averProduct) Calibrate(cal []Row) error {
 			costN[c]++
 		}
 	}
-	tab, err := aver.Fit(answers, averDelta)
+	tab, err := aver.Fit(answers, p.delta)
 	if err != nil {
 		return err
 	}
