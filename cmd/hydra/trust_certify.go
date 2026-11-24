@@ -68,7 +68,7 @@ as checks too.`,
 		},
 	}
 	cmd.Flags().StringVar(&kind, "kind", "", "one kind of work only")
-	cmd.Flags().Float64Var(&delta, "delta", 0.05, "chance that any bound in a kind is wrong, split over its checks")
+	cmd.Flags().Float64Var(&delta, "delta", aver.DefaultDelta, "chance that any bound in a kind is wrong, split over its checks")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	return cmd
 }
