@@ -147,40 +147,42 @@ func CheapestFirst(cal []Row) []string {
 // Result is one (kind, policy, alpha, split). FalseAccept is wrong accepted over all
 // test tasks, with a two-sided 95% Clopper–Pearson interval.
 type Result struct {
-	Kind            string  `json:"kind"`
-	Policy          string  `json:"policy"`
-	Alpha           float64 `json:"alpha"`
-	Seed            uint64  `json:"seed"`
-	Tasks           int     `json:"tasks"`
-	Accepted        int     `json:"accepted"`
-	WrongAccepted   int     `json:"wrong_accepted"`
-	FalseAccept     float64 `json:"false_accept_per_task"`
-	FalseAcceptLo   float64 `json:"false_accept_lo"`
-	FalseAcceptHi   float64 `json:"false_accept_hi"`
-	Refusal         float64 `json:"refusal"`
-	SpentUSD        float64 `json:"spent_usd"`
-	CostPerTask     float64 `json:"cost_per_task_usd"`
-	CorrectAccepted int     `json:"correct_accepted"`
-	CostPerCorrect  USD     `json:"cost_per_correct_usd"`
-	Untestable      int     `json:"untestable_pairs,omitempty"` // aver_gated only
+	Kind            string    `json:"kind"`
+	Policy          string    `json:"policy"`
+	Alpha           float64   `json:"alpha"`
+	Seed            uint64    `json:"seed"`
+	Tasks           int       `json:"tasks"`
+	Accepted        int       `json:"accepted"`
+	WrongAccepted   int       `json:"wrong_accepted"`
+	FalseAccept     float64   `json:"false_accept_per_task"`
+	FalseAcceptLo   float64   `json:"false_accept_lo"`
+	FalseAcceptHi   float64   `json:"false_accept_hi"`
+	Refusal         float64   `json:"refusal"`
+	SpentUSD        float64   `json:"spent_usd"`
+	CostPerTask     float64   `json:"cost_per_task_usd"`
+	CorrectAccepted int       `json:"correct_accepted"`
+	CostPerCorrect  USD       `json:"cost_per_correct_usd"`
+	Bars            []float64 `json:"bars,omitempty"`             // per candidate, AVER policies only
+	Untestable      int       `json:"untestable_pairs,omitempty"` // aver_gated only
 }
 
 // Summary folds one (kind, policy, alpha) over its splits. The interval is the
 // first seed's: splits share tasks, so their intervals do not combine.
 type Summary struct {
-	Kind             string  `json:"kind"`
-	Policy           string  `json:"policy"`
-	Alpha            float64 `json:"alpha"`
-	Splits           int     `json:"splits"`
-	MeanFalseAccept  float64 `json:"mean_false_accept_per_task"`
-	FirstLo          float64 `json:"first_split_lo"`
-	FirstHi          float64 `json:"first_split_hi"`
-	WorstFalseAccept float64 `json:"worst_false_accept_per_task"`
-	OverAlpha        float64 `json:"share_of_splits_over_alpha"`
-	Refusal          float64 `json:"refusal"`
-	CostPerTask      float64 `json:"cost_per_task_usd"`
-	CostPerCorrect   USD     `json:"cost_per_correct_usd"`
-	Untestable       int     `json:"untestable_pairs,omitempty"` // the first split's
+	Kind             string    `json:"kind"`
+	Policy           string    `json:"policy"`
+	Alpha            float64   `json:"alpha"`
+	Splits           int       `json:"splits"`
+	MeanFalseAccept  float64   `json:"mean_false_accept_per_task"`
+	FirstLo          float64   `json:"first_split_lo"`
+	FirstHi          float64   `json:"first_split_hi"`
+	WorstFalseAccept float64   `json:"worst_false_accept_per_task"`
+	OverAlpha        float64   `json:"share_of_splits_over_alpha"`
+	Refusal          float64   `json:"refusal"`
+	CostPerTask      float64   `json:"cost_per_task_usd"`
+	CostPerCorrect   USD       `json:"cost_per_correct_usd"`
+	Bars             []float64 `json:"bars,omitempty"`             // the first split's
+	Untestable       int       `json:"untestable_pairs,omitempty"` // the first split's
 }
 
 // Report is everything one replay printed, seeds included so it can be repeated.
@@ -287,6 +289,9 @@ func replayOne(rows []Row, byTask map[string][]Row, name string, opts Options, s
 	if u, ok := p.(interface{ Untestable() int }); ok {
 		r.Untestable = u.Untestable()
 	}
+	if b, ok := p.(interface{ Bars() []float64 }); ok {
+		r.Bars = b.Bars()
+	}
 	return r, nil
 }
 
@@ -335,7 +340,7 @@ func perCorrect(spent float64, correct int) USD {
 // summarise pools spend and counts across splits; rates are means over splits.
 func summarise(res []Result) Summary {
 	s := Summary{Kind: res[0].Kind, Policy: res[0].Policy, Alpha: res[0].Alpha, Splits: len(res),
-		FirstLo: res[0].FalseAcceptLo, FirstHi: res[0].FalseAcceptHi, Untestable: res[0].Untestable}
+		FirstLo: res[0].FalseAcceptLo, FirstHi: res[0].FalseAcceptHi, Bars: res[0].Bars, Untestable: res[0].Untestable}
 	var spent float64
 	var tasks, correct, over int
 	for _, r := range res {
