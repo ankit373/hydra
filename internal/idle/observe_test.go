@@ -5,6 +5,7 @@ package idle
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -65,7 +66,12 @@ func TestRunLogActivity_IgnoresIdleRuns(t *testing.T) {
 	}
 }
 
+// Permission and path semantics differ on Windows, so the error paths are
+// asserted where a directory read of a file and a mode bit are enforced.
 func TestRunLog_UnreadableRunsAreReported(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		return
+	}
 	home := t.TempDir()
 	t.Setenv("HYDRA_HOME", home)
 	if err := os.MkdirAll(filepath.Join(home, "logs"), 0o700); err != nil {
