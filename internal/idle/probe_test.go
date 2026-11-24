@@ -4,6 +4,7 @@ package idle
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"strconv"
 	"strings"
@@ -148,5 +149,64 @@ func TestProbe_FailedVerifyIsNotProbed(t *testing.T) {
 	v, err := RunProbes(context.Background(), h, probePack(turns, "x"), turns, Verdict{Reason: "inflated"}, 0)
 	if err != nil || v.Pass || v.Reason != "inflated" || len(h.asked) != 0 {
 		t.Fatalf("verdict %+v, %d asks, err %v; want the fail kept and no model asked", v, len(h.asked), err)
+	}
+}
+
+func TestProbe_DeterministicQuestionsFollowTheState(t *testing.T) {
+	s := State{
+		Constraints:   []Quote{{Text: "Only email me.", Ref: "u1"}},
+		Files:         []File{{Path: "reports/nov.csv", Action: FileEdited, Ref: "e1"}},
+		OpenQuestions: []Quote{{Text: "Who approves it?", Ref: "u2"}},
+	}
+	for i := 0; i < maxDecisionProbes+2; i++ {
+		s.Decisions = append(s.Decisions, Decision{What: "step " + strconv.Itoa(i), Why: "because", Ref: "a1"})
+	}
+	var kinds []string
+	for _, q := range deterministicProbes(s) {
+		kinds = append(kinds, q.Kind)
+	}
+	if got, want := strings.Join(kinds, ","), "rules,files,open"+strings.Repeat(",decision", maxDecisionProbes); got != want {
+		t.Fatalf("probe kinds %s, want %s", got, want)
+	}
+	if got := deterministicProbes(State{Goal: "x"}); len(got) != 0 {
+		t.Fatalf("an empty state asked %v", got)
+	}
+}
+
+// failingHead replies until its nth call, then fails.
+type failingHead struct {
+	*lookupHead
+	failAt, calls int
+	reply         string
+}
+
+func (h *failingHead) Ask(ctx context.Context, prompt string) (string, error) {
+	if h.calls++; h.calls == h.failAt {
+		return "", errors.New("server went away")
+	}
+	if h.reply != "" && strings.HasPrefix(prompt, questionPrompt) {
+		return h.reply, nil
+	}
+	return h.lookupHead.Ask(ctx, prompt)
+}
+
+func TestProbe_AHeadThatFailsStopsTheProbes(t *testing.T) {
+	turns := probeTurns()
+	pack := probePack(turns, "both lines are the same invoice")
+	for _, at := range []int{1, 4, 5} {
+		h := &failingHead{lookupHead: newLookupHead(), failAt: at}
+		if v, err := RunProbes(context.Background(), h, pack, turns, Verdict{Pass: true}, 0); err == nil || v.Pass {
+			t.Errorf("failing at call %d: pass %v, err %v; want the error", at, v.Pass, err)
+		}
+	}
+	// A head that writes no questions leaves only the deterministic ones; with none of those, nothing to ask.
+	bare := probePack(turns, "x")
+	bare.State.Constraints, bare.State.Decisions = nil, nil
+	h := &failingHead{lookupHead: newLookupHead(), reply: "\n"}
+	if v, err := RunProbes(context.Background(), h, bare, turns, Verdict{Pass: true}, 0); err != nil || v.Pass || v.Reason != "no probes could be asked" {
+		t.Fatalf("verdict %+v, %v; want no probes", v, err)
+	}
+	if overlap("is a", "to be") != 0 || agree("is a", "to be") {
+		t.Fatal("answers with no words of their own agreed")
 	}
 }
