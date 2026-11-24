@@ -78,7 +78,7 @@ func TestDispatch_CertifyAcceptsWithCalibratedChecks(t *testing.T) {
 	dispatchable(t, "billing")
 	seedLabels(t, 60)
 
-	out, cobraOut, err := run(t, labelArgs(t, "--certify", "0.05")...)
+	out, cobraOut, err := run(t, labelArgs(t, "--certify", "0.05", "--certify-candidates", "1")...)
 	if err != nil {
 		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
 	}
@@ -110,7 +110,7 @@ func TestDispatch_CertifyNotVerifiedWithFewLabels(t *testing.T) {
 	dispatchable(t, "billing")
 	seedLabels(t, 20)
 
-	out, cobraOut, err := run(t, labelArgs(t, "--certify", "0.05")...)
+	out, cobraOut, err := run(t, labelArgs(t, "--certify", "0.05", "--certify-candidates", "1")...)
 	if err != nil {
 		t.Fatalf("not verified must not be an error: %v (%s)", err, cobraOut)
 	}
@@ -127,7 +127,7 @@ func TestDispatch_CertifyNotVerifiedWithFewLabels(t *testing.T) {
 func TestDispatch_CertifyFailedCheckIsFutile(t *testing.T) {
 	dispatchable(t, "refund")
 	seedLabels(t, 60) // the head answers "refund", which the label check fails
-	out, cobraOut, err := run(t, labelArgs(t, "--certify", "0.05")...)
+	out, cobraOut, err := run(t, labelArgs(t, "--certify", "0.05", "--certify-candidates", "1")...)
 	if err != nil {
 		t.Fatalf("dispatch failed: %v (%s)", err, cobraOut)
 	}

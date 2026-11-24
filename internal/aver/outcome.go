@@ -16,6 +16,9 @@ const (
 	ReasonFutile      = "futility"
 	ReasonBudget      = "budget"
 	ReasonNoCheck     = "no check for this kind"
+	ReasonCandidates  = "candidate budget"
+	ReasonCostCeiling = "cost ceiling"
+	ReasonNoHead      = "no further model"
 )
 
 // Outcome is what certified acceptance decided for one answer and the numbers
@@ -29,6 +32,9 @@ type Outcome struct {
 	Reason  string  `json:"reason,omitempty"`
 	Have    int     `json:"have,omitempty"`
 	Need    int     `json:"need,omitempty"`
+	// Candidates is how many answers were bought, of a budget of Budget.
+	Candidates int `json:"candidates,omitempty"`
+	Budget     int `json:"budget,omitempty"`
 }
 
 // Certified says the answer cleared its bar in one of the two modes.
@@ -37,7 +43,11 @@ func (o Outcome) Certified() bool { return o.Mode != "" }
 // Line is the outcome in one line, with its reason when not verified.
 func (o Outcome) Line() string {
 	if o.Certified() {
-		return fmt.Sprintf("certified (%s) at alpha %g: product %.3g >= bar %.3g", o.Mode, o.Alpha, o.Product, o.Bar)
+		line := fmt.Sprintf("certified (%s) at alpha %g: product %.3g >= bar %.3g", o.Mode, o.Alpha, o.Product, o.Bar)
+		if o.Budget > 1 {
+			line += fmt.Sprintf(", candidate %d of %d", o.Candidates, o.Budget)
+		}
+		return line
 	}
 	switch o.Reason {
 	case ReasonTooFewWrong:
@@ -46,6 +56,9 @@ func (o Outcome) Line() string {
 		return fmt.Sprintf("not verified: futility, product %.3g cannot reach bar %.3g", o.Product, o.Bar)
 	case ReasonBudget:
 		return fmt.Sprintf("not verified: budget spent at product %.3g, bar %.3g", o.Product, o.Bar)
+	case ReasonCandidates, ReasonCostCeiling, ReasonNoHead:
+		return fmt.Sprintf("not verified: %s after %d of %d candidates, last product %.3g < bar %.3g",
+			o.Reason, o.Candidates, o.Budget, o.Product, o.Bar)
 	}
 	return "not verified: " + o.Reason
 }
