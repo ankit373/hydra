@@ -73,8 +73,11 @@ One JSON line per (task, head) candidate:
   and `first_check_pass` (the cheapest answer whose `--check` passes).
 - `aver_product_perhead` and `aver_product` are certified acceptance (#1549): each verdict is an
   e-value from a per-check bound on false passes (`hyctl trust certify-table`), and an answer is
-  accepted once their product reaches N/alpha, N the heads in the order. `aver_product_perhead`
-  fits a bound per head, `aver_product` one pooled over heads. Checks run strongest evidence per
+  accepted once their product reaches its candidate's bar, 1/(alpha w_j) for the j-th answer bought.
+  The weights are fixed from the head count before any answer is seen: `spend` (the default) gives
+  1/2, 1/4, ... and the last the rest; `bonferroni` gives 1/N and is refused past 3 heads. Name the
+  rule as a suffix, `--policy aver_product_perhead:bonferroni`; the table prints each policy's bars.
+  `aver_product_perhead` fits a bound per head, `aver_product` one pooled over heads. Checks run strongest evidence per
   dollar first, a head that cannot reach the bar is not bought, and an answer stops as soon as the
   bar is out of reach. Bounds hold with chance 1 - `--delta` (default 0.05).
 - In the AVER policies a check missing from `verdicts` did not run, unlike the older policies where
