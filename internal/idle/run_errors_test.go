@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -240,7 +241,7 @@ func TestTick_UnwritableDirectoryStillReports(t *testing.T) {
 	if res := tick(t, r); res.Outcome != OutcomeRejected || !strings.Contains(res.Reason, "not saved") {
 		t.Fatalf("result %+v, want the rejection reported even though it could not be kept", res)
 	}
-	if _, err := Summaries(r.env.Dir); err == nil {
+	if _, err := Summaries(r.env.Dir); err == nil && runtime.GOOS != "windows" {
 		t.Fatal("a directory that is a file read as empty")
 	}
 }
@@ -261,7 +262,7 @@ func TestPackFiles_ReadAndWriteErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chmod(ro, 0o700)
-	if os.Geteuid() != 0 {
+	if os.Geteuid() != 0 && runtime.GOOS != "windows" {
 		if err := writeJSON(filepath.Join(ro, "x.json"), 1); err == nil {
 			t.Fatal("a read-only directory was written to")
 		}
