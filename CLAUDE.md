@@ -108,6 +108,10 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           its originals pinned (`PinOwner`); a fail is kept as `pack-<n>.rejected.json`. One job at a time, a new
                           request in any conversation cancels it, per-job and per-night caps. Events `idle_*` go to an `idle-<date>`
                           run. `hyctl idle run|status`; `hyctl serve` ticks it each minute when `[idle] enabled = true`.
+                          `ShouldSwap` says whether a staged pack should replace the turns it covers: always when the
+                          provider cache is cold (5 minutes quiet), when warm only if the expected turns exceed
+                          `w*M / (r*(N-M))`, never with unknown cache rates; `TurnsLeft` reads that expectation from the
+                          conversation's own request times.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,
