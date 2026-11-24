@@ -320,6 +320,39 @@ jobs:
           }
           Write-Host "PSScriptAnalyzer: no errors"
 
+  npm-windows:
+    name: npm install on Windows
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install the package against the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HYDRA_NO_UPDATE_CHECK: "1"
+        run: |
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          want="${tag#v}"
+          npm --prefix npm pkg set version="$want"
+          tgz=$(npm pack ./npm --pack-destination "$RUNNER_TEMP" | tail -1)
+          npm install --global "$RUNNER_TEMP/$tgz"
+          got=$(hyctl --version | awk '$1 == "hydra" {print $2; exit}')
+          if [ "$got" != "$want" ]; then
+            echo "::error::npm installed hyctl $got, want $want"
+            exit 1
+          fi
+          echo "ok: hyctl $got"
+
   typecheck:
     name: TypeScript typecheck
     needs: changes
