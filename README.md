@@ -105,6 +105,8 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 
 A check is not equally good on every model's answers. Strong models make subtler mistakes, so their wrong answers get past tests more often: in a public pilot, HumanEval+ base tests passed 0.7% of vicuna-7b's wrong answers and 40.6% of gpt-4's. `hyctl trust certify-table` keeps each check's false-pass rate per model and kind of work, with an upper bound, and never pools models. A model with few labelled wrong answers gets a wide bound, which is valid and simply counts for little.
 
+Certified acceptance, still being built on these bounds, will label an answer certified or not verified, with the reason, on the answer's span. Its alpha is the chance of accepting a wrong answer, per task. It is never the chance that an accepted answer is wrong: that is not bounded.
+
 `--check` judges one answer, and a real fail reruns once on a stronger model: [how checks work](https://hydra.uvansa.com/docs.html#check). Each kind of work also has a menu of [recipes](https://hydra.uvansa.com/docs.html#recipe).
 
 ---

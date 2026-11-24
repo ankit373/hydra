@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/ankit373/hydra/internal/aver"
 )
 
 // ErrNoSuchSpan reports a score naming a span the run does not contain.
@@ -34,6 +36,22 @@ type Score struct {
 	// Source is who judged: an oracle id, "human", a CI job. A verdict with no
 	// provenance cannot be weighed against a disagreeing one.
 	Source string `json:"source,omitempty"`
+
+	// Outcome is set only on a "certified" score. Typed, not Meta, which is shed past MaxEventBytes.
+	Outcome *aver.Outcome `json:"outcome,omitempty"`
+}
+
+// ScoreCertified is the name of the score certified acceptance writes.
+const ScoreCertified = "certified"
+
+// AppendCertified records certified acceptance's outcome on an answer's span:
+// value 1 when certified, 0 when not verified, the one-line reason as comment.
+func AppendCertified(runID, spanID string, o aver.Outcome) error {
+	v := 0.0
+	if o.Certified() {
+		v = 1
+	}
+	return AppendScore(runID, spanID, Score{Name: ScoreCertified, Value: v, Comment: o.Line(), Source: "aver", Outcome: &o})
 }
 
 // AppendScore records a verdict on an existing span.

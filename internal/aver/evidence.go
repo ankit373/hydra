@@ -19,11 +19,18 @@ func EValue(c Cell, passed bool) float64 {
 	return (1 - c.S) / (1 - c.QBar)
 }
 
-// Step is one check run on one answer.
+// Step is one check run on one answer, with the calibration it was read against.
 type Step struct {
 	Check  string  `json:"check"`
 	Passed bool    `json:"passed"`
+	QBar   float64 `json:"q_bar"`
+	S      float64 `json:"s"`
 	E      float64 `json:"e"`
+}
+
+// StepFor is one verdict from a calibrated cell, its e-value included.
+func StepFor(c Cell, passed bool) Step {
+	return Step{Check: c.Check, Passed: passed, QBar: c.QBar, S: c.S, E: EValue(c, passed)}
 }
 
 // Run multiplies one answer's e-values until the product reaches Bar.
