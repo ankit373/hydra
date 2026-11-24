@@ -32,6 +32,8 @@
 
 **Hydra picks the model best suited to each task, and can check the answer before you rely on it.**
 
+![A terminal: hyctl oracle ground flags a summary that says 1.9 hours when the report says 1.4, and exits 1; the corrected summary is grounded and exits 0](docs/demo/ground.gif)
+
 You probably have several models to hand: hosted APIs (OpenAI, Anthropic, Gemini, Bedrock, Mistral and others), local models through Ollama or llama.cpp, and CLI agents. Each is good at different work, and none of them tells you when its answer is wrong. Hydra sits in front of all of them.
 
 - **It finds your models.** API keys, local model servers and CLI agents, with no configuration.
