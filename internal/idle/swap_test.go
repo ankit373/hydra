@@ -85,3 +85,19 @@ func TestTurnsLeft_MedianBurstAfterAPause(t *testing.T) {
 		t.Fatalf("no history = %v, want the fallback 7", got)
 	}
 }
+
+func TestTurnsLeft_OddNumberOfBursts(t *testing.T) {
+	base := time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)
+	at := func(mins ...int) []time.Time {
+		var out []time.Time
+		for _, m := range mins {
+			out = append(out, base.Add(time.Duration(m)*time.Minute))
+		}
+		return out
+	}
+	// After each 10-minute pause: 2, 3 and 6 requests; the median is 3.
+	times := at(0, 30, 31, 60, 61, 62, 100, 101, 102, 103, 104, 105)
+	if got := TurnsLeft(times, 10*time.Minute, 7); got != 3 {
+		t.Fatalf("median of 2, 3, 6 = %v, want 3", got)
+	}
+}
