@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: MIT
+
+package replay
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/ankit373/hydra/internal/aver"
+)
+
+// averDelta is the chance that any calibrated bound in a kind is wrong.
+const averDelta = 0.05
+
+// pooledHead stands in for every head when the product is fitted pooled.
+const pooledHead = "*"
+
+// averProduct buys heads cheapest first and accepts the first answer whose
+// e-value product reaches len(order)/alpha, the pilot's Bonferroni split over heads.
+// A head that cannot reach the bar even if every check passes is not bought.
+type averProduct struct {
+	alpha   float64
+	perHead bool
+	cells   map[[2]string][]aver.Cell // (kind, head) -> usable cells, cheapest evidence first
+}
+
+func newAverProduct(perHead bool) func(Options) (Policy, error) {
+	return func(o Options) (Policy, error) { return &averProduct{alpha: o.Alpha, perHead: perHead}, nil }
+}
+
+func (p *averProduct) head(h string) string {
+	if p.perHead {
+		return h
+	}
+	return pooledHead
+}
+
+func (p *averProduct) Calibrate(cal []Row) error {
+	answers := make([]aver.Answer, 0, len(cal))
+	costSum, costN := map[string]float64{}, map[string]int{}
+	for _, r := range cal {
+		answers = append(answers, aver.Answer{Kind: r.Kind, Head: p.head(r.Head), Correct: r.Correct, Verdicts: r.Verdicts})
+		for c := range r.Verdicts {
+			costSum[c] += r.CheckCostUSD[c]
+			costN[c]++
+		}
+	}
+	tab, err := aver.Fit(answers, averDelta)
+	if err != nil {
+		return err
+	}
+	if len(tab.Cells) == 0 {
+		return errors.New("aver: no calibration answer has a verdict")
+	}
+	byHead := map[[2]string][]aver.Cell{}
+	for _, c := range tab.Cells {
+		if !c.Skip {
+			k := [2]string{c.Kind, c.Head}
+			byHead[k] = append(byHead[k], c)
+		}
+	}
+	meanCost := func(c string) float64 { return costSum[c] / float64(costN[c]) }
+	p.cells = make(map[[2]string][]aver.Cell, len(byHead))
+	for k, cs := range byHead {
+		p.cells[k] = aver.Order(cs, meanCost)
+	}
+	return nil
+}
+
+// Decide runs only checks the row has a verdict for: a missing one did not run.
+func (p *averProduct) Decide(task []Row, order []string) Outcome {
+	rows := byHead(task)
+	bar := float64(len(order)) / p.alpha
+	var o Outcome
+	for _, h := range order {
+		r, ok := rows[h]
+		if !ok {
+			continue
+		}
+		all := p.cells[[2]string{r.Kind, p.head(h)}]
+		run := aver.NewRun(bar)
+		if run.Futile(all) {
+			continue
+		}
+		var cells []aver.Cell
+		for _, c := range all {
+			if _, ran := r.Verdicts[c.Check]; ran {
+				cells = append(cells, c)
+			}
+		}
+		o.Bought = append(o.Bought, h)
+		o.Spent += r.CostUSD
+		for i, c := range cells {
+			if run.Futile(cells[i:]) {
+				break
+			}
+			passed := r.Verdicts[c.Check]
+			o.Spent += r.CheckCostUSD[c.Check]
+			run.Add(aver.Step{Check: c.Check, Passed: passed, E: aver.EValue(c, passed)})
+			if run.Accepted() {
+				o.Accepted = r
+				o.Reason = fmt.Sprintf("product %.3g >= bar %.3g", run.Product, bar)
+				return o
+			}
+		}
+	}
+	o.Reason = fmt.Sprintf("no answer reached bar %.3g", bar)
+	return o
+}

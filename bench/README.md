@@ -71,6 +71,12 @@ One JSON line per (task, head) candidate:
 - Heads are tried cheapest first, by mean cost on the calibration half.
 - Policies: `always_strongest` (the head most often correct on calibration, accepted unchecked)
   and `first_check_pass` (the cheapest answer whose `--check` passes).
+- `aver_product_perhead` and `aver_product` are certified acceptance (#1549): each verdict is an
+  e-value from a per-check bound on false passes (`hyctl trust certify-table`), and an answer is
+  accepted once their product reaches N/alpha, N the heads in the order. `aver_product_perhead`
+  fits a bound per head, `aver_product` one pooled over heads. Checks run strongest evidence per
+  dollar first, a head that cannot reach the bar is not bought, and an answer stops as soon as the
+  bar is out of reach. Here a check missing from `verdicts` did not run. Bounds hold at delta 0.05.
 - False accept per task is wrong accepted answers over all test tasks, with a two-sided 95%
   Clopper-Pearson interval. The table shows the mean over splits, the first seed's interval,
   the worst split and the share of splits over alpha, then refusal, cost per task and cost per
