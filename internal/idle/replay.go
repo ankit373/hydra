@@ -130,23 +130,32 @@ func Replay(ctx context.Context, head Head, fixtures []Fixture, cfg ReplayConfig
 			end := len(fx.Turns) * round / ReplayRounds
 			cur := Turns{Turns: fx.Turns[:end]}
 			pack, err := Build(ctx, head, cur, prev, false)
-			if err != nil {
-				return nil, fmt.Errorf("idle: replay %s round %d: %w", fx.Name, round, err)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
 			}
-			v := Verify(pack, cur, func(string) bool { return true })
+			// A reply that is not valid state is a failed round, not the end of
+			// the replay: neither pack arm has anything to send but the full turns.
+			built := err == nil
+			v := Verdict{Reason: fmt.Sprint(err)}
+			if built {
+				v = Verify(pack, cur, func(string) bool { return true })
+				prev = &pack
+			}
 			if v.Pass {
 				if v, err = RunProbes(ctx, head, pack, cur, v, cfg.MinAgree); err != nil {
 					return nil, fmt.Errorf("idle: replay %s round %d: %w", fx.Name, round, err)
 				}
 			}
-			prev = &pack
 			if !slices.Contains(scoredRounds, round) {
 				continue
 			}
 			arms := map[string]string{
 				ArmNone:      renderTurns(cur.Turns),
 				ArmMask:      renderTurns(Mask(cur, cfg.KeepLast).Turns),
-				ArmUnchecked: packContext(pack),
+				ArmUnchecked: renderTurns(cur.Turns),
+			}
+			if built {
+				arms[ArmUnchecked] = packContext(pack)
 			}
 			arms[ArmChecked] = arms[ArmUnchecked]
 			if !v.Pass {

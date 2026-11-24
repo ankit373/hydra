@@ -206,3 +206,23 @@ func TestShippedFixtures_PlantTheirNeedles(t *testing.T) {
 		t.Fatalf("kinds %v, want support, research, writing and agent loop", kinds)
 	}
 }
+
+// A model whose state reply is not valid fails that round; the replay goes on.
+func TestReplay_ABadStateReplyIsAFailedRound(t *testing.T) {
+	h := replayHead("t1")
+	h.state = `{"goal": "refund", "decisions": [{"what": "refund one charge"}]}`
+	rows, err := Replay(context.Background(), h, replayFixture(t), ReplayConfig{KeepLast: 2})
+	if err != nil || len(rows) != 12 {
+		t.Fatalf("%d rows, %v; want every round scored", len(rows), err)
+	}
+	for _, r := range rows {
+		if (r.Arm == ArmChecked || r.Arm == ArmUnchecked) && (r.Passed || r.Tokens != pick(rows, r.Round, ArmNone).Tokens) {
+			t.Fatalf("row %+v, want the full turns sent when no pack could be built", r)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Replay(ctx, replayHead("t1"), replayFixture(t), ReplayConfig{}); err == nil {
+		t.Fatal("a cancelled replay returned rows")
+	}
+}
