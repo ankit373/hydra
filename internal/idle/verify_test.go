@@ -34,7 +34,7 @@ func goodPack(t Turns) Pack {
 			Next:        []string{"email the customer"},
 		},
 		Notes:  []Note{{Seq: 1, Text: "double charge on invoice 4417", Ref: "u1"}},
-		Covers: Covers{From: 0, To: len(t.Turns), Hash: coverHash(t.Turns)},
+		Covers: Covers{From: 0, To: len(t.Turns), Hash: CoverHash(t.Turns)},
 	}
 }
 

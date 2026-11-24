@@ -104,7 +104,7 @@ func Build(ctx context.Context, head Head, turns Turns, prev *Pack, allowRemote 
 		return Pack{Notes: notes}, err
 	}
 	return Pack{State: st, Notes: notes, Head: head.Head().ID, Built: time.Now().UTC(),
-		Covers: Covers{From: 0, To: len(turns.Turns), Hash: coverHash(turns.Turns)}}, nil
+		Covers: Covers{From: 0, To: len(turns.Turns), Hash: CoverHash(turns.Turns)}}, nil
 }
 
 func renderNotes(notes []Note) string {
@@ -141,11 +141,12 @@ func mergeByRef[T any](prev, next []T, ref func(T) string) []T {
 	return append(out, next...)
 }
 
-// coverHash names the exact turns a pack covers.
-func coverHash(turns []Turn) string {
+// CoverHash names the exact turns a pack covers, by role and text, so a served
+// request's messages can be matched against it: they carry no payload refs.
+func CoverHash(turns []Turn) string {
 	var b strings.Builder
 	for _, t := range turns {
-		fmt.Fprintf(&b, "%d\x00%s\x00%s\x00%s\x00", t.Seq, t.Role, t.Ref, t.Text)
+		fmt.Fprintf(&b, "%s\x00%s\x00", t.Role, t.Text)
 	}
 	return payload.Hash(b.String())
 }

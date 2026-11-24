@@ -112,6 +112,11 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           provider cache is cold (5 minutes quiet), when warm only if the expected turns exceed
                           `w*M / (r*(N-M))`, never with unknown cache rates; `TurnsLeft` reads that expectation from the
                           conversation's own request times.
+                          `hyctl serve` (`serveRouter.compact`, `cmd/hydra/idle_swap.go`) swaps the staged pack for the turns it covers
+                          when `CoverHash` of the request's leading messages equals the pack's, the verdict passed and is not
+                          `Partial`, and `[idle] swap` allows it (`cold_only` default, `auto`, `off`); the rules and the state go in
+                          two system blocks, so they sit under the system cache marker. Header `X-Hydra-Compacted`, `idle_used`
+                          event, answer not cached.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,

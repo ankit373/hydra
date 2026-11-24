@@ -70,7 +70,7 @@ func probePack(t Turns, why string) Pack {
 			Decisions:   []Decision{{What: "refund one charge", Why: why, Ref: "a1"}},
 		},
 		Head:   "ollama/stub",
-		Covers: Covers{From: 0, To: len(t.Turns), Hash: coverHash(t.Turns)},
+		Covers: Covers{From: 0, To: len(t.Turns), Hash: CoverHash(t.Turns)},
 	}
 }
 

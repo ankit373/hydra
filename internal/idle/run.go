@@ -380,8 +380,9 @@ func nextNumber(dir, conv string) (int, error) {
 	return n + 1, nil
 }
 
-// LatestPack is the newest staged pack of conv and its number; nil, 0 when none.
-func LatestPack(dir, conv string) (*Pack, int, error) {
+// LatestStaged is the newest staged pack of conv with its verdict and number;
+// nil, 0 when none.
+func LatestStaged(dir, conv string) (*Staged, int, error) {
 	nums, err := packNumbers(dir, conv, false)
 	if err != nil || len(nums) == 0 {
 		return nil, 0, err
@@ -395,7 +396,22 @@ func LatestPack(dir, conv string) (*Pack, int, error) {
 	if err := json.Unmarshal(raw, &st); err != nil {
 		return nil, 0, fmt.Errorf("idle: pack %d of %s: %w", n, conv, err)
 	}
-	return &st.Pack, n, nil
+	return &st, n, nil
+}
+
+// LatestPack is the newest staged pack of conv and its number; nil, 0 when none.
+func LatestPack(dir, conv string) (*Pack, int, error) {
+	st, n, err := LatestStaged(dir, conv)
+	if st == nil {
+		return nil, n, err
+	}
+	return &st.Pack, n, err
+}
+
+// PackID names a staged pack in a header and on the command line:
+// its conversation's directory and its number.
+func PackID(conv string, n int) string {
+	return fmt.Sprintf("%s/%d", filepath.Base(convDir("", conv)), n)
 }
 
 func (s *Scheduler) note(conv string, o Outcome, reason string, now time.Time) {
