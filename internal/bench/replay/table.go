@@ -24,6 +24,12 @@ func Table(rep Report) string {
 			100*s.OverAlpha, 100*s.Refusal, s.CostPerTask, dollars(s.CostPerCorrect))
 	}
 	w.Flush()
+	for _, s := range rep.Summaries {
+		if s.Untestable > 0 {
+			fmt.Fprintf(&b, "%s %s alpha %.2f: %d check pair(s) linked for lack of shared wrong answers (first split)\n",
+				s.Kind, s.Policy, s.Alpha, s.Untestable)
+		}
+	}
 	fmt.Fprintf(&b, "seeds: %s\n", strings.Trim(fmt.Sprint(rep.Seeds), "[]"))
 	return b.String()
 }

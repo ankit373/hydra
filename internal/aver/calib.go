@@ -34,6 +34,8 @@ type Cell struct {
 	S         float64 `json:"s"`
 	// Skip marks s <= q̄: a fail would then be worth more than 1 on a wrong answer.
 	Skip bool `json:"skip"`
+	// LinkedTo names the check this one fails together with; only that one counts.
+	LinkedTo string `json:"linked_to,omitempty"`
 }
 
 // EPass is the e-value of a pass, s/q̄. A skipped cell's verdict is worth 1.
