@@ -1,0 +1,173 @@
+{
+ "name": "research-sleep-memory",
+ "kind": "research",
+ "license": "MIT, written for this test by the hydra authors; no real customer, paper or person",
+ "turns": [
+  {
+   "role": "system",
+   "text": "You help a graduate student review the literature on sleep and memory.\nCite only peer-reviewed papers.\nKeep every answer under 150 words.\nUse British spelling."
+  },
+  {
+   "role": "user",
+   "text": "I need a short review for my thesis chapter. The deadline is 14 December and I plan to submit it to Sleep Medicine Reviews afterwards. Start with the main idea of memory consolidation during sleep."
+  },
+  {
+   "role": "assistant",
+   "text": "The central idea is that new memories are fragile when formed and are stabilised during sleep. Slow-wave sleep appears to help declarative memories, such as word lists, while rapid eye movement sleep is linked more to emotional and procedural memories."
+  },
+  {
+   "role": "user",
+   "text": "Which studies should I read first? Give me two."
+  },
+  {
+   "role": "assistant",
+   "text": "Two good starting points are Okafor and Lindqvist (2019), a laboratory study of word-pair recall after a night of sleep, and Haraldsen et al. (2021), a meta-analysis of thirty-one such studies."
+  },
+  {
+   "role": "user",
+   "text": "What sample size did Okafor and Lindqvist use, and what did they find?"
+  },
+  {
+   "role": "assistant",
+   "text": "They tested 62 adults, split evenly between a sleep group and a wake group. The sleep group recalled 21 per cent more word pairs after twelve hours than the wake group."
+  },
+  {
+   "role": "tool",
+   "text": "papers.lookup id=okafor-lindqvist-2019\n  n=62 design=between-subjects\n  outcome=word_pair_recall effect=+21% (95% CI 11 to 31)\n  journal=Journal of Sleep Cognition peer_reviewed=true\n  [1] A group observed measured 79 participants on image pairs over 4 days; the authors note no dropouts and report a difference of 0.40.\n  [2] A group tested measured 84 participants on maze routes over 10 days; the authors note a few dropouts and report a difference of 0.26.\n  [3] A team followed measured 42 participants on image pairs over 11 days; the authors note uneven sleep logs and report a ratio of 0.87.\n  [4] A team tracked measured 95 participants on maze routes over 23 days; the authors note varying room temperature and report a ratio of 0.25.\n  [5] A team tracked measured 88 participants on maze routes over 2 days; the authors note uneven sleep logs and report a ratio of 0.70.\n  [6] One lab observed measured 72 participants on maze routes over 15 days; the authors note varying room temperature and report a difference of 0.23.\n  [7] A group tracked measured 23 participants on number strings over 22 days; the authors note uneven sleep logs and report a ratio of 0.53.\n  [8] A team tested measured 104 participants on image pairs over 4 days; the authors note varying room temperature and report a difference of 0.64.\n  [9] One lab followed measured 73 participants on maze routes over 22 days; the authors note a few dropouts and report a effect size of 0.10.\n  [10] One lab followed measured 115 participants on image pairs over 5 days; the authors note uneven sleep logs and report a difference of 0.29.\n  [11] A team tracked measured 54 participants on maze routes over 2 days; the authors note uneven sleep logs and report a effect size of 0.32.\n  [12] Another site tracked measured 55 participants on image pairs over 30 days; the authors note varying room temperature and report a effect size of 0.14.\n  [13] One lab followed measured 91 participants on word lists over 13 days; the authors note no dropouts and report a effect size of 0.17.\n  [14] A team followed measured 91 participants on word lists over 16 days; the authors note a few dropouts and report a effect size of 0.92.\n  [15] A group tracked measured 112 participants on image pairs over 21 days; the authors note a few dropouts and report a ratio of 0.04.\n  [16] One lab followed measured 22 participants on word lists over 28 days; the authors note uneven sleep logs and report a effect size of 0.65.\n  [17] One lab tested measured 74 participants on number strings over 17 days; the authors note no dropouts and report a difference of 0.42.\n  [18] Another site tested measured 81 participants on image pairs over 3 days; the authors note no dropouts and report a effect size of 0.25.\n  [19] One lab observed measured 51 participants on image pairs over 12 days; the authors note no dropouts and report a effect size of 0.57.\n  [20] A group observed measured 67 participants on word lists over 15 days; the authors note a few dropouts and report a ratio of 0.90.\n  [21] A team followed measured 102 participants on number strings over 27 days; the authors note uneven sleep logs and report a effect size of 0.53.\n  [22] A team followed measured 68 participants on number strings over 4 days; the authors note uneven sleep logs and report a ratio of 0.67."
+  },
+  {
+   "role": "user",
+   "text": "And the meta-analysis? I want the pooled effect and how many studies went in."
+  },
+  {
+   "role": "assistant",
+   "text": "Haraldsen et al. pooled 31 studies with 1,208 participants in total. The pooled effect was a standardised difference of 0.43, which is a moderate benefit of sleep over wake for declarative memory."
+  },
+  {
+   "role": "tool",
+   "text": "papers.lookup id=haraldsen-2021\n  studies=31 participants=1208\n  pooled_smd=0.43 heterogeneity_I2=48%\n  journal=Sleep Medicine Reviews peer_reviewed=true\n  [1] A team tracked measured 77 participants on image pairs over 22 days; the authors note no dropouts and report a difference of 0.11.\n  [2] One lab observed measured 87 participants on word lists over 20 days; the authors note a few dropouts and report a difference of 0.73.\n  [3] One lab observed measured 38 participants on word lists over 6 days; the authors note varying room temperature and report a difference of 0.13.\n  [4] One lab tested measured 39 participants on image pairs over 11 days; the authors note uneven sleep logs and report a difference of 0.54.\n  [5] One lab tested measured 106 participants on image pairs over 30 days; the authors note varying room temperature and report a effect size of 0.02.\n  [6] One lab followed measured 26 participants on maze routes over 11 days; the authors note no dropouts and report a ratio of 0.68.\n  [7] A team followed measured 57 participants on number strings over 24 days; the authors note uneven sleep logs and report a difference of 0.48.\n  [8] A group followed measured 20 participants on maze routes over 29 days; the authors note varying room temperature and report a difference of 0.55.\n  [9] Another site tracked measured 75 participants on word lists over 24 days; the authors note a few dropouts and report a ratio of 0.96.\n  [10] One lab observed measured 62 participants on maze routes over 30 days; the authors note uneven sleep logs and report a effect size of 0.11.\n  [11] A team followed measured 22 participants on number strings over 4 days; the authors note a few dropouts and report a effect size of 0.51.\n  [12] One lab followed measured 53 participants on word lists over 11 days; the authors note uneven sleep logs and report a effect size of 0.18.\n  [13] One lab followed measured 79 participants on image pairs over 25 days; the authors note no dropouts and report a difference of 0.99.\n  [14] Another site tracked measured 48 participants on maze routes over 28 days; the authors note uneven sleep logs and report a effect size of 0.65.\n  [15] A group observed measured 60 participants on image pairs over 6 days; the authors note a few dropouts and report a ratio of 0.90.\n  [16] One lab observed measured 65 participants on image pairs over 3 days; the authors note varying room temperature and report a effect size of 0.14.\n  [17] One lab observed measured 80 participants on maze routes over 17 days; the authors note uneven sleep logs and report a effect size of 0.47.\n  [18] A group observed measured 86 participants on image pairs over 22 days; the authors note varying room temperature and report a effect size of 0.18.\n  [19] A team tracked measured 118 participants on maze routes over 24 days; the authors note no dropouts and report a effect size of 0.36.\n  [20] A team observed measured 51 participants on maze routes over 12 days; the authors note a few dropouts and report a ratio of 0.85.\n  [21] A team followed measured 103 participants on maze routes over 16 days; the authors note uneven sleep logs and report a ratio of 0.65.\n  [22] A team followed measured 100 participants on maze routes over 25 days; the authors note varying room temperature and report a effect size of 0.92."
+  },
+  {
+   "role": "user",
+   "text": "Is there a counter-argument I should mention? Something that says the effect is overstated."
+  },
+  {
+   "role": "assistant",
+   "text": "Yes. Brandt and Mwangi (2022) argue that many studies compare sleep to a wake group that was also tired, so part of the gap comes from poor wake-group performance rather than a sleep benefit."
+  },
+  {
+   "role": "user",
+   "text": "Is that paper peer reviewed? I should not cite anything that is not."
+  },
+  {
+   "role": "assistant",
+   "text": "I checked. Brandt and Mwangi (2022) is a peer-reviewed article, so it is safe to cite. The preprint version I saw first is not, so cite the journal version only.\n  [1] A group observed measured 115 participants on maze routes over 3 days; the authors note no dropouts and report a difference of 0.66.\n  [2] A team followed measured 116 participants on word lists over 10 days; the authors note varying room temperature and report a difference of 0.73.\n  [3] A group tested measured 90 participants on maze routes over 23 days; the authors note no dropouts and report a effect size of 0.34.\n  [4] Another site followed measured 74 participants on word lists over 26 days; the authors note a few dropouts and report a ratio of 0.63.\n  [5] A group tested measured 101 participants on maze routes over 17 days; the authors note a few dropouts and report a ratio of 0.58.\n  [6] A group followed measured 49 participants on number strings over 11 days; the authors note uneven sleep logs and report a ratio of 0.12.\n  [7] One lab tracked measured 95 participants on maze routes over 11 days; the authors note a few dropouts and report a effect size of 0.48.\n  [8] One lab tracked measured 42 participants on image pairs over 2 days; the authors note uneven sleep logs and report a ratio of 0.90.\n  [9] A team followed measured 66 participants on number strings over 11 days; the authors note a few dropouts and report a ratio of 1.00.\n  [10] Another site observed measured 30 participants on number strings over 9 days; the authors note no dropouts and report a ratio of 0.67.\n  [11] Another site observed measured 119 participants on word lists over 18 days; the authors note varying room temperature and report a effect size of 0.30.\n  [12] A group tested measured 113 participants on maze routes over 16 days; the authors note varying room temperature and report a ratio of 0.78.\n  [13] A group tracked measured 50 participants on maze routes over 8 days; the authors note uneven sleep logs and report a ratio of 0.45.\n  [14] A team observed measured 71 participants on number strings over 10 days; the authors note varying room temperature and report a ratio of 0.48.\n  [15] Another site observed measured 57 participants on number strings over 12 days; the authors note uneven sleep logs and report a ratio of 0.16.\n  [16] Another site followed measured 58 participants on number strings over 17 days; the authors note a few dropouts and report a effect size of 0.56.\n  [17] A group tested measured 21 participants on word lists over 23 days; the authors note uneven sleep logs and report a effect size of 0.98.\n  [18] A group tested measured 37 participants on maze routes over 21 days; the authors note no dropouts and report a effect size of 0.81.\n  [19] Another site tracked measured 78 participants on image pairs over 5 days; the authors note uneven sleep logs and report a effect size of 0.96.\n  [20] One lab followed measured 36 participants on word lists over 22 days; the authors note no dropouts and report a ratio of 0.11.\n  [21] Another site tracked measured 98 participants on word lists over 24 days; the authors note a few dropouts and report a ratio of 0.83.\n  [22] A team observed measured 81 participants on word lists over 27 days; the authors note a few dropouts and report a difference of 0.91."
+  },
+  {
+   "role": "tool",
+   "text": "papers.lookup id=brandt-mwangi-2022\n  peer_reviewed=true venue=Memory and Sleep Letters\n  preprint_version=true (do not cite)\n  claim=control-group fatigue inflates effect"
+  },
+  {
+   "role": "user",
+   "text": "Draft two sentences that put these three together."
+  },
+  {
+   "role": "assistant",
+   "text": "Laboratory work suggests sleep supports declarative memory (Okafor and Lindqvist, 2019), and a meta-analysis of 31 studies puts the benefit at a moderate 0.43 (Haraldsen et al., 2021). However, part of that gap may reflect fatigued controls rather than a true sleep benefit (Brandt and Mwangi, 2022)."
+  },
+  {
+   "role": "user",
+   "text": "Good. Now what about naps? My supervisor asked."
+  },
+  {
+   "role": "assistant",
+   "text": "Short naps of around twenty minutes seem to give a smaller but real benefit for alertness, while naps containing slow-wave sleep, usually 60 minutes or more, help recall more. Evidence for naps is thinner than for full nights."
+  },
+  {
+   "role": "user",
+   "text": "Name a study on naps and give its sample size."
+  },
+  {
+   "role": "assistant",
+   "text": "Delacroix et al. (2020) tested 48 adults across three nap lengths. Only the 60-minute nap improved recall, by 9 per cent over no nap.\n  [1] Another site tracked measured 27 participants on word lists over 13 days; the authors note no dropouts and report a ratio of 0.21.\n  [2] Another site tracked measured 48 participants on word lists over 19 days; the authors note varying room temperature and report a difference of 0.83.\n  [3] A group observed measured 24 participants on image pairs over 3 days; the authors note a few dropouts and report a effect size of 0.42.\n  [4] A team tested measured 31 participants on image pairs over 13 days; the authors note no dropouts and report a ratio of 0.71.\n  [5] One lab observed measured 105 participants on number strings over 26 days; the authors note uneven sleep logs and report a effect size of 0.59.\n  [6] A team tested measured 119 participants on image pairs over 24 days; the authors note a few dropouts and report a difference of 0.57.\n  [7] A team observed measured 54 participants on word lists over 5 days; the authors note varying room temperature and report a difference of 0.76.\n  [8] Another site observed measured 23 participants on word lists over 26 days; the authors note uneven sleep logs and report a effect size of 0.70.\n  [9] Another site tracked measured 29 participants on maze routes over 17 days; the authors note no dropouts and report a difference of 0.73.\n  [10] Another site followed measured 109 participants on number strings over 30 days; the authors note uneven sleep logs and report a difference of 0.94.\n  [11] A group observed measured 25 participants on image pairs over 26 days; the authors note uneven sleep logs and report a difference of 0.74.\n  [12] Another site tracked measured 39 participants on number strings over 14 days; the authors note uneven sleep logs and report a difference of 0.82.\n  [13] A team observed measured 63 participants on number strings over 9 days; the authors note a few dropouts and report a difference of 0.18.\n  [14] One lab tracked measured 80 participants on image pairs over 10 days; the authors note uneven sleep logs and report a difference of 0.15.\n  [15] A team tested measured 106 participants on word lists over 16 days; the authors note varying room temperature and report a effect size of 0.40.\n  [16] Another site tracked measured 42 participants on word lists over 8 days; the authors note varying room temperature and report a difference of 0.11.\n  [17] A group tracked measured 90 participants on image pairs over 19 days; the authors note no dropouts and report a effect size of 0.61.\n  [18] One lab observed measured 37 participants on maze routes over 13 days; the authors note uneven sleep logs and report a effect size of 0.12.\n  [19] Another site observed measured 79 participants on maze routes over 4 days; the authors note a few dropouts and report a difference of 0.75.\n  [20] Another site tested measured 84 participants on word lists over 8 days; the authors note uneven sleep logs and report a difference of 0.69.\n  [21] A team tracked measured 107 participants on maze routes over 18 days; the authors note uneven sleep logs and report a difference of 0.36.\n  [22] A team tested measured 96 participants on image pairs over 27 days; the authors note a few dropouts and report a effect size of 0.74."
+  },
+  {
+   "role": "tool",
+   "text": "papers.lookup id=delacroix-2020\n  n=48 conditions=3 (10, 30, 60 min)\n  significant=60min only effect=+9%\n  peer_reviewed=true"
+  },
+  {
+   "role": "user",
+   "text": "My supervisor is Dr Whitcombe and she wants a limitations paragraph. What are the main limitations?"
+  },
+  {
+   "role": "assistant",
+   "text": "Most studies use young university students, test recall only hours later, and use word lists that are unlike everyday learning. Few follow participants for weeks."
+  },
+  {
+   "role": "user",
+   "text": "Okay. Please remind me of the deadline and the journal, so I can put it in my plan."
+  },
+  {
+   "role": "assistant",
+   "text": "The chapter is due on 14 December, and you plan to submit afterwards to Sleep Medicine Reviews."
+  },
+  {
+   "role": "user",
+   "text": "One last check. Which study had 62 participants, and what rule am I following on length?"
+  },
+  {
+   "role": "assistant",
+   "text": "Okafor and Lindqvist (2019) had 62 participants. Every answer stays under 150 words."
+  }
+ ],
+ "needles": [
+  {
+   "kind": "fact",
+   "question": "What is the thesis chapter deadline?",
+   "expect": "14 December",
+   "at": 1
+  },
+  {
+   "kind": "fact",
+   "question": "Which journal does the student plan to submit to?",
+   "expect": "Sleep Medicine Reviews",
+   "at": 1
+  },
+  {
+   "kind": "fact",
+   "question": "How many adults did Okafor and Lindqvist test?",
+   "expect": "62",
+   "at": 6
+  },
+  {
+   "kind": "fact",
+   "question": "What was the pooled effect in the meta-analysis?",
+   "expect": "0.43",
+   "at": 9
+  },
+  {
+   "kind": "rule",
+   "question": "Which papers may be cited?",
+   "expect": "peer-reviewed",
+   "at": 0
+  },
+  {
+   "kind": "rule",
+   "question": "Which spelling must the answers use?",
+   "expect": "british",
+   "at": 0
+  },
+  {
+   "kind": "fact",
+   "question": "By how many per cent did the 60-minute nap improve recall?",
+   "expect": "9 per cent|9%",
+   "at": 21
+  },
+  {
+   "kind": "fact",
+   "question": "Who is the supervisor?",
+   "expect": "Whitcombe",
+   "at": 23
+  }
+ ]
+}

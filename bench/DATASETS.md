@@ -150,3 +150,12 @@ differ are label noise no arm can score, so every copy is `excluded`.
 - **Rank**: `sha256("rank\0" ‖ suite ‖ "\0" ‖ id)`, first 8 bytes. A tier takes the first
   *n* test items by rank, so tiers nest and the seed never chooses the sample.
 - Upstream train/val/test is ignored: no arm trains.
+
+## Idle replay fixtures
+
+`bench/idle-replay/*.json` are four conversations written for `hyctl idle replay` (#1639), one each for
+support, research, writing and an agent loop. They are committed whole, since they are small and made up:
+no real customer, paper or person, licence MIT, stated in each file. Each has about 30 turns, some with
+pasted logs or OCR lines so there is something to compact, and eight needles: rules and facts planted in
+one turn and asked for later. They are not a public set of long chats; replaying such a set is one
+`hyctl idle replay <dir>` away once it is converted to this shape.
