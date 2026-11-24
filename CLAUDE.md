@@ -120,6 +120,8 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           `Packs`, `FindPack`, `Resolve`, `MarkUsed` and `Restore` back `hyctl context packs|show-pack|restore`; a
                           restored conversation (`restored` marker) is neither swapped nor rebuilt, and its pins are dropped
                           per owner, so text another conversation's pack pins stays.
+                          `Replay` (`hyctl idle replay <dir>`) compacts `bench/idle-replay` chats 5 times on one local head and
+                          scores none, masking, checked and unchecked packs after rounds 1, 3, 5 on needle recall and tokens.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,

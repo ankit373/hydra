@@ -1037,7 +1037,8 @@ cat notes.md | hyctl context entropy -</pre></div>
 hyctl idle status                       # each conversation and the last reason one was refused
 hyctl context packs                     # staged packs: turns covered, probes agreed, tokens, uses
 hyctl context show-pack &lt;id&gt;           # the rules and state the model is sent
-hyctl context restore &lt;conversation&gt;   # its next request goes out as it came; no new packs for it</pre></div>
+hyctl context restore &lt;conversation&gt;   # its next request goes out as it came; no new packs for it
+hyctl idle replay bench/idle-replay     # does a checked pack keep what later turns need?</pre></div>
       <div class="sub"><div class="lbl">Needs</div><p>Payload capture on (<span class="fx">capture_payloads = true</span>), so the original turns are stored, and a local model that is up. With either missing, <span class="fx">hyctl idle status</span> says so and nothing is compacted.</p></div>
     </section>
 
