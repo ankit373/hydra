@@ -103,6 +103,11 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           decision and why) plus three it writes, of the full turns and of the pack, and needs 0.8 to agree:
                           paths and numbers exactly, prose by word overlap. Turns too big for the head's window, or a window
                           it does not report, are probed per group and the verdict is `Partial`, never swapped in automatically.
+                          `Scheduler.Tick` is the job: for the quiet conversation with the most new text it builds, runs
+                          `Verify` then `RunProbes`, and only a pass is written to `$HYDRA_HOME/idle/<conv>/pack-<n>.json` with
+                          its originals pinned (`PinOwner`); a fail is kept as `pack-<n>.rejected.json`. One job at a time, a new
+                          request in any conversation cancels it, per-job and per-night caps. Events `idle_*` go to an `idle-<date>`
+                          run. `hyctl idle run|status`; `hyctl serve` ticks it each minute when `[idle] enabled = true`.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,

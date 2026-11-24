@@ -123,6 +123,13 @@ const (
 	// Confidence the probability it stated that its answer is right.
 	KindDecision Kind = "decision"
 
+	// The idle kinds are compaction work done between requests. They are
+	// written to a run of their own so they never mix with a user's runs.
+	KindIdleStarted  Kind = "idle_started"
+	KindIdleVerified Kind = "idle_verified"
+	KindIdleRejected Kind = "idle_rejected"
+	KindIdleStaged   Kind = "idle_staged"
+
 	KindError Kind = "error"
 )
 
