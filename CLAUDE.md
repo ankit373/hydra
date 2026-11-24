@@ -117,6 +117,9 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           `Partial`, and `[idle] swap` allows it (`cold_only` default, `auto`, `off`); the rules and the state go in
                           two system blocks, so they sit under the system cache marker. Header `X-Hydra-Compacted`, `idle_used`
                           event, answer not cached.
+                          `Packs`, `FindPack`, `Resolve`, `MarkUsed` and `Restore` back `hyctl context packs|show-pack|restore`; a
+                          restored conversation (`restored` marker) is neither swapped nor rebuilt, and its pins are dropped
+                          per owner, so text another conversation's pack pins stays.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,

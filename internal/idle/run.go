@@ -152,7 +152,7 @@ func (s *Scheduler) Tick(ctx context.Context, now time.Time) (Result, error) {
 			s.note(c.Key, OutcomeNone, fmt.Sprintf("active %s ago; idle after %s", quiet.Round(time.Second), cfg.IdleAfter), now)
 			continue
 		}
-		if st := readStatus(s.env.Dir, c.Key); st.Outcome == OutcomeRejected && st.LastEvent.Equal(c.LastEvent) {
+		if st := readStatus(s.env.Dir, c.Key); (st.Outcome == OutcomeRejected && st.LastEvent.Equal(c.LastEvent)) || Restored(s.env.Dir, c.Key) {
 			continue
 		}
 		turns, err := s.env.Transcript(c.Key)

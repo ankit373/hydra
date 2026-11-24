@@ -103,7 +103,7 @@ func (c *compactor) since(conv string) (time.Duration, []time.Time, bool) {
 // Any doubt, a changed turn, a partial pack, a tool pair cut in two, sends the
 // request as it came.
 func (c *compactor) apply(msgs []executor.Message, conv, head string) ([]executor.Message, *serve.Compacted) {
-	if c == nil || conv == "" || c.mode == swapOff {
+	if c == nil || conv == "" || c.mode == swapOff || idle.Restored(c.dir, conv) {
 		return msgs, nil
 	}
 	quiet, prior, seen := c.since(conv)
@@ -129,12 +129,21 @@ func (c *compactor) apply(msgs []executor.Message, conv, head string) ([]executo
 		out = append(out, msgs[0])
 	}
 	if rules != "" {
-		out = append(out, executor.Message{Role: "system", Content: "Rules from the conversation so far, word for word:\n" + rules})
+		out = append(out, executor.Message{Role: "system", Content: idle.RulesHeading + rules})
 	}
-	out = append(out, executor.Message{Role: "system", Content: "Summary of the conversation so far:\n" + state})
+	out = append(out, executor.Message{Role: "system", Content: idle.StateHeading + state})
 	out = append(out, msgs[end:]...)
+	c.markUsed(conv, n)
 	return out, &serve.Compacted{Pack: idle.PackID(conv, n), ProbeAgree: staged.Verdict.ProbeAgree,
 		Probes: staged.Verdict.Probes, TokensBefore: before, TokensAfter: after}
+}
+
+// markUsed counts a swap for `hyctl context packs`. A failure to count never
+// fails the request.
+func (c *compactor) markUsed(conv string, n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = idle.MarkUsed(c.dir, conv, n, c.now())
 }
 
 // pays applies the swap mode: cold_only swaps only a cold cache, auto asks ShouldSwap.
