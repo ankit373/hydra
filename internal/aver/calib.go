@@ -59,8 +59,7 @@ const DefaultDelta = 0.05
 
 type cellKey struct{ kind, check, head string }
 
-// MinWrongSinceChange is how many wrong answers a check needs after a change
-// before it counts again, the floor hyctl trust joint prints a rate at.
+// MinWrongSinceChange bounds how soon a changed check counts again: wrong answers needed since the change.
 const MinWrongSinceChange = 20
 
 // Fit bounds each cell's false-pass rate at delta/M, M the checks in its kind.

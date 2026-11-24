@@ -16,8 +16,7 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// minSharedWrong is the fewest wrong answers a rate is printed on. Below it
-// the 95% upper bound is wider than any rate it could certify.
+// minSharedWrong bounds which rates trust joint prints: below it the 95% bound is wider than the rate.
 const minSharedWrong = 20
 
 // jointAlpha is the one-sided level of every upper bound in the report.
