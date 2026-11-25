@@ -352,7 +352,7 @@ hyctl dispatch --kind classification --check gen "is this ticket billing, bug or
 hyctl dispatch --kind extraction --check gen:fields "pull vendor, total and date as JSON: ..."   <span class="c"># a verdict on every field, each broken one listed</span>
 hyctl dispatch --check ground --require-pass "..."   <span class="c"># exit 0 passed, 1 a check failed, 2 a check could not run</span>
 hyctl dispatch --kind writing.support --source-only "reply to this customer: ... &lt;fenced policy&gt;"   <span class="c"># only what the docs say, or "the documents given do not cover this"</span>
-hyctl dispatch --schema invoice.schema.json "pull the invoice fields as JSON: ..."   <span class="c"># check every field the schema lists, no extra model call</span>
+hyctl dispatch --schema invoice.schema.json "pull the invoice fields as JSON: ..."   <span class="c"># check every field the schema lists, no extra model call; a string that breaks its pattern or format is marked bad_format</span>
 hyctl dispatch --schema tax-form.schema.json --max-fields 30 "pull every box from this form as JSON: ..."   <span class="c"># 90 fields: three calls, one merged object, checked field by field</span>
 
 <span class="c"># Serve the router to anything that speaks OpenAI</span>
