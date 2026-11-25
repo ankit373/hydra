@@ -89,8 +89,8 @@ func fakeRun(maxCost float64) (replayRun, *[]string) {
 			}
 			return h.ID + " answers " + task, 0.01, nil
 		},
-		Check: func(_ context.Context, tk replayTask, h provider.Head, answer string) (bool, bool) {
-			return tk.Example.Task != "t2", h.ID == "api/strong"
+		Check: func(_ context.Context, tk replayTask, h provider.Head, answer string) (bool, bool, float64) {
+			return tk.Example.Task != "t2", h.ID == "api/strong", 0
 		},
 		File: func(tk replayTask, h provider.Head, answer string, passed bool) {
 			filed = append(filed, h.ID+":"+tk.Example.Task)
@@ -129,6 +129,22 @@ func TestCompareReplay_StopsAtMaxCost(t *testing.T) {
 	}
 	if got := rr.worstCase(replayTasks("a", "b", "c")); got < 0.0599 || got > 0.0601 {
 		t.Fatalf("worst case %v, want 3 tasks x 2 heads x $0.01", got)
+	}
+}
+
+// A check that asks a model spends too: its cost is in the total and stops the replay at the cap.
+func TestCompareReplay_CheckSpendCountsTowardMaxCost(t *testing.T) {
+	rr, _ := fakeRun(0.1)
+	rr.Check = func(context.Context, replayTask, provider.Head, string) (bool, bool, float64) {
+		return true, true, 0.02
+	}
+	res := rr.run(context.Background(), replayTasks("t1", "t4", "t5", "t6"))
+	// Each task: two answers at $0.01 and two checks at $0.02 is $0.06, so the second would pass $0.10.
+	if res.Tasks != 1 || !strings.Contains(res.Stopped, "--max-cost") {
+		t.Fatalf("result %+v, want a stop after one task", res)
+	}
+	if spent := res.Sides[0].CostUSD + res.Sides[1].CostUSD; spent < 0.0599 || spent > 0.0601 {
+		t.Fatalf("spent $%v, want the answers and the checks, $0.06", spent)
 	}
 }
 

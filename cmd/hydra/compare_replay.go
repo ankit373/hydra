@@ -87,9 +87,10 @@ type replayRun struct {
 	Heads    [2]provider.Head
 	Ask      func(ctx context.Context, task string, head provider.Head) (output string, costUSD float64, err error)
 	Estimate func(head provider.Head, task string) float64 // the most one call can cost
-	Check    func(ctx context.Context, t replayTask, head provider.Head, answer string) (checked, passed bool)
-	File     func(t replayTask, head provider.Head, answer string, passed bool)
-	MaxCost  float64 // 0 for no cap
+	// Check returns what its own model calls cost, so a check that asks a model counts toward MaxCost.
+	Check   func(ctx context.Context, t replayTask, head provider.Head, answer string) (checked, passed bool, costUSD float64)
+	File    func(t replayTask, head provider.Head, answer string, passed bool)
+	MaxCost float64 // 0 for no cap
 }
 
 // replaySide is one head's score on the replayed sample.
@@ -126,18 +127,20 @@ func (r replayRun) worstCase(tasks []replayTask) float64 {
 // spend past MaxCost, so the two heads always see the same tasks.
 func (r replayRun) run(ctx context.Context, tasks []replayTask) replayResult {
 	res := replayResult{Sides: [2]replaySide{{Head: r.Heads[0].ID}, {Head: r.Heads[1].ID}}}
-	var spent float64
+	// checksMax is the most one task's checks have cost so far, the best guess at the next task's.
+	var spent, checksMax float64
 	for _, t := range tasks {
 		if err := ctx.Err(); err != nil {
 			res.Stopped = "interrupted"
 			break
 		}
-		next := r.Estimate(r.Heads[0], t.Example.Task) + r.Estimate(r.Heads[1], t.Example.Task)
+		next := r.Estimate(r.Heads[0], t.Example.Task) + r.Estimate(r.Heads[1], t.Example.Task) + checksMax
 		if r.MaxCost > 0 && spent+next > r.MaxCost {
 			res.Stopped = fmt.Sprintf("--max-cost $%.2f: $%.4f spent, the next task could cost $%.4f", r.MaxCost, spent, next)
 			break
 		}
 		res.Tasks++
+		var checksCost float64
 		for i, h := range r.Heads {
 			side := &res.Sides[i]
 			side.Asked++
@@ -148,7 +151,9 @@ func (r replayRun) run(ctx context.Context, tasks []replayTask) replayResult {
 				side.Errors++
 				continue
 			}
-			checked, passed := r.Check(ctx, t, h, out)
+			checked, passed, checkCost := r.Check(ctx, t, h, out)
+			spent, checksCost = spent+checkCost, checksCost+checkCost
+			side.CostUSD += checkCost
 			if !checked {
 				side.NotChecked++
 				continue
@@ -159,6 +164,7 @@ func (r replayRun) run(ctx context.Context, tasks []replayTask) replayResult {
 			}
 			r.File(t, h, out, passed)
 		}
+		checksMax = max(checksMax, checksCost)
 	}
 	return res
 }
@@ -166,6 +172,7 @@ func (r replayRun) run(ctx context.Context, tasks []replayTask) replayResult {
 // confirmReplay prints the worst case, then asks unless yes. Anything but y or yes is no.
 func confirmReplay(in io.Reader, out io.Writer, worst float64, tasks, heads int, yes bool) bool {
 	fmt.Fprintf(out, "\n  Worst case: $%.4f to send %d tasks to %d heads (a local head costs nothing).\n", worst, tasks, heads)
+	fmt.Fprintln(out, "  A check that asks a model adds to that; --max-cost counts it, and the footer shows the total.")
 	if yes {
 		return true
 	}
@@ -262,6 +269,8 @@ func compareReplay(ctx context.Context, a replayArgs) error {
 	domain := trust.Domain(a.kind)
 	maxCost, _ := costCeiling(servePolicy(), a.maxCostSet, a.maxCost)
 	runID := runid.New()
+	// One spend for every check in the replay, so its calls stop at the cap together.
+	checks := &genSpend{maxUSD: maxCost, chat: d.Dispatch}
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
 		return err
@@ -281,8 +290,10 @@ func compareReplay(ctx context.Context, a replayArgs) error {
 			}
 			return res.Output, res.CostUSD, nil
 		},
-		Check: func(ctx context.Context, t replayTask, h provider.Head, answer string) (bool, bool) {
-			return replayCheck(ctx, d, byID, t, h, answer, domain, runID, maxCost)
+		Check: func(ctx context.Context, t replayTask, h provider.Head, answer string) (bool, bool, float64) {
+			before := checks.spent
+			checked, passed := replayCheck(ctx, d, byID, t, h, answer, domain, runID, maxCost, checks)
+			return checked, passed, checks.spent - before
 		},
 		File: func(t replayTask, h provider.Head, answer string, passed bool) {
 			fileExample(evalset.Example{
@@ -310,7 +321,7 @@ func compareReplay(ctx context.Context, a replayArgs) error {
 // replayCheck runs every check a task met. checked is false when any could not run,
 // since a check that did not run is never a pass; passed needs all of them to.
 func replayCheck(ctx context.Context, d *dispatch.Dispatcher, byID map[string]provider.Head, t replayTask, h provider.Head,
-	answer, domain, runID string, maxCost float64) (checked, passed bool) {
+	answer, domain, runID string, maxCost float64, spend *genSpend) (checked, passed bool) {
 	passed = true
 	for _, src := range t.Sources {
 		if src != "ground" {
@@ -324,7 +335,7 @@ func replayCheck(ctx context.Context, d *dispatch.Dispatcher, byID map[string]pr
 	}
 	if len(t.Specs) > 0 {
 		g := genRun{d: d, kind: domain, runID: runID, maxUSD: maxCost}
-		_, env := g.checkEnv(byID, &genSpend{maxUSD: maxCost, chat: d.Dispatch})
+		_, env := g.checkEnv(byID, spend)
 		results, _ := checkgen.Run(ctx, t.Specs, answer, h, runlog.Event{RunID: runID, Domain: domain}, env)
 		for _, r := range results {
 			if !r.Checked() {
