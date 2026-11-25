@@ -46,6 +46,17 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   number, code (one token with a digit, or in capitals, like `INV-2041`) and text, since a
   check can catch wrong amounts and still miss a misread code. An answer that is not JSON
   is a format fail and adds no fields.
+- `grader_model = "<provider>:<model id>"` in a config adds a second model to the grade, for
+  a suite that can use one (snips). It re-extracts each answer's fields from the utterance, and
+  a field it reads differently is flagged, on top of the fields check. The table then adds, under
+  each field row, a `<arm> + second model` row with the catch rate and the cost per verified
+  field with it. The first row's cost leaves the second model's calls out, so the two compare.
+  It is unset by default, so no run pays for one it did not name. `ollama:<model>` uses the
+  local Ollama server (`$OLLAMA_HOST`) and costs nothing, for example `grader_model =
+  "ollama:qwen2.5:7b"` (the model has to be pulled first). A hosted one is `openrouter:` or
+  `bedrock:`, and needs a `[cutoffs]` entry and a price like any arm. Its calls count against
+  `--max-usd` and show in `--dry-run`. A second model that does not answer leaves that row
+  unscored, and the next `run` asks it again, as for an arm.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).
 
 ## replay

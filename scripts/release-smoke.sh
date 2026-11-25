@@ -96,6 +96,7 @@ check() {
 
 brew_has_version() {
   # brew info never taps on its own, unlike brew install (#1511).
+  brew trust ankit373/hydra >/dev/null
   brew tap ankit373/hydra >/dev/null
   brew update --quiet >/dev/null
   [ "$(brew info --json=v2 ankit373/hydra/hyctl | jq -r '.formulae[0].versions.stable')" = "$VER" ]
