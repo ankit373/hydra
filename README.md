@@ -103,6 +103,8 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 | Analyse | compare numbers, explain a trend | a script recomputes the figures | any command via `--check cmd:...` or `hyctl oracle verify` |
 | Code | edit, generate, review | tests, build, lint; a file many others depend on needs more confidence | `hyctl edit`, `hyctl vet`, `hyctl graph blast`, `hyverify`; Go tests another model writes for the change, run with the network off, via `--check gen:tests=<file>` |
 
+A check is not equally good on every model's answers. Strong models make subtler mistakes, so their wrong answers get past tests more often: in a public pilot, HumanEval+ base tests passed 0.7% of vicuna-7b's wrong answers and 40.6% of gpt-4's. `hyctl trust certify-table` keeps each check's false-pass rate per model and kind of work, with an upper bound, and never pools models. A model with few labelled wrong answers gets a wide bound, which is valid and simply counts for little.
+
 `--check` judges one answer, and a real fail reruns once on a stronger model: [how checks work](https://hydra.uvansa.com/docs.html#check). Each kind of work also has a menu of [recipes](https://hydra.uvansa.com/docs.html#recipe).
 
 ---
@@ -112,7 +114,7 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 The CLI is **`hyctl`** (the product is Hydra). Every method installs the same prebuilt binary and checks its checksum.
 
 ```bash
-brew install ankit373/hydra/hyctl                                           # Homebrew, macOS and Linux
+brew trust ankit373/hydra && brew install ankit373/hydra/hyctl              # Homebrew, macOS and Linux
 npm install -g hyctl                                                        # or run once with npx hyctl
 pip install hyctl                                                           # Python 3.8+
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh   # macOS and Linux

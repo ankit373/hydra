@@ -153,7 +153,9 @@ internal/checkgen/      ← Generated checks: a Spec per check (labels, fields, 
                           strict yes or no. Classification gets a labels check: the set the request lists, with any
                           label the writer invented dropped. Extraction gets a fields check: valid JSON, required fields,
                           types, and values found in the fenced source, all without a model, with a `FieldVerdict` per
-                          field on `Result.Fields` (ok, absent, missing, wrong_type, not_in_source, unverified). `SchemaFields` reads a
+                          field on `Result.Fields` (ok, absent, missing, wrong_type, bad_format, not_in_source, unverified). `bad_format` is a string breaking its
+                          schema `pattern`/`format`, with the lookalike swap (O/0, I/l/1, S/5, B/8, Z/2) that would fit, or the odd
+                          value in a list of strings that has one where the other values have the other class. `SchemaFields` reads a
                           JSON Schema (`hyctl dispatch --schema`) as that field list, objects one level deep as dotted
                           names, so no model writes it. `ChunkFields` splits a wider list than `--max-fields` (30) in
                           schema order, an object's fields kept together; `cmd/hydra`'s `chunkedDispatch` asks each
@@ -182,6 +184,9 @@ internal/vet/           ← Review a diff: open-code-review resolves the files a
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace
                           validator for the file's language. Shared by the TUI and `hyctl edit`.
+internal/aver/          ← Certified acceptance (#1549). `Fit` bounds each check's false-pass rate per
+                          (check, model, kind) with Clopper-Pearson at delta/M, never pooled across models.
+                          `hyctl trust certify-table`.
 internal/drift/         ← When a pass rate changed, and the record since: change-point detection that
                           keeps its hazard on idle steps, so a source nobody calls can recover. Used by trust calibration.
 internal/reliability/   ← Is a stated confidence honest? Brier + Murphy decomposition + ECE over
@@ -929,7 +934,7 @@ at the old version, and the next release is computed off the wrong base (#215).
 
 | Channel | Built from | Tag pattern | Install |
 |---|---|---|---|
-| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew install hyctl` |
+| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew trust ankit373/hydra && brew install ankit373/hydra/hyctl` |
 | **RC** | a commit on `main`, by hand | `v1.2.0-rc.1` | GitHub pre-release |
 | **edge** | every merge to `main` | `edge` (overwritten) | GitHub pre-release |
 
