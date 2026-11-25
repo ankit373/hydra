@@ -180,6 +180,9 @@ internal/vet/           ← Review a diff: open-code-review resolves the files a
                           picks a Head per file. `hyctl vet`.
 internal/verify/        ← Which command judges this work: the repo's own suite, or the workspace
                           validator for the file's language. Shared by the TUI and `hyctl edit`.
+internal/aver/          ← Certified acceptance (#1549). `Fit` bounds each check's false-pass rate per
+                          (check, model, kind) with Clopper-Pearson at delta/M, never pooled across models.
+                          `hyctl trust certify-table`.
 internal/drift/         ← When a pass rate changed, and the record since: change-point detection that
                           keeps its hazard on idle steps, so a source nobody calls can recover. Used by trust calibration.
 internal/reliability/   ← Is a stated confidence honest? Brier + Murphy decomposition + ECE over
