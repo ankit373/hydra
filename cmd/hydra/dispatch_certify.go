@@ -46,8 +46,8 @@ func certifyServed(alpha float64, checks []answerCheck, esc *decide.OnFail, r *d
 	return o
 }
 
-// certifyTable is the calibration table from the verdict log, model votes
-// included, with checks that fail together counted once.
+// certifyTable is the verdict log's calibration, model votes included, counted
+// since each check's last change, with checks that fail together counted once.
 func certifyTable() (aver.Table, error) {
 	joint, err := evalset.Joint(evalset.VerdictsPath())
 	if err != nil {
@@ -59,7 +59,7 @@ func certifyTable() (aver.Table, error) {
 	}
 	joint, _ = evalset.AddModelVotes(joint, runs)
 	answers := averAnswers(joint)
-	tab, err := aver.Fit(answers, aver.DefaultDelta)
+	tab, err := aver.FitSince(answers, aver.DefaultDelta, aver.Changes(answers))
 	if err != nil {
 		return aver.Table{}, err
 	}
