@@ -29,6 +29,7 @@ type Policy interface {
 type Options struct {
 	Alpha float64
 	Delta float64 // chance a calibrated bound is wrong, for the AVER policies
+	Rule  string  // how the AVER policies split alpha over candidates, from "name:rule"
 	Check string
 }
 
@@ -54,12 +55,18 @@ func Names() []string {
 	return names
 }
 
-// New makes a fresh, uncalibrated policy.
+// New makes a fresh, uncalibrated policy. An AVER policy takes its spending
+// rule as a suffix, aver_product_perhead:bonferroni; spend is the default.
 func New(name string, o Options) (Policy, error) {
-	mk, ok := policies[name]
+	base, rule, _ := strings.Cut(name, ":")
+	mk, ok := policies[base]
 	if !ok {
 		return nil, fmt.Errorf("no policy %q (known: %s)", name, strings.Join(Names(), ", "))
 	}
+	if rule != "" && !strings.HasPrefix(base, "aver_") {
+		return nil, fmt.Errorf("policy %q takes no spending rule", base)
+	}
+	o.Rule = rule
 	return mk(o)
 }
 

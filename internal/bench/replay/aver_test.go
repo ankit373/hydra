@@ -70,7 +70,7 @@ func TestReplay_AverProductOnFixture(t *testing.T) {
 	// Pooled, the dear head's false passes widen the one shared bound past reach.
 	pooled := calibrated(t, "aver_product", 0.1, cal)
 	o = pooled.Decide([]Row{averRow("x", "cheap", 1, true, true, true)}, order)
-	if o.Accepted != nil || o.Spent != 0 || !strings.Contains(o.Reason, "bar 20") {
+	if o.Accepted != nil || o.Spent != 0 || o.Reason != "no answer reached its bar" {
 		t.Fatalf("pooled should refuse without buying, got %+v", o)
 	}
 
@@ -93,11 +93,11 @@ func TestReplay_AverProductOnFixture(t *testing.T) {
 }
 
 func TestReplay_AverMissingVerdictIsNotRun(t *testing.T) {
-	per := calibrated(t, "aver_product_perhead", 0.1, averFixture(80))
+	// Two heads at alpha 0.2 by spend: bar 1/(0.2 * 1/2) = 10; lint alone is worth 11.36.
+	per := calibrated(t, "aver_product_perhead", 0.2, averFixture(80))
 	r := averRow("z", "cheap", 1, true, true, true)
 	delete(r.Verdicts, "tests")
 	o := per.Decide([]Row{r}, []string{"cheap"})
-	// bar 1/0.1 = 10; lint alone is worth 11.36.
 	if o.Accepted == nil || o.Spent != 1 {
 		t.Fatalf("lint alone clears bar 10 and tests was never paid for: %+v", o)
 	}
@@ -136,5 +136,78 @@ func TestReplay_DeltaReachesTheFit(t *testing.T) {
 		if _, err := Run(cal, Config{Policies: []string{"aver_product"}, Alphas: []float64{0.1}, Seeds: []uint64{0}, Delta: d}); err == nil {
 			t.Errorf("delta %v accepted", d)
 		}
+	}
+}
+
+// threeHeads: cheap is right on even tasks, mid on the rest, dear never.
+// Wrong answers from cheap and mid never pass a check; dear's always do.
+func threeHeads(tasks int) []Row {
+	var rows []Row
+	for i := range tasks {
+		task := fmt.Sprintf("t%03d", i)
+		even := i%2 == 0
+		rows = append(rows,
+			averRow(task, "cheap", 1, even, even, even),
+			averRow(task, "mid", 2, !even, !even, !even),
+			averRow(task, "dear", 3, false, true, true))
+	}
+	return rows
+}
+
+func TestReplay_SpendVsBonferroniBothUnderAlphaOnFixture(t *testing.T) {
+	rep, err := Run(threeHeads(200), Config{
+		Policies: []string{"aver_product_perhead", "aver_product_perhead:bonferroni"},
+		Alphas:   []float64{0.1}, Seeds: []uint64{0, 1, 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// alpha 0.1 over 3 candidates: spend 1/2, 1/4, 1/4 gives bars 20, 40, 40;
+	// bonferroni 1/3 each gives 30, 30, 30.
+	want := map[string][]float64{
+		"aver_product_perhead":            {20, 40, 40},
+		"aver_product_perhead:bonferroni": {30, 30, 30},
+	}
+	for _, s := range rep.Summaries {
+		if s.MeanFalseAccept > s.Alpha || s.Refusal != 0 {
+			t.Errorf("%s: false accept %v, refusal %v", s.Policy, s.MeanFalseAccept, s.Refusal)
+		}
+		for j, b := range want[s.Policy] {
+			if math.Abs(s.Bars[j]-b) > 1e-9 {
+				t.Fatalf("%s bars %v, want %v", s.Policy, s.Bars, want[s.Policy])
+			}
+		}
+	}
+	if out := Table(rep); !strings.Contains(out, "bars per candidate, code aver_product_perhead:bonferroni alpha 0.10: 30, 30, 30") {
+		t.Fatalf("table does not show the bars:\n%s", out)
+	}
+}
+
+func TestReplay_BonferroniRefusedAboveThreeHeads(t *testing.T) {
+	rows := threeHeads(20)
+	for i := range 20 {
+		rows = append(rows, averRow(fmt.Sprintf("t%03d", i), "fourth", 4, false, false, false))
+	}
+	_, err := Run(rows, Config{Policies: []string{"aver_product:bonferroni"}, Alphas: []float64{0.1}, Seeds: []uint64{0}})
+	if err == nil || !strings.Contains(err.Error(), "use spend") {
+		t.Fatalf("want bonferroni refused for 4 heads, got %v", err)
+	}
+	if _, err := New("first_check_pass:spend", Options{Check: "tests"}); err == nil {
+		t.Fatal("a rule on a non-AVER policy was accepted")
+	}
+}
+
+func TestReplay_CandidateWithNoWeightIsNeverAccepted(t *testing.T) {
+	// Calibrated on one head, so there is one bar; a second head in the order gets none.
+	var cal []Row
+	for _, r := range averFixture(80) {
+		if r.Head == "cheap" {
+			cal = append(cal, r)
+		}
+	}
+	p := calibrated(t, "aver_product_perhead", 0.1, cal)
+	o := p.Decide([]Row{averRow("x", "cheap", 1, false, true, false), averRow("x", "dear", 10, true, true, true)},
+		[]string{"cheap", "dear"})
+	if o.Accepted != nil || slices.Contains(o.Bought, "dear") {
+		t.Fatalf("the second candidate had no weight but was bought: %+v", o)
 	}
 }
