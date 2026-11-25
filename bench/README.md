@@ -80,10 +80,6 @@ One JSON line per (task, head) candidate:
   `aver_product_perhead` fits a bound per head, `aver_product` one pooled over heads. Checks run strongest evidence per
   dollar first, a head that cannot reach the bar is not bought, and an answer stops as soon as the
   bar is out of reach. Bounds hold with chance 1 - `--delta` (default 0.05).
-- `aver_gated` is `aver_product_perhead` that first tests each pair of checks on the wrong answers
-  both ran on (`aver.Gate`): a pair that passes together more often than q-bar_a x q-bar_b allows,
-  or has under 20 shared wrong answers, is linked, and linked checks count once, through the one
-  with the best e on a pass. Compare it with the plain product at a small alpha.
 - `aver_pattern` certifies under any dependence: per head, it bounds how often a wrong answer
   matches a pattern of up to 3 features (checks, plus at most one "at least m earlier answers
   agree"), with delta split over every pattern and head, and accepts an answer matching the pattern

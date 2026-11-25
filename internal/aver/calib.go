@@ -52,7 +52,7 @@ type Table struct {
 	Cells []Cell  `json:"cells"`
 }
 
-// DefaultDelta is the chance that any calibrated bound in a kind is wrong, unless a caller sets one.
+// DefaultDelta is the chance that any calibrated bound in a kind is wrong.
 const DefaultDelta = 0.05
 
 type cellKey struct{ kind, check, head string }

@@ -20,28 +20,22 @@ type averProduct struct {
 	delta   float64
 	rule    string
 	perHead bool
-	gated   bool                      // count checks that fail together once (aver.Gate)
 	bars    []float64                 // one per candidate, fixed from the head count on calibration
 	cells   map[[2]string][]aver.Cell // (kind, head) -> usable cells, cheapest evidence first
-	// untestable is how many pairs the gate linked for want of shared wrong answers.
-	untestable int
 }
 
-func newAverProduct(perHead, gated bool) func(Options) (Policy, error) {
+func newAverProduct(perHead bool) func(Options) (Policy, error) {
 	return func(o Options) (Policy, error) {
 		rule := o.Rule
 		if rule == "" {
 			rule = aver.RuleSpend
 		}
-		return &averProduct{alpha: o.Alpha, delta: o.Delta, rule: rule, perHead: perHead, gated: gated}, nil
+		return &averProduct{alpha: o.Alpha, delta: o.Delta, rule: rule, perHead: perHead}, nil
 	}
 }
 
 // Bars is each candidate's bar, in the order answers are bought.
 func (p *averProduct) Bars() []float64 { return p.bars }
-
-// Untestable is how many check pairs were linked only for lack of data.
-func (p *averProduct) Untestable() int { return p.untestable }
 
 func (p *averProduct) head(h string) string {
 	if p.perHead {
@@ -53,14 +47,16 @@ func (p *averProduct) head(h string) string {
 func (p *averProduct) Calibrate(cal []Row) error {
 	answers := make([]aver.Answer, 0, len(cal))
 	costSum, costN := map[string]float64{}, map[string]int{}
+	heads := map[string]bool{} // the candidate budget, as CheapestFirst(cal) will order it
 	for _, r := range cal {
+		heads[r.Head] = true
 		answers = append(answers, aver.Answer{Kind: r.Kind, Head: p.head(r.Head), Correct: r.Correct, Verdicts: r.Verdicts})
 		for c := range r.Verdicts {
 			costSum[c] += r.CheckCostUSD[c]
 			costN[c]++
 		}
 	}
-	w, err := aver.Weights(len(CheapestFirst(cal)), p.rule)
+	w, err := aver.Weights(len(heads), p.rule)
 	if err != nil {
 		return err
 	}
@@ -74,10 +70,6 @@ func (p *averProduct) Calibrate(cal []Row) error {
 	}
 	if len(tab.Cells) == 0 {
 		return errors.New("aver: no calibration answer has a verdict")
-	}
-	if p.gated {
-		g := aver.Gate(answers, tab)
-		tab, p.untestable = g.Apply(tab), g.Untestable
 	}
 	byHead := map[[2]string][]aver.Cell{}
 	for _, c := range tab.Cells {

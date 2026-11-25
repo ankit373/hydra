@@ -27,8 +27,11 @@ type LockEntry struct {
 
 // Dataset is one suite's block of bench/datasets.lock.
 type Dataset struct {
-	Revision string `toml:"revision"`
-	Licence  string `toml:"licence"`
+	// PublicSince is the year the suite's items first appeared in public, which is what a
+	// contamination caveat can honestly say; models trained after it may have seen them.
+	PublicSince int    `toml:"public_since"`
+	Revision    string `toml:"revision"`
+	Licence     string `toml:"licence"`
 	// LicenceVerified is "<LICENSE url at the pinned commit>, <date>", empty when
 	// nobody checked it; `hyctl bench table` refuses to publish such a suite.
 	LicenceVerified string `toml:"licence_verified"`

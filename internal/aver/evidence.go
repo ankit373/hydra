@@ -80,27 +80,35 @@ func xlogy(x, y float64) float64 {
 // Order sorts cells by KL per dollar, most first. A heuristic for cost only:
 // the bound holds in any order. A free check comes first; ties go by name.
 func Order(cells []Cell, cost func(check string) float64) []Cell {
-	out := append([]Cell(nil), cells...)
-	rate := func(c Cell) float64 {
-		k := KL(c)
-		if usd := cost(c.Check); usd > 0 {
-			return k / usd
-		}
-		if k > 0 {
-			return math.Inf(1)
-		}
-		return 0
+	type keyed struct {
+		c        Cell
+		rate, kl float64
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		ri, rj := rate(out[i]), rate(out[j])
-		if ri != rj {
-			return ri > rj
+	ks := make([]keyed, len(cells))
+	for i, c := range cells {
+		k := keyed{c: c, kl: KL(c)}
+		switch usd := cost(c.Check); {
+		case usd > 0:
+			k.rate = k.kl / usd
+		case k.kl > 0:
+			k.rate = math.Inf(1)
 		}
-		if ki, kj := KL(out[i]), KL(out[j]); ki != kj {
-			return ki > kj // two free checks: the stronger first
+		ks[i] = k
+	}
+	sort.SliceStable(ks, func(i, j int) bool {
+		a, b := ks[i], ks[j]
+		if a.rate != b.rate {
+			return a.rate > b.rate
 		}
-		return out[i].Check < out[j].Check
+		if a.kl != b.kl {
+			return a.kl > b.kl // two free checks: the stronger first
+		}
+		return a.c.Check < b.c.Check
 	})
+	out := make([]Cell, len(ks))
+	for i, k := range ks {
+		out[i] = k.c
+	}
 	return out
 }
 
