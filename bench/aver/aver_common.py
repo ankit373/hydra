@@ -28,9 +28,15 @@ def fetch(url, sha256, dest):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     tmp = dest + ".part"
     req = urllib.request.Request(url, headers={"User-Agent": "hydra-bench-aver"})
-    with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as f:
-        for block in iter(lambda: r.read(1 << 20), b""):
-            f.write(block)
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as f:
+            for block in iter(lambda: r.read(1 << 20), b""):
+                f.write(block)
+    except BaseException:
+        # A cut download must not linger as a .part the next run mistakes for progress.
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
     got = sha256_of(tmp)
     if got != sha256:
         os.remove(tmp)

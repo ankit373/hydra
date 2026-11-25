@@ -1,8 +1,11 @@
+import hashlib
 import io
 import json
 import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import aver_common as common
@@ -140,3 +143,36 @@ class RagLabels(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Fetch(unittest.TestCase):
+    """No network: urlopen is replaced, so only the pinning and cleanup run."""
+
+    def body(self, data, fail=False):
+        class Resp(io.BytesIO):
+            def read(self, n=-1):
+                if fail and self.tell() > 0:
+                    raise OSError("connection reset")
+                return super().read(min(n, 4) if fail else n)
+        return mock.patch("urllib.request.urlopen", return_value=Resp(data))
+
+    def test_pinned_file_is_kept(self):
+        with tempfile.TemporaryDirectory() as d, self.body(b"hello"):
+            dest = os.path.join(d, "x", "f.bin")
+            common.fetch("https://example.invalid/f", hashlib.sha256(b"hello").hexdigest(), dest)
+            with open(dest, "rb") as f:
+                self.assertEqual(f.read(), b"hello")
+
+    def test_wrong_hash_is_refused_and_nothing_is_left(self):
+        with tempfile.TemporaryDirectory() as d, self.body(b"hello"):
+            dest = os.path.join(d, "f.bin")
+            with self.assertRaises(SystemExit):
+                common.fetch("https://example.invalid/f", "0" * 64, dest)
+            self.assertEqual(os.listdir(d), [])
+
+    def test_cut_download_leaves_no_part_file(self):
+        with tempfile.TemporaryDirectory() as d, self.body(b"hello world", fail=True):
+            dest = os.path.join(d, "f.bin")
+            with self.assertRaises(OSError):
+                common.fetch("https://example.invalid/f", "0" * 64, dest)
+            self.assertEqual(os.listdir(d), [])
