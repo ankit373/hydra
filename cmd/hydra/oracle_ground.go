@@ -177,7 +177,7 @@ func printNotChecked(src string, reason error) {
 // printGrounding prints a grounding verdict, its unsupported spans and its
 // calibrated strength, or why no strength can be stated yet.
 func printGrounding(src string, last ground.Verdict, v oracle.Verdict, measured bool, why string, llr float64) {
-	status := cortexStyle.Render("GROUNDED")
+	status := okStyle.Render("GROUNDED")
 	if !v.Passed {
 		status = warnStyle.Render("UNSUPPORTED")
 	}
