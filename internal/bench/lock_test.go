@@ -75,3 +75,17 @@ func TestDatasetOpen_RehashesOnEveryLoad(t *testing.T) {
 		t.Fatal("hashed a missing file")
 	}
 }
+
+// Every suite in the committed lock says when it first appeared in public, since the
+// table footer prints that year per suite (#1987).
+func TestCommittedLock_EverySuiteHasAPublicYear(t *testing.T) {
+	lock, err := ReadLock(filepath.Join("..", "..", "bench", "datasets.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, ds := range lock {
+		if ds.PublicSince < 2015 || ds.PublicSince > 2026 {
+			t.Errorf("%s: public_since = %d, want the year its items first appeared", name, ds.PublicSince)
+		}
+	}
+}
