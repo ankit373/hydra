@@ -94,7 +94,7 @@ func (c *Cascade) Judge(ctx context.Context, a Answer) (next bool, reason string
 	case conf >= c.Target.Confidence:
 		return true, "no verifier verdict supported it"
 	default:
-		return true, fmt.Sprintf("P(correct) %.3f < %.2f", conf, c.Target.Confidence)
+		return true, fmt.Sprintf("confidence estimate %.3f < target %.2f", conf, c.Target.Confidence)
 	}
 	return false, ""
 }

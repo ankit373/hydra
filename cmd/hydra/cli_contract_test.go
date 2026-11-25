@@ -127,6 +127,30 @@ func TestCLI_HelpWorksForEverySubcommand(t *testing.T) {
 	}
 }
 
+// The confidence a run reaches is an estimate, not a guarantee, so no flag may
+// promise a P(correct) and the --confidence flags say "estimate" (#1942).
+func TestCLI_ConfidenceHelpSaysEstimate(t *testing.T) {
+	cliSandbox(t)
+
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if strings.Contains(c.Flags().FlagUsages(), "P(correct)") {
+			t.Errorf("a %s flag promises a P(correct)", c.CommandPath())
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(rootCmd())
+
+	for _, c := range []*cobra.Command{cmdDispatch(), cmdVet()} {
+		f := c.Flags().Lookup("confidence")
+		if f == nil || !strings.Contains(f.Usage, "estimate") {
+			t.Errorf("%s --confidence does not call the target an estimate: %v", c.Name(), f)
+		}
+	}
+}
+
 // `hyctl --version` and `hyctl version` must agree. They used to be separate
 // strings; the root flag answered "unknown flag" while the subcommand worked.
 func TestCLI_VersionFlagAndSubcommandAgree(t *testing.T) {

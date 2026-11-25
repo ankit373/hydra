@@ -337,7 +337,7 @@ func cmdVet() *cobra.Command {
 	f.BoolVar(&jsonOut, "json", false, "emit JSON")
 	f.BoolVar(&dryRun, "dry-run", false, "show what would be reviewed, without dispatching")
 	f.Float64Var(&confidence, "confidence", 0,
-		"sample several Heads per file until this confidence is reached; the file's blast radius raises it (0 = one Head per file)")
+		"sample several Heads per file until the estimate that the review is right clears this target; the file's blast radius raises it (0 = one Head per file)")
 	f.StringVar(&graphPath, "graph", "graph.json", "dependency graph that sets each file's blast radius")
 	f.Float64Var(&maxCost, "max-cost", 0, "refuse a Head whose estimated cost for a file exceeds this, in USD (0 = no limit)")
 	f.IntVar(&concurrency, "concurrency", 4, "files reviewed at once")
