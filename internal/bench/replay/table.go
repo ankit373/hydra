@@ -28,6 +28,10 @@ func Table(rep Report) string {
 		if len(s.Bars) > 0 {
 			fmt.Fprintf(&b, "bars per candidate, %s %s alpha %.2f: %s\n", s.Kind, s.Policy, s.Alpha, bars(s.Bars))
 		}
+		if s.Untestable > 0 {
+			fmt.Fprintf(&b, "%s %s alpha %.2f: %d check pair(s) linked for lack of shared wrong answers (first split)\n",
+				s.Kind, s.Policy, s.Alpha, s.Untestable)
+		}
 	}
 	fmt.Fprintf(&b, "seeds: %s\n", strings.Trim(fmt.Sprint(rep.Seeds), "[]"))
 	return b.String()
