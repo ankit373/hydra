@@ -332,3 +332,27 @@ func TestNewSpec_VariantChangesID(t *testing.T) {
 		t.Errorf("check ids = %q, %q", a.Check(), Spec{Kind: "labels"}.Check())
 	}
 }
+
+func TestLoadSpecs_GroupsByTaskAndSortsByID(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir())
+	if got, err := LoadSpecs(); err != nil || len(got) != 0 {
+		t.Fatalf("no specs yet: %v, %v", got, err)
+	}
+	for _, s := range []Spec{
+		{ID: "b", Kind: "claims", TaskHash: "t1"}, {ID: "a", Kind: "fields", TaskHash: "t1"}, {ID: "c", Kind: "labels", TaskHash: "t2"},
+	} {
+		if err := storeSpec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := LoadSpecs()
+	if err != nil || len(got) != 2 || len(got["t1"]) != 2 || got["t1"][0].ID != "a" || got["t2"][0].Kind != "labels" {
+		t.Fatalf("specs %+v, %v", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(SpecsDir(), "broken.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSpecs(); err == nil {
+		t.Fatal("a corrupt spec file was skipped")
+	}
+}

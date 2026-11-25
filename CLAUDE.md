@@ -528,6 +528,8 @@ hyctl trust reliability --source <head> ; hyctl trust reliability --source <head
 # Two heads side by side on one kind of work, from the record: pass rate, 95% lower bound,
 # record since any change. Names one ahead only when the intervals do not overlap
 hyctl compare claude-sonnet ollama/qwen3:4b --kind summary ; hyctl compare a b --kind extraction --json
+# Rerun stored tasks on both: same tasks for both heads, worst case printed and confirmed first
+hyctl compare claude-sonnet ollama/qwen3:4b --kind summary --replay 20 [--yes] [--max-cost 1]
 # Per kind of work, how often each check and each pair passed an answer later found wrong,
 # and when a check's rate changed (its rate and bound since)
 hyctl trust joint ; hyctl trust joint --domain go --json
