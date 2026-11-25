@@ -36,7 +36,10 @@ func Snapshot(lookup PriceLookup, fetchedAt time.Time, models []string, refs map
 	out := PriceSnapshot{}
 	for _, m := range models {
 		if p, ok := overrides[m]; ok {
-			p.Model, p.Ref = m, "override"
+			p.Model = m
+			if p.Ref == "" {
+				p.Ref = "override"
+			}
 			out[m] = p
 			continue
 		}
@@ -55,6 +58,19 @@ func Snapshot(lookup PriceLookup, fetchedAt time.Time, models []string, refs map
 			Source: "openrouter", FetchedAt: fetchedAt}
 	}
 	return out, nil
+}
+
+// SnapshotFor prices one "<provider>:<model id>": a local model at $0, any other by lookup.
+func SnapshotFor(spec string, lookup PriceLookup, fetchedAt time.Time) (PriceSnapshot, error) {
+	prov, m, err := ParseModel(spec)
+	if err != nil {
+		return nil, err
+	}
+	var over map[string]Price
+	if prov == Local {
+		over = map[string]Price{m: localPrice}
+	}
+	return Snapshot(lookup, fetchedAt, []string{m}, nil, over)
 }
 
 // Cost prices provider-reported tokens. Unlike pricing.DB it does not round.

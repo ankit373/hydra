@@ -46,7 +46,33 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   number, code (one token with a digit, or in capitals, like `INV-2041`) and text, since a
   check can catch wrong amounts and still miss a misread code. An answer that is not JSON
   is a format fail and adds no fields.
+- A model is `bedrock:<id>`, `openrouter:<id>` or `ollama:<name>`. An `ollama:` model runs on
+  the Ollama server at `OLLAMA_HOST` (default `localhost:11434`) with no key and with thinking
+  off (`reasoning_effort: none`), since a suite allows only a few answer tokens. Its price row is
+  `local` at $0, so it needs no `[prices]` entry, and the detection table prints it as
+  `<name> (local)`. One id cannot be both local and hosted in one config, since prices are
+  keyed by id. A local number is a number for that local model, not for a hosted one.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).
+
+## redaction
+
+`hyctl bench redaction` measures what `--redact` costs in answer quality. It asks one model
+each task in `redaction/tasks.jsonl` twice at temperature 0: as is, and with every value
+redaction replaces turned into a placeholder and the answer restored, the way dispatch does
+for a hosted model. Both answers get the same checks: the task's `match` pattern and, for
+summaries, `ground` against the source.
+
+```bash
+hyctl bench redaction --model ollama:qwen3:8b                    # local, $0
+hyctl bench redaction --model openrouter:<id> --max-usd 0.50      # hosted, worst case printed first
+```
+
+- The 30 tasks are made up (support, HR, finance). Each plants emails, phones, IBANs, card
+  numbers, SSNs or IPs, and says what the answer needs: `copy` repeats a value, `read` needs
+  a fact inside one (a domain, the last four digits, a country), `around` needs none of them.
+- The table gives the pass rate off and on per kind of work and per need, each with a 95%
+  Wilson interval, the pairs only one side passed, and the exact McNemar p on those pairs.
+- `--out` writes every task's answers and grades as JSONL.
 
 ## replay
 

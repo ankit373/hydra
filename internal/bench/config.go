@@ -113,6 +113,18 @@ func (c *Config) ArmConfigs() (map[string]ArmConfig, error) {
 			}
 		}
 	}
+	// The snapshot is keyed by model id, so a local $0 row would price paid calls too.
+	provs := map[string]string{}
+	for _, spec := range c.Models {
+		prov, m, err := ParseModel(spec)
+		if err != nil {
+			continue
+		}
+		if p, ok := provs[m]; ok && p != prov {
+			return nil, fmt.Errorf("model %s is named on both %s and %s", m, p, prov)
+		}
+		provs[m] = prov
+	}
 	return out, nil
 }
 
@@ -132,9 +144,21 @@ func (c *Config) ModelIDs() []string {
 	return out
 }
 
-// Overrides turns [prices] into snapshot rows, refusing one without a source or date.
+// localPrice is a local model's row: $0, and named local rather than a list price.
+var localPrice = Price{Ref: "local", Source: "local"}
+
+// Overrides turns [prices] into snapshot rows, refusing one without a source or date,
+// and gives each local model a $0 row marked local.
 func (c *Config) Overrides() (map[string]Price, error) {
 	out := map[string]Price{}
+	for _, spec := range c.Models {
+		if prov, m, err := ParseModel(spec); err == nil && prov == Local {
+			if _, ok := c.Prices[m]; ok {
+				return nil, fmt.Errorf("bench: %s runs locally, so [prices.%q] does not apply", m, m)
+			}
+			out[m] = localPrice
+		}
+	}
 	for m, o := range c.Prices {
 		d, err := time.Parse("2006-01-02", o.Date)
 		if err != nil || o.Source == "" {
