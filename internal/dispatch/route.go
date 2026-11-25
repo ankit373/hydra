@@ -16,7 +16,7 @@ const gatePassed = "passed"
 func (d *Dispatcher) route(candidates []provider.Head, gates []Gate, scores map[string]rank.Score,
 	opts Options, requirement, firstProb float64) *runlog.Route {
 	r := &runlog.Route{
-		Objective: string(opts.Objective), Requirement: requirement,
+		Objective: string(opts.Objective), Requirement: requirement, CertifyAlpha: opts.CertifyAlpha,
 		FirstHead: candidates[0].ID, FirstProb: firstProb,
 	}
 	if len(candidates) > 1 {

@@ -564,6 +564,8 @@ hyctl trust joint ; hyctl trust joint --domain go --json
 hyctl dispatch --check ground "summarise this: <fenced source>"
 # Fetch every cited link (ledger-gated, the URL alone leaves); dead link or misquote fails
 hyctl dispatch --kind answer --check links "what did the regulator decide? cite your sources"
+# Certified or not verified, with the reason: bounds the chance of accepting a wrong answer, per task
+hyctl dispatch --certify 0.05 --check match:labels=labels.txt "label this ticket: ..."
 # Gate a script on it: 0 passed, 1 a check failed, 2 a check could not run
 hyctl dispatch --check ground --require-pass "summarise this: <fenced source>"
 # Reply only from the fenced docs: every sentence checked, else "the documents given do not cover this", exit 1
