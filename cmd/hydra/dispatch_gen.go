@@ -184,29 +184,7 @@ func (g genRun) check(ctx context.Context, r *dispatch.Result, prompt string) ge
 	for _, x := range heads {
 		byID[x.ID] = x
 	}
-	// A check only ever asks the head that wrote it; an unknown one is never left to the router.
-	ask := func(ctx context.Context, gen checkgen.GenInfo, prompt string) (string, error) {
-		if _, ok := byID[gen.Head]; !ok {
-			return "", fmt.Errorf("head %q cannot run here", gen.Head)
-		}
-		res, err := spend.dispatch(ctx, prompt, dispatch.Options{
-			Head: gen.Head, Domain: g.kind, RunID: g.runID, NoCache: true, LocalOnly: g.localOnly,
-		})
-		if err != nil {
-			return "", err
-		}
-		return res.Output, nil
-	}
-	env := checkgen.Env{
-		Ask: ask,
-		Decider: func(gen checkgen.GenInfo) oracle.Decider {
-			h, ok := byID[gen.Head]
-			if !ok {
-				return nil
-			}
-			return &checkgen.HeadDecider{Head: h, Chat: spend.dispatch, RunID: g.runID, Domain: g.kind}
-		},
-	}
+	ask, env := g.checkEnv(byID, spend)
 	writer := checkgen.GenInfo{Head: h.ID, Family: provider.Family(h), SameFamily: same}
 	task := checkgen.Task{Text: prompt, Kind: g.kind, File: g.want.file, Writer: writer, Fields: g.want.schema,
 		Ask: func(ctx context.Context, p string) (string, error) { return ask(ctx, writer, p) }}
@@ -229,6 +207,33 @@ func (g genRun) check(ctx context.Context, r *dispatch.Result, prompt string) ge
 	}
 	o.logErr = errors.Join(logErrs...)
 	return o
+}
+
+// checkEnv is what a spec's oracle may ask: only the head that wrote it, never one
+// the router picks, and every call through spend so the checks stay inside the budget.
+func (g genRun) checkEnv(byID map[string]provider.Head, spend *genSpend) (func(context.Context, checkgen.GenInfo, string) (string, error), checkgen.Env) {
+	ask := func(ctx context.Context, gen checkgen.GenInfo, prompt string) (string, error) {
+		if _, ok := byID[gen.Head]; !ok {
+			return "", fmt.Errorf("head %q cannot run here", gen.Head)
+		}
+		res, err := spend.dispatch(ctx, prompt, dispatch.Options{
+			Head: gen.Head, Domain: g.kind, RunID: g.runID, NoCache: true, LocalOnly: g.localOnly,
+		})
+		if err != nil {
+			return "", err
+		}
+		return res.Output, nil
+	}
+	return ask, checkgen.Env{
+		Ask: ask,
+		Decider: func(gen checkgen.GenInfo) oracle.Decider {
+			h, ok := byID[gen.Head]
+			if !ok {
+				return nil
+			}
+			return &checkgen.HeadDecider{Head: h, Chat: spend.dispatch, RunID: g.runID, Domain: g.kind}
+		},
+	}
 }
 
 func printGenResult(r checkgen.Result) {

@@ -1,0 +1,5 @@
+{"answer_key":"sample-a","checks":{"base_tests":true,"compiles":true},"correct":true,"kind":"code","model":"gpt-4","suite":"humaneval","task":"humaneval/12","tokens_basis":"estimated","tokens_in":120,"tokens_out":80}
+{"answer_key":"sample-b","checks":{"base_tests":true,"compiles":true},"correct":false,"kind":"code","model":"code-llama-7b","suite":"humaneval","task":"humaneval/12","tokens_basis":"estimated","tokens_in":120,"tokens_out":200}
+{"answer_key":"42","checks":{"arithmetic":true,"format":true},"correct":true,"kind":"math","model":"Llama-2-70b-hf","suite":"gsm8k","task":"gsm8k/0007","tokens_basis":"exact","tokens_in":930,"tokens_out":105}
+{"answer_key":"none:Yi-6B","checks":{"arithmetic":false,"format":false},"correct":false,"kind":"math","model":"Yi-6B","suite":"gsm8k","task":"gsm8k/0007","tokens_basis":"exact","tokens_in":912,"tokens_out":96}
+{"answer_key":"sample-c","checks":{"complete":true,"numbers_in_source":false},"correct":false,"kind":"grounded","model":"gpt-3.5-turbo-0613","suite":"ragtruth","task":"ragtruth/31","tokens_basis":"estimated","tokens_in":410,"tokens_out":150}
