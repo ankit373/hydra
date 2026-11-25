@@ -59,7 +59,7 @@ const DefaultDelta = 0.05
 
 type cellKey struct{ kind, check, head string }
 
-// MinWrongSinceChange bounds how soon a changed check counts again: wrong answers needed since the change.
+// MinWrongSinceChange bounds how soon a changed check counts again.
 const MinWrongSinceChange = 20
 
 // Fit bounds each cell's false-pass rate at delta/M, M the checks in its kind.
@@ -76,14 +76,15 @@ func FitSince(answers []Answer, delta float64, changes map[[3]string]int) (Table
 	}
 	cells := map[cellKey]*Cell{}
 	checks := map[string]map[string]bool{}
-	clock := map[string]int{}
+	clock := map[[2]string]int{}
 	for _, a := range answers {
 		if checks[a.Kind] == nil {
 			checks[a.Kind] = map[string]bool{}
 		}
-		now := clock[a.Kind]
+		kh := [2]string{a.Kind, a.Head}
+		now := clock[kh]
 		if !a.Correct {
-			clock[a.Kind]++
+			clock[kh]++
 		}
 		for check, passed := range a.Verdicts {
 			checks[a.Kind][check] = true
@@ -140,21 +141,22 @@ func FitSince(answers []Answer, delta float64, changes map[[3]string]int) (Table
 }
 
 // Changes finds where each (kind, check, head) false-pass rate last changed, read
-// oldest first on the kind's clock of wrong answers; per head, or a shift in which
-// heads answer reads as a change. The value is how many wrong answers came before it.
+// oldest first on that head's wrong answers in the kind; per head, or a shift in
+// which heads answer reads as a change. The value is how many came before it.
 func Changes(answers []Answer) map[[3]string]int {
 	type watch struct {
 		det         *drift.Detector
-		start, seen int // start: the kind's clock before the check first judged
+		start, seen int // start: the clock before the check first judged
 	}
 	watches := map[[3]string]*watch{}
-	clock := map[string]int{}
+	clock := map[[2]string]int{}
 	for _, a := range answers {
 		if a.Correct {
 			continue
 		}
-		clock[a.Kind]++
-		now := clock[a.Kind]
+		kh := [2]string{a.Kind, a.Head}
+		clock[kh]++
+		now := clock[kh]
 		for check, passed := range a.Verdicts {
 			k := [3]string{a.Kind, check, a.Head}
 			w := watches[k]

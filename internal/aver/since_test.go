@@ -68,8 +68,8 @@ func TestFit_RecentlyChangedCheckIsSkipped(t *testing.T) {
 	}
 }
 
-func TestChanges_OnTheKindsClock(t *testing.T) {
-	// "late" first judges at the kind's 31st wrong answer, then jumps 30 later.
+func TestChanges_OnTheHeadsClock(t *testing.T) {
+	// "late" first judges at the head's 31st wrong answer, then jumps 30 later.
 	in := jump(60, 30)
 	for i, a := range in {
 		if !a.Correct && i/2 >= 30 {
@@ -77,6 +77,29 @@ func TestChanges_OnTheKindsClock(t *testing.T) {
 		}
 	}
 	if at := Changes(in)[[3]string{"summary", "late", "m"}]; at != 60 {
-		t.Fatalf("late changed at %d on its own clock, want 60 on the kind's", at)
+		t.Fatalf("late changed at %d on its own clock, want 60 on its head's clock", at)
+	}
+}
+
+func TestChanges_OtherHeadsDoNotMoveTheClock(t *testing.T) {
+	// Another model's 200 wrong answers, interleaved, must not shift m's change point.
+	var in []Answer
+	for i, a := range jump(60, 30) {
+		in = append(in, a)
+		if i%2 == 0 {
+			in = append(in, Answer{Kind: "summary", Head: "n", Verdicts: map[string]bool{"judge": false}},
+				Answer{Kind: "summary", Head: "n", Verdicts: map[string]bool{"judge": false}})
+		}
+	}
+	ch := Changes(in)
+	if at := ch[[3]string{"summary", "judge", "m"}]; at != 60 {
+		t.Fatalf("m changed at %d, want 60 on its own wrong answers", at)
+	}
+	tab, err := FitSince(in, 0.05, ch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := cell(t, tab, "summary", "judge", "m"); c.Wrong != 30 || !c.Changed {
+		t.Fatalf("m should count its 30 wrong answers since the change: %+v", c)
 	}
 }
