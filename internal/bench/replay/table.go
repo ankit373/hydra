@@ -25,6 +25,9 @@ func Table(rep Report) string {
 	}
 	w.Flush()
 	for _, s := range rep.Summaries {
+		if len(s.Bars) > 0 {
+			fmt.Fprintf(&b, "bars per candidate, %s %s alpha %.2f: %s\n", s.Kind, s.Policy, s.Alpha, bars(s.Bars))
+		}
 		if s.Untestable > 0 {
 			fmt.Fprintf(&b, "%s %s alpha %.2f: %d check pair(s) linked for lack of shared wrong answers (first split)\n",
 				s.Kind, s.Policy, s.Alpha, s.Untestable)
@@ -39,4 +42,12 @@ func dollars(u USD) string {
 		return "n/a (none correct)"
 	}
 	return fmt.Sprintf("%.6f", float64(u))
+}
+
+func bars(b []float64) string {
+	parts := make([]string, len(b))
+	for i, x := range b {
+		parts[i] = fmt.Sprintf("%.4g", x)
+	}
+	return strings.Join(parts, ", ")
 }
