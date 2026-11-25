@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/oracle"
@@ -105,6 +107,12 @@ func MergeFields(results []Result) (fields []FieldVerdict, merged bool) {
 	if src == nil || rt == nil {
 		return append(src, rt...), false
 	}
+	return MergeVerdicts(src, rt), true
+}
+
+// MergeVerdicts is one verdict per field from the fields check's list and the round trip's: a
+// failure from either stands, else in the source, agreed by a second model, or both.
+func MergeVerdicts(src, rt []FieldVerdict) (fields []FieldVerdict) {
 	byName := make(map[string]FieldVerdict, len(rt))
 	for _, f := range rt {
 		byName[f.Name] = f
@@ -132,7 +140,7 @@ func MergeFields(results []Result) (fields []FieldVerdict, merged bool) {
 			fields = append(fields, f)
 		}
 	}
-	return fields, true
+	return fields
 }
 
 func record(r Result, answer string, answering provider.Head, span runlog.Event) error {
@@ -211,4 +219,29 @@ func Label(results []Result) string {
 		return LabelNotChecked
 	}
 	return LabelAllPassed
+}
+
+// LoadSpecs reads every stored spec, grouped by the task hash it was written
+// for and sorted by id, so a replay can rebuild the checks a past answer met.
+func LoadSpecs() (map[string][]Spec, error) {
+	paths, err := filepath.Glob(filepath.Join(SpecsDir(), "*.json"))
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]Spec{}
+	for _, p := range paths {
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		var s Spec
+		if err := json.Unmarshal(raw, &s); err != nil {
+			return nil, fmt.Errorf("checkgen: %s: %w", p, err)
+		}
+		out[s.TaskHash] = append(out[s.TaskHash], s)
+	}
+	for _, specs := range out {
+		slices.SortFunc(specs, func(a, b Spec) int { return strings.Compare(a.ID, b.ID) })
+	}
+	return out, nil
 }

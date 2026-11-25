@@ -146,8 +146,8 @@ release:
     ---
     **Install / Upgrade**
     ```bash
-    brew tap ankit373/hydra   # first install (one-time)
-    brew install hyctl
+    brew trust ankit373/hydra  # first install (one-time)
+    brew install ankit373/hydra/hyctl
     brew upgrade hyctl        # upgrade
     ```
     **Verify SHA**
