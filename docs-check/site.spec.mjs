@@ -168,7 +168,7 @@ test.describe('without JavaScript', () => {
   }
 })
 
-// The theme follows the OS until the viewer picks one, and the pick survives a reload (#1355).
+// The site opens dark until the viewer picks a theme, and the pick survives a reload (#1355, #2093).
 test.describe('theme', () => {
   test.skip(({ colorScheme }) => colorScheme !== 'light', 'drives the theme itself')
 
@@ -177,24 +177,29 @@ test.describe('theme', () => {
     await page.goto('index.html')
     const toggle = page.locator('.site-header .theme-toggle')
     await expect(toggle).toBeInViewport()
-    await expect(toggle).toHaveAccessibleName('Theme: match system')
+    // Nothing saved: dark, even though the OS is light here.
+    await expect(toggle).toHaveAccessibleName('Theme: dark')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     const base = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
-    const light = await base()
-    // The OS is light here, so the first press must go to dark, or it changes nothing on screen.
+    const dark = await base()
     await toggle.focus()
     await page.keyboard.press('Enter')
-    await expect(toggle).toHaveAccessibleName('Theme: dark')
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-    expect(await base()).not.toBe(light)
-    await page.reload()
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-    await expect(toggle).toHaveAccessibleName('Theme: dark')
-    await toggle.click()
     await expect(toggle).toHaveAccessibleName('Theme: light')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+    const light = await base()
+    expect(light).not.toBe(dark)
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
     await toggle.click()
     await expect(toggle).toHaveAccessibleName('Theme: match system')
     await expect(page.locator('html')).not.toHaveAttribute('data-theme', /./)
     expect(await base()).toBe(light)
+    // A saved "system" must survive a reload, not fall back to the dark default.
+    await page.reload()
+    await expect(toggle).toHaveAccessibleName('Theme: match system')
+    await expect(page.locator('html')).not.toHaveAttribute('data-theme', /./)
+    await toggle.click()
+    await expect(toggle).toHaveAccessibleName('Theme: dark')
   })
 
   // A theme set after a stylesheet is parsed can paint the other theme first.
@@ -219,18 +224,20 @@ test.describe('theme', () => {
     const pixels = () => page.evaluate(() => document.getElementById('aurora').toDataURL())
     const before = await pixels()
     const colour = await page.evaluate(() => Hydra.color('surface-base'))
-    await page.locator('.theme-toggle').click() // the OS is light, so this is dark
+    await page.locator('.theme-toggle').click() // dark by default, so this is light
     await page.waitForTimeout(400)
     expect(await page.evaluate(() => Hydra.color('surface-base'))).not.toBe(colour)
-    expect(await pixels(), 'the aurora kept its light-theme frame').not.toBe(before)
+    expect(await pixels(), 'the aurora kept its old-theme frame').not.toBe(before)
   })
 
   test('with storage refused the page still loads and the toggle still works', async ({ page }) => {
     const errors = collectErrors(page)
     await page.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new Error('denied') } }))
     await page.goto('index.html')
-    await page.locator('.theme-toggle').click()
+    // Storage refused still opens dark, and the first press still changes it.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+    await page.locator('.theme-toggle').click()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
     expect(errors).toEqual([])
   })
 })

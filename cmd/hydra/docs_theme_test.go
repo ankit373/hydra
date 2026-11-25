@@ -10,7 +10,7 @@ import (
 
 // themeScript applies a viewer's saved theme before any stylesheet paints, so a
 // page never flashes the other theme (#1355). site.js owns the choice afterwards.
-const themeScript = `<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>`
+const themeScript = `<script>try{var t=localStorage.getItem('hydra-theme');if(t!=='system')document.documentElement.dataset.theme=t==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>`
 
 var stylesheetLink = regexp.MustCompile(`<link rel="stylesheet"`)
 
