@@ -38,7 +38,7 @@ Light values sit on `:root`. Dark values apply under `@media (prefers-color-sche
 
 ### Choosing a theme
 
-Both surfaces follow the OS until the viewer picks a theme. A header button cycles system, light and dark; the choice is saved per browser (or per app install) under the `hydra-theme` key in `localStorage`, and every read and write is wrapped so a refused storage leaves the page following the choice for the session.
+The website opens dark until the viewer picks a theme; the desktop app follows the OS until then. A header button cycles the choices (dark, light, match system on the website); the choice is saved per browser (or per app install) under the `hydra-theme` key in `localStorage`, and every read and write is wrapped so a refused storage leaves the page following the choice for the session. The website saves `system` explicitly, since an empty key means dark.
 
 - **No flash.** A one-line inline script in each page's `<head>`, before any stylesheet, sets `data-theme` from the saved choice. `cmd/hydra/docs_theme_test.go` fails on a page without it, with it after a stylesheet, or with a pinned `data-theme`; `ThemeToggle.test.tsx` checks the desktop entry pages the same way.
 - **Canvas and SVG.** `Hydra.color()` drops its cache and `Hydra.loop()` redraws on any theme change, from the OS or the button. A page that keeps colours of its own refreshes them in `Hydra.onTheme(fn)`. SVG built by script should take `var(--hy-color-…)` in its style so it follows without script.
