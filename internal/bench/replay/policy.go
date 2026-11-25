@@ -39,6 +39,7 @@ var policies = map[string]func(Options) (Policy, error){
 	"aver_pattern":         newAverPattern,
 	"aver_product":         newAverProduct(false, false),
 	"aver_product_perhead": newAverProduct(true, false),
+	"sprt":                 newSPRT,
 	"first_check_pass": func(o Options) (Policy, error) {
 		if o.Check == "" {
 			return nil, errors.New("first_check_pass needs its primary check named (bench replay --check)")

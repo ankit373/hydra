@@ -101,6 +101,13 @@ One JSON line per (task, head) candidate:
   chosen on calibration. It buys heads in order without skipping, so agreement means the same on
   both halves. Without enough wrong answers it refuses and says how many it would need, about
   ln(patterns/delta) x bar.
+- `sprt` is hydra's current default, `trust.Run` (`--confidence`), replayed: models vote by agreeing,
+  each vote weighed by its calibrated sensitivity and specificity, until an answer's confidence
+  reaches 1 - alpha. Calibration is fitted in memory from the calibrate half (every distinct answer
+  to a task is a hypothesis, and a head says "correct" for it when its `answer_key` matches), answers
+  agree when their `answer_key`s match, and the family co-agreement discount is fitted from the same
+  half. Nothing is read from or written to `~/.hydra`. An optional `family` field on a row names the
+  head's vendor family; rows without one are treated as independent.
 - In the AVER policies a check missing from `verdicts` did not run, unlike the older policies where
   it did not pass: calibration only sees verdicts that exist, so a missing one has no calibrated e.
 - False accept per task is wrong accepted answers over all test tasks, with a two-sided 95%
