@@ -12,8 +12,8 @@ import (
 	"github.com/ankit373/hydra/internal/util"
 )
 
-// maxGroundBytes is the most original text checked in one ground.Check. Past
-// it, each ref's claims are checked against only the turns carrying that ref.
+// maxGroundBytes is how much original text is checked in one go. Past it, each
+// ref's claims are checked against only the turns carrying that ref.
 const maxGroundBytes = 256 << 10
 
 // Verdict is what the checks found on a pack. Reason is empty on a pass.
