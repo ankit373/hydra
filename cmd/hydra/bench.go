@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -122,7 +123,7 @@ func cmdBenchTable() *cobra.Command {
 }
 
 func cmdBenchReplay() *cobra.Command {
-	var candidates, check string
+	var candidates, check, outcomes string
 	var policies []string
 	var alphas []float64
 	var delta float64
@@ -152,9 +153,29 @@ func cmdBenchReplay() *cobra.Command {
 			for i := range seeds {
 				seeds[i] = uint64(i)
 			}
-			rep, err := replay.Run(rows, replay.Config{Policies: policies, Alphas: alphas, Seeds: seeds, Check: check, Delta: delta})
+			cfg := replay.Config{Policies: policies, Alphas: alphas, Seeds: seeds, Check: check, Delta: delta}
+			var out *os.File
+			var w *bufio.Writer
+			if outcomes != "" {
+				if out, err = os.Create(outcomes); err != nil {
+					return err
+				}
+				defer out.Close()
+				w = bufio.NewWriter(out)
+				cfg.Outcomes = w
+			}
+			rep, err := replay.Run(rows, cfg)
 			if err != nil {
 				return err
+			}
+			if w != nil {
+				// A short write must fail the command, not leave a truncated file behind quietly.
+				if err := w.Flush(); err != nil {
+					return err
+				}
+				if err := out.Close(); err != nil {
+					return err
+				}
 			}
 			if jsonOut {
 				return json.NewEncoder(stdout).Encode(rep)
@@ -173,6 +194,7 @@ func cmdBenchReplay() *cobra.Command {
 	f.IntVar(&splits, "splits", 20, "random calibrate/test splits, seeded 0..n-1")
 	f.StringVar(&check, "check", "", "the primary check first_check_pass accepts on")
 	f.BoolVar(&jsonOut, "json", false, "print every split and summary as JSON")
+	f.StringVar(&outcomes, "outcomes", "", "also write one JSON line per test task, policy, alpha and split to this file")
 	_ = cmd.MarkFlagRequired("candidates")
 	return cmd
 }

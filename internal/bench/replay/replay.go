@@ -209,6 +209,22 @@ type Config struct {
 	Seeds    []uint64
 	Check    string  // first_check_pass's primary check
 	Delta    float64 // AVER bound error; 0 means aver.DefaultDelta
+	// Outcomes, when set, gets one TaskOutcome JSON line per test task per run.
+	Outcomes io.Writer
+}
+
+// TaskOutcome is one test task's result under one (policy, alpha, seed): what the
+// per-split counts are summed from, kept so runs can be compared task by task.
+type TaskOutcome struct {
+	Task     string   `json:"task"`
+	Kind     string   `json:"kind"`
+	Seed     uint64   `json:"seed"`
+	Policy   string   `json:"policy"`
+	Alpha    float64  `json:"alpha"`
+	Accepted *string  `json:"accepted_head"` // null when nothing was accepted
+	Correct  *bool    `json:"correct"`       // null when nothing was accepted
+	Tried    []string `json:"tried"`
+	CostUSD  float64  `json:"cost_usd"`
 }
 
 // Run replays each kind on its own, since a check's evidence does not carry across kinds.
@@ -237,6 +253,10 @@ func Run(rows []Row, cfg Config) (Report, error) {
 	}
 	sort.Strings(kinds)
 	rep := Report{Seeds: cfg.Seeds}
+	var enc *json.Encoder
+	if cfg.Outcomes != nil {
+		enc = json.NewEncoder(cfg.Outcomes)
+	}
 	for _, kind := range kinds {
 		byTask := map[string][]Row{}
 		for _, r := range byKind[kind] {
@@ -246,7 +266,7 @@ func Run(rows []Row, cfg Config) (Report, error) {
 			for _, alpha := range cfg.Alphas {
 				var res []Result
 				for _, seed := range cfg.Seeds {
-					r, err := replayOne(byKind[kind], byTask, name, Options{Alpha: alpha, Delta: cfg.Delta, Check: cfg.Check}, seed)
+					r, err := replayOne(byKind[kind], byTask, name, Options{Alpha: alpha, Delta: cfg.Delta, Check: cfg.Check}, seed, enc)
 					if err != nil {
 						return Report{}, fmt.Errorf("replay: %s, %s: %w", kind, name, err)
 					}
@@ -260,7 +280,7 @@ func Run(rows []Row, cfg Config) (Report, error) {
 	return rep, nil
 }
 
-func replayOne(rows []Row, byTask map[string][]Row, name string, opts Options, seed uint64) (Result, error) {
+func replayOne(rows []Row, byTask map[string][]Row, name string, opts Options, seed uint64, enc *json.Encoder) (Result, error) {
 	sp := SplitTasks(rows, seed)
 	if len(sp.Calibration) == 0 {
 		return Result{}, errors.New("needs at least two tasks to split")
@@ -279,7 +299,20 @@ func replayOne(rows []Row, byTask map[string][]Row, name string, opts Options, s
 	order := CheapestFirst(cal)
 	out := make([]Outcome, 0, len(sp.Test))
 	for _, t := range sp.Test {
-		out = append(out, p.Decide(byTask[t], order))
+		o := p.Decide(byTask[t], order)
+		out = append(out, o)
+		if enc == nil {
+			continue
+		}
+		line := TaskOutcome{Task: t, Kind: rows[0].Kind, Seed: seed, Policy: name, Alpha: opts.Alpha,
+			Tried: append([]string{}, o.Bought...), CostUSD: o.Spent}
+		if o.Accepted != nil {
+			head, correct := o.Accepted.Head, o.Accepted.Correct
+			line.Accepted, line.Correct = &head, &correct
+		}
+		if err := enc.Encode(line); err != nil {
+			return Result{}, fmt.Errorf("outcomes: %w", err)
+		}
 	}
 	r, err := Score(out)
 	if err != nil {
