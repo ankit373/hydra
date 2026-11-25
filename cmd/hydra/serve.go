@@ -528,6 +528,9 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if cfg.Idle.Enabled {
+				go idleLoop(ctx, d, cfg.Idle)
+			}
 			r := serveRouter{
 				d: d, defaultEnum: enum, objective: objective, implicit: implicitDefault(c, objective),
 				notice: newDeprecationNotice(stderr), defaultClass: defaultClass, localOnly: localOnly,
