@@ -91,6 +91,12 @@ One JSON line per (task, head) candidate:
   `aver_product_perhead` fits a bound per head, `aver_product` one pooled over heads. Checks run strongest evidence per
   dollar first, a head that cannot reach the bar is not bought, and an answer stops as soon as the
   bar is out of reach. Bounds hold with chance 1 - `--delta` (default 0.05).
+- `aver_pattern` certifies under any dependence: per head, it bounds how often a wrong answer
+  matches a pattern of up to 3 features (checks, plus at most one "at least m earlier answers
+  agree"), with delta split over every pattern and head, and accepts an answer matching the pattern
+  chosen on calibration. It buys heads in order without skipping, so agreement means the same on
+  both halves. Without enough wrong answers it refuses and says how many it would need, about
+  ln(patterns/delta) x bar.
 - In the AVER policies a check missing from `verdicts` did not run, unlike the older policies where
   it did not pass: calibration only sees verdicts that exist, so a missing one has no calibrated e.
 - False accept per task is wrong accepted answers over all test tasks, with a two-sided 95%

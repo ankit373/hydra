@@ -35,6 +35,7 @@ type Options struct {
 
 var policies = map[string]func(Options) (Policy, error){
 	"always_strongest":     func(Options) (Policy, error) { return &alwaysStrongest{}, nil },
+	"aver_pattern":         newAverPattern,
 	"aver_product":         newAverProduct(false),
 	"aver_product_perhead": newAverProduct(true),
 	"first_check_pass": func(o Options) (Policy, error) {
