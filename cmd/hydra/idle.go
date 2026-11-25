@@ -239,7 +239,9 @@ func cmdIdleReplay() *cobra.Command {
 			if !head.LocalOnly {
 				return fmt.Errorf("%s is not a local model; a replay never calls a paid one", head.ID)
 			}
-			fmt.Fprintf(stdout, "model %s (%s), digest %s; local only, no paid calls\n\n", head.ID, head.Name, orUnknown(head.Meta["model_digest"]))
+			if !jsonOut {
+				fmt.Fprintf(stdout, "model %s (%s), digest %s; local only, no paid calls\n\n", head.ID, head.Name, orUnknown(head.Meta["model_digest"]))
+			}
 			rows, err := idle.Replay(ctx, idleHead{head: head, ask: dispatch.HeadAsk(head, idleMaxTokens)}, fixtures, idle.ReplayConfig{})
 			if err != nil {
 				return err
