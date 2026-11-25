@@ -32,11 +32,12 @@ func seedCertifyFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Passes are spread over the log, so no rate changes along it.
 	for i := range 40 {
 		add("weak", i, false, false)
-		add("weak", i, true, i < 36)
-		add("strong", i, false, i < 16)
-		add("strong", i, true, i < 18)
+		add("weak", i, true, i%10 < 9)
+		add("strong", i, false, i%5 < 2)
+		add("strong", i, true, i%20 < 9)
 	}
 }
 
@@ -115,5 +116,36 @@ func TestAverAnswers_KeepsLabelledAndFoldsRepeats(t *testing.T) {
 	}
 	if !got[1].Correct || got[1].Kind != "unknown" || got[1].Head != "unknown" || !got[1].Verdicts["lint"] {
 		t.Fatalf("second answer: %+v", got[1])
+	}
+}
+
+// The judge passes none of its first 60 wrong answers and every one of the
+// next 10. Lines are written newest first, so only the timestamps give the order.
+func TestTrustCertifyTable_ShowsChangedRecently(t *testing.T) {
+	cliSandbox(t)
+	p := evalset.VerdictsPath()
+	for i := 69; i >= 0; i-- {
+		ts := fmt.Sprintf("2026-11-01T%02d:%02d:00Z", i/60, i%60)
+		for _, correct := range []bool{false, true} {
+			span := fmt.Sprintf("s-%d-%v", i, correct)
+			v := evalset.Verdict{TS: ts, SpanID: span, Head: "m", Domain: "summary", Check: "judge", Passed: correct || i >= 60}
+			out := evalset.OutcomeIncorrect
+			if correct {
+				out = evalset.OutcomeCorrect
+			}
+			if err := evalset.AddVerdict(p, v); err != nil {
+				t.Fatal(err)
+			}
+			if err := evalset.AddTruth(p, evalset.Truth{TS: ts, SpanID: span, Outcome: out}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	out, _, err := run(t, "trust", "certify-table")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "skip  changed recently") {
+		t.Fatalf("judge not shown as changed recently:\n%s", out)
 	}
 }
