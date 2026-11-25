@@ -897,6 +897,9 @@ Do not poll with `gh pr checks --watch`; a short background poll loop costs far 
 
 - PRs land through the Mergify queue: label `ready`, or the maintainer comments `@mergifyio queue`
 - PRs to `main` need CI green; release-please's PR also needs the maintainer's approval
+- A docs-only PR into `main` (only `docs/`, `*.md` or `registry/*.yaml`) runs Go on Linux and the
+  cheap checks; the desktop, cross-compile and release jobs still report success but build
+  nothing (`changes` job, `scripts/ci-scope.sh`). The merge queue and other base branches run everything
 - Merge strategy: **Squash and merge** everywhere, clean linear history
 - Never force-push to `release/*` or `main`
 
@@ -1135,6 +1138,9 @@ docs/pricing.md    ← machine-readable pricing for AI agents
 docs/sitemap.xml   ← lastmod date + any new public URLs
 docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 ```
+
+`docs/demo/` holds the README's demo GIF and what it is recorded from (`ground.tape`, the fixtures).
+Re-record it with `vhs docs/demo/ground.tape` when `oracle ground` output changes; `TestDemo_*` fails first.
 
 `docs/releases/` is generated, never edited: `python3 docs/releases/generate.py` builds one page
 per release, the index, `feed.xml` and the sitemap's `RELEASE-URLS` block from `CHANGELOG.md`,

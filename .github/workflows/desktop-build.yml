@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip:
+        description: "Report success without building, for a change that touches no code"
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Commit to build. Defaults to the commit that triggered the caller."
         required: false
@@ -64,7 +69,8 @@ on:
 jobs:
   build:
     name: ${{ matrix.goos }}/${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+    # A skipped build takes a Linux runner, so no leg waits for a macOS or Windows one.
+    runs-on: ${{ inputs.skip && 'ubuntu-latest' || matrix.runner }}
     # A job asking for a runner label that does not exist does not fail, it
     # queues, and without this it would sit there for six hours before GitHub
     # gives up. 30 minutes is roughly double the slowest real build.
@@ -84,11 +90,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        if: ${{ !inputs.skip }}
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Go
+        if: ${{ !inputs.skip }}
         uses: actions/setup-go@v7
         with:
           go-version-file: desktop/go.mod
@@ -96,6 +104,7 @@ jobs:
           cache-dependency-path: desktop/go.sum
 
       - name: Set up Node
+        if: ${{ !inputs.skip }}
         uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -105,12 +114,13 @@ jobs:
       # Ubuntu 24.04 ships webkit2gtk-4.1, not 4.0, hence the webkit2_41 build
       # tag in the target definition above. Without both the link step fails.
       - name: Linux webview dependencies
-        if: matrix.goos == 'linux'
+        if: ${{ !inputs.skip && matrix.goos == 'linux' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Install Wails CLI
+        if: ${{ !inputs.skip }}
         shell: bash
         run: |
           # Pinned to the version in desktop/go.mod so the CLI and the library
@@ -132,6 +142,7 @@ jobs:
       # pre-release *of* that version; the exact build stays visible in the
       # footer via ldflags, which is the authoritative place for it.
       - name: Stamp the bundle version
+        if: ${{ !inputs.skip }}
         shell: bash
         working-directory: desktop
         # Through env, not ${{ }} interpolated into the script body: the value
@@ -151,6 +162,7 @@ jobs:
           mv wails.json.tmp wails.json
 
       - name: Build
+        if: ${{ !inputs.skip }}
         shell: bash
         working-directory: desktop
         run: |
@@ -170,7 +182,7 @@ jobs:
       # are exact rather than globbed, a rename should break the build loudly
       # here, not produce a release with a silently missing artifact.
       - name: Package (macOS)
-        if: matrix.goos == 'darwin'
+        if: ${{ !inputs.skip && matrix.goos == 'darwin' }}
         shell: bash
         working-directory: desktop/build/bin
         run: |
@@ -184,14 +196,14 @@ jobs:
       # matrix would otherwise silently overwrite the amd64 artifact on the
       # release (same filename, `gh release upload --clobber`).
       - name: Package (Windows)
-        if: matrix.goos == 'windows'
+        if: ${{ !inputs.skip && matrix.goos == 'windows' }}
         shell: pwsh
         working-directory: desktop/build/bin
         run: |
           Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_$($env:VERSION)_windows_$($env:TARGET_ARCH).zip"
 
       - name: Package (Linux)
-        if: matrix.goos == 'linux'
+        if: ${{ !inputs.skip && matrix.goos == 'linux' }}
         shell: bash
         working-directory: desktop/build/bin
         run: |
@@ -202,8 +214,8 @@ jobs:
       # docs tell users exactly what to do. When the certificates exist they
       # slot in here, gated on their secrets, the same way publish.yml gates
       # Homebrew/npm/pip, no pipeline restructuring required.
-
       - name: Verify the artifact exists and is not empty
+        if: ${{ !inputs.skip }}
         shell: bash
         working-directory: desktop/build/bin
         run: |
@@ -241,6 +253,7 @@ jobs:
       # jobs run in parallel, and appending to a single checksums.txt would be a
       # race between them. Each job owns exactly the files it produced.
       - name: Checksum the artifact
+        if: ${{ !inputs.skip }}
         shell: bash
         working-directory: desktop/build/bin
         run: |
@@ -262,7 +275,7 @@ jobs:
       # works rather than restating the step above, and it keeps working: if the
       # docs and the artifact ever drift apart, this job fails.
       - name: Verify the checksum the way the docs tell Windows users to
-        if: matrix.goos == 'windows'
+        if: ${{ !inputs.skip && matrix.goos == 'windows' }}
         shell: pwsh
         working-directory: desktop/build/bin
         run: |
@@ -277,7 +290,7 @@ jobs:
           }
 
       - name: Upload to the release
-        if: inputs.upload
+        if: ${{ !inputs.skip && inputs.upload }}
         shell: bash
         working-directory: desktop/build/bin
         env:
@@ -286,10 +299,14 @@ jobs:
           gh release upload "$RELEASE_TAG" hydra-desktop_* --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Upload as a workflow artifact
-        if: ${{ !inputs.upload }}
+        if: ${{ !inputs.skip && !inputs.upload }}
         uses: actions/upload-artifact@v7
         with:
           name: hydra-desktop-${{ matrix.goos }}-${{ matrix.arch }}
           path: desktop/build/bin/hydra-desktop_*
           if-no-files-found: error
           retention-days: 7
+
+      - name: Skipped
+        if: ${{ inputs.skip }}
+        run: echo "::notice::docs-only change, nothing to build"
