@@ -87,8 +87,13 @@ func RunProbes(ctx context.Context, head Head, p Pack, t Turns, v Verdict, minAg
 	v.SameHead = head.Head().ID == p.Head
 	v.Pass = false
 
+	// Rendered once: every probe reads every group.
+	rendered := make([]string, len(groups))
+	for i, g := range groups {
+		rendered[i] = renderTurns(g)
+	}
 	probes := deterministicProbes(p.State)
-	extra, err := askProbes(ctx, head, groups[len(groups)-1])
+	extra, err := askProbes(ctx, head, rendered[len(rendered)-1])
 	if err != nil {
 		return v, err
 	}
@@ -104,8 +109,8 @@ func RunProbes(ctx context.Context, head Head, p Pack, t Turns, v Verdict, minAg
 			return v, err
 		}
 		agreed := false
-		for _, g := range groups {
-			fromTurns, err := answer(ctx, head, q.Question, renderTurns(g))
+		for _, g := range rendered {
+			fromTurns, err := answer(ctx, head, q.Question, g)
 			if err != nil {
 				return v, err
 			}
@@ -128,11 +133,11 @@ func RunProbes(ctx context.Context, head Head, p Pack, t Turns, v Verdict, minAg
 	return v, nil
 }
 
-func askProbes(ctx context.Context, head Head, g []Turn) ([]probe, error) {
+func askProbes(ctx context.Context, head Head, conversation string) ([]probe, error) {
 	var out []probe
 	for _, m := range modelProbes {
 		q, err := head.Ask(ctx, questionPrompt+m.ask+". Reply with the question only.\n\n"+
-			util.WrapUntrusted("CONVERSATION", renderTurns(g)))
+			util.WrapUntrusted("CONVERSATION", conversation))
 		if err != nil {
 			return nil, err
 		}

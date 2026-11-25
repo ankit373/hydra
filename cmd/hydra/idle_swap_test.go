@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,5 +171,26 @@ func TestServe_CompactedHeaderSet(t *testing.T) {
 	}
 	if ev.TaskClass != "" || opts.Domain != "" {
 		t.Fatal("a swap must not claim a task class")
+	}
+}
+
+func TestServe_CompactorForgetsTheOldestConversationAtItsCap(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir())
+	c := newCompactor(swapColdOnly)
+	start := time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)
+	for i := 0; i < maxConversations; i++ {
+		c.now = func() time.Time { return start.Add(time.Duration(i) * time.Second) }
+		c.since(fmt.Sprintf("conv-%d", i))
+	}
+	c.now = func() time.Time { return start.Add(time.Hour) }
+	c.since("conv-new")
+	if len(c.requests) != maxConversations {
+		t.Fatalf("%d conversations kept, want the cap %d", len(c.requests), maxConversations)
+	}
+	if _, kept := c.requests["conv-0"]; kept {
+		t.Fatal("the oldest conversation was kept")
+	}
+	if _, kept := c.requests["conv-1"]; !kept {
+		t.Fatal("a newer conversation was dropped")
 	}
 }
