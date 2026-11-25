@@ -12,7 +12,7 @@ On first run it downloads the prebuilt `hyctl` binary matching this package's ve
 ## Other install methods
 
 ```bash
-brew tap ankit373/hydra && brew install hyctl          # Homebrew
+brew trust ankit373/hydra && brew install ankit373/hydra/hyctl  # Homebrew
 npm install -g hyctl                                    # npm
 npx hyctl init                                          # npx (no install)
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh   # standalone
