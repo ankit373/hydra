@@ -18,6 +18,41 @@ permissions:
   contents: read
 
 jobs:
+  # Decides whether the heavy jobs have work. A docs-only PR into main (docs/, *.md,
+  # registry/*.yaml) runs Go on Linux and the cheap checks; the rest report success
+  # without building, because Mergify requires them by name. The merge queue, every
+  # other base branch and any API failure run everything.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Scope
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          case "$HEAD_REF" in
+            mergify/merge-queue/*) echo "full=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          if [ "$BASE_REF" != main ]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" -q '.[].filename') \
+            || { echo "full=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          ./scripts/ci-scope.sh <<<"$files" | tee -a "$GITHUB_OUTPUT"
+
   # Hydra ships for darwin, linux and windows on both amd64 and arm64, but every
   # job in this file used to run on ubuntu-latest, so `go test` only ever ran on
   # Linux. That is how a Windows user came to see "0GB RAM · memory fully
@@ -27,7 +62,11 @@ jobs:
   # are simply untested surfaces. The matrix is the fix (#255).
   go:
     name: Go build & test
-    runs-on: ${{ matrix.os }}
+    needs: changes
+    env:
+      RUN: ${{ needs.changes.outputs.full == 'true' || matrix.os == 'ubuntu-latest' }}
+    # A leg that has nothing to run takes a Linux runner, so none waits on macOS or Windows.
+    runs-on: ${{ (needs.changes.outputs.full == 'true' || matrix.os == 'ubuntu-latest') && matrix.os || 'ubuntu-latest' }}
     strategy:
       # One platform's failure must never mask another's: the whole point is to
       # learn the full list in a single run.
@@ -42,10 +81,12 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        if: ${{ env.RUN == 'true' }}
         with:
           persist-credentials: false
 
       - name: Set up Go
+        if: ${{ env.RUN == 'true' }}
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -56,7 +97,7 @@ jobs:
       # Formatting is checked before anything expensive: cheapest failure to
       # produce, cheapest to fix.
       - name: Gofmt
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         run: |
           unformatted=$(gofmt -l ./cmd ./internal)
           if [ -n "$unformatted" ]; then
@@ -67,7 +108,7 @@ jobs:
           fi
 
       - name: Vet
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         run: go vet ./...
 
       # staticcheck must be BUILT with the same toolchain it analyses. Its own
@@ -77,14 +118,15 @@ jobs:
       # this module actually resolved to keeps the two in step without
       # hardcoding a version that would drift from go.mod.
       - name: Install staticcheck
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
 
       - name: Staticcheck
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         run: staticcheck ./...
 
       - name: Build
+        if: ${{ env.RUN == 'true' }}
         run: go build ./...
 
       # -count=1 defeats the test cache. setup-go restores the build cache across
@@ -97,6 +139,7 @@ jobs:
       # rather than dropping the leg, an unraced Windows run still catches every
       # platform bug listed above.
       - name: Test
+        if: ${{ env.RUN == 'true' }}
         run: go test ./... -race -count=1
 
       # Coverage floors, the zero-test-package allow-list and the skip budget.
@@ -110,17 +153,24 @@ jobs:
       # Run without -race: the detector does not change coverage, and this is a
       # second full pass over the suite.
       - name: Coverage floors
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         run: |
           go test ./internal/... ./cmd/... ./registry/... \
             -coverprofile=cover.out -count=1
           go run ./ci/covergate -profile cover.out -config ci/coverage-floors.txt
 
+      - name: Skipped
+        if: ${{ env.RUN != 'true' }}
+        run: echo "::notice::docs-only change, nothing to run here"
+
   # The desktop app ships for all three OSes, so its Go backend is tested on all
   # three too, same reasoning as the root job above (#257).
   desktop:
     name: Desktop backend
-    runs-on: ${{ matrix.os }}
+    needs: changes
+    env:
+      RUN: ${{ needs.changes.outputs.full == 'true' }}
+    runs-on: ${{ needs.changes.outputs.full == 'true' && matrix.os || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -130,10 +180,12 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        if: ${{ env.RUN == 'true' }}
         with:
           persist-credentials: false
 
       - name: Set up Go
+        if: ${{ env.RUN == 'true' }}
         uses: actions/setup-go@v7
         with:
           go-version-file: desktop/go.mod
@@ -152,7 +204,7 @@ jobs:
       # part with the tests, imports no UI framework at all, and main.go is
       # exercised by `wails build` on a machine that has a webview.
       - name: Gofmt
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         working-directory: desktop
         run: |
           unformatted=$(gofmt -l .)
@@ -164,25 +216,30 @@ jobs:
           fi
 
       - name: Vet
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         working-directory: desktop
         run: go vet ./api/...
 
       # Same reasoning as the root job: staticcheck must be built with the
       # toolchain it analyses.
       - name: Install staticcheck
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         working-directory: desktop
         run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
 
       - name: Staticcheck
-        if: runner.os == 'Linux'
+        if: ${{ env.RUN == 'true' && runner.os == 'Linux' }}
         working-directory: desktop
         run: staticcheck ./api/...
 
       - name: Test
+        if: ${{ env.RUN == 'true' }}
         working-directory: desktop
         run: go test ./api/... -race -count=1
+
+      - name: Skipped
+        if: ${{ env.RUN != 'true' }}
+        run: echo "::notice::docs-only change, nothing to run here"
 
   shellcheck:
     name: Shellcheck
@@ -263,11 +320,48 @@ jobs:
           }
           Write-Host "PSScriptAnalyzer: no errors"
 
+  npm-windows:
+    name: npm install on Windows
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install the package against the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HYDRA_NO_UPDATE_CHECK: "1"
+        run: |
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          want="${tag#v}"
+          npm --prefix npm pkg set version="$want"
+          tgz=$(npm pack ./npm --pack-destination "$RUNNER_TEMP" | tail -1)
+          npm install --global "$RUNNER_TEMP/$tgz"
+          got=$(hyctl --version | awk '$1 == "hydra" {print $2; exit}')
+          if [ "$got" != "$want" ]; then
+            echo "::error::npm installed hyctl $got, want $want"
+            exit 1
+          fi
+          echo "ok: hyctl $got"
+
   typecheck:
     name: TypeScript typecheck
+    needs: changes
+    env:
+      RUN: ${{ needs.changes.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        if: ${{ env.RUN == 'true' }}
         with:
           persist-credentials: false
 
@@ -276,6 +370,7 @@ jobs:
       # types.ts mirrors the Go DTOs by hand, so a compile error there is
       # exactly the kind of drift CI should catch.
       - name: Set up Node
+        if: ${{ env.RUN == 'true' }}
         uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -283,14 +378,17 @@ jobs:
           cache-dependency-path: desktop/frontend/package-lock.json
 
       - name: Install dependencies
+        if: ${{ env.RUN == 'true' }}
         working-directory: desktop/frontend
         run: npm ci
 
       - name: Typecheck
+        if: ${{ env.RUN == 'true' }}
         working-directory: desktop/frontend
         run: npm run typecheck
 
       - name: Test
+        if: ${{ env.RUN == 'true' }}
         working-directory: desktop/frontend
         run: npm test
 
@@ -298,24 +396,32 @@ jobs:
       # defects shipped in one day that only a browser could catch, one of them
       # a regression against a width an earlier PR had verified by hand (#1127).
       - name: Cache the browser
+        if: ${{ env.RUN == 'true' }}
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('desktop/frontend/package-lock.json') }}
 
       - name: Install Chromium
+        if: ${{ env.RUN == 'true' }}
         working-directory: desktop/frontend
         run: npx playwright install --with-deps chromium
 
       - name: Layout check
+        if: ${{ env.RUN == 'true' }}
         working-directory: desktop/frontend
         run: npm run layout
 
       # The production bundle must build, not merely typecheck, `wails build`
       # runs this exact command before it compiles any Go.
       - name: Build
+        if: ${{ env.RUN == 'true' }}
         working-directory: desktop/frontend
         run: npm run build
+
+      - name: Skipped
+        if: ${{ env.RUN != 'true' }}
+        run: echo "::notice::docs-only change, nothing to run here"
 
   # The website, the desktop app and the TUI all style from files generated out
   # of design/tokens. Rebuilding must change nothing: a hand edit to a generated
@@ -403,19 +509,25 @@ jobs:
   # `go` matrix's job. Together they cover build for 6 targets and behaviour for 3.
   cross-compile:
     name: Cross-compile (6 targets)
+    needs: changes
+    env:
+      RUN: ${{ needs.changes.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        if: ${{ env.RUN == 'true' }}
         with:
           persist-credentials: false
 
       - name: Set up Go
+        if: ${{ env.RUN == 'true' }}
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Build and vet every release target
+        if: ${{ env.RUN == 'true' }}
         run: |
           set -u
           failed=""
@@ -437,6 +549,10 @@ jobs:
             echo "::error::cross-compile failed for:$failed"
             exit 1
           fi
+
+      - name: Skipped
+        if: ${{ env.RUN != 'true' }}
+        run: echo "::notice::docs-only change, nothing to run here"
 
   yaml-lint:
     name: YAML validation
@@ -569,31 +685,40 @@ jobs:
   # three-OS matrix on every PR. The full matrix runs on RC and release builds.
   desktop-app:
     name: Desktop app build
+    needs: changes
     uses: ./.github/workflows/desktop-build.yml
     with:
       version: ci
+      skip: ${{ needs.changes.outputs.full != 'true' }}
       targets: '[{"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}]'
 
   # A PR into main is what ships: merging it tags and publishes. So it builds what
   # publish.yml builds, all 5 desktop targets and GoReleaser, before it can merge (#1353).
   release-desktop:
     name: Release desktop build
+    needs: changes
     if: github.base_ref == 'main'
     uses: ./.github/workflows/desktop-build.yml
     with:
       version: ci
+      skip: ${{ needs.changes.outputs.full != 'true' }}
 
   release-binaries:
     name: Release build (GoReleaser)
+    needs: changes
+    env:
+      RUN: ${{ needs.changes.outputs.full == 'true' }}
     if: github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        if: ${{ env.RUN == 'true' }}
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - uses: actions/setup-go@v7
+        if: ${{ env.RUN == 'true' }}
         with:
           go-version-file: go.mod
           # Uncached, like the release it rehearses.
@@ -602,6 +727,7 @@ jobs:
       # Not --snapshot, which swallowed the missing-tag error (#821). A local tag
       # like edge.yml's, never pushed; the -ci suffix cannot collide with a release.
       - name: Create the tag GoReleaser reads
+        if: ${{ env.RUN == 'true' }}
         id: ver
         run: |
           released=$(python3 -c 'import json; print(json.load(open(".release-please-manifest.json"))["."])')
@@ -612,6 +738,7 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Build every release archive
+        if: ${{ env.RUN == 'true' }}
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           # Exact, like the release workflows (#821).
@@ -620,6 +747,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.tag }}
+
+      - name: Skipped
+        if: ${{ env.RUN != 'true' }}
+        run: echo "::notice::docs-only change, nothing to run here"
 
   # The soak rules in RELEASING.md section 3: a large release needs an RC of
   # this version at least 48 hours old, a major one an RC at least 7 days old

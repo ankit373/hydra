@@ -5,6 +5,7 @@ package decide
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/decision"
@@ -81,6 +82,10 @@ func TestCascade_Judge(t *testing.T) {
 			}
 			if next && reason == "" {
 				t.Error("an escalation gave no reason, so its Attempt says nothing")
+			}
+			// The posterior is an estimate, so the reason must not call it P(correct) (#1942).
+			if strings.Contains(reason, "P(correct)") {
+				t.Errorf("reason %q states the estimate as P(correct)", reason)
 			}
 		})
 	}

@@ -32,6 +32,8 @@
 
 **Hydra picks the model best suited to each task, and can check the answer before you rely on it.**
 
+![A terminal: hyctl oracle ground flags a summary that says 1.9 hours when the report says 1.4, and exits 1; the corrected summary is grounded and exits 0](docs/demo/ground.gif)
+
 You probably have several models to hand: hosted APIs (OpenAI, Anthropic, Gemini, Bedrock, Mistral and others), local models through Ollama or llama.cpp, and CLI agents. Each is good at different work, and none of them tells you when its answer is wrong. Hydra sits in front of all of them.
 
 - **It finds your models.** API keys, local model servers and CLI agents, with no configuration.
@@ -144,7 +146,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications`, or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.8.0` pins
+Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.9.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 <!-- x-release-please-end -->

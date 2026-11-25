@@ -48,7 +48,7 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("cli exec %s: %w, stderr: %s", req.Head.ID, err, stderr.String())
+		return nil, &CLIError{Head: req.Head.ID, Err: err, Stderr: stderr.String()}
 	}
 
 	output := strings.TrimSpace(stdout.String())
