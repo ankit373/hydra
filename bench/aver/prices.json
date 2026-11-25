@@ -1,0 +1,198 @@
+{
+  "snapshots": {
+    "openai": {
+      "url": "http://web.archive.org/web/20240502185457/https://openai.com/api/pricing",
+      "date": "2024-05-02",
+      "unit": "USD per 1M tokens"
+    },
+    "together": {
+      "url": "http://web.archive.org/web/20240304022604/https://www.together.ai/pricing",
+      "date": "2024-03-04",
+      "unit": "USD per 1M tokens, one rate for input and output"
+    }
+  },
+  "prices": {
+    "gpt-4": {
+      "snapshot": "openai",
+      "listed_as": "gpt-4",
+      "in_per_m": 30.0,
+      "out_per_m": 60.0,
+      "basis": "listed"
+    },
+    "gpt-4-0613": {
+      "snapshot": "openai",
+      "listed_as": "gpt-4",
+      "in_per_m": 30.0,
+      "out_per_m": 60.0,
+      "basis": "nearest listed"
+    },
+    "gpt-4-1106-preview": {
+      "snapshot": "openai",
+      "listed_as": "gpt-4-1106-preview",
+      "in_per_m": 10.0,
+      "out_per_m": 30.0,
+      "basis": "listed"
+    },
+    "gpt-3.5-turbo": {
+      "snapshot": "openai",
+      "listed_as": "gpt-3.5-turbo-0125",
+      "in_per_m": 0.5,
+      "out_per_m": 1.5,
+      "basis": "nearest listed"
+    },
+    "chatgpt": {
+      "snapshot": "openai",
+      "listed_as": "gpt-3.5-turbo-0125",
+      "in_per_m": 0.5,
+      "out_per_m": 1.5,
+      "basis": "nearest listed"
+    },
+    "gpt-3.5-turbo-0613": {
+      "snapshot": "openai",
+      "listed_as": "gpt-3.5-turbo-0613",
+      "in_per_m": 1.5,
+      "out_per_m": 2.0,
+      "basis": "listed"
+    },
+    "code-llama-7b": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 7B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "listed"
+    },
+    "code-llama-13b": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 13B",
+      "in_per_m": 0.225,
+      "out_per_m": 0.225,
+      "basis": "listed"
+    },
+    "code-llama-34b": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 34B",
+      "in_per_m": 0.776,
+      "out_per_m": 0.776,
+      "basis": "listed"
+    },
+    "mistral-7b": {
+      "snapshot": "together",
+      "listed_as": "4.1B - 8B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "size tier"
+    },
+    "mistral-7B-instruct": {
+      "snapshot": "together",
+      "listed_as": "4.1B - 8B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "size tier"
+    },
+    "Mistral-7B-v0.1": {
+      "snapshot": "together",
+      "listed_as": "Mistral v0.1 (7B), 4.1B - 8B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "size tier"
+    },
+    "Mixtral-8x7B-v0.1": {
+      "snapshot": "together",
+      "listed_as": "Mixture-of-experts, 8X 7B",
+      "in_per_m": 0.6,
+      "out_per_m": 0.6,
+      "basis": "listed"
+    },
+    "vicuna-7b": {
+      "snapshot": "together",
+      "listed_as": "4.1B - 8B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "size tier"
+    },
+    "vicuna-13b": {
+      "snapshot": "together",
+      "listed_as": "8.1B - 21B",
+      "in_per_m": 0.3,
+      "out_per_m": 0.3,
+      "basis": "size tier"
+    },
+    "wizardcoder-34b": {
+      "snapshot": "together",
+      "listed_as": "21.1B - 41B",
+      "in_per_m": 0.8,
+      "out_per_m": 0.8,
+      "basis": "size tier"
+    },
+    "deepseek-coder-33b-instruct": {
+      "snapshot": "together",
+      "listed_as": "21.1B - 41B",
+      "in_per_m": 0.8,
+      "out_per_m": 0.8,
+      "basis": "size tier"
+    },
+    "llama-2-7b-chat": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 7B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "listed"
+    },
+    "llama-2-13b-chat": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 13B",
+      "in_per_m": 0.225,
+      "out_per_m": 0.225,
+      "basis": "listed"
+    },
+    "llama-2-70b-chat": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 70B",
+      "in_per_m": 0.9,
+      "out_per_m": 0.9,
+      "basis": "listed"
+    },
+    "Llama-2-7b-hf": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 7B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "listed"
+    },
+    "Llama-2-13b-hf": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 13B",
+      "in_per_m": 0.225,
+      "out_per_m": 0.225,
+      "basis": "listed"
+    },
+    "Llama-2-70b-hf": {
+      "snapshot": "together",
+      "listed_as": "Llama-2 and CodeLlama, 70B",
+      "in_per_m": 0.9,
+      "out_per_m": 0.9,
+      "basis": "listed"
+    },
+    "Yi-6B": {
+      "snapshot": "together",
+      "listed_as": "4.1B - 8B",
+      "in_per_m": 0.2,
+      "out_per_m": 0.2,
+      "basis": "size tier"
+    },
+    "Yi-34B": {
+      "snapshot": "together",
+      "listed_as": "21.1B - 41B",
+      "in_per_m": 0.8,
+      "out_per_m": 0.8,
+      "basis": "size tier"
+    },
+    "Qwen-14B": {
+      "snapshot": "together",
+      "listed_as": "8.1B - 21B",
+      "in_per_m": 0.3,
+      "out_per_m": 0.3,
+      "basis": "size tier"
+    }
+  }
+}

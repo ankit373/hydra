@@ -99,6 +99,19 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           `Verify` is the no-model gate a pack must pass first: smaller than the turns it covers,
                           valid state, every ref stored, rules the extractor's byte for byte, and nothing a model
                           wrote that `ground.Check` cannot find in the originals; a fail says why (`inflated`).
+                          `RunProbes` then asks the local head the state's own questions (rules, files, what is open, each
+                          decision and why) plus three it writes, of the full turns and of the pack, and needs 0.8 to agree:
+                          paths and numbers exactly, prose by word overlap. Turns too big for the head's window, or a window
+                          it does not report, are probed per group and the verdict is `Partial`, never swapped in automatically.
+                          `Scheduler.Tick` is the job: for the quiet conversation with the most new text it builds, runs
+                          `Verify` then `RunProbes`, and only a pass is written to `$HYDRA_HOME/idle/<conv>/pack-<n>.json` with
+                          its originals pinned (`PinOwner`); a fail is kept as `pack-<n>.rejected.json`. One job at a time, a new
+                          request in any conversation cancels it, per-job and per-night caps. Events `idle_*` go to an `idle-<date>`
+                          run. `hyctl idle run|status`; `hyctl serve` ticks it each minute when `[idle] enabled = true`.
+                          `ShouldSwap` says whether a staged pack should replace the turns it covers: always when the
+                          provider cache is cold (5 minutes quiet), when warm only if the expected turns exceed
+                          `w*M / (r*(N-M))`, never with unknown cache rates; `TurnsLeft` reads that expectation from the
+                          conversation's own request times.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,
@@ -182,6 +195,8 @@ internal/verify/        ← Which command judges this work: the repo's own suite
                           validator for the file's language. Shared by the TUI and `hyctl edit`.
 internal/aver/          ← Certified acceptance (#1549). `Fit` bounds each check's false-pass rate per
                           (check, model, kind) with Clopper-Pearson at delta/M, never pooled across models.
+                          `FitSince` counts only answers after each cell's last change (`Changes`, an
+                          `internal/drift` detector per cell); under 20 wrong answers since, it is skipped.
                           `hyctl trust certify-table`.
 internal/drift/         ← When a pass rate changed, and the record since: change-point detection that
                           keeps its hazard on idle steps, so a source nobody calls can recover. Used by trust calibration.

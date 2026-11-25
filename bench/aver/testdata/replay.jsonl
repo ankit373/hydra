@@ -1,0 +1,5 @@
+{"answer_key": "42", "check_cost_usd": {"arithmetic": 0, "format": 0}, "correct": true, "cost_usd": 0.0009315, "head": "Llama-2-70b-hf", "kind": "math", "task": "gsm8k/0007", "verdicts": {"arithmetic": true, "format": true}}
+{"answer_key": "none:Yi-6B", "check_cost_usd": {"arithmetic": 0, "format": 0}, "correct": false, "cost_usd": 0.0002016, "head": "Yi-6B", "kind": "math", "task": "gsm8k/0007", "verdicts": {"arithmetic": false, "format": false}}
+{"answer_key": "sample-b", "check_cost_usd": {"base_tests": 0, "compiles": 0}, "correct": false, "cost_usd": 6.4e-05, "head": "code-llama-7b", "kind": "code", "task": "humaneval/12", "verdicts": {"base_tests": true, "compiles": true}}
+{"answer_key": "sample-a", "check_cost_usd": {"base_tests": 0, "compiles": 0}, "correct": true, "cost_usd": 0.0084, "head": "gpt-4", "kind": "code", "task": "humaneval/12", "verdicts": {"base_tests": true, "compiles": true}}
+{"answer_key": "sample-c", "check_cost_usd": {"complete": 0, "numbers_in_source": 0}, "correct": false, "cost_usd": 0.000915, "head": "gpt-3.5-turbo-0613", "kind": "grounded", "task": "ragtruth/31", "verdicts": {"complete": true, "numbers_in_source": false}}

@@ -1,0 +1,6 @@
+; Generated code runs under this profile: no network, writes only inside WORK.
+(version 1)
+(allow default)
+(deny network*)
+(deny file-write*)
+(allow file-write* (subpath (param "WORK")) (literal "/dev/null") (literal "/dev/tty"))

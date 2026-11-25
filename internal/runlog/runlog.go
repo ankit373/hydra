@@ -123,6 +123,13 @@ const (
 	// Confidence the probability it stated that its answer is right.
 	KindDecision Kind = "decision"
 
+	// The idle kinds are compaction work done between requests. They are
+	// written to a run of their own so they never mix with a user's runs.
+	KindIdleStarted  Kind = "idle_started"
+	KindIdleVerified Kind = "idle_verified"
+	KindIdleRejected Kind = "idle_rejected"
+	KindIdleStaged   Kind = "idle_staged"
+
 	KindError Kind = "error"
 )
 
@@ -239,6 +246,9 @@ type Route struct {
 	FirstHead string  `json:"first_head"`
 	FirstProb float64 `json:"first_prob"`
 	RunnerUp  string  `json:"runner_up,omitempty"`
+
+	// CertifyAlpha is the alpha certified acceptance was asked for; 0 when it was not asked.
+	CertifyAlpha float64 `json:"certify_alpha,omitempty"`
 
 	// Candidates are in the order tried, then the heads dropped before any try.
 	Candidates []RouteCandidate `json:"candidates"`
