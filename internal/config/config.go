@@ -131,6 +131,22 @@ type Config struct {
 
 	OpenRouter OpenRouter `toml:"openrouter,omitempty"`
 	Serve      Serve      `toml:"serve,omitempty"`
+	Idle       Idle       `toml:"idle,omitempty"`
+}
+
+// Idle configures compaction while a conversation is idle. Off by default; it
+// only ever runs on a local model, and a pack is only staged once it passes its checks.
+type Idle struct {
+	Enabled bool `toml:"enabled,omitempty"`
+	// MaxJobMinutes and MaxNightMinutes cap one job and one day's total; 0 takes 10 and 120.
+	MaxJobMinutes   int `toml:"max_job_minutes,omitempty"`
+	MaxNightMinutes int `toml:"max_night_minutes,omitempty"`
+	// MinAgree is the share of probe questions that must agree; 0 takes 0.8.
+	MinAgree float64 `toml:"min_agree,omitempty"`
+	// Swap is when `hyctl serve` sends a staged pack in place of the turns it
+	// covers: "off", "cold_only" (the default, only when the provider cache has
+	// expired) or "auto" (also while warm, when the cache rates say it pays).
+	Swap string `toml:"swap,omitempty"`
 }
 
 // Serve configures `hyctl serve`.

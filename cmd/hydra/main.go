@@ -165,7 +165,7 @@ func rootCmd() *cobra.Command {
 		cmdEdit(), cmdReview(), cmdVet(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
 		cmdWorkflow(), cmdRecipe(), cmdCompare(), cmdServe(), cmdBench(),
-		cmdSecurity(), cmdPolicy(), cmdEgress(), cmdAsk(), cmdVersion(), cmdUpgrade(),
+		cmdSecurity(), cmdPolicy(), cmdEgress(), cmdAsk(), cmdIdle(), cmdVersion(), cmdUpgrade(),
 		cmdRlimitExec(),
 	)
 	return root
@@ -3982,7 +3982,7 @@ func cmdContext() *cobra.Command {
 	}
 	entropyCmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	entropyCmd.Flags().Float64Var(&minDensity, "min-density", 0, "signal-density floor for the compact recommendation (default 0.35)")
-	cmd.AddCommand(entropyCmd)
+	cmd.AddCommand(entropyCmd, cmdContextPacks(), cmdContextRestore(), cmdContextShowPack())
 	return cmd
 }
 

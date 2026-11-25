@@ -103,6 +103,23 @@ internal/idle/          ← Compaction while a conversation is idle (#1475). Typ
                           decision and why) plus three it writes, of the full turns and of the pack, and needs 0.8 to agree:
                           paths and numbers exactly, prose by word overlap. Turns too big for the head's window, or a window
                           it does not report, are probed per group and the verdict is `Partial`, never swapped in automatically.
+                          `Scheduler.Tick` is the job: for the quiet conversation with the most new text it builds, runs
+                          `Verify` then `RunProbes`, and only a pass is written to `$HYDRA_HOME/idle/<conv>/pack-<n>.json` with
+                          its originals pinned (`PinOwner`); a fail is kept as `pack-<n>.rejected.json`. One job at a time, a new
+                          request in any conversation cancels it, per-job and per-night caps. Events `idle_*` go to an `idle-<date>`
+                          run. `hyctl idle run|status`; `hyctl serve` ticks it each minute when `[idle] enabled = true`.
+                          `ShouldSwap` says whether a staged pack should replace the turns it covers: always when the
+                          provider cache is cold (5 minutes quiet), when warm only if the expected turns exceed
+                          `w*M / (r*(N-M))`, never with unknown cache rates; `TurnsLeft` reads that expectation from the
+                          conversation's own request times.
+                          `hyctl serve` (`serveRouter.compact`, `cmd/hydra/idle_swap.go`) swaps the staged pack for the turns it covers
+                          when `CoverHash` of the request's leading messages equals the pack's, the verdict passed and is not
+                          `Partial`, and `[idle] swap` allows it (`cold_only` default, `auto`, `off`); the rules and the state go in
+                          two system blocks, so they sit under the system cache marker. Header `X-Hydra-Compacted`, `idle_used`
+                          event, answer not cached.
+                          `Packs`, `FindPack`, `Resolve`, `MarkUsed` and `Restore` back `hyctl context packs|show-pack|restore`; a
+                          restored conversation (`restored` marker) is neither swapped nor rebuilt, and its pins are dropped
+                          per owner, so text another conversation's pack pins stays.
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Multi-step tasks, each step routed on its own. A step names the steps it
                           needs (nil = every earlier one) and ready steps run together, at most 4,

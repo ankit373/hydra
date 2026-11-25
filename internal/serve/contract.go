@@ -42,6 +42,10 @@ const (
 	// CheckDetailHeader is one line on that verdict: what failed, what could not run, or what passed.
 	CheckDetailHeader = "X-Hydra-Check-Detail"
 
+	// CompactedHeader says the request went out with a checked pack in place of
+	// the turns it covers: the pack's id and how many probe questions agreed.
+	CompactedHeader = "X-Hydra-Compacted"
+
 	// DeprecationHeader (RFC 9745) marks a reply whose route relied on the
 	// implicit `hydra` default, which v2.0.0 changes (#1206).
 	DeprecationHeader = "Deprecation"
@@ -101,6 +105,21 @@ type Evidence struct {
 	// CheckResult is set only when the request named a check; see CheckResultHeader.
 	CheckResult string `json:"check_result,omitempty"`
 	CheckDetail string `json:"check_detail,omitempty"`
+	// Compacted is set when a pack replaced part of the conversation.
+	Compacted *Compacted `json:"compacted,omitempty"`
+}
+
+// Compacted is a pack that stood in for the turns it covers.
+type Compacted struct {
+	Pack         string `json:"pack"`
+	ProbeAgree   int    `json:"probe_agree"`
+	Probes       int    `json:"probes"`
+	TokensBefore int    `json:"tokens_before"`
+	TokensAfter  int    `json:"tokens_after"`
+}
+
+func (c *Compacted) header() string {
+	return fmt.Sprintf("%s; probes %d/%d", c.Pack, c.ProbeAgree, c.Probes)
 }
 
 // setEvidenceHeaders is shared by the buffered and streamed replies, so the
@@ -114,6 +133,9 @@ func setEvidenceHeaders(h http.Header, ev *Evidence) {
 	setNonEmpty(h, BasisHeader, ev.PPassBasis)
 	setNonEmpty(h, CheckResultHeader, ev.CheckResult)
 	setNonEmpty(h, CheckDetailHeader, ev.CheckDetail)
+	if ev.Compacted != nil {
+		h.Set(CompactedHeader, ev.Compacted.header())
+	}
 }
 
 func setNonEmpty(h http.Header, name, v string) {

@@ -20,6 +20,8 @@ logs/
 !internal/bench/suites/testdata/*/*.jsonl
 # And the prose grounding set, which the grounding measurements are read from.
 !internal/ground/testdata/*.jsonl
+# And the AVER converter fixtures, small synthetic rows.
+!bench/aver/testdata/*.jsonl
 state.json
 auth_required.json
 

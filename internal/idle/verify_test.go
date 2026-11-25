@@ -4,6 +4,7 @@ package idle
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -34,7 +35,7 @@ func goodPack(t Turns) Pack {
 			Next:        []string{"email the customer"},
 		},
 		Notes:  []Note{{Seq: 1, Text: "double charge on invoice 4417", Ref: "u1"}},
-		Covers: Covers{From: 0, To: len(t.Turns), Hash: coverHash(t.Turns)},
+		Covers: Covers{From: 0, To: len(t.Turns), Hash: CoverHash(t.Turns)},
 	}
 }
 
@@ -124,5 +125,39 @@ func TestVerify_LargeSpanNamesTheGroup(t *testing.T) {
 	p.State.Facts = append(p.State.Facts, Quote{Text: "invoice 4417 is closed", Ref: "a2"})
 	if v := Verify(p, turns, allStored); v.Pass || v.Reason != "ungrounded in turns 4-4: 4417" {
 		t.Fatalf("verdict %+v, want ungrounded in turns 4-4", v)
+	}
+}
+
+func TestVerify_RefusesWhatItCannotCheck(t *testing.T) {
+	turns := supportChat()
+	p := goodPack(turns)
+	p.Covers.To = len(turns.Turns) + 1
+	if v := Verify(p, turns, allStored); v.Pass || !strings.HasPrefix(v.Reason, "covers turns ") {
+		t.Fatalf("verdict %+v, want a span outside the turns refused", v)
+	}
+	p = goodPack(turns)
+	p.State.Goal = ""
+	if v := Verify(p, turns, allStored); v.Pass || !strings.Contains(v.Reason, "no goal") {
+		t.Fatalf("verdict %+v, want the invalid state's reason", v)
+	}
+	p = goodPack(turns)
+	p.State.Files = []File{{Path: "refunds.csv", Action: FileEdited, Ref: "e1"}}
+	p.State.Errors = []Quote{{Text: "the card was declined", Ref: "u1"}}
+	p.State.OpenQuestions = []Quote{{Text: "who approves refunds", Ref: "u2"}}
+	turns.Files = p.State.Files
+	if got := p.refs(); !slices.Contains(got, "e1") || !slices.Contains(got, "u2") {
+		t.Fatalf("refs %v, want the file's and the open question's", got)
+	}
+}
+
+// With a small newest turn the tail takes older turns until the cap.
+func TestVerify_TailFitsTheCap(t *testing.T) {
+	big := Turn{Text: strings.Repeat("x", maxGroundBytes/2+1)}
+	span := []Turn{big, big, {Text: "small"}, {Text: "small"}}
+	if got := tail(span); len(got) != 3 {
+		t.Fatalf("tail has %d turns, want the two small ones and one big one, not two", len(got))
+	}
+	if got := tail(span[:2]); len(got) != 1 {
+		t.Fatalf("tail has %d turns, want one", len(got))
 	}
 }
