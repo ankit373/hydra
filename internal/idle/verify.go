@@ -82,6 +82,12 @@ func (p Pack) Blocks() (rules, state string) {
 	return b.String(), rest.Render() + renderNotes(p.Notes)
 }
 
+// Headings the two blocks carry when sent, and when shown by `hyctl context show-pack`.
+const (
+	RulesHeading = "Rules from the conversation so far, word for word:\n"
+	StateHeading = "Summary of the conversation so far:\n"
+)
+
 // Text is both blocks, the size a swap costs.
 func (p Pack) Text() string {
 	rules, state := p.Blocks()
