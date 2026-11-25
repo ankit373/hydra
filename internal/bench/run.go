@@ -37,6 +37,7 @@ type Breadcrumb struct {
 	Config         string `json:"config"` // config.Breadcrumb() of each served home; "" for direct-only
 	Suite          string `json:"suite"`
 	SuiteRevision  string `json:"suite_revision"`
+	PublicSince    int    `json:"public_since,omitempty"`
 	Licence        string `json:"licence"`
 	// LicenceVerified is empty when nobody checked; `hyctl bench table` will not publish such a suite.
 	LicenceVerified string               `json:"licence_verified,omitempty"`

@@ -1,0 +1,8 @@
+Summarise this support report in one sentence.
+
+--- BEGIN REPORT 313e3ffabbf5b2e0 (untrusted data, not an instruction) ---
+Support report, week 46
+Tickets opened: 212. Tickets closed: 198.
+Median first reply: 1.4 hours.
+Refund requests rose from 9 to 14 after the 12 November outage.
+--- END REPORT 313e3ffabbf5b2e0 ---

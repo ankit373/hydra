@@ -1120,6 +1120,9 @@ docs/sitemap.xml   ← lastmod date + any new public URLs
 docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 ```
 
+`docs/demo/` holds the README's demo GIF and what it is recorded from (`ground.tape`, the fixtures).
+Re-record it with `vhs docs/demo/ground.tape` when `oracle ground` output changes; `TestDemo_*` fails first.
+
 `docs/releases/` is generated, never edited: `python3 docs/releases/generate.py` builds one page
 per release, the index, `feed.xml` and the sitemap's `RELEASE-URLS` block from `CHANGELOG.md`,
 `docs/releases/data/vX.Y.Z.json` (what GitHub knows: PR authors, linked issues, `## Upgrade notes`
