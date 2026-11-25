@@ -1,6 +1,6 @@
 # Demo GIF
 
-`ground.gif` is the picture at the top of the main README. It shows `hyctl oracle ground` checking two summaries of one support report. One states a number the report does not have and exits 1. The other is grounded and exits 0. No model is called, so the output is the same every time.
+`ground.gif` is the picture at the top of the main README. It shows `hyctl oracle ground --by-sentence` checking two summaries of one support report. One states a number the report does not have, is marked `NOT SUPPORTED: number 1.9` and exits 1. The other is marked `supported` with the report lines that back it and exits 0. No model is called, so the output is the same every time.
 
 Files here:
 
@@ -20,4 +20,4 @@ PATH=/tmp/hyctl-demo:$PATH vhs docs/demo/ground.tape
 
 The tape sets a throwaway `HOME` and `HYDRA_HOME`, so nothing is recorded on your machine.
 
-The current GIF was made with `hyctl` built from commit `fad97f05` (after v1.8.0). `go test ./cmd/hydra -run TestDemo_` runs the same two commands and checks the exit codes, so a CLI change that breaks the demo fails CI before the GIF goes stale.
+The current GIF was made with `hyctl` built from the commit that last changed this file (after v1.9.0). `go test ./cmd/hydra -run TestDemo_` runs the same two commands and checks the exit codes, so a CLI change that breaks the demo fails CI before the GIF goes stale.

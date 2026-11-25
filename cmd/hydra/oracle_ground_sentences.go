@@ -55,7 +55,7 @@ func sentenceStatus(v checkgen.SentenceVerdict) string {
 			}
 			at = append(at, s.Label+" "+lines)
 		}
-		return cortexStyle.Render("supported") + dimStyle.Render(" ["+strings.Join(at, ", ")+"]")
+		return okStyle.Render("supported") + dimStyle.Render(" ["+strings.Join(at, ", ")+"]")
 	case checkgen.StatusNotSupported:
 		var what []string
 		for _, c := range v.Unsupported {
