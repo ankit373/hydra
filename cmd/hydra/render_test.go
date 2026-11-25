@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -100,6 +102,31 @@ func TestPrintSwarmResult_ShowsWhyTheJudgeFellBack(t *testing.T) {
 	if !strings.Contains(out, "connection refused") {
 		t.Errorf("the fallback reason is not shown, so a real judge failure looks identical "+
 			"to a healthy run:\n%s", out)
+	}
+}
+
+// A failed head says why on its own line, once, with a key in the message
+// redacted (#1943).
+func TestPrintSwarmResult_ShowsWhyAHeadFailed(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	key := "sk-" + strings.Repeat("Z", 32)
+	cause := &executor.CLIError{Head: "codex", Err: errors.New("exit status 1"),
+		Stderr: "\nNot inside a trusted directory, key " + key + "\nsecond line\n"}
+	res := &swarm.SwarmResult{
+		Mode: swarm.ModeAll,
+		Attempts: []swarm.Attempt{
+			{Head: provider.Head{ID: "codex", Name: "codex"}, Status: swarm.StatusFailed, Err: cause},
+		},
+	}
+
+	out := captureStdout(t, func() { printSwarmResult(res) })
+
+	if n := strings.Count(out, "Not inside a trusted directory"); n != 1 {
+		t.Errorf("reason shown %d times, want once:\n%s", n, out)
+	}
+	if strings.Contains(out, key) || strings.Contains(out, "second line") {
+		t.Errorf("the line carries a key or more than the first line:\n%s", out)
 	}
 }
 

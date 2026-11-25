@@ -7,4 +7,5 @@
 
 Runs: core-banking77-full-s1-3f9a2c1d. Git: abc123. Prices fetched 2026-11-05.
 
-Caveat: both suites have been public since 2019–2020 and are likely in pre-training data; paired differences are the claim, absolute rates are context.
+Caveat: likely in pre-training data; paired differences are the claim, absolute rates are context.
+banking77: public since 2020
