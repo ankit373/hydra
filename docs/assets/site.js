@@ -48,15 +48,14 @@
     kick();
   }
 
-  // The theme follows the OS unless the viewer picks one; the choice is saved per
-  // browser. The inline script in each page's <head> applies it before CSS paints.
+  // Dark unless the viewer picks light or the OS; the choice is saved per browser.
+  // The inline script in each page's <head> applies it before CSS paints.
   var KEY = 'hydra-theme', themeFns = [];
   var NAME = { system: 'Theme: match system', light: 'Theme: light', dark: 'Theme: dark' };
   function onTheme(fn) { themeFns.push(fn); }
-  // The theme the OS is not showing comes first, so the first press always changes
-  // the screen: system, the other theme, the OS's own, system.
+  // From the dark default the first press goes to light, so it always changes the screen.
   function nextTheme(mode) {
-    var order = osDark.matches ? ['system', 'light', 'dark'] : ['system', 'dark', 'light'];
+    var order = ['dark', 'light', 'system'];
     return order[(order.indexOf(mode) + 1) % order.length];
   }
   function themeChanged() {
@@ -67,7 +66,7 @@
   onChange(osDark, themeChanged);
   function setTheme(mode) {
     if (mode === 'system') delete root.dataset.theme; else root.dataset.theme = mode;
-    try { if (mode === 'system') localStorage.removeItem(KEY); else localStorage.setItem(KEY, mode); } catch (e) { /* this page still follows it */ }
+    try { localStorage.setItem(KEY, mode); } catch (e) { /* this page still follows it */ }
     themeChanged();
   }
   var ICONS = '<svg class="i-system" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="fill"/></svg>' +

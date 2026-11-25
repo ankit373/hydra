@@ -250,7 +250,7 @@
   }
   </script>
 
-<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+<script>try{var t=localStorage.getItem('hydra-theme');if(t!=='system')document.documentElement.dataset.theme=t==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/site.js"></script>
@@ -523,8 +523,8 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
       <div class="tagline">Pick the model · check the answer</div>
       <p class="subline">Hydra sends each request to the model <b>best suited to the task</b>, and <b>can check the answer</b> and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider.</p>
       <div class="ctas">
-        <button class="install" data-copy="brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl">
-          <span class="dollar">$</span><span class="cmd">brew trust ankit373/hydra &amp;&amp; brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
+        <button class="install" data-copy="npm install -g hyctl">
+          <span class="dollar">$</span><span class="cmd">npm install -g <b>hyctl</b></span><span class="cp">copy</span>
         </button>
         <a class="btn btn-lg" href="/app.html">Get the desktop app →</a>
       </div>
@@ -1110,8 +1110,8 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
   <h2>The right model for each task.<br>The answer, <span class="grad">checked</span>.</h2>
   <p>Hydra works with any provider, runs on your own hardware, and keeps your spend logs and policy on your machine.</p>
   <div class="ctas">
-    <button class="install" data-copy="brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl">
-        <span class="dollar">$</span><span class="cmd">brew trust ankit373/hydra &amp;&amp; brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
+    <button class="install" data-copy="npm install -g hyctl">
+        <span class="dollar">$</span><span class="cmd">npm install -g <b>hyctl</b></span><span class="cp">copy</span>
       </button>
     <a class="btn btn-lg" href="/app.html">Get the desktop app →</a>
   </div>

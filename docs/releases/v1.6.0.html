@@ -20,7 +20,7 @@
   {"@context": "https://schema.org", "@type": "TechArticle", "headline": "Hydra 1.6.0 release notes", "url": "https://hydra.uvansa.com/releases/v1.6.0.html", "datePublished": "2026-11-03", "description": "1 new, 5 fixed. Most of the work is in project, website and docs, install and upgrade.", "publisher": {"@type": "Organization", "name": "Hydra", "url": "https://hydra.uvansa.com/"}}
   </script>
 
-<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+<script>try{var t=localStorage.getItem('hydra-theme');if(t!=='system')document.documentElement.dataset.theme=t==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <link rel="stylesheet" href="../assets/tokens.css">
 <link rel="stylesheet" href="../assets/site.css">
 <link rel="stylesheet" href="../assets/docs.css">

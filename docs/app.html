@@ -38,7 +38,7 @@
   }
   </script>
 
-<script>try{var t=localStorage.getItem('hydra-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}</script>
+<script>try{var t=localStorage.getItem('hydra-theme');if(t!=='system')document.documentElement.dataset.theme=t==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <link rel="stylesheet" href="assets/tokens.css">
 <link rel="stylesheet" href="assets/site.css">
 <script src="assets/site.js"></script>
