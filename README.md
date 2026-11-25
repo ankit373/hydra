@@ -116,7 +116,7 @@ Certified acceptance, still being built on these bounds, will label an answer ce
 The CLI is **`hyctl`** (the product is Hydra). Every method installs the same prebuilt binary and checks its checksum.
 
 ```bash
-brew install ankit373/hydra/hyctl                                           # Homebrew, macOS and Linux
+brew trust ankit373/hydra && brew install ankit373/hydra/hyctl              # Homebrew, macOS and Linux
 npm install -g hyctl                                                        # or run once with npx hyctl
 pip install hyctl                                                           # Python 3.8+
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh   # macOS and Linux
