@@ -166,7 +166,8 @@ func cmdBenchReplay() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&candidates, "candidates", "", "JSONL, one row per (task, head) candidate")
 	f.StringSliceVar(&policies, "policy", []string{"always_strongest", "first_check_pass"},
-		"policies to replay: "+strings.Join(replay.Names(), ", "))
+		"policies to replay: "+strings.Join(replay.Names(), ", ")+
+			"; an aver_ policy takes :spend (default) or :bonferroni")
 	f.Float64SliceVar(&alphas, "alpha", []float64{0.01, 0.05, 0.10}, "target false accept per task")
 	f.Float64Var(&delta, "delta", aver.DefaultDelta, "AVER policies: chance that any calibrated bound is wrong")
 	f.IntVar(&splits, "splits", 20, "random calibrate/test splits, seeded 0..n-1")
