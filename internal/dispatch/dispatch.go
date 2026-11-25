@@ -109,6 +109,9 @@ type Options struct {
 	// Under quota pressure the governor routes it as ServedDefaultEnum instead.
 	Objective rank.Objective
 
+	// CertifyAlpha is the alpha certified acceptance was asked for, logged on the route; 0 when not.
+	CertifyAlpha float64
+
 	// Messages is a whole conversation, when the caller has one, and Tools the
 	// functions a head may call. Both exist for `hyctl serve`: an agent loop
 	// sends its tool results back as further turns, which Prompt cannot carry.
