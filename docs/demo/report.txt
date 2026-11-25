@@ -1,0 +1,4 @@
+Support report, week 46
+Tickets opened: 212. Tickets closed: 198.
+Median first reply: 1.4 hours.
+Refund requests rose from 9 to 14 after the 12 November outage.

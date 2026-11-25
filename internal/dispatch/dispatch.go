@@ -1212,7 +1212,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			lastErr = err
 			// Before the chain advances, so a surface can retract this head's
 			// partial output before the next head's tokens interleave with it.
-			emit(StreamAttemptFailed, "", err.Error())
+			emit(StreamAttemptFailed, "", executor.Reason(err))
 			// A request no head can be asked is not this head failing, so the
 			// chain stops here. Advancing it spends on every remaining head to
 			// be told the same thing, and the breaker below would park healthy

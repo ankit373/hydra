@@ -197,6 +197,9 @@ func TestSummarize_ArmsPairsAndTheOracle(t *testing.T) {
 	if len(s.Caveats) == 0 || s.Smoke != nil || s.Incomplete {
 		t.Fatalf("a complete fixture run carries caveats only: %+v %+v", s.Caveats, s.Smoke)
 	}
+	if s.Caveats[0] != publicSince(s.Breadcrumb) || strings.Contains(strings.Join(s.Caveats, " "), "both suites") {
+		t.Fatalf("the first caveat names this suite's year, not a blanket claim: %q", s.Caveats)
+	}
 }
 
 // An interval the data cannot support is refused, never reported as 0: here the
