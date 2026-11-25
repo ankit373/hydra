@@ -143,6 +143,10 @@ type Idle struct {
 	MaxNightMinutes int `toml:"max_night_minutes,omitempty"`
 	// MinAgree is the share of probe questions that must agree; 0 takes 0.8.
 	MinAgree float64 `toml:"min_agree,omitempty"`
+	// Swap is when `hyctl serve` sends a staged pack in place of the turns it
+	// covers: "off", "cold_only" (the default, only when the provider cache has
+	// expired) or "auto" (also while warm, when the cache rates say it pays).
+	Swap string `toml:"swap,omitempty"`
 }
 
 // Serve configures `hyctl serve`.

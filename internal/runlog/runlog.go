@@ -129,6 +129,8 @@ const (
 	KindIdleVerified Kind = "idle_verified"
 	KindIdleRejected Kind = "idle_rejected"
 	KindIdleStaged   Kind = "idle_staged"
+	// KindIdleUsed is a served request that was sent a pack in place of the turns it covers.
+	KindIdleUsed Kind = "idle_used"
 
 	KindError Kind = "error"
 )

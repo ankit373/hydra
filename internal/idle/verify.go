@@ -41,7 +41,7 @@ func Verify(p Pack, t Turns, has func(ref string) bool) Verdict {
 		return Verdict{Reason: fmt.Sprintf("covers turns %d-%d of %d", p.Covers.From, p.Covers.To, len(t.Turns))}
 	}
 	span := t.Turns[p.Covers.From:p.Covers.To]
-	if coverHash(span) != p.Covers.Hash {
+	if CoverHash(span) != p.Covers.Hash {
 		return Verdict{Reason: "covers other turns"}
 	}
 	text := spanText(span)
@@ -69,8 +69,24 @@ func Verify(p Pack, t Turns, has func(ref string) bool) Verdict {
 	return v
 }
 
-// Text is what a swap would send for p: the rendered state and the notes.
-func (p Pack) Text() string { return p.State.Render() + renderNotes(p.Notes) }
+// Blocks are what a swap sends in place of the covered turns: the rules word
+// for word, which never change between swaps, and the rest of the state with its notes.
+func (p Pack) Blocks() (rules, state string) {
+	var b strings.Builder
+	for _, q := range p.State.Constraints {
+		b.WriteString(q.Text)
+		b.WriteByte('\n')
+	}
+	rest := p.State
+	rest.Constraints = nil
+	return b.String(), rest.Render() + renderNotes(p.Notes)
+}
+
+// Text is both blocks, the size a swap costs.
+func (p Pack) Text() string {
+	rules, state := p.Blocks()
+	return rules + state
+}
 
 func spanText(span []Turn) string {
 	var b strings.Builder

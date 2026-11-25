@@ -281,3 +281,12 @@ func TestPackFiles_ReadAndWriteErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestPackID_NamesTheDirectoryAndNumber(t *testing.T) {
+	if id := PackID("support-42", 3); id != "support-42/3" {
+		t.Fatalf("pack id %q", id)
+	}
+	if id := PackID("../escape/key with spaces", 2); !strings.HasPrefix(id, "h-") || !strings.HasSuffix(id, "/2") || strings.Contains(id, "..") {
+		t.Fatalf("pack id %q, want a hashed directory", id)
+	}
+}
