@@ -47,14 +47,16 @@ func (p *averProduct) head(h string) string {
 func (p *averProduct) Calibrate(cal []Row) error {
 	answers := make([]aver.Answer, 0, len(cal))
 	costSum, costN := map[string]float64{}, map[string]int{}
+	heads := map[string]bool{} // the candidate budget, as CheapestFirst(cal) will order it
 	for _, r := range cal {
+		heads[r.Head] = true
 		answers = append(answers, aver.Answer{Kind: r.Kind, Head: p.head(r.Head), Correct: r.Correct, Verdicts: r.Verdicts})
 		for c := range r.Verdicts {
 			costSum[c] += r.CheckCostUSD[c]
 			costN[c]++
 		}
 	}
-	w, err := aver.Weights(len(CheapestFirst(cal)), p.rule)
+	w, err := aver.Weights(len(heads), p.rule)
 	if err != nil {
 		return err
 	}
