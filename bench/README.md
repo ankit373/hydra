@@ -95,6 +95,12 @@ One JSON line per (task, head) candidate:
   both ran on (`aver.Gate`): a pair that passes together more often than q-bar_a x q-bar_b allows,
   or has under 20 shared wrong answers, is linked, and linked checks count once, through the one
   with the best e on a pass. Compare it with the plain product at a small alpha.
+- `aver_pattern` certifies under any dependence: per head, it bounds how often a wrong answer
+  matches a pattern of up to 3 features (checks, plus at most one "at least m earlier answers
+  agree"), with delta split over every pattern and head, and accepts an answer matching the pattern
+  chosen on calibration. It buys heads in order without skipping, so agreement means the same on
+  both halves. Without enough wrong answers it refuses and says how many it would need, about
+  ln(patterns/delta) x bar.
 - In the AVER policies a check missing from `verdicts` did not run, unlike the older policies where
   it did not pass: calibration only sees verdicts that exist, so a missing one has no calibrated e.
 - False accept per task is wrong accepted answers over all test tasks, with a two-sided 95%
