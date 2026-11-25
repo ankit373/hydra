@@ -85,7 +85,7 @@ func NewScheduler(env Env) *Scheduler {
 	if env.Poll <= 0 {
 		env.Poll = 2 * time.Second
 	}
-	return &Scheduler{env: env, lastEvent: map[string]time.Time{}}
+	return &Scheduler{env: env}
 }
 
 // Outcome is what a tick did.
@@ -134,6 +134,8 @@ func (s *Scheduler) Tick(ctx context.Context, now time.Time) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	// Rebuilt each tick, so a long-running server does not keep every key it ever saw.
+	s.lastEvent = make(map[string]time.Time, len(seen))
 	for _, c := range seen {
 		s.lastEvent[c.Key] = c.LastEvent
 	}
@@ -152,7 +154,8 @@ func (s *Scheduler) Tick(ctx context.Context, now time.Time) (Result, error) {
 			s.note(c.Key, OutcomeNone, fmt.Sprintf("active %s ago; idle after %s", quiet.Round(time.Second), cfg.IdleAfter), now)
 			continue
 		}
-		if st := readStatus(s.env.Dir, c.Key); (st.Outcome == OutcomeRejected && st.LastEvent.Equal(c.LastEvent)) || Restored(s.env.Dir, c.Key) {
+		// Nothing new since a pack was staged or refused, or the user restored it: skip reading the transcript.
+		if st := readStatus(s.env.Dir, c.Key); ((st.Outcome == OutcomeRejected || st.Outcome == OutcomeStaged) && st.LastEvent.Equal(c.LastEvent)) || Restored(s.env.Dir, c.Key) {
 			continue
 		}
 		turns, err := s.env.Transcript(c.Key)
