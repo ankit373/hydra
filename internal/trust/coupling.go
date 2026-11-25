@@ -73,24 +73,11 @@ func DefaultCoAgreementPath() string {
 // vote is only ever discounted when a family is known, so an unfamilied
 // source carries no correlation signal to record.
 func RecordCoAgreement(path, domain string, ids, families, texts []string, equiv AnswerEquivalence) {
-	if path == "" || len(ids) < 2 {
+	if path == "" {
 		return
 	}
-	groups := ClusterByAgreement(texts, equiv)
-	clusterOf := make([]int, len(texts))
-	for gi, g := range groups {
-		for _, idx := range g {
-			clusterOf[idx] = gi
-		}
-	}
-	rec := coAgreementRecord{TS: time.Now().UTC().Format(time.RFC3339), Domain: domain}
-	for i := range ids {
-		if families[i] == "" {
-			continue
-		}
-		rec.Sources = append(rec.Sources, coAgreementSource{ID: ids[i], Family: families[i], Cluster: clusterOf[i]})
-	}
-	if len(rec.Sources) < 2 {
+	rec, ok := newCoAgreementRecord(domain, ids, families, texts, equiv)
+	if !ok {
 		return
 	}
 	raw, err := json.Marshal(rec)
@@ -106,6 +93,58 @@ func RecordCoAgreement(path, domain string, ids, families, texts []string, equiv
 	}
 	defer f.Close()
 	_, _ = f.WriteString(string(raw) + "\n")
+}
+
+// newCoAgreementRecord is one task's observation, or false when fewer than two
+// familied sources took part, so the file and the in-memory tally agree.
+func newCoAgreementRecord(domain string, ids, families, texts []string, equiv AnswerEquivalence) (coAgreementRecord, bool) {
+	if len(ids) < 2 {
+		return coAgreementRecord{}, false
+	}
+	groups := ClusterByAgreement(texts, equiv)
+	clusterOf := make([]int, len(texts))
+	for gi, g := range groups {
+		for _, idx := range g {
+			clusterOf[idx] = gi
+		}
+	}
+	rec := coAgreementRecord{TS: time.Now().UTC().Format(time.RFC3339), Domain: domain}
+	for i := range ids {
+		if families[i] == "" {
+			continue
+		}
+		rec.Sources = append(rec.Sources, coAgreementSource{ID: ids[i], Family: families[i], Cluster: clusterOf[i]})
+	}
+	return rec, len(rec.Sources) >= 2
+}
+
+// CoAgreement is co-agreement observations held in memory: the family discount
+// fitted from labelled data, with the math FamilyDiscount applies to the file.
+// Not safe for concurrent use.
+type CoAgreement struct {
+	records  []coAgreementRecord
+	discount map[string]float64 // per family, cleared by Add
+}
+
+// Add records one task's answers, as RecordCoAgreement would append them.
+func (c *CoAgreement) Add(domain string, ids, families, texts []string, equiv AnswerEquivalence) {
+	if rec, ok := newCoAgreementRecord(domain, ids, families, texts, equiv); ok {
+		c.records = append(c.records, rec)
+		c.discount = nil
+	}
+}
+
+// Discount is FamilyDiscount over the observations added, computed once per family.
+func (c *CoAgreement) Discount(family string) float64 {
+	if d, ok := c.discount[family]; ok {
+		return d
+	}
+	if c.discount == nil {
+		c.discount = map[string]float64{}
+	}
+	d := discountFrom(c.records, family)
+	c.discount[family] = d
+	return d
 }
 
 type coAgreementCacheEntry struct {
@@ -168,8 +207,13 @@ func loadCoAgreement(path string) []coAgreementRecord {
 // definition of "these are correlated, not independently confirming." ok is
 // false below minCoAgreementSamples same-family pairs.
 func FamilyCoupling(path, family string) (j float64, ok bool) {
+	return couplingFrom(loadCoAgreement(path), family)
+}
+
+// couplingFrom is FamilyCoupling over records already read.
+func couplingFrom(records []coAgreementRecord, family string) (j float64, ok bool) {
 	var sameAgree, sameTotal, diffAgree, diffTotal int
-	for _, r := range loadCoAgreement(path) {
+	for _, r := range records {
 		for i := 0; i < len(r.Sources); i++ {
 			for k := i + 1; k < len(r.Sources); k++ {
 				a, b := r.Sources[i], r.Sources[k]
@@ -286,7 +330,11 @@ func AllFamilyCoupling(path string) map[string]FamilyCouplingResult {
 // nothing on a repeat vote. Falls back to defaultCorrelationDiscount below
 // minCoAgreementSamples.
 func FamilyDiscount(path, family string) float64 {
-	j, ok := FamilyCoupling(path, family)
+	return discountFrom(loadCoAgreement(path), family)
+}
+
+func discountFrom(records []coAgreementRecord, family string) float64 {
+	j, ok := couplingFrom(records, family)
 	if !ok {
 		return defaultCorrelationDiscount
 	}

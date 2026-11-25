@@ -29,6 +29,7 @@ type Row struct {
 	CostUSD      float64            `json:"cost_usd"`
 	Correct      bool               `json:"correct"`
 	AnswerKey    string             `json:"answer_key"`
+	Family       string             `json:"family,omitempty"` // vendor family, for the sprt co-agreement discount
 	Verdicts     map[string]bool    `json:"verdicts"`
 	CheckCostUSD map[string]float64 `json:"check_cost_usd"`
 }

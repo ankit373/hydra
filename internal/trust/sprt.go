@@ -181,7 +181,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		// its measured excess agreement, not counted as fresh confirmation.
 		weight := 1.0
 		if src.Family != "" && familySeen[src.Family] {
-			weight = FamilyDiscount(DefaultCoAgreementPath(), src.Family)
+			weight = cfg.familyDiscount(src.Family)
 		}
 		familySeen[src.Family] = true
 
@@ -215,7 +215,9 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		}
 	}
 
-	RecordCoAgreement(DefaultCoAgreementPath(), task.Domain, seenIDs, seenFamilies, seenTexts, cfg.equiv)
+	if cfg.coAgreement == nil {
+		RecordCoAgreement(DefaultCoAgreementPath(), task.Domain, seenIDs, seenFamilies, seenTexts, cfg.equiv)
+	}
 	return res, nil
 }
 
@@ -320,6 +322,20 @@ type runConfig struct {
 	allowUncalibrated bool
 	observe           Observer
 	accept            float64
+	coAgreement       *CoAgreement // nil: coagreement.jsonl, read and appended to
+}
+
+func (c *runConfig) familyDiscount(family string) float64 {
+	if c.coAgreement != nil {
+		return c.coAgreement.Discount(family)
+	}
+	return FamilyDiscount(DefaultCoAgreementPath(), family)
+}
+
+// WithCoAgreement takes the family discount from co instead of coagreement.jsonl,
+// and records nothing, so a replay can fit it from labelled data and leave disk alone.
+func WithCoAgreement(co *CoAgreement) RunOption {
+	return func(c *runConfig) { c.coAgreement = co }
 }
 
 // AllowNoEvidence runs the ensemble even when no source can move the
