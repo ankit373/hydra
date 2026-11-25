@@ -18,14 +18,22 @@ Show
 
 Type "cat report.txt"
 Enter
-Sleep 2.5s
+Sleep 2s
 
-Type 'hyctl oracle ground --prompt prompt.txt --candidate summary-bad.txt; echo "exit $?"'
+Type "cat summary-bad.txt"
 Enter
-Sleep 4s
+Sleep 1.5s
+
+Type 'hyctl oracle ground --by-sentence --prompt prompt.txt --candidate summary-bad.txt; echo "exit $?"'
+Enter
+Sleep 3.5s
 
 Type "clear"
 Enter
-Type 'hyctl oracle ground --prompt prompt.txt --candidate summary-good.txt; echo "exit $?"'
+Type "cat summary-good.txt"
+Enter
+Sleep 1.5s
+
+Type 'hyctl oracle ground --by-sentence --prompt prompt.txt --candidate summary-good.txt; echo "exit $?"'
 Enter
 Sleep 4s

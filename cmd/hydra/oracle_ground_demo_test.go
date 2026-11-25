@@ -19,20 +19,20 @@ func TestDemo_GroundFixturesGiveTheRecordedVerdicts(t *testing.T) {
 	testutil.NewSandbox(t)
 	prompt := filepath.Join(demoDir, "prompt.txt")
 
-	out, _, err := run(t, "oracle", "ground", "--prompt", prompt, "--candidate", filepath.Join(demoDir, "summary-bad.txt"))
+	out, _, err := run(t, "oracle", "ground", "--by-sentence", "--prompt", prompt, "--candidate", filepath.Join(demoDir, "summary-bad.txt"))
 	wantExit(t, err, groundUnsupported)
-	for _, want := range []string{"UNSUPPORTED", "number 1.9"} {
+	for _, want := range []string{"NOT SUPPORTED: number 1.9"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the bad summary's output is missing %q:\n%s", want, out)
 		}
 	}
 
-	out, _, err = run(t, "oracle", "ground", "--prompt", prompt, "--candidate", filepath.Join(demoDir, "summary-good.txt"))
+	out, _, err = run(t, "oracle", "ground", "--by-sentence", "--prompt", prompt, "--candidate", filepath.Join(demoDir, "summary-good.txt"))
 	if err != nil {
 		t.Fatalf("the good summary should exit 0: %v", err)
 	}
-	if !strings.Contains(out, "GROUNDED") {
-		t.Errorf("the good summary was not reported grounded:\n%s", out)
+	if !strings.Contains(out, "supported [REPORT L2-3]") {
+		t.Errorf("the good summary was not shown with the lines that back it:\n%s", out)
 	}
 }
 
