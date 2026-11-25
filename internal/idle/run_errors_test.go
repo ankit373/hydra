@@ -64,9 +64,19 @@ func TestTick_AStagedPackIsNotRebuiltUntilThereIsNewText(t *testing.T) {
 	if res := tick(t, r); res.Outcome != OutcomeStaged {
 		t.Fatalf("first tick %+v", res)
 	}
-	res := tick(t, r)
-	if res.Outcome != OutcomeNone {
-		t.Fatalf("second tick %+v, want the covered turns not to count as new", res)
+	// Nothing happened since: the transcript is not even read.
+	read := r.env.Transcript
+	r.env.Transcript = func(string) (Turns, error) { t.Fatal("transcript read with no new event"); return Turns{}, nil }
+	if res := tick(t, r); res.Outcome != OutcomeNone {
+		t.Fatalf("second tick %+v", res)
+	}
+	// An event with no new text: read, and the covered turns do not count as new.
+	r.env.Transcript = read
+	r.env.Seen = func() ([]Seen, error) {
+		return []Seen{{Key: "conv1", LastEvent: r.now.Add(-30 * time.Minute), Head: stubID}}, nil
+	}
+	if res := tick(t, r); res.Outcome != OutcomeNone {
+		t.Fatalf("third tick %+v, want the covered turns not to count as new", res)
 	}
 	if st := statusOf(r.env.Dir, "conv1"); !strings.Contains(st.Reason, "new tokens") {
 		t.Fatalf("status %+v", st)
@@ -202,6 +212,9 @@ func TestTick_SecondPackBuildsOnTheFirst(t *testing.T) {
 		Turn{Role: "user", Text: strings.Repeat("Please also check the ledger again. ", 40), Ref: "u2", Seq: 4},
 		Turn{Role: "assistant", Text: strings.Repeat("The ledger line was checked again. ", 40), Ref: "a2", Seq: 5})
 	r.env.Transcript = func(string) (Turns, error) { return grown, nil }
+	r.env.Seen = func() ([]Seen, error) {
+		return []Seen{{Key: "conv1", LastEvent: r.now.Add(-30 * time.Minute), Head: stubID}}, nil
+	}
 	res := tick(t, r)
 	if res.Outcome != OutcomeStaged || res.Pack != 2 {
 		t.Fatalf("second tick %+v, want pack 2", res)
