@@ -247,6 +247,9 @@ type Route struct {
 	FirstProb float64 `json:"first_prob"`
 	RunnerUp  string  `json:"runner_up,omitempty"`
 
+	// CertifyAlpha is the alpha certified acceptance was asked for; 0 when it was not asked.
+	CertifyAlpha float64 `json:"certify_alpha,omitempty"`
+
 	// Candidates are in the order tried, then the heads dropped before any try.
 	Candidates []RouteCandidate `json:"candidates"`
 	Omitted    int              `json:"omitted,omitempty"`

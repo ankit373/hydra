@@ -23,6 +23,8 @@ func cmdTrustCertifyTable() *cobra.Command {
 		Long: `hyctl trust certify-table reads the verdict log and prints, for each check, model
 and kind of work, how often the check passed a wrong answer from that model and an
 upper bound on that rate (q-bar). Certified acceptance is built on these bounds.
+Its alpha is the chance of accepting a wrong answer, per task, never the chance
+that an accepted answer is wrong.
 
 The bound is calibrated per model and never pooled: a test suite can pass a weak
 model's wrong answers rarely and a strong model's often, because the strong model's
