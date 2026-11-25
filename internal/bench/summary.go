@@ -27,9 +27,16 @@ const (
 	alpha     = 0.05
 )
 
-// contamination is in every summary's caveats and every table's footer.
-const contamination = "both suites have been public since 2019–2020 and are likely in pre-training data; " +
-	"paired differences are the claim, absolute rates are context"
+// contamination follows the per-suite public-since lines in every summary's caveats and every table's footer.
+const contamination = "likely in pre-training data; paired differences are the claim, absolute rates are context"
+
+// publicSince is one suite's line in the caveat. A run that predates the lock's year says so.
+func publicSince(c Breadcrumb) string {
+	if c.PublicSince == 0 {
+		return c.Suite + ": first-public year not recorded"
+	}
+	return fmt.Sprintf("%s: public since %d", c.Suite, c.PublicSince)
+}
 
 // Summary is summary.json: a pure function of run.json and items.jsonl. Only
 // Execution differs between an interrupted run and an uninterrupted one.
@@ -61,7 +68,8 @@ type ArmSummary struct {
 	PassRate        float64      `json:"pass_rate"`
 	PassWilson      [2]float64   `json:"pass_wilson95"`
 	CostUSD         float64      `json:"cost_usd"`
-	CostPerAccepted *float64     `json:"cost_per_accepted"` // nil when nothing was accepted
+	GraderCostUSD   float64      `json:"grader_cost_usd,omitempty"` // the part of CostUSD billed to the second model
+	CostPerAccepted *float64     `json:"cost_per_accepted"`         // nil when nothing was accepted
 	TokensIn        Moments      `json:"tokens_in"`
 	TokensOut       Moments      `json:"tokens_out"`
 	LatencyMS       LatencyStats `json:"latency_ms"`
@@ -94,6 +102,15 @@ type FieldCatch struct {
 	// and on a kind, since a call is not billed per kind.
 	CostPerVerified *float64              `json:"cost_per_verified"`
 	ByKind          map[string]FieldCatch `json:"by_kind,omitempty"`
+	// WithSecond reads the same fields with a second model's disagreement added to the checks.
+	WithSecond *SecondCatch `json:"with_second,omitempty"`
+}
+
+// SecondCatch is a FieldCatch's detection with the round trip counted as a check. Its cost
+// per verified field includes the second model's calls; the FieldCatch's own leaves them out.
+type SecondCatch struct {
+	DetectionStats
+	CostPerVerified *float64 `json:"cost_per_verified"`
 }
 
 // Moments is a mean and a nearest-rank p95.
@@ -206,7 +223,8 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		order[id] = i
 	}
 	scored := map[pairKey]Result{}
-	pairSpend, armSpend := map[pairKey]float64{}, map[string]float64{}
+	pairSpend, pairGrader := map[pairKey]float64{}, map[pairKey]float64{}
+	armSpend, graderSpend := map[string]float64{}, map[string]float64{}
 	var e Execution
 	for _, r := range rows {
 		if _, ok := order[r.ItemID]; !ok {
@@ -215,6 +233,10 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		e.SpendUSD += r.CostUSD
 		pairSpend[pairKey{r.ItemID, r.Arm}] += r.CostUSD
 		armSpend[r.Arm] += r.CostUSD
+		if r.Grader {
+			graderSpend[r.Arm] += r.CostUSD
+			pairGrader[pairKey{r.ItemID, r.Arm}] += r.CostUSD
+		}
 		if r.Retryable {
 			e.SpendRows++
 		} else {
@@ -230,11 +252,11 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 	e.WallSeconds = e.End.Sub(e.Start).Seconds()
 	// A scored pair costs everything billed for it, retries and earlier attempts included.
 	for k, r := range scored {
-		r.CostUSD = pairSpend[k]
+		r.CostUSD, r.graderUSD = pairSpend[k], pairGrader[k]
 		scored[k] = r
 	}
 	s := Summary{Schema: summarySchema, RunID: run.ID, Tier: run.Tier, Breadcrumb: run.Crumb,
-		Arms: map[string]ArmSummary{}, Paired: map[string]PairedStats{}, Caveats: []string{contamination}, Execution: e}
+		Arms: map[string]ArmSummary{}, Paired: map[string]PairedStats{}, Caveats: []string{publicSince(run.Crumb), contamination}, Execution: e}
 	for _, id := range run.ItemIDs {
 		for _, arm := range run.ArmOrder {
 			if _, ok := scored[pairKey{id, arm}]; !ok {
@@ -251,6 +273,7 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		byArm[OracleArm] = oracleRows(byArm)
 		for _, r := range byArm[OracleArm] {
 			armSpend[OracleArm] += r.CostUSD
+			graderSpend[OracleArm] += r.graderUSD
 		}
 	}
 	for _, rs := range byArm {
@@ -258,7 +281,7 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 	}
 	s.Breadcrumb.ProviderModels = providerModels(byArm)
 	for arm, rs := range byArm {
-		a, err := summarizeArm(rs, armSpend[arm])
+		a, err := summarizeArm(rs, armSpend[arm], graderSpend[arm])
 		if err != nil {
 			return Summary{}, err
 		}
@@ -310,8 +333,9 @@ func oracleRows(byArm map[string][]Result) []Result {
 
 // summarizeArm scores rs, an arm's scored rows; spend is everything the arm was billed,
 // unscored and spend rows included, so a flaky arm's cost per accepted answer shows it.
-func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
-	a := ArmSummary{N: len(rs), CostUSD: spend}
+// graderSpend is the part of spend that went to the grader's second model.
+func summarizeArm(rs []Result, spend, graderSpend float64) (ArmSummary, error) {
+	a := ArmSummary{N: len(rs), CostUSD: spend, GraderCostUSD: graderSpend}
 	var in, out []float64
 	var fields map[string]FieldTally // by kind
 	lat := sketch.New(sketch.DefaultAlpha)
@@ -366,7 +390,7 @@ func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
 	if a.Detection, err = detection(rs); err != nil {
 		return a, err
 	}
-	if a.Fields, err = fieldCatch(fields, a.CostUSD); err != nil {
+	if a.Fields, err = fieldCatch(fields, a.CostUSD, a.GraderCostUSD); err != nil {
 		return a, err
 	}
 	if a.LatencyMS.Valid > 0 {
@@ -420,7 +444,7 @@ func (d *DetectionStats) rates() error {
 }
 
 // fieldCatch reads each kind's tally and their sum as detections; nil when no row tallied fields.
-func fieldCatch(byKind map[string]FieldTally, spend float64) (*FieldCatch, error) {
+func fieldCatch(byKind map[string]FieldTally, spend, graderSpend float64) (*FieldCatch, error) {
 	if byKind == nil {
 		return nil, nil
 	}
@@ -440,8 +464,14 @@ func fieldCatch(byKind map[string]FieldTally, spend float64) (*FieldCatch, error
 	}
 	c.ByKind = kinds
 	if verified := all.Right + all.Wrong - all.RightFlagged - all.WrongFlagged; verified > 0 {
-		v := spend / float64(verified)
+		v := (spend - graderSpend) / float64(verified)
 		c.CostPerVerified = &v
+	}
+	if c.WithSecond != nil {
+		if verified := all.Right + all.Wrong - all.RightFlaggedSecond - all.WrongFlaggedSecond; verified > 0 {
+			v := spend / float64(verified)
+			c.WithSecond.CostPerVerified = &v
+		}
 	}
 	return &c, nil
 }
@@ -450,6 +480,13 @@ func (t FieldTally) catch() (FieldCatch, error) {
 	c := FieldCatch{DetectionStats: DetectionStats{Positives: t.Wrong, Caught: t.WrongFlagged, Negatives: t.Right, FalseFlags: t.RightFlagged}}
 	if n := t.Right + t.Wrong; n > 0 {
 		c.Accuracy = float64(t.Right) / float64(n)
+	}
+	if t.Second {
+		c.WithSecond = &SecondCatch{DetectionStats: DetectionStats{Positives: t.Wrong, Caught: t.WrongFlaggedSecond,
+			Negatives: t.Right, FalseFlags: t.RightFlaggedSecond}}
+		if err := c.WithSecond.rates(); err != nil {
+			return c, err
+		}
 	}
 	return c, c.rates()
 }

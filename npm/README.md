@@ -15,7 +15,7 @@ On install, it downloads the `hyctl` binary matching this package's version from
 
 ```bash
 # Homebrew
-brew tap ankit373/hydra && brew install hyctl
+brew trust ankit373/hydra && brew install ankit373/hydra/hyctl
 
 # Standalone (curl)
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh

@@ -1,0 +1,855 @@
+{
+  "advisories": [],
+  "prs": {
+    "1452": {
+      "author": "ankit373",
+      "issues": [
+        1451
+      ],
+      "upgrade_notes": ""
+    },
+    "1517": {
+      "author": "ankit373",
+      "issues": [
+        1509
+      ],
+      "upgrade_notes": ""
+    },
+    "1518": {
+      "author": "ankit373",
+      "issues": [
+        1511
+      ],
+      "upgrade_notes": ""
+    },
+    "1555": {
+      "author": "ankit373",
+      "issues": [
+        1531
+      ],
+      "upgrade_notes": ""
+    },
+    "1556": {
+      "author": "ankit373",
+      "issues": [
+        1536
+      ],
+      "upgrade_notes": ""
+    },
+    "1557": {
+      "author": "ankit373",
+      "issues": [
+        1487
+      ],
+      "upgrade_notes": ""
+    },
+    "1558": {
+      "author": "ankit373",
+      "issues": [
+        1467
+      ],
+      "upgrade_notes": ""
+    },
+    "1568": {
+      "author": "ankit373",
+      "issues": [
+        1507
+      ],
+      "upgrade_notes": ""
+    },
+    "1577": {
+      "author": "ankit373",
+      "issues": [
+        1539
+      ],
+      "upgrade_notes": ""
+    },
+    "1585": {
+      "author": "ankit373",
+      "issues": [
+        1541
+      ],
+      "upgrade_notes": ""
+    },
+    "1610": {
+      "author": "ankit373",
+      "issues": [
+        1513
+      ],
+      "upgrade_notes": ""
+    },
+    "1687": {
+      "author": "ankit373",
+      "issues": [
+        1537
+      ],
+      "upgrade_notes": ""
+    },
+    "1689": {
+      "author": "ankit373",
+      "issues": [
+        1532
+      ],
+      "upgrade_notes": ""
+    },
+    "1690": {
+      "author": "ankit373",
+      "issues": [
+        1533
+      ],
+      "upgrade_notes": ""
+    },
+    "1691": {
+      "author": "ankit373",
+      "issues": [
+        1534
+      ],
+      "upgrade_notes": ""
+    },
+    "1693": {
+      "author": "ankit373",
+      "issues": [
+        1468
+      ],
+      "upgrade_notes": ""
+    },
+    "1695": {
+      "author": "ankit373",
+      "issues": [
+        1530
+      ],
+      "upgrade_notes": ""
+    },
+    "1696": {
+      "author": "ankit373",
+      "issues": [
+        1540
+      ],
+      "upgrade_notes": ""
+    },
+    "1698": {
+      "author": "ankit373",
+      "issues": [
+        1461,
+        1538
+      ],
+      "upgrade_notes": ""
+    },
+    "1705": {
+      "author": "ankit373",
+      "issues": [
+        1514
+      ],
+      "upgrade_notes": ""
+    },
+    "1707": {
+      "author": "ankit373",
+      "issues": [
+        1515
+      ],
+      "upgrade_notes": ""
+    },
+    "1712": {
+      "author": "ankit373",
+      "issues": [
+        1470
+      ],
+      "upgrade_notes": ""
+    },
+    "1714": {
+      "author": "ankit373",
+      "issues": [
+        1535
+      ],
+      "upgrade_notes": ""
+    },
+    "1715": {
+      "author": "ankit373",
+      "issues": [
+        1480
+      ],
+      "upgrade_notes": ""
+    },
+    "1716": {
+      "author": "ankit373",
+      "issues": [
+        1580
+      ],
+      "upgrade_notes": ""
+    },
+    "1717": {
+      "author": "ankit373",
+      "issues": [
+        1469
+      ],
+      "upgrade_notes": ""
+    },
+    "1718": {
+      "author": "ankit373",
+      "issues": [
+        1730
+      ],
+      "upgrade_notes": ""
+    },
+    "1719": {
+      "author": "ankit373",
+      "issues": [
+        1728
+      ],
+      "upgrade_notes": ""
+    },
+    "1720": {
+      "author": "ankit373",
+      "issues": [
+        1729
+      ],
+      "upgrade_notes": ""
+    },
+    "1721": {
+      "author": "ankit373",
+      "issues": [
+        1661
+      ],
+      "upgrade_notes": ""
+    },
+    "1724": {
+      "author": "ankit373",
+      "issues": [
+        1544
+      ],
+      "upgrade_notes": ""
+    },
+    "1725": {
+      "author": "ankit373",
+      "issues": [
+        1472
+      ],
+      "upgrade_notes": ""
+    },
+    "1726": {
+      "author": "ankit373",
+      "issues": [
+        1731
+      ],
+      "upgrade_notes": ""
+    },
+    "1727": {
+      "author": "ankit373",
+      "issues": [
+        1653
+      ],
+      "upgrade_notes": ""
+    },
+    "1739": {
+      "author": "ankit373",
+      "issues": [
+        1654
+      ],
+      "upgrade_notes": ""
+    },
+    "1740": {
+      "author": "ankit373",
+      "issues": [
+        1481
+      ],
+      "upgrade_notes": ""
+    },
+    "1742": {
+      "author": "ankit373",
+      "issues": [
+        1583
+      ],
+      "upgrade_notes": ""
+    },
+    "1744": {
+      "author": "ankit373",
+      "issues": [
+        1503
+      ],
+      "upgrade_notes": ""
+    },
+    "1745": {
+      "author": "ankit373",
+      "issues": [
+        1736
+      ],
+      "upgrade_notes": ""
+    },
+    "1746": {
+      "author": "ankit373",
+      "issues": [
+        1525
+      ],
+      "upgrade_notes": ""
+    },
+    "1747": {
+      "author": "ankit373",
+      "issues": [
+        1508
+      ],
+      "upgrade_notes": ""
+    },
+    "1748": {
+      "author": "ankit373",
+      "issues": [
+        1584
+      ],
+      "upgrade_notes": ""
+    },
+    "1749": {
+      "author": "ankit373",
+      "issues": [
+        1504
+      ],
+      "upgrade_notes": ""
+    },
+    "1751": {
+      "author": "ankit373",
+      "issues": [
+        1545
+      ],
+      "upgrade_notes": ""
+    },
+    "1753": {
+      "author": "ankit373",
+      "issues": [
+        1471
+      ],
+      "upgrade_notes": ""
+    },
+    "1755": {
+      "author": "ankit373",
+      "issues": [
+        1474
+      ],
+      "upgrade_notes": ""
+    },
+    "1756": {
+      "author": "ankit373",
+      "issues": [
+        1754
+      ],
+      "upgrade_notes": ""
+    },
+    "1762": {
+      "author": "ankit373",
+      "issues": [
+        1527
+      ],
+      "upgrade_notes": ""
+    },
+    "1763": {
+      "author": "ankit373",
+      "issues": [
+        1547
+      ],
+      "upgrade_notes": ""
+    },
+    "1764": {
+      "author": "ankit373",
+      "issues": [
+        1505
+      ],
+      "upgrade_notes": ""
+    },
+    "1768": {
+      "author": "ankit373",
+      "issues": [
+        1521
+      ],
+      "upgrade_notes": ""
+    },
+    "1771": {
+      "author": "ankit373",
+      "issues": [
+        1757
+      ],
+      "upgrade_notes": ""
+    },
+    "1772": {
+      "author": "ankit373",
+      "issues": [
+        1601
+      ],
+      "upgrade_notes": ""
+    },
+    "1774": {
+      "author": "ankit373",
+      "issues": [
+        1546
+      ],
+      "upgrade_notes": ""
+    },
+    "1775": {
+      "author": "ankit373",
+      "issues": [
+        1619
+      ],
+      "upgrade_notes": ""
+    },
+    "1777": {
+      "author": "ankit373",
+      "issues": [
+        1548
+      ],
+      "upgrade_notes": ""
+    },
+    "1778": {
+      "author": "ankit373",
+      "issues": [
+        1591
+      ],
+      "upgrade_notes": ""
+    },
+    "1779": {
+      "author": "ankit373",
+      "issues": [
+        1626
+      ],
+      "upgrade_notes": ""
+    },
+    "1780": {
+      "author": "ankit373",
+      "issues": [
+        1627
+      ],
+      "upgrade_notes": ""
+    },
+    "1781": {
+      "author": "ankit373",
+      "issues": [
+        1629
+      ],
+      "upgrade_notes": ""
+    },
+    "1783": {
+      "author": "ankit373",
+      "issues": [
+        1586
+      ],
+      "upgrade_notes": ""
+    },
+    "1784": {
+      "author": "ankit373",
+      "issues": [
+        1602
+      ],
+      "upgrade_notes": ""
+    },
+    "1785": {
+      "author": "ankit373",
+      "issues": [
+        1603
+      ],
+      "upgrade_notes": ""
+    },
+    "1792": {
+      "author": "ankit373",
+      "issues": [
+        1522
+      ],
+      "upgrade_notes": ""
+    },
+    "1793": {
+      "author": "ankit373",
+      "issues": [
+        1523
+      ],
+      "upgrade_notes": ""
+    },
+    "1798": {
+      "author": "ankit373",
+      "issues": [
+        1620
+      ],
+      "upgrade_notes": ""
+    },
+    "1806": {
+      "author": "ankit373",
+      "issues": [
+        1592
+      ],
+      "upgrade_notes": ""
+    },
+    "1807": {
+      "author": "ankit373",
+      "issues": [
+        1593
+      ],
+      "upgrade_notes": ""
+    },
+    "1810": {
+      "author": "ankit373",
+      "issues": [
+        1604
+      ],
+      "upgrade_notes": ""
+    },
+    "1812": {
+      "author": "ankit373",
+      "issues": [
+        1587
+      ],
+      "upgrade_notes": ""
+    },
+    "1816": {
+      "author": "ankit373",
+      "issues": [
+        1605
+      ],
+      "upgrade_notes": ""
+    },
+    "1820": {
+      "author": "ankit373",
+      "issues": [
+        1819
+      ],
+      "upgrade_notes": ""
+    },
+    "1822": {
+      "author": "ankit373",
+      "issues": [
+        1617
+      ],
+      "upgrade_notes": ""
+    },
+    "1824": {
+      "author": "ankit373",
+      "issues": [
+        1590
+      ],
+      "upgrade_notes": ""
+    },
+    "1826": {
+      "author": "ankit373",
+      "issues": [
+        1607
+      ],
+      "upgrade_notes": ""
+    },
+    "1828": {
+      "author": "ankit373",
+      "issues": [
+        1608
+      ],
+      "upgrade_notes": ""
+    },
+    "1830": {
+      "author": "ankit373",
+      "issues": [
+        1606
+      ],
+      "upgrade_notes": ""
+    },
+    "1834": {
+      "author": "ankit373",
+      "issues": [
+        1612
+      ],
+      "upgrade_notes": ""
+    },
+    "1837": {
+      "author": "ankit373",
+      "issues": [
+        1836
+      ],
+      "upgrade_notes": ""
+    },
+    "1900": {
+      "author": "ankit373",
+      "issues": [
+        1588
+      ],
+      "upgrade_notes": ""
+    },
+    "1924": {
+      "author": "ankit373",
+      "issues": [
+        1856
+      ],
+      "upgrade_notes": ""
+    },
+    "1926": {
+      "author": "ankit373",
+      "issues": [
+        1888
+      ],
+      "upgrade_notes": ""
+    },
+    "1927": {
+      "author": "ankit373",
+      "issues": [
+        1864
+      ],
+      "upgrade_notes": ""
+    },
+    "1928": {
+      "author": "ankit373",
+      "issues": [
+        1875
+      ],
+      "upgrade_notes": ""
+    },
+    "1930": {
+      "author": "ankit373",
+      "issues": [
+        1842
+      ],
+      "upgrade_notes": ""
+    },
+    "1931": {
+      "author": "ankit373",
+      "issues": [
+        1564
+      ],
+      "upgrade_notes": ""
+    },
+    "1932": {
+      "author": "ankit373",
+      "issues": [
+        1866
+      ],
+      "upgrade_notes": ""
+    },
+    "1933": {
+      "author": "ankit373",
+      "issues": [
+        1890
+      ],
+      "upgrade_notes": ""
+    },
+    "1934": {
+      "author": "ankit373",
+      "issues": [
+        1859
+      ],
+      "upgrade_notes": ""
+    },
+    "1936": {
+      "author": "ankit373",
+      "issues": [
+        1872
+      ],
+      "upgrade_notes": ""
+    },
+    "1937": {
+      "author": "ankit373",
+      "issues": [
+        1589
+      ],
+      "upgrade_notes": ""
+    },
+    "1938": {
+      "author": "ankit373",
+      "issues": [
+        1868
+      ],
+      "upgrade_notes": ""
+    },
+    "1946": {
+      "author": "ankit373",
+      "issues": [
+        1860
+      ],
+      "upgrade_notes": ""
+    },
+    "1951": {
+      "author": "ankit373",
+      "issues": [
+        1857
+      ],
+      "upgrade_notes": ""
+    },
+    "1952": {
+      "author": "ankit373",
+      "issues": [
+        1880
+      ],
+      "upgrade_notes": ""
+    },
+    "1957": {
+      "author": "ankit373",
+      "issues": [
+        1865
+      ],
+      "upgrade_notes": ""
+    },
+    "1959": {
+      "author": "ankit373",
+      "issues": [
+        1861
+      ],
+      "upgrade_notes": ""
+    },
+    "1960": {
+      "author": "ankit373",
+      "issues": [
+        1628
+      ],
+      "upgrade_notes": ""
+    },
+    "1961": {
+      "author": "ankit373",
+      "issues": [
+        1634
+      ],
+      "upgrade_notes": ""
+    },
+    "1962": {
+      "author": "ankit373",
+      "issues": [
+        1882
+      ],
+      "upgrade_notes": ""
+    },
+    "1964": {
+      "author": "ankit373",
+      "issues": [
+        1858
+      ],
+      "upgrade_notes": ""
+    },
+    "1965": {
+      "author": "ankit373",
+      "issues": [
+        1876
+      ],
+      "upgrade_notes": ""
+    },
+    "1967": {
+      "author": "ankit373",
+      "issues": [
+        1889
+      ],
+      "upgrade_notes": ""
+    },
+    "1969": {
+      "author": "ankit373",
+      "issues": [
+        1630
+      ],
+      "upgrade_notes": ""
+    },
+    "1970": {
+      "author": "ankit373",
+      "issues": [
+        1631
+      ],
+      "upgrade_notes": ""
+    },
+    "1973": {
+      "author": "ankit373",
+      "issues": [
+        1877
+      ],
+      "upgrade_notes": ""
+    },
+    "1980": {
+      "author": "ankit373",
+      "issues": [
+        1883
+      ],
+      "upgrade_notes": ""
+    },
+    "1982": {
+      "author": "ankit373",
+      "issues": [
+        1976
+      ],
+      "upgrade_notes": ""
+    },
+    "1984": {
+      "author": "ankit373",
+      "issues": [
+        1862
+      ],
+      "upgrade_notes": ""
+    },
+    "1986": {
+      "author": "ankit373",
+      "issues": [
+        1870
+      ],
+      "upgrade_notes": ""
+    },
+    "1989": {
+      "author": "ankit373",
+      "issues": [
+        1867
+      ],
+      "upgrade_notes": ""
+    },
+    "1990": {
+      "author": "ankit373",
+      "issues": [
+        1884
+      ],
+      "upgrade_notes": ""
+    },
+    "1992": {
+      "author": "ankit373",
+      "issues": [
+        1609
+      ],
+      "upgrade_notes": ""
+    },
+    "1997": {
+      "author": "ankit373",
+      "issues": [
+        1885
+      ],
+      "upgrade_notes": ""
+    },
+    "2001": {
+      "author": "ankit373",
+      "issues": [
+        1999
+      ],
+      "upgrade_notes": ""
+    },
+    "2006": {
+      "author": "ankit373",
+      "issues": [
+        1869
+      ],
+      "upgrade_notes": ""
+    },
+    "2010": {
+      "author": "ankit373",
+      "issues": [
+        1881
+      ],
+      "upgrade_notes": ""
+    },
+    "2017": {
+      "author": "ankit373",
+      "issues": [
+        1942
+      ],
+      "upgrade_notes": ""
+    },
+    "2026": {
+      "author": "ankit373",
+      "issues": [
+        1943
+      ],
+      "upgrade_notes": ""
+    },
+    "2031": {
+      "author": "ankit373",
+      "issues": [
+        1945
+      ],
+      "upgrade_notes": ""
+    },
+    "2032": {
+      "author": "ankit373",
+      "issues": [
+        1987
+      ],
+      "upgrade_notes": ""
+    }
+  },
+  "release": null,
+  "version": "1.9.0"
+}

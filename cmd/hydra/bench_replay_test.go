@@ -87,3 +87,11 @@ func TestBenchReplay_FirstCheckPassNeedsACheck(t *testing.T) {
 		t.Fatalf("got %v; want a refusal naming --check", err)
 	}
 }
+
+func TestBenchReplay_DeltaFlagReachesTheReplay(t *testing.T) {
+	testutil.NewSandbox(t)
+	_, _, err := run(t, "bench", "replay", "--candidates", replayFixture(t), "--policy", "always_strongest", "--delta", "2")
+	if err == nil || !strings.Contains(err.Error(), "delta 2") {
+		t.Fatalf("want delta 2 refused, got %v", err)
+	}
+}

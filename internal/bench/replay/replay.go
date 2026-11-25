@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/ankit373/hydra/internal/aver"
 	"github.com/ankit373/hydra/internal/bench"
 	"github.com/ankit373/hydra/internal/stats"
 )
@@ -202,7 +203,8 @@ type Config struct {
 	Policies []string
 	Alphas   []float64
 	Seeds    []uint64
-	Check    string // first_check_pass's primary check
+	Check    string  // first_check_pass's primary check
+	Delta    float64 // AVER bound error; 0 means aver.DefaultDelta
 }
 
 // Run replays each kind on its own, since a check's evidence does not carry across kinds.
@@ -214,6 +216,12 @@ func Run(rows []Row, cfg Config) (Report, error) {
 		if !(a > 0 && a < 1) {
 			return Report{}, fmt.Errorf("replay: alpha %v is outside (0, 1)", a)
 		}
+	}
+	if cfg.Delta == 0 {
+		cfg.Delta = aver.DefaultDelta
+	}
+	if !(cfg.Delta > 0 && cfg.Delta < 1) {
+		return Report{}, fmt.Errorf("replay: delta %v is outside (0, 1)", cfg.Delta)
 	}
 	byKind := map[string][]Row{}
 	for _, r := range rows {
@@ -234,7 +242,7 @@ func Run(rows []Row, cfg Config) (Report, error) {
 			for _, alpha := range cfg.Alphas {
 				var res []Result
 				for _, seed := range cfg.Seeds {
-					r, err := replayOne(byKind[kind], byTask, name, Options{Alpha: alpha, Check: cfg.Check}, seed)
+					r, err := replayOne(byKind[kind], byTask, name, Options{Alpha: alpha, Delta: cfg.Delta, Check: cfg.Check}, seed)
 					if err != nil {
 						return Report{}, fmt.Errorf("replay: %s, %s: %w", kind, name, err)
 					}

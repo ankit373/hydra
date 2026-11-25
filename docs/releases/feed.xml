@@ -4,8 +4,15 @@
   <id>https://hydra.uvansa.com/releases/</id>
   <link href="https://hydra.uvansa.com/releases/"/>
   <link rel="self" href="https://hydra.uvansa.com/releases/feed.xml"/>
-  <updated>2026-11-13T00:00:00Z</updated>
+  <updated>2026-11-24T00:00:00Z</updated>
   <author><name>Hydra</name></author>
+  <entry>
+    <title>Hydra 1.9.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.9.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.9.0.html"/>
+    <updated>2026-11-24T00:00:00Z</updated>
+    <summary>Hydra 1.9.0 is about checking answers. You can ask it to check almost any kind of work: a label, an extraction, a summary, a support reply, a list of links or citations. When a check fails, the request reruns once on a stronger model. Prompt caching now shows up in the cost of every call, and the terminal app starts in Ask, so a first request never writes a file.</summary>
+  </entry>
   <entry>
     <title>Hydra 1.8.0</title>
     <id>https://hydra.uvansa.com/releases/v1.8.0.html</id>

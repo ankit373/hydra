@@ -32,6 +32,8 @@
 
 **Hydra picks the model best suited to each task, and can check the answer before you rely on it.**
 
+![A terminal: hyctl oracle ground flags a summary that says 1.9 hours when the report says 1.4, and exits 1; the corrected summary is grounded and exits 0](docs/demo/ground.gif)
+
 You probably have several models to hand: hosted APIs (OpenAI, Anthropic, Gemini, Bedrock, Mistral and others), local models through Ollama or llama.cpp, and CLI agents. Each is good at different work, and none of them tells you when its answer is wrong. Hydra sits in front of all of them.
 
 - **It finds your models.** API keys, local model servers and CLI agents, with no configuration.
@@ -101,6 +103,8 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 | Analyse | compare numbers, explain a trend | a script recomputes the figures | any command via `--check cmd:...` or `hyctl oracle verify` |
 | Code | edit, generate, review | tests, build, lint; a file many others depend on needs more confidence | `hyctl edit`, `hyctl vet`, `hyctl graph blast`, `hyverify`; Go tests another model writes for the change, run with the network off, via `--check gen:tests=<file>` |
 
+A check is not equally good on every model's answers. Strong models make subtler mistakes, so their wrong answers get past tests more often: in a public pilot, HumanEval+ base tests passed 0.7% of vicuna-7b's wrong answers and 40.6% of gpt-4's. `hyctl trust certify-table` keeps each check's false-pass rate per model and kind of work, with an upper bound, and never pools models. A model with few labelled wrong answers gets a wide bound, which is valid and simply counts for little.
+
 `--check` judges one answer, and a real fail reruns once on a stronger model: [how checks work](https://hydra.uvansa.com/docs.html#check). Each kind of work also has a menu of [recipes](https://hydra.uvansa.com/docs.html#recipe).
 
 ---
@@ -110,7 +114,7 @@ hyctl edit --file "$PWD/slug.go" --enum MODERATE --prompt "drop punctuation and 
 The CLI is **`hyctl`** (the product is Hydra). Every method installs the same prebuilt binary and checks its checksum.
 
 ```bash
-brew install ankit373/hydra/hyctl                                           # Homebrew, macOS and Linux
+brew trust ankit373/hydra && brew install ankit373/hydra/hyctl              # Homebrew, macOS and Linux
 npm install -g hyctl                                                        # or run once with npx hyctl
 pip install hyctl                                                           # Python 3.8+
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh   # macOS and Linux
@@ -144,7 +148,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications`, or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.8.0` pins
+Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.9.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 <!-- x-release-please-end -->

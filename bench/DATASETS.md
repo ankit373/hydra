@@ -7,7 +7,8 @@ any file whose hash differs. What is committed is derived: `bench/splits/<suite>
 `go generate ./internal/bench/suites`, and `bench/configs/smoke.ids`, the first 100 test ids
 by rank per suite.
 
-Every suite has been public since 2017–2021 and is **likely in pre-training data**.
+Every suite is public and **likely in pre-training data**. `public_since` in `bench/datasets.lock` is the year each
+suite's items first appeared (HumanEval+ counts from HumanEval, 2021), and the table footer prints one line per suite.
 Paired differences against the frontier arm are the claim; absolute rates are context.
 
 ## Banking77

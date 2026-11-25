@@ -45,7 +45,7 @@
     "description": "Hydra is an open source gateway for AI models from any provider. It picks the model best suited to each task, and can check the answer before you rely on it. It works with hosted APIs, local models and CLI agents, and runs as a desktop app, a command-line tool (hyctl) and an OpenAI-compatible endpoint.",
     "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
-    "softwareVersion": "1.8.0",
+    "softwareVersion": "1.9.0",
     "datePublished": "2026-01-01",
     "dateModified": "2026-09-04",
     "license": "https://github.com/ankit373/hydra/blob/main/LICENSE",
@@ -174,7 +174,7 @@
       "name": "How do I install Hydra?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "The desktop app is a download for macOS, Windows and Linux from the desktop app page. The command-line tool, hyctl, installs with Homebrew: 'brew install ankit373/hydra/hyctl'. It is also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Install Ollama too if you want to run models locally."
+        "text": "The desktop app is a download for macOS, Windows and Linux from the desktop app page. The command-line tool, hyctl, installs with Homebrew: 'brew trust ankit373/hydra && brew install ankit373/hydra/hyctl'. It is also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Install Ollama too if you want to run models locally."
       }
     },
     {
@@ -523,8 +523,8 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
       <div class="tagline">Pick the model · check the answer</div>
       <p class="subline">Hydra sends each request to the model <b>best suited to the task</b>, and <b>can check the answer</b> and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider.</p>
       <div class="ctas">
-        <button class="install" data-copy="brew install ankit373/hydra/hyctl">
-          <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
+        <button class="install" data-copy="brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl">
+          <span class="dollar">$</span><span class="cmd">brew trust ankit373/hydra &amp;&amp; brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
         </button>
         <a class="btn btn-lg" href="/app.html">Get the desktop app →</a>
       </div>
@@ -1007,7 +1007,7 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
       <h3>Get the binary</h3>
       <p>One Go binary. No daemon, no account, no cloud.</p>
       <div class="term">
-        <div class="copyline"><code translate="no"><span class="p">$</span> brew install ankit373/hydra/hyctl</code><button type="button" class="copy-btn" data-copy="brew install ankit373/hydra/hyctl">copy</button></div>
+        <div class="copyline"><code translate="no"><span class="p">$</span> brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl</code><button type="button" class="copy-btn" data-copy="brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl">copy</button></div>
         <div class="copyline"><code translate="no"><span class="p">$</span> npm install -g hyctl</code><button type="button" class="copy-btn" data-copy="npm install -g hyctl">copy</button></div>
         <div class="copyline"><code translate="no"><span class="p">$</span> pip install hyctl</code><button type="button" class="copy-btn" data-copy="pip install hyctl">copy</button></div>
         <div class="copyline"><code translate="no"><span class="p">$</span> curl -fsSL …/install.sh | sh</code><button type="button" class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh">copy</button></div>
@@ -1076,7 +1076,7 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
     </div>
     <div class="faq-item">
       <h3>How do I install Hydra?</h3>
-      <p>The desktop app is a download for macOS, Windows and Linux from the desktop app page. The command-line tool, hyctl, installs with Homebrew: 'brew install ankit373/hydra/hyctl'. It is also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Install Ollama too if you want to run models locally.</p>
+      <p>The desktop app is a download for macOS, Windows and Linux from the desktop app page. The command-line tool, hyctl, installs with Homebrew: 'brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl'. It is also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Install Ollama too if you want to run models locally.</p>
     </div>
     <div class="faq-item">
       <h3>What models does Hydra support?</h3>
@@ -1110,8 +1110,8 @@ table.cmp.checks code{font-family:var(--hy-font-family-mono);font-size:.94em;}
   <h2>The right model for each task.<br>The answer, <span class="grad">checked</span>.</h2>
   <p>Hydra works with any provider, runs on your own hardware, and keeps your spend logs and policy on your machine.</p>
   <div class="ctas">
-    <button class="install" data-copy="brew install ankit373/hydra/hyctl">
-        <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
+    <button class="install" data-copy="brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl">
+        <span class="dollar">$</span><span class="cmd">brew trust ankit373/hydra &amp;&amp; brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
       </button>
     <a class="btn btn-lg" href="/app.html">Get the desktop app →</a>
   </div>
