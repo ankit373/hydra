@@ -221,6 +221,7 @@
       <a href="#graph-blast"><code translate="no">graph blast</code></a>
       <a href="#graph-parallel"><code translate="no">graph parallel</code></a>
       <a href="#context"><code translate="no">context entropy</code></a>
+      <a href="#idle"><code translate="no">idle, context packs</code></a>
 
       <div class="grp" data-grp>Accountability</div>
       <a href="#mcp"><code translate="no">hyctl mcp</code></a>
@@ -387,6 +388,9 @@ hyctl trust benchmark                   <span class="c"># measured SPRT numbers 
 hyctl graph blast &lt;file&gt;                <span class="c"># a file's blast radius + the confidence it demands</span>
 hyctl graph parallel &lt;files...&gt;         <span class="c"># optimal number of parallel agents (Law 4)</span>
 hyctl context entropy &lt;file|-&gt;          <span class="c"># signal density + useful tokens + compact hint</span>
+hyctl idle status                      <span class="c"># conversations, their last pack, why one was refused</span>
+hyctl context packs [conversation]     <span class="c"># staged packs, their checks, how often one was used</span>
+hyctl context restore &lt;conversation&gt;   <span class="c"># send its next request as it came, stop compacting it</span>
 
 <span class="c"># Verification &amp; accountability</span>
 hyctl oracle verify go test ./... --source verifier:go-test  <span class="c"># verifier as evidence + its LLR</span>
@@ -1024,6 +1028,21 @@ hyctl compare claude-sonnet ollama/qwen3:4b <span class="fl">--kind</span> summa
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl context entropy internal/foo.go
 cat notes.md | hyctl context entropy -</pre></div>
       <a class="more" href="/first-principles.html#entropy">See useful-tokens fall →</a>
+    </section>
+
+    <section class="doc" id="idle">
+      <h2><span class="cmd">hyctl idle</span> <span class="tagline">compact while quiet, check before use</span></h2>
+      <p class="sum">Shrinks a long conversation on a local model while you are away, and only uses the result once it has passed its checks.</p>
+      <div class="sub"><div class="lbl">What it does</div><p>When a conversation has gone quiet and the machine is free (on AC power, low load, memory to spare), Hydra writes a <span class="fx">pack</span> on a local model: the goal, the rules copied word for word, decisions with their reasons, and a pointer back to every original turn. Nothing is deleted. A new request in any conversation stops the job at once.</p></div>
+      <div class="sub"><div class="lbl">What has to pass first</div><p>The pack must be smaller than the turns it covers, every pointer must resolve, the rules must match the originals byte for byte, and it must state no number, name, date or quote the originals lack. Then the same questions are put to the local model twice, once with the full turns and once with the pack, and at least 0.8 of the answers must agree: paths and numbers exactly, other answers by word overlap. The model that wrote the pack also answers, so agreement is weaker evidence than a second opinion. A conversation too big for the model's window is checked in parts and marked partial, and a partial pack is never used automatically. A pack that fails is kept beside the others with the reason and is never used.</p></div>
+      <div class="sub"><div class="lbl">When it is used</div><p>Off by default. With <span class="fx">[idle] enabled = true</span> in <span class="fx">config.toml</span>, <span class="fx">hyctl serve</span> checks once a minute. The pack is sent in place of the turns it covers only when the provider's prompt cache for the old conversation has expired (<span class="fx">swap = "cold_only"</span>, the default), because rewriting a warm cache costs more than it saves. <span class="fx">swap = "auto"</span> also does it while the cache is warm when the cache rates say the rewrite pays back, and <span class="fx">"off"</span> never does. Any change to the covered turns sends the request as it came. A request that used a pack says so in <span class="fx">X-Hydra-Compacted</span>, and its answer is not cached. It never calls a paid model, and every original stays in the payload store.</p></div>
+      <div class="sub"><div class="lbl">See it, undo it</div><pre translate="no">hyctl idle run                          # one tick by hand
+hyctl idle status                       # each conversation and the last reason one was refused
+hyctl context packs                     # staged packs: turns covered, probes agreed, tokens, uses
+hyctl context show-pack &lt;id&gt;           # the rules and state the model is sent
+hyctl context restore &lt;conversation&gt;   # its next request goes out as it came; no new packs for it
+hyctl idle replay bench/idle-replay     # does a checked pack keep what later turns need?</pre></div>
+      <div class="sub"><div class="lbl">Needs</div><p>Payload capture on (<span class="fx">capture_payloads = true</span>), so the original turns are stored, and a local model that is up. With either missing, <span class="fx">hyctl idle status</span> says so and nothing is compacted.</p></div>
     </section>
 
     <!-- ══ MCP / ORACLE ══ -->

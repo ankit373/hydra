@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -110,7 +111,7 @@ func cmdIdle() *cobra.Command {
 			"A pack is only staged once it passes its checks. `hyctl serve` ticks this once a minute when\n" +
 			"[idle] enabled = true in config.toml. It is off by default and never calls a paid model.",
 	}
-	cmd.AddCommand(cmdIdleRun(), cmdIdleStatus())
+	cmd.AddCommand(cmdIdleRun(), cmdIdleStatus(), cmdIdleReplay())
 	return cmd
 }
 
@@ -202,4 +203,57 @@ func logCompacted(run, task string, c *serve.Compacted) {
 		Meta: map[string]any{"pack": c.Pack, "probes": c.Probes, "probe_agree": c.ProbeAgree,
 			"tokens_before": c.TokensBefore, "tokens_after": c.TokensAfter},
 	})
+}
+
+func cmdIdleReplay() *cobra.Command {
+	var headID string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "replay <dir>",
+		Short: "Does a checked pack keep what later turns need? Compare it with masking and with no compaction",
+		Long: "Reads recorded conversations (*.json: name, kind, license, turns, and needles, the facts and rules\n" +
+			"asked for later), compacts each five times, and scores four arms after rounds 1, 3 and 5: nothing,\n" +
+			"masking (old assistant and tool output cut to one line), a pack that must pass its checks, and the\n" +
+			"same pack unchecked. Per kind of chat it prints tokens, probe agreement and needle recall, and says\n" +
+			"whether the checked pack beat masking. One local model does everything; nothing is sent anywhere else.",
+		Example: "  hyctl idle replay bench/idle-replay --head ollama/qwen3:8b",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(c *cobra.Command, args []string) error {
+			ctx := c.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			fixtures, err := idle.LoadFixtures(args[0])
+			if err != nil {
+				return err
+			}
+			d, err := dispatch.New(ctx)
+			if err != nil {
+				return fmt.Errorf("dispatcher init: %w", err)
+			}
+			defer d.Close()
+			head, err := pickHead(d.Heads(), headID)
+			if err != nil {
+				return err
+			}
+			if !head.LocalOnly {
+				return fmt.Errorf("%s is not a local model; a replay never calls a paid one", head.ID)
+			}
+			if !jsonOut {
+				fmt.Fprintf(stdout, "model %s (%s), digest %s; local only, no paid calls\n\n", head.ID, head.Name, orUnknown(head.Meta["model_digest"]))
+			}
+			rows, err := idle.Replay(ctx, idleHead{head: head, ask: dispatch.HeadAsk(head, idleMaxTokens)}, fixtures, idle.ReplayConfig{})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return json.NewEncoder(stdout).Encode(map[string]any{"head": head.ID, "digest": head.Meta["model_digest"], "rows": rows})
+			}
+			fmt.Fprint(stdout, idle.Tables(rows))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&headID, "head", "", "the local model to use (default: the first routable local one)")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "one JSON object with every row")
+	return cmd
 }

@@ -1,0 +1,177 @@
+{
+ "name": "agent-expense-lisbon",
+ "kind": "agent loop",
+ "license": "MIT, written for this test by the hydra authors; no real customer, paper or person",
+ "turns": [
+  {
+   "role": "system",
+   "text": "You file expense reports for the finance team.\nNever submit a report without a receipt.\nOnly use the company card.\nCharge everything to the cost centre the user names."
+  },
+  {
+   "role": "user",
+   "text": "File my Lisbon trip. Cost centre is CC-7731 and the approver is Dmitri Volkov. Start with the taxi from the airport."
+  },
+  {
+   "role": "assistant",
+   "text": "Starting the Lisbon report for cost centre CC-7731, approver Dmitri Volkov. I need the taxi receipt first."
+  },
+  {
+   "role": "tool",
+   "text": "receipts.scan file=taxi_airport.jpg\n  vendor=Taxi Lisboa amount=38.50 EUR date=2026-10-12\n  payment=company_card_ending_8812\nOCR line 1: Line qty=4 price=18.07 tax=23% ref=299126\nOCR line 2: Line qty=4 price=25.20 tax=6% ref=198695\nOCR line 3: Item qty=1 price=21.55 tax=23% ref=765271\nOCR line 4: Subtotal qty=4 price=26.16 tax=23% ref=781648\nOCR line 5: Service qty=1 price=2.38 tax=6% ref=353695\nOCR line 6: Subtotal qty=3 price=17.62 tax=6% ref=644341\nOCR line 7: Fee qty=4 price=0.18 tax=6% ref=579545\nOCR line 8: Subtotal qty=1 price=28.31 tax=13% ref=894810\nOCR line 9: Fee qty=1 price=2.81 tax=6% ref=519849\nOCR line 10: Fee qty=4 price=2.67 tax=6% ref=988468\nOCR line 11: Item qty=2 price=37.08 tax=6% ref=592817\nOCR line 12: Subtotal qty=4 price=2.92 tax=23% ref=308131\nOCR line 13: Fee qty=3 price=3.49 tax=13% ref=115885\nOCR line 14: Service qty=2 price=9.86 tax=6% ref=111487\nOCR line 15: Subtotal qty=2 price=27.28 tax=6% ref=569158\nOCR line 16: Item qty=4 price=25.75 tax=6% ref=514033\nOCR line 17: Service qty=3 price=34.57 tax=23% ref=418919\nOCR line 18: Item qty=2 price=15.77 tax=23% ref=773013\nOCR line 19: Service qty=2 price=8.53 tax=13% ref=110040\nOCR line 20: Fee qty=3 price=15.45 tax=6% ref=194494\nOCR line 21: Item qty=1 price=24.05 tax=13% ref=752370\nOCR line 22: Line qty=4 price=33.29 tax=6% ref=504852\nOCR line 23: Item qty=3 price=36.34 tax=23% ref=361618\nOCR line 24: Item qty=2 price=27.48 tax=13% ref=605954\nOCR line 25: Subtotal qty=1 price=4.15 tax=6% ref=637244\nOCR line 26: Subtotal qty=3 price=16.83 tax=23% ref=614850\nOCR line 27: Item qty=1 price=5.06 tax=13% ref=686538\nOCR line 28: Line qty=1 price=11.21 tax=6% ref=885367\nOCR line 29: Fee qty=4 price=17.83 tax=6% ref=148861\nOCR line 30: Fee qty=2 price=3.69 tax=6% ref=572221\nOCR line 31: Line qty=2 price=23.60 tax=6% ref=597856\nOCR line 32: Fee qty=1 price=0.85 tax=23% ref=178468\nOCR line 33: Fee qty=3 price=5.46 tax=6% ref=178918\nOCR line 34: Fee qty=1 price=36.01 tax=23% ref=872957\nOCR line 35: Fee qty=3 price=3.40 tax=13% ref=181442\nOCR line 36: Subtotal qty=1 price=34.54 tax=23% ref=115238\nOCR line 37: Subtotal qty=4 price=23.31 tax=23% ref=175758\nOCR line 38: Service qty=3 price=35.19 tax=23% ref=446187\nOCR line 39: Line qty=4 price=17.62 tax=23% ref=187852\nOCR line 40: Line qty=1 price=12.41 tax=6% ref=604319"
+  },
+  {
+   "role": "assistant",
+   "text": "Taxi receipt found: 38.50 EUR on 12 October, paid with the company card ending 8812. Added to the report."
+  },
+  {
+   "role": "user",
+   "text": "Now the hotel. Three nights."
+  },
+  {
+   "role": "tool",
+   "text": "receipts.scan file=hotel_baixa.pdf\n  vendor=Hotel Baixa amount=636.00 EUR nights=3 per_night=212.00\n  payment=company_card_ending_8812 date=2026-10-15\nOCR line 1: Line qty=3 price=5.70 tax=6% ref=492958\nOCR line 2: Subtotal qty=2 price=22.33 tax=23% ref=754555\nOCR line 3: Fee qty=2 price=13.59 tax=6% ref=161681\nOCR line 4: Item qty=1 price=20.54 tax=13% ref=814537\nOCR line 5: Service qty=1 price=36.76 tax=23% ref=633647\nOCR line 6: Subtotal qty=4 price=4.50 tax=13% ref=241630\nOCR line 7: Line qty=2 price=39.05 tax=6% ref=682117\nOCR line 8: Service qty=4 price=24.30 tax=23% ref=724920\nOCR line 9: Line qty=4 price=21.65 tax=23% ref=861609\nOCR line 10: Fee qty=3 price=37.64 tax=23% ref=504324\nOCR line 11: Service qty=3 price=9.40 tax=13% ref=489300\nOCR line 12: Line qty=2 price=1.13 tax=13% ref=134303\nOCR line 13: Item qty=4 price=1.74 tax=6% ref=909415\nOCR line 14: Line qty=2 price=7.12 tax=23% ref=387086\nOCR line 15: Fee qty=4 price=13.77 tax=23% ref=861136\nOCR line 16: Subtotal qty=3 price=8.35 tax=13% ref=577763\nOCR line 17: Subtotal qty=2 price=38.24 tax=6% ref=587302\nOCR line 18: Fee qty=2 price=7.57 tax=23% ref=330565\nOCR line 19: Service qty=3 price=36.62 tax=13% ref=288261\nOCR line 20: Service qty=1 price=9.90 tax=6% ref=478485\nOCR line 21: Item qty=1 price=37.10 tax=23% ref=972367\nOCR line 22: Service qty=2 price=31.37 tax=23% ref=600578\nOCR line 23: Fee qty=3 price=27.38 tax=13% ref=874704\nOCR line 24: Fee qty=1 price=11.13 tax=23% ref=771331\nOCR line 25: Item qty=3 price=20.84 tax=6% ref=816486\nOCR line 26: Service qty=2 price=22.32 tax=13% ref=540740\nOCR line 27: Item qty=4 price=18.87 tax=6% ref=687131\nOCR line 28: Fee qty=1 price=16.71 tax=23% ref=197383\nOCR line 29: Item qty=3 price=39.20 tax=23% ref=871579\nOCR line 30: Item qty=1 price=27.55 tax=6% ref=132395\nOCR line 31: Service qty=4 price=21.40 tax=13% ref=930901\nOCR line 32: Fee qty=2 price=12.48 tax=23% ref=819927\nOCR line 33: Line qty=1 price=8.48 tax=23% ref=834652\nOCR line 34: Line qty=2 price=2.87 tax=13% ref=439312\nOCR line 35: Fee qty=2 price=27.46 tax=23% ref=427656\nOCR line 36: Item qty=4 price=14.62 tax=6% ref=319317\nOCR line 37: Subtotal qty=4 price=7.17 tax=23% ref=723073\nOCR line 38: Item qty=3 price=3.88 tax=6% ref=108099\nOCR line 39: Fee qty=2 price=27.54 tax=13% ref=331084\nOCR line 40: Item qty=3 price=6.49 tax=13% ref=507742"
+  },
+  {
+   "role": "assistant",
+   "text": "Hotel Baixa: 636.00 EUR for three nights, 212.00 EUR a night, on the company card. Added."
+  },
+  {
+   "role": "user",
+   "text": "Add the conference ticket. I paid for it with my own card, I will send the receipt."
+  },
+  {
+   "role": "assistant",
+   "text": "I cannot file that one: expenses must go on the company card and every item needs a receipt. If it was paid on a personal card, finance has a separate reimbursement route. I will leave it out of this report."
+  },
+  {
+   "role": "user",
+   "text": "Fine, leave it. Add dinner on the 13th, 54.20 EUR."
+  },
+  {
+   "role": "tool",
+   "text": "receipts.scan file=dinner_13.jpg\n  vendor=Cervejaria Ramiro amount=54.20 EUR date=2026-10-13\n  payment=company_card_ending_8812\nOCR line 1: Item qty=2 price=26.65 tax=6% ref=772092\nOCR line 2: Item qty=1 price=21.25 tax=6% ref=880866\nOCR line 3: Subtotal qty=2 price=33.51 tax=23% ref=115133\nOCR line 4: Item qty=1 price=34.85 tax=13% ref=966506\nOCR line 5: Subtotal qty=2 price=31.75 tax=13% ref=473017\nOCR line 6: Subtotal qty=4 price=26.83 tax=13% ref=769667\nOCR line 7: Service qty=3 price=32.79 tax=23% ref=375659\nOCR line 8: Line qty=2 price=17.62 tax=23% ref=564938\nOCR line 9: Fee qty=2 price=7.18 tax=13% ref=365616\nOCR line 10: Fee qty=3 price=15.83 tax=6% ref=705240\nOCR line 11: Item qty=2 price=35.46 tax=23% ref=484240\nOCR line 12: Subtotal qty=4 price=15.59 tax=23% ref=544926\nOCR line 13: Service qty=2 price=5.67 tax=23% ref=978859\nOCR line 14: Fee qty=2 price=29.33 tax=23% ref=363483\nOCR line 15: Fee qty=2 price=28.22 tax=23% ref=492960\nOCR line 16: Item qty=2 price=28.91 tax=6% ref=747223\nOCR line 17: Line qty=1 price=14.37 tax=23% ref=697570\nOCR line 18: Fee qty=2 price=6.58 tax=23% ref=682266\nOCR line 19: Item qty=2 price=2.77 tax=23% ref=724020\nOCR line 20: Line qty=1 price=38.84 tax=13% ref=776427\nOCR line 21: Service qty=2 price=39.92 tax=6% ref=527865\nOCR line 22: Fee qty=1 price=37.54 tax=23% ref=484510\nOCR line 23: Service qty=1 price=12.79 tax=6% ref=620679\nOCR line 24: Line qty=4 price=8.92 tax=6% ref=410961\nOCR line 25: Subtotal qty=2 price=29.53 tax=13% ref=546023\nOCR line 26: Item qty=3 price=16.99 tax=6% ref=472836\nOCR line 27: Line qty=3 price=17.12 tax=23% ref=467860\nOCR line 28: Fee qty=4 price=18.43 tax=6% ref=894974\nOCR line 29: Service qty=3 price=7.62 tax=13% ref=681570\nOCR line 30: Service qty=3 price=21.12 tax=6% ref=255574\nOCR line 31: Service qty=3 price=32.94 tax=6% ref=422914\nOCR line 32: Subtotal qty=3 price=1.33 tax=6% ref=204501\nOCR line 33: Subtotal qty=4 price=1.74 tax=23% ref=409833\nOCR line 34: Service qty=3 price=6.67 tax=23% ref=875587\nOCR line 35: Service qty=2 price=36.49 tax=23% ref=257023\nOCR line 36: Fee qty=1 price=13.80 tax=6% ref=149231\nOCR line 37: Item qty=4 price=7.80 tax=13% ref=750748\nOCR line 38: Line qty=1 price=4.61 tax=6% ref=659782\nOCR line 39: Fee qty=4 price=11.98 tax=23% ref=412320\nOCR line 40: Fee qty=1 price=37.27 tax=6% ref=862246"
+  },
+  {
+   "role": "assistant",
+   "text": "Dinner on 13 October at Cervejaria Ramiro, 54.20 EUR, company card. Added."
+  },
+  {
+   "role": "user",
+   "text": "And the metro passes."
+  },
+  {
+   "role": "tool",
+   "text": "receipts.scan file=metro_pass.jpg\n  vendor=Carris Metropolitana amount=19.80 EUR date=2026-10-12\n  payment=company_card_ending_8812\nOCR line 1: Line qty=2 price=10.84 tax=13% ref=405152\nOCR line 2: Subtotal qty=3 price=18.66 tax=13% ref=512939\nOCR line 3: Service qty=3 price=8.93 tax=13% ref=475424\nOCR line 4: Fee qty=2 price=6.44 tax=23% ref=796253\nOCR line 5: Service qty=1 price=4.92 tax=13% ref=129137\nOCR line 6: Item qty=4 price=16.15 tax=13% ref=737042\nOCR line 7: Service qty=3 price=7.25 tax=6% ref=883290\nOCR line 8: Line qty=2 price=10.83 tax=23% ref=328786\nOCR line 9: Fee qty=3 price=4.10 tax=6% ref=392166\nOCR line 10: Service qty=2 price=29.61 tax=6% ref=819530\nOCR line 11: Service qty=4 price=19.22 tax=23% ref=276551\nOCR line 12: Subtotal qty=3 price=19.39 tax=13% ref=537983\nOCR line 13: Service qty=3 price=18.98 tax=6% ref=571057\nOCR line 14: Subtotal qty=1 price=22.76 tax=13% ref=837642\nOCR line 15: Subtotal qty=1 price=33.01 tax=13% ref=543663\nOCR line 16: Line qty=3 price=37.57 tax=13% ref=472875\nOCR line 17: Item qty=1 price=25.14 tax=13% ref=936456\nOCR line 18: Subtotal qty=1 price=1.39 tax=13% ref=126408\nOCR line 19: Line qty=3 price=20.86 tax=13% ref=363753\nOCR line 20: Item qty=2 price=0.07 tax=13% ref=624987\nOCR line 21: Item qty=2 price=24.16 tax=13% ref=405528\nOCR line 22: Fee qty=1 price=22.44 tax=23% ref=877268\nOCR line 23: Item qty=2 price=14.66 tax=13% ref=356764\nOCR line 24: Line qty=3 price=19.52 tax=23% ref=133086\nOCR line 25: Subtotal qty=4 price=30.94 tax=6% ref=375516\nOCR line 26: Item qty=2 price=2.18 tax=6% ref=321836\nOCR line 27: Subtotal qty=2 price=21.79 tax=13% ref=153259\nOCR line 28: Fee qty=3 price=21.65 tax=13% ref=235129\nOCR line 29: Service qty=2 price=32.34 tax=6% ref=253679\nOCR line 30: Item qty=3 price=39.79 tax=23% ref=788694\nOCR line 31: Service qty=4 price=18.74 tax=13% ref=438407\nOCR line 32: Fee qty=1 price=39.79 tax=23% ref=779420\nOCR line 33: Service qty=1 price=17.05 tax=6% ref=153964\nOCR line 34: Item qty=1 price=0.00 tax=23% ref=420007\nOCR line 35: Subtotal qty=2 price=0.19 tax=13% ref=591472\nOCR line 36: Subtotal qty=1 price=11.85 tax=13% ref=360227\nOCR line 37: Line qty=1 price=21.94 tax=6% ref=860103\nOCR line 38: Fee qty=1 price=34.21 tax=13% ref=501104\nOCR line 39: Fee qty=3 price=1.17 tax=6% ref=395695\nOCR line 40: Fee qty=2 price=20.95 tax=13% ref=126777"
+  },
+  {
+   "role": "assistant",
+   "text": "Metro passes, 19.80 EUR on 12 October, company card. Added."
+  },
+  {
+   "role": "user",
+   "text": "Give me the total so far."
+  },
+  {
+   "role": "tool",
+   "text": "report.total id=EXP-5530\n  items=4 total=748.50 EUR\n  taxi=38.50 hotel=636.00 dinner=54.20 metro=19.80\n  cost_centre=CC-7731 approver=Dmitri Volkov"
+  },
+  {
+   "role": "assistant",
+   "text": "The report EXP-5530 has four items and totals 748.50 EUR. Taxi 38.50, hotel 636.00, dinner 54.20, metro 19.80. Cost centre CC-7731, approver Dmitri Volkov.\nOCR line 1: Line qty=1 price=6.32 tax=6% ref=117700\nOCR line 2: Item qty=3 price=9.59 tax=13% ref=588982\nOCR line 3: Fee qty=4 price=10.53 tax=6% ref=999507\nOCR line 4: Fee qty=3 price=8.94 tax=23% ref=636210\nOCR line 5: Line qty=4 price=33.63 tax=13% ref=182794\nOCR line 6: Fee qty=4 price=22.78 tax=23% ref=776930\nOCR line 7: Service qty=4 price=38.37 tax=6% ref=305217\nOCR line 8: Item qty=1 price=11.46 tax=13% ref=259058\nOCR line 9: Service qty=1 price=15.81 tax=6% ref=591427\nOCR line 10: Line qty=3 price=16.06 tax=23% ref=343656\nOCR line 11: Line qty=3 price=3.13 tax=13% ref=426351\nOCR line 12: Fee qty=4 price=36.19 tax=13% ref=562997\nOCR line 13: Fee qty=4 price=5.69 tax=23% ref=616405\nOCR line 14: Service qty=3 price=37.12 tax=23% ref=196827\nOCR line 15: Service qty=4 price=35.76 tax=13% ref=266068\nOCR line 16: Line qty=4 price=34.90 tax=13% ref=145139\nOCR line 17: Subtotal qty=1 price=22.78 tax=13% ref=343034\nOCR line 18: Line qty=4 price=27.70 tax=13% ref=811206\nOCR line 19: Service qty=1 price=13.32 tax=23% ref=975862\nOCR line 20: Fee qty=1 price=24.74 tax=23% ref=417017\nOCR line 21: Fee qty=1 price=32.03 tax=13% ref=115768\nOCR line 22: Fee qty=4 price=36.35 tax=6% ref=250874\nOCR line 23: Subtotal qty=3 price=13.00 tax=6% ref=817656\nOCR line 24: Subtotal qty=3 price=0.10 tax=13% ref=836183\nOCR line 25: Service qty=2 price=25.66 tax=23% ref=864265\nOCR line 26: Line qty=4 price=13.39 tax=6% ref=451944\nOCR line 27: Fee qty=4 price=29.51 tax=23% ref=747463\nOCR line 28: Service qty=4 price=37.11 tax=23% ref=104802\nOCR line 29: Item qty=4 price=33.54 tax=23% ref=305483\nOCR line 30: Line qty=3 price=14.75 tax=6% ref=684155\nOCR line 31: Service qty=4 price=23.49 tax=23% ref=818837\nOCR line 32: Fee qty=4 price=34.62 tax=23% ref=794358\nOCR line 33: Fee qty=3 price=5.20 tax=13% ref=474479\nOCR line 34: Subtotal qty=2 price=3.97 tax=23% ref=364148\nOCR line 35: Service qty=4 price=21.41 tax=6% ref=437760\nOCR line 36: Service qty=3 price=16.72 tax=13% ref=875670\nOCR line 37: Fee qty=2 price=20.05 tax=13% ref=596298\nOCR line 38: Subtotal qty=2 price=17.30 tax=13% ref=387331\nOCR line 39: Item qty=1 price=18.08 tax=13% ref=783624\nOCR line 40: Line qty=1 price=24.48 tax=13% ref=566617"
+  },
+  {
+   "role": "user",
+   "text": "Is anything missing a receipt?"
+  },
+  {
+   "role": "tool",
+   "text": "report.validate id=EXP-5530\n  missing_receipts=0\n  non_company_card=0\n  warnings=none"
+  },
+  {
+   "role": "assistant",
+   "text": "Nothing is missing. All four items have receipts and are on the company card."
+  },
+  {
+   "role": "user",
+   "text": "Okay. Before you submit, add a note for Dmitri saying the conference ticket will come separately."
+  },
+  {
+   "role": "tool",
+   "text": "report.note id=EXP-5530 text=\"Conference ticket to follow via the personal reimbursement route.\""
+  },
+  {
+   "role": "assistant",
+   "text": "Note added for Dmitri. The report is ready to submit."
+  },
+  {
+   "role": "user",
+   "text": "Submit it."
+  },
+  {
+   "role": "tool",
+   "text": "report.submit id=EXP-5530\n  status=submitted approver=Dmitri Volkov\n  cost_centre=CC-7731 total=748.50 EUR"
+  },
+  {
+   "role": "assistant",
+   "text": "Submitted. EXP-5530, 748.50 EUR, charged to CC-7731, waiting for Dmitri Volkov."
+  },
+  {
+   "role": "user",
+   "text": "Just to be sure: what was the hotel cost per night, and what is the report number?"
+  },
+  {
+   "role": "assistant",
+   "text": "The hotel was 212.00 EUR a night, and the report is EXP-5530."
+  }
+ ],
+ "needles": [
+  {
+   "kind": "fact",
+   "question": "Which cost centre is the report charged to?",
+   "expect": "CC-7731",
+   "at": 1
+  },
+  {
+   "kind": "fact",
+   "question": "Who is the approver?",
+   "expect": "Dmitri",
+   "at": 1
+  },
+  {
+   "kind": "fact",
+   "question": "What did the airport taxi cost?",
+   "expect": "38.50",
+   "at": 3
+  },
+  {
+   "kind": "fact",
+   "question": "What was the hotel price per night?",
+   "expect": "212",
+   "at": 6
+  },
+  {
+   "kind": "rule",
+   "question": "What must every submitted report have for each item?",
+   "expect": "receipt",
+   "at": 0
+  },
+  {
+   "kind": "rule",
+   "question": "Which card may be used for expenses?",
+   "expect": "company",
+   "at": 0
+  },
+  {
+   "kind": "fact",
+   "question": "What is the report number?",
+   "expect": "EXP-5530",
+   "at": 17
+  },
+  {
+   "kind": "fact",
+   "question": "What was the total of the report?",
+   "expect": "748.50",
+   "at": 17
+  }
+ ]
+}

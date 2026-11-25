@@ -1,0 +1,177 @@
+{
+ "name": "writing-city-trees",
+ "kind": "writing",
+ "license": "MIT, written for this test by the hydra authors; no real customer, paper or person",
+ "turns": [
+  {
+   "role": "system",
+   "text": "You are an editor helping draft a feature article.\nUse British spelling.\nKeep quotes under 40 words.\nNever use the word \"lush\"."
+  },
+  {
+   "role": "user",
+   "text": "Draft a 600-word feature on city trees for the Sunday magazine. Working title: Shade for Everyone. My editor is Marta, so write it for her to read first."
+  },
+  {
+   "role": "assistant",
+   "text": "Understood: 600 words, British spelling, working title Shade for Everyone. I will open with a street scene and bring in the figures after. Do you have numbers for me?"
+  },
+  {
+   "role": "user",
+   "text": "Yes. The council planted 4,000 trees in 2021. The planting budget was 2.1 million pounds. A survey of 1,350 residents found most want more trees on their own street."
+  },
+  {
+   "role": "assistant",
+   "text": "Good, those are concrete. I will use 4,000 trees, 2.1 million pounds and the 1,350-resident survey. Shall I name the council?"
+  },
+  {
+   "role": "user",
+   "text": "Call it the Eastfield council. And the lead arborist is Joanna Pike, I have a quote from her."
+  },
+  {
+   "role": "assistant",
+   "text": "Noted: Eastfield council and Joanna Pike, lead arborist. Send me the quote and I will check that it is under 40 words."
+  },
+  {
+   "role": "user",
+   "text": "She said: \"A street with trees is cooler in July by about four degrees, and people stay outside longer, which is the whole point.\""
+  },
+  {
+   "role": "assistant",
+   "text": "That is 25 words, so it fits. I will place it after the figures."
+  },
+  {
+   "role": "tool",
+   "text": "wordcount quote=pike_quote\n  words=25 limit=40 status=ok\n  v0 line 1: The council newsletter had promised shade within a decade.\n  v0 line 2: The pavement was cracked where the roots had pushed up.\n  v0 line 3: Neighbours said the street felt hotter before the planting.\n  v0 line 4: Neighbours said the street felt hotter before the planting.\n  v0 line 5: The pavement was cracked where the roots had pushed up.\n  v0 line 6: The council newsletter had promised shade within a decade.\n  v0 line 7: Children counted the leaves on the lowest branches.\n  v0 line 8: The council newsletter had promised shade within a decade.\n  v0 line 9: Neighbours said the street felt hotter before the planting.\n  v0 line 10: A bench under the new trees was full by noon.\n  v0 line 11: The council newsletter had promised shade within a decade.\n  v0 line 12: The council newsletter had promised shade within a decade.\n  v0 line 13: A bench under the new trees was full by noon.\n  v0 line 14: The pavement was cracked where the roots had pushed up.\n  v0 line 15: The council newsletter had promised shade within a decade.\n  v0 line 16: The pavement was cracked where the roots had pushed up.\n  v0 line 17: The pavement was cracked where the roots had pushed up.\n  v0 line 18: Children counted the leaves on the lowest branches.\n  v0 line 19: Children counted the leaves on the lowest branches.\n  v0 line 20: Children counted the leaves on the lowest branches.\n  v0 line 21: The pavement was cracked where the roots had pushed up.\n  v0 line 22: Neighbours said the street felt hotter before the planting.\n  v0 line 23: Children counted the leaves on the lowest branches.\n  v0 line 24: Children counted the leaves on the lowest branches.\n  v0 line 25: A bench under the new trees was full by noon.\n  v0 line 26: The council newsletter had promised shade within a decade.\n  v0 line 27: Children counted the leaves on the lowest branches.\n  v0 line 28: A bench under the new trees was full by noon.\n  v0 line 29: The council newsletter had promised shade within a decade.\n  v0 line 30: Neighbours said the street felt hotter before the planting.\n  v0 line 31: A bench under the new trees was full by noon.\n  v0 line 32: Children counted the leaves on the lowest branches.\n  v0 line 33: Children counted the leaves on the lowest branches.\n  v0 line 34: Children counted the leaves on the lowest branches.\n  v0 line 35: Neighbours said the street felt hotter before the planting.\n  v0 line 36: A bench under the new trees was full by noon.\n  v0 line 37: A bench under the new trees was full by noon.\n  v0 line 38: A bench under the new trees was full by noon.\n  v0 line 39: The council newsletter had promised shade within a decade.\n  v0 line 40: The council newsletter had promised shade within a decade.\n  v0 line 41: The pavement was cracked where the roots had pushed up.\n  v0 line 42: Neighbours said the street felt hotter before the planting.\n  v0 line 43: The pavement was cracked where the roots had pushed up.\n  v0 line 44: The council newsletter had promised shade within a decade.\n  v0 line 45: Neighbours said the street felt hotter before the planting."
+  },
+  {
+   "role": "user",
+   "text": "Write the opening paragraph."
+  },
+  {
+   "role": "assistant",
+   "text": "At half past seven the bakery queue on Hollis Road forms in the only shade for a hundred metres. The shade comes from a single young plane tree, planted two winters ago, and the queue has learned to stand under it."
+  },
+  {
+   "role": "user",
+   "text": "Nice. Keep going with the second paragraph, the figures."
+  },
+  {
+   "role": "assistant",
+   "text": "Eastfield council planted 4,000 trees in 2021, on a budget of 2.1 million pounds. A survey of 1,350 residents found that most wanted more of them on their own street, not in the park."
+  },
+  {
+   "role": "user",
+   "text": "I think the word 'leafy' is too soft. Anything stronger? Not the l-word that Marta hates."
+  },
+  {
+   "role": "assistant",
+   "text": "I will avoid it, as the rules say. Options: shaded, canopied, green-fronted. I would use canopied once and shaded elsewhere."
+  },
+  {
+   "role": "tool",
+   "text": "style.check text=draft_v1\n  banned_terms=0 spelling=british words=118 of 600\n  v0 line 1: A bench under the new trees was full by noon.\n  v0 line 2: Neighbours said the street felt hotter before the planting.\n  v0 line 3: The pavement was cracked where the roots had pushed up.\n  v0 line 4: The council newsletter had promised shade within a decade.\n  v0 line 5: The pavement was cracked where the roots had pushed up.\n  v0 line 6: Children counted the leaves on the lowest branches.\n  v0 line 7: The council newsletter had promised shade within a decade.\n  v0 line 8: The council newsletter had promised shade within a decade.\n  v0 line 9: Neighbours said the street felt hotter before the planting.\n  v0 line 10: The pavement was cracked where the roots had pushed up.\n  v0 line 11: Children counted the leaves on the lowest branches.\n  v0 line 12: Children counted the leaves on the lowest branches.\n  v0 line 13: The council newsletter had promised shade within a decade.\n  v0 line 14: The pavement was cracked where the roots had pushed up.\n  v0 line 15: Neighbours said the street felt hotter before the planting.\n  v0 line 16: The council newsletter had promised shade within a decade.\n  v0 line 17: A bench under the new trees was full by noon.\n  v0 line 18: The council newsletter had promised shade within a decade.\n  v0 line 19: The pavement was cracked where the roots had pushed up.\n  v0 line 20: The pavement was cracked where the roots had pushed up.\n  v0 line 21: The pavement was cracked where the roots had pushed up.\n  v0 line 22: The council newsletter had promised shade within a decade.\n  v0 line 23: Neighbours said the street felt hotter before the planting.\n  v0 line 24: The pavement was cracked where the roots had pushed up.\n  v0 line 25: The pavement was cracked where the roots had pushed up.\n  v0 line 26: Neighbours said the street felt hotter before the planting.\n  v0 line 27: Neighbours said the street felt hotter before the planting.\n  v0 line 28: The pavement was cracked where the roots had pushed up.\n  v0 line 29: The pavement was cracked where the roots had pushed up.\n  v0 line 30: Children counted the leaves on the lowest branches.\n  v0 line 31: Neighbours said the street felt hotter before the planting.\n  v0 line 32: The council newsletter had promised shade within a decade.\n  v0 line 33: The pavement was cracked where the roots had pushed up.\n  v0 line 34: Neighbours said the street felt hotter before the planting.\n  v0 line 35: The pavement was cracked where the roots had pushed up.\n  v0 line 36: Children counted the leaves on the lowest branches.\n  v0 line 37: Neighbours said the street felt hotter before the planting.\n  v0 line 38: Children counted the leaves on the lowest branches.\n  v0 line 39: The council newsletter had promised shade within a decade.\n  v0 line 40: Neighbours said the street felt hotter before the planting.\n  v0 line 41: The pavement was cracked where the roots had pushed up.\n  v0 line 42: Children counted the leaves on the lowest branches.\n  v0 line 43: The pavement was cracked where the roots had pushed up.\n  v0 line 44: The pavement was cracked where the roots had pushed up.\n  v0 line 45: Children counted the leaves on the lowest branches."
+  },
+  {
+   "role": "user",
+   "text": "Add Joanna's quote in the third paragraph."
+  },
+  {
+   "role": "assistant",
+   "text": "Joanna Pike, the council's lead arborist, puts it plainly: \"A street with trees is cooler in July by about four degrees, and people stay outside longer, which is the whole point.\""
+  },
+  {
+   "role": "user",
+   "text": "Now a paragraph on the cost of watering in the first summers."
+  },
+  {
+   "role": "assistant",
+   "text": "Young trees are thirsty. In their first three summers each one needs roughly sixty litres a week, and the council estimates the watering bill at about 140,000 pounds a year until the roots take hold."
+  },
+  {
+   "role": "user",
+   "text": "Check the draft against the rules.\n  v0 line 1: The council newsletter had promised shade within a decade.\n  v0 line 2: The pavement was cracked where the roots had pushed up.\n  v0 line 3: The council newsletter had promised shade within a decade.\n  v0 line 4: Neighbours said the street felt hotter before the planting.\n  v0 line 5: The council newsletter had promised shade within a decade.\n  v0 line 6: Neighbours said the street felt hotter before the planting.\n  v0 line 7: The pavement was cracked where the roots had pushed up.\n  v0 line 8: Neighbours said the street felt hotter before the planting.\n  v0 line 9: The council newsletter had promised shade within a decade.\n  v0 line 10: A bench under the new trees was full by noon.\n  v0 line 11: A bench under the new trees was full by noon.\n  v0 line 12: Neighbours said the street felt hotter before the planting.\n  v0 line 13: Neighbours said the street felt hotter before the planting.\n  v0 line 14: The council newsletter had promised shade within a decade.\n  v0 line 15: The pavement was cracked where the roots had pushed up.\n  v0 line 16: Neighbours said the street felt hotter before the planting.\n  v0 line 17: Children counted the leaves on the lowest branches.\n  v0 line 18: Neighbours said the street felt hotter before the planting.\n  v0 line 19: Children counted the leaves on the lowest branches.\n  v0 line 20: The council newsletter had promised shade within a decade.\n  v0 line 21: Children counted the leaves on the lowest branches.\n  v0 line 22: Children counted the leaves on the lowest branches.\n  v0 line 23: Neighbours said the street felt hotter before the planting.\n  v0 line 24: The pavement was cracked where the roots had pushed up.\n  v0 line 25: A bench under the new trees was full by noon.\n  v0 line 26: The pavement was cracked where the roots had pushed up.\n  v0 line 27: The pavement was cracked where the roots had pushed up.\n  v0 line 28: Children counted the leaves on the lowest branches.\n  v0 line 29: Children counted the leaves on the lowest branches.\n  v0 line 30: The pavement was cracked where the roots had pushed up.\n  v0 line 31: Neighbours said the street felt hotter before the planting.\n  v0 line 32: The council newsletter had promised shade within a decade.\n  v0 line 33: A bench under the new trees was full by noon.\n  v0 line 34: Children counted the leaves on the lowest branches.\n  v0 line 35: The pavement was cracked where the roots had pushed up.\n  v0 line 36: A bench under the new trees was full by noon.\n  v0 line 37: Neighbours said the street felt hotter before the planting.\n  v0 line 38: The council newsletter had promised shade within a decade.\n  v0 line 39: A bench under the new trees was full by noon.\n  v0 line 40: The pavement was cracked where the roots had pushed up.\n  v0 line 41: The pavement was cracked where the roots had pushed up.\n  v0 line 42: A bench under the new trees was full by noon.\n  v0 line 43: A bench under the new trees was full by noon.\n  v0 line 44: Children counted the leaves on the lowest branches.\n  v0 line 45: The council newsletter had promised shade within a decade."
+  },
+  {
+   "role": "tool",
+   "text": "style.check text=draft_v2\n  banned_terms=0 spelling=british quotes_max_words=25 words=262 of 600"
+  },
+  {
+   "role": "assistant",
+   "text": "The draft passes: no banned words, British spelling, and the longest quote is 25 words. We are at 262 of 600 words."
+  },
+  {
+   "role": "user",
+   "text": "Write the closing paragraph. Link back to the bakery queue."
+  },
+  {
+   "role": "assistant",
+   "text": "By eight the queue on Hollis Road has gone, and the plane tree is alone again, doing its quiet work. Four thousand more like it are growing across Eastfield. It will take a decade for the shade to reach every street, but the queue, at least, already knows where to stand."
+  },
+  {
+   "role": "user",
+   "text": "Great. Remind me what is the title and who is the editor?"
+  },
+  {
+   "role": "assistant",
+   "text": "The working title is Shade for Everyone, and the editor is Marta."
+  },
+  {
+   "role": "user",
+   "text": "And which number of trees and what budget?"
+  },
+  {
+   "role": "assistant",
+   "text": "4,000 trees, on a budget of 2.1 million pounds."
+  }
+ ],
+ "needles": [
+  {
+   "kind": "fact",
+   "question": "What is the working title of the article?",
+   "expect": "Shade for Everyone",
+   "at": 1
+  },
+  {
+   "kind": "fact",
+   "question": "Who is the editor?",
+   "expect": "Marta",
+   "at": 1
+  },
+  {
+   "kind": "fact",
+   "question": "How many trees did the council plant, and in which year?",
+   "expect": "4,000",
+   "at": 3
+  },
+  {
+   "kind": "fact",
+   "question": "What was the planting budget?",
+   "expect": "2.1 million",
+   "at": 3
+  },
+  {
+   "kind": "rule",
+   "question": "Which spelling must the article use?",
+   "expect": "british",
+   "at": 0
+  },
+  {
+   "kind": "rule",
+   "question": "Which word must never be used?",
+   "expect": "lush",
+   "at": 0
+  },
+  {
+   "kind": "fact",
+   "question": "What is the lead arborist called?",
+   "expect": "Pike",
+   "at": 5
+  },
+  {
+   "kind": "fact",
+   "question": "How many residents were surveyed?",
+   "expect": "1,350",
+   "at": 3
+  }
+ ]
+}

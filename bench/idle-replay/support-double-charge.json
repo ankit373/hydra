@@ -1,0 +1,173 @@
+{
+ "name": "support-double-charge",
+ "kind": "support",
+ "license": "MIT, written for this test by the hydra authors; no real customer, paper or person",
+ "turns": [
+  {
+   "role": "system",
+   "text": "You are the billing assistant for Acme Cloud.\nNever promise a refund over $200 without a manager.\nAlways answer in the customer's language.\nDo not close a ticket until the customer confirms in writing."
+  },
+  {
+   "role": "user",
+   "text": "Hi, I was charged twice for invoice 90417 on 3 March. My plan is Team Annual and it should be billed once. Please sort it out."
+  },
+  {
+   "role": "assistant",
+   "text": "I am sorry about that. I can see invoice 90417 on the Team Annual plan, and two identical charges of 120 dollars each on 3 March. I will look into the second one now."
+  },
+  {
+   "role": "user",
+   "text": "Thanks. Please only email me about this, do not call. I am in meetings all week."
+  },
+  {
+   "role": "assistant",
+   "text": "Understood, email only. I have noted it on the ticket. I am checking with the payments team whether the second charge was a retry that went through twice."
+  },
+  {
+   "role": "tool",
+   "text": "payments.lookup invoice=90417\n  charge ch_71A02 amount=120.00 USD status=captured at=2026-03-03T09:14:02Z\n  charge ch_71A09 amount=120.00 USD status=captured at=2026-03-03T09:14:31Z\n  retry_of=ch_71A02 reason=gateway_timeout\n  customer_card_last4=4242\n2026-03-03T09:08:36Z gw-1 request=rq_43432 route=/v2/charges status=ok latency=547ms region=eu-west-2\n2026-03-03T09:30:41Z gw-4 request=rq_37519 route=/v2/charges status=ok latency=539ms region=eu-west-1\n2026-03-03T09:57:53Z gw-4 request=rq_66723 route=/v2/charges status=ok latency=820ms region=eu-west-1\n2026-03-03T09:44:28Z gw-3 request=rq_39984 route=/v2/charges status=ok latency=144ms region=eu-west-2\n2026-03-03T09:01:01Z gw-1 request=rq_95137 route=/v2/charges status=ok latency=49ms region=eu-west-2\n2026-03-03T09:43:13Z gw-4 request=rq_13806 route=/v2/charges status=ok latency=267ms region=eu-west-2\n2026-03-03T09:31:35Z gw-2 request=rq_55311 route=/v2/charges status=ok latency=733ms region=eu-west-1\n2026-03-03T09:48:29Z gw-3 request=rq_12816 route=/v2/charges status=retry latency=897ms region=eu-west-3\n2026-03-03T09:59:41Z gw-1 request=rq_34367 route=/v2/charges status=ok latency=163ms region=eu-west-3\n2026-03-03T09:21:57Z gw-4 request=rq_76547 route=/v2/charges status=ok latency=350ms region=eu-west-2\n2026-03-03T09:37:56Z gw-4 request=rq_76228 route=/v2/charges status=retry latency=643ms region=eu-west-1\n2026-03-03T09:30:15Z gw-4 request=rq_64304 route=/v2/charges status=ok latency=415ms region=eu-west-3\n2026-03-03T09:56:44Z gw-3 request=rq_21333 route=/v2/charges status=retry latency=719ms region=eu-west-3\n2026-03-03T09:06:49Z gw-2 request=rq_78280 route=/v2/charges status=retry latency=419ms region=eu-west-2\n2026-03-03T09:46:01Z gw-4 request=rq_15699 route=/v2/charges status=ok latency=760ms region=eu-west-3\n2026-03-03T09:37:37Z gw-4 request=rq_94824 route=/v2/charges status=ok latency=212ms region=eu-west-3\n2026-03-03T09:14:00Z gw-2 request=rq_80728 route=/v2/charges status=ok latency=277ms region=eu-west-2\n2026-03-03T09:32:22Z gw-3 request=rq_70179 route=/v2/charges status=ok latency=715ms region=eu-west-3\n2026-03-03T09:38:46Z gw-1 request=rq_60290 route=/v2/charges status=ok latency=868ms region=eu-west-1\n2026-03-03T09:33:49Z gw-2 request=rq_65848 route=/v2/charges status=ok latency=532ms region=eu-west-2\n2026-03-03T09:36:35Z gw-2 request=rq_76154 route=/v2/charges status=retry latency=536ms region=eu-west-2\n2026-03-03T09:26:22Z gw-1 request=rq_80579 route=/v2/charges status=ok latency=678ms region=eu-west-3\n2026-03-03T09:21:29Z gw-1 request=rq_40094 route=/v2/charges status=ok latency=603ms region=eu-west-3\n2026-03-03T09:11:55Z gw-1 request=rq_82224 route=/v2/charges status=ok latency=73ms region=eu-west-3\n2026-03-03T09:04:05Z gw-1 request=rq_69375 route=/v2/charges status=ok latency=812ms region=eu-west-2\n2026-03-03T09:15:17Z gw-1 request=rq_91894 route=/v2/charges status=ok latency=392ms region=eu-west-2\n2026-03-03T09:04:10Z gw-2 request=rq_43451 route=/v2/charges status=ok latency=212ms region=eu-west-3\n2026-03-03T09:17:41Z gw-3 request=rq_69598 route=/v2/charges status=ok latency=548ms region=eu-west-2\n2026-03-03T09:07:01Z gw-3 request=rq_60666 route=/v2/charges status=ok latency=471ms region=eu-west-1\n2026-03-03T09:16:06Z gw-3 request=rq_76861 route=/v2/charges status=ok latency=660ms region=eu-west-2\n2026-03-03T09:52:01Z gw-2 request=rq_12341 route=/v2/charges status=retry latency=189ms region=eu-west-1\n2026-03-03T09:46:10Z gw-4 request=rq_76362 route=/v2/charges status=retry latency=597ms region=eu-west-1\n2026-03-03T09:40:51Z gw-4 request=rq_39254 route=/v2/charges status=ok latency=704ms region=eu-west-1\n2026-03-03T09:25:43Z gw-3 request=rq_96484 route=/v2/charges status=retry latency=100ms region=eu-west-3\n2026-03-03T09:19:08Z gw-2 request=rq_16218 route=/v2/charges status=ok latency=112ms region=eu-west-1\n2026-03-03T09:19:58Z gw-3 request=rq_30736 route=/v2/charges status=retry latency=618ms region=eu-west-2\n2026-03-03T09:08:00Z gw-1 request=rq_87409 route=/v2/charges status=ok latency=623ms region=eu-west-2\n2026-03-03T09:10:52Z gw-1 request=rq_59541 route=/v2/charges status=ok latency=395ms region=eu-west-1\n2026-03-03T09:13:36Z gw-4 request=rq_87517 route=/v2/charges status=ok latency=544ms region=eu-west-1\n2026-03-03T09:42:24Z gw-3 request=rq_76074 route=/v2/charges status=retry latency=57ms region=eu-west-2\n2026-03-03T09:39:55Z gw-4 request=rq_46877 route=/v2/charges status=ok latency=200ms region=eu-west-1\n2026-03-03T09:54:20Z gw-2 request=rq_54445 route=/v2/charges status=retry latency=258ms region=eu-west-2\n2026-03-03T09:43:06Z gw-4 request=rq_81778 route=/v2/charges status=ok latency=897ms region=eu-west-3\n2026-03-03T09:34:31Z gw-2 request=rq_18561 route=/v2/charges status=ok latency=126ms region=eu-west-1\n2026-03-03T09:10:10Z gw-2 request=rq_45128 route=/v2/charges status=ok latency=654ms region=eu-west-3\n2026-03-03T09:53:16Z gw-3 request=rq_54413 route=/v2/charges status=ok latency=156ms region=eu-west-2\n2026-03-03T09:15:55Z gw-4 request=rq_27740 route=/v2/charges status=ok latency=604ms region=eu-west-1\n2026-03-03T09:20:02Z gw-4 request=rq_19593 route=/v2/charges status=retry latency=847ms region=eu-west-1\n2026-03-03T09:53:08Z gw-3 request=rq_25032 route=/v2/charges status=ok latency=641ms region=eu-west-2\n2026-03-03T09:04:36Z gw-2 request=rq_84182 route=/v2/charges status=ok latency=313ms region=eu-west-2\n2026-03-03T09:57:18Z gw-1 request=rq_70000 route=/v2/charges status=ok latency=150ms region=eu-west-1\n2026-03-03T09:52:18Z gw-1 request=rq_90435 route=/v2/charges status=ok latency=133ms region=eu-west-2\n2026-03-03T09:07:52Z gw-1 request=rq_34631 route=/v2/charges status=ok latency=844ms region=eu-west-3\n2026-03-03T09:26:10Z gw-1 request=rq_69101 route=/v2/charges status=ok latency=737ms region=eu-west-1\n2026-03-03T09:10:47Z gw-1 request=rq_67029 route=/v2/charges status=retry latency=865ms region=eu-west-3"
+  },
+  {
+   "role": "assistant",
+   "text": "The payments log confirms it. The second charge, ch_71A09, was a gateway retry of the first and was captured by mistake. The amount is 120 dollars, which I am allowed to refund myself."
+  },
+  {
+   "role": "user",
+   "text": "Great. How long will the refund take to show up?"
+  },
+  {
+   "role": "assistant",
+   "text": "Card refunds usually take five to seven working days after I issue them. I will issue it today and put the refund reference in the ticket."
+  },
+  {
+   "role": "user",
+   "text": "Fine. One more thing, can you also tell me when my next renewal is?"
+  },
+  {
+   "role": "assistant",
+   "text": "Your Team Annual plan renews on 3 March next year, at 1,440 dollars for twelve seats."
+  },
+  {
+   "role": "tool",
+   "text": "payments.refund charge=ch_71A09 amount=120.00 USD\n  refund re_55C10 status=pending\n  expected_settlement=5-7 working days\n  note=duplicate gateway retry"
+  },
+  {
+   "role": "assistant",
+   "text": "The refund is issued. The reference is re_55C10 and it is pending. You will get an email when it settles."
+  },
+  {
+   "role": "user",
+   "text": "Thank you. Actually I just noticed my seat count shows 14 in the dashboard, I only pay for twelve."
+  },
+  {
+   "role": "assistant",
+   "text": "Let me check that. Seat count in the dashboard can include invited guests who have not accepted yet."
+  },
+  {
+   "role": "tool",
+   "text": "accounts.seats org=acme-4417-team\n  paid_seats=12\n  active_members=12\n  pending_invites=2\n  dashboard_total=14\naudit seq=1926 actor=svc-billing action=seat.sync object=org/2390 result=ok took=48ms\naudit seq=6048 actor=svc-billing action=invoice.render object=org/4476 result=ok took=79ms\naudit seq=3594 actor=svc-billing action=invite.list object=org/7447 result=ok took=67ms\naudit seq=8288 actor=svc-billing action=invoice.render object=org/1588 result=ok took=5ms\naudit seq=6217 actor=svc-billing action=invite.list object=org/7940 result=ok took=69ms\naudit seq=3907 actor=svc-billing action=plan.read object=org/4778 result=ok took=5ms\naudit seq=3844 actor=svc-billing action=plan.read object=org/9358 result=ok took=67ms\naudit seq=3979 actor=svc-billing action=invite.list object=org/7793 result=ok took=69ms\naudit seq=6967 actor=svc-billing action=invoice.render object=org/6929 result=ok took=59ms\naudit seq=7551 actor=svc-billing action=invite.list object=org/9689 result=ok took=33ms\naudit seq=9160 actor=svc-billing action=invoice.render object=org/8449 result=ok took=61ms\naudit seq=8480 actor=svc-billing action=invite.list object=org/4634 result=ok took=43ms\naudit seq=3720 actor=svc-billing action=invoice.render object=org/8860 result=ok took=41ms\naudit seq=9261 actor=svc-billing action=invite.list object=org/6109 result=ok took=28ms\naudit seq=7006 actor=svc-billing action=seat.sync object=org/6594 result=ok took=3ms\naudit seq=4135 actor=svc-billing action=seat.sync object=org/1962 result=ok took=75ms\naudit seq=5474 actor=svc-billing action=plan.read object=org/2741 result=ok took=68ms\naudit seq=5355 actor=svc-billing action=plan.read object=org/4448 result=ok took=9ms\naudit seq=1522 actor=svc-billing action=seat.sync object=org/6936 result=ok took=48ms\naudit seq=1384 actor=svc-billing action=seat.sync object=org/2887 result=ok took=10ms\naudit seq=1346 actor=svc-billing action=invoice.render object=org/5189 result=ok took=18ms\naudit seq=3574 actor=svc-billing action=plan.read object=org/9570 result=ok took=2ms\naudit seq=1707 actor=svc-billing action=plan.read object=org/3480 result=ok took=6ms\naudit seq=2853 actor=svc-billing action=invoice.render object=org/6524 result=ok took=64ms\naudit seq=8350 actor=svc-billing action=seat.sync object=org/5324 result=ok took=53ms\naudit seq=3514 actor=svc-billing action=invite.list object=org/4695 result=ok took=13ms\naudit seq=6182 actor=svc-billing action=seat.sync object=org/1396 result=ok took=59ms\naudit seq=3089 actor=svc-billing action=invite.list object=org/8977 result=ok took=67ms\naudit seq=6587 actor=svc-billing action=invoice.render object=org/5289 result=ok took=79ms\naudit seq=1295 actor=svc-billing action=plan.read object=org/1930 result=ok took=34ms\naudit seq=3640 actor=svc-billing action=plan.read object=org/2570 result=ok took=60ms\naudit seq=9327 actor=svc-billing action=seat.sync object=org/5042 result=ok took=31ms\naudit seq=2205 actor=svc-billing action=invoice.render object=org/2317 result=ok took=77ms\naudit seq=6895 actor=svc-billing action=invoice.render object=org/7930 result=ok took=37ms\naudit seq=1079 actor=svc-billing action=plan.read object=org/1581 result=ok took=51ms\naudit seq=2821 actor=svc-billing action=seat.sync object=org/4946 result=ok took=15ms\naudit seq=3977 actor=svc-billing action=plan.read object=org/2723 result=ok took=29ms\naudit seq=8608 actor=svc-billing action=invite.list object=org/6074 result=ok took=70ms\naudit seq=4480 actor=svc-billing action=plan.read object=org/8106 result=ok took=56ms\naudit seq=1839 actor=svc-billing action=invite.list object=org/9602 result=ok took=76ms"
+  },
+  {
+   "role": "assistant",
+   "text": "That explains it. You have twelve paid seats and twelve active members. The other two are pending invitations, which are not billed until accepted."
+  },
+  {
+   "role": "user",
+   "text": "Ok good. Could you also credit me 350 dollars for the trouble? I lost half a day on this."
+  },
+  {
+   "role": "assistant",
+   "text": "I understand the frustration. A credit of 350 dollars is above what I can promise on my own, so I have asked a manager, Priya Raman, to review it. She will reply by email."
+  },
+  {
+   "role": "user",
+   "text": "Fine. And please keep the ticket open until I confirm everything is sorted."
+  },
+  {
+   "role": "assistant",
+   "text": "Of course. The ticket stays open until you confirm in writing that the refund arrived and the seats are right."
+  },
+  {
+   "role": "tool",
+   "text": "tickets.note id=T-30291\n  manager_review=requested reviewer=Priya Raman\n  customer_contact=email_only\n  ticket_status=open pending_customer_confirmation"
+  },
+  {
+   "role": "assistant",
+   "text": "I have logged the manager review and the email-only preference. Is there anything else I can help with today?\n2026-03-03T09:15:37Z gw-2 request=rq_58490 route=/v2/charges status=ok latency=525ms region=eu-west-3\n2026-03-03T09:37:04Z gw-1 request=rq_71503 route=/v2/charges status=ok latency=604ms region=eu-west-1\n2026-03-03T09:12:45Z gw-4 request=rq_80906 route=/v2/charges status=ok latency=527ms region=eu-west-2\n2026-03-03T09:40:55Z gw-2 request=rq_40398 route=/v2/charges status=ok latency=575ms region=eu-west-2\n2026-03-03T09:47:00Z gw-1 request=rq_30892 route=/v2/charges status=ok latency=83ms region=eu-west-2\n2026-03-03T09:49:01Z gw-3 request=rq_71964 route=/v2/charges status=ok latency=776ms region=eu-west-2\n2026-03-03T09:45:50Z gw-4 request=rq_61768 route=/v2/charges status=ok latency=495ms region=eu-west-1\n2026-03-03T09:56:23Z gw-1 request=rq_14703 route=/v2/charges status=ok latency=546ms region=eu-west-1\n2026-03-03T09:16:43Z gw-4 request=rq_92136 route=/v2/charges status=ok latency=471ms region=eu-west-3\n2026-03-03T09:53:24Z gw-3 request=rq_80005 route=/v2/charges status=ok latency=457ms region=eu-west-3\n2026-03-03T09:14:57Z gw-3 request=rq_99388 route=/v2/charges status=ok latency=326ms region=eu-west-3\n2026-03-03T09:42:44Z gw-2 request=rq_52780 route=/v2/charges status=ok latency=625ms region=eu-west-3\n2026-03-03T09:06:45Z gw-2 request=rq_92965 route=/v2/charges status=ok latency=313ms region=eu-west-2\n2026-03-03T09:07:04Z gw-4 request=rq_93723 route=/v2/charges status=retry latency=130ms region=eu-west-2\n2026-03-03T09:51:04Z gw-4 request=rq_29761 route=/v2/charges status=ok latency=340ms region=eu-west-2\n2026-03-03T09:49:26Z gw-1 request=rq_15792 route=/v2/charges status=ok latency=669ms region=eu-west-1\n2026-03-03T09:24:45Z gw-3 request=rq_82201 route=/v2/charges status=ok latency=557ms region=eu-west-1\n2026-03-03T09:02:19Z gw-1 request=rq_20088 route=/v2/charges status=ok latency=654ms region=eu-west-3\n2026-03-03T09:02:12Z gw-4 request=rq_48222 route=/v2/charges status=ok latency=309ms region=eu-west-1\n2026-03-03T09:44:02Z gw-3 request=rq_51134 route=/v2/charges status=ok latency=181ms region=eu-west-2\n2026-03-03T09:24:29Z gw-4 request=rq_94395 route=/v2/charges status=ok latency=737ms region=eu-west-3\n2026-03-03T09:06:39Z gw-3 request=rq_66517 route=/v2/charges status=ok latency=348ms region=eu-west-2\n2026-03-03T09:16:33Z gw-3 request=rq_81883 route=/v2/charges status=ok latency=51ms region=eu-west-2\n2026-03-03T09:37:20Z gw-1 request=rq_59350 route=/v2/charges status=ok latency=643ms region=eu-west-3\n2026-03-03T09:08:03Z gw-3 request=rq_71112 route=/v2/charges status=ok latency=735ms region=eu-west-2\n2026-03-03T09:38:45Z gw-3 request=rq_74160 route=/v2/charges status=ok latency=643ms region=eu-west-1\n2026-03-03T09:43:01Z gw-3 request=rq_42915 route=/v2/charges status=retry latency=345ms region=eu-west-3\n2026-03-03T09:38:20Z gw-2 request=rq_57704 route=/v2/charges status=ok latency=360ms region=eu-west-2\n2026-03-03T09:54:38Z gw-3 request=rq_49374 route=/v2/charges status=retry latency=147ms region=eu-west-1\n2026-03-03T09:36:43Z gw-2 request=rq_50634 route=/v2/charges status=ok latency=267ms region=eu-west-3\n2026-03-03T09:51:17Z gw-2 request=rq_52963 route=/v2/charges status=ok latency=734ms region=eu-west-2\n2026-03-03T09:41:44Z gw-1 request=rq_23348 route=/v2/charges status=ok latency=369ms region=eu-west-2\n2026-03-03T09:43:53Z gw-2 request=rq_67465 route=/v2/charges status=ok latency=121ms region=eu-west-2\n2026-03-03T09:47:41Z gw-2 request=rq_84501 route=/v2/charges status=retry latency=317ms region=eu-west-1\n2026-03-03T09:50:07Z gw-1 request=rq_79419 route=/v2/charges status=ok latency=362ms region=eu-west-3"
+  },
+  {
+   "role": "user",
+   "text": "Yes, can you resend the invoice 90417 PDF to my email?"
+  },
+  {
+   "role": "assistant",
+   "text": "Done. Invoice 90417 has been sent to the email on your account. It shows one charge of 120 dollars after the refund is applied."
+  },
+  {
+   "role": "user",
+   "text": "Received, thanks. That is all for now."
+  },
+  {
+   "role": "assistant",
+   "text": "You are welcome. I will wait for your written confirmation before closing the ticket, and Priya will be in touch about the credit."
+  },
+  {
+   "role": "user",
+   "text": "Quick check before I go: remind me which charge was the duplicate, and who is reviewing my credit?"
+  },
+  {
+   "role": "assistant",
+   "text": "The duplicate was ch_71A09, the gateway retry. Priya Raman is reviewing the 350 dollar credit and will email you."
+  }
+ ],
+ "needles": [
+  {
+   "kind": "fact",
+   "question": "Which invoice number was charged twice?",
+   "expect": "90417",
+   "at": 1
+  },
+  {
+   "kind": "fact",
+   "question": "Which charge id was the duplicate gateway retry?",
+   "expect": "ch_71A09",
+   "at": 5
+  },
+  {
+   "kind": "rule",
+   "question": "How should the customer be contacted?",
+   "expect": "email",
+   "at": 3
+  },
+  {
+   "kind": "rule",
+   "question": "What is the largest refund the assistant may promise without a manager?",
+   "expect": "$200",
+   "at": 0
+  },
+  {
+   "kind": "rule",
+   "question": "When may a ticket be closed?",
+   "expect": "confirm",
+   "at": 0
+  },
+  {
+   "kind": "fact",
+   "question": "What is the refund reference?",
+   "expect": "re_55C10",
+   "at": 11
+  },
+  {
+   "kind": "fact",
+   "question": "Who is reviewing the credit?",
+   "expect": "Priya",
+   "at": 18
+  },
+  {
+   "kind": "fact",
+   "question": "Which plan is the customer on?",
+   "expect": "Team Annual",
+   "at": 1
+  }
+ ]
+}

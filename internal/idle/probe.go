@@ -149,7 +149,8 @@ func askProbes(ctx context.Context, head Head, conversation string) ([]probe, er
 }
 
 func answer(ctx context.Context, head Head, question, context string) (string, error) {
-	return head.Ask(ctx, answerPrompt+question+"\n\n"+util.WrapUntrusted("CONTEXT", context))
+	reply, err := head.Ask(ctx, answerPrompt+question+"\n\n"+util.WrapUntrusted("CONTEXT", context))
+	return thinking.ReplaceAllString(reply, ""), err
 }
 
 func renderTurns(ts []Turn) string {
