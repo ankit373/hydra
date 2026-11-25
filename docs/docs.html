@@ -275,7 +275,7 @@
       <p class="sum">Pure Go, single static binary.</p>
       <div class="sub"><div class="lbl">Usage</div>
         <pre translate="no"><span class="c"># Homebrew (recommended)</span>
-brew install ankit373/hydra/hyctl
+brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl
 
 <span class="c"># npm  ·  or run once, no install:  npx hyctl</span>
 npm install -g hyctl
@@ -352,7 +352,7 @@ hyctl dispatch --kind classification --check gen "is this ticket billing, bug or
 hyctl dispatch --kind extraction --check gen:fields "pull vendor, total and date as JSON: ..."   <span class="c"># a verdict on every field, each broken one listed</span>
 hyctl dispatch --check ground --require-pass "..."   <span class="c"># exit 0 passed, 1 a check failed, 2 a check could not run</span>
 hyctl dispatch --kind writing.support --source-only "reply to this customer: ... &lt;fenced policy&gt;"   <span class="c"># only what the docs say, or "the documents given do not cover this"</span>
-hyctl dispatch --schema invoice.schema.json "pull the invoice fields as JSON: ..."   <span class="c"># check every field the schema lists, no extra model call</span>
+hyctl dispatch --schema invoice.schema.json "pull the invoice fields as JSON: ..."   <span class="c"># check every field the schema lists, no extra model call; a string that breaks its pattern or format is marked bad_format</span>
 hyctl dispatch --schema tax-form.schema.json --max-fields 30 "pull every box from this form as JSON: ..."   <span class="c"># 90 fields: three calls, one merged object, checked field by field</span>
 
 <span class="c"># Serve the router to anything that speaks OpenAI</span>
@@ -992,10 +992,12 @@ hyctl trust joint            <span class="c"># how often two checks pass the sam
 
     <section class="doc" id="compare">
       <h2><span class="cmd">hyctl compare</span> <span class="tagline">two models on your own kind of work</span></h2>
-      <p class="sum">Puts two models side by side for one kind of work, read from your own checked answers. It calls no model.</p>
+      <p class="sum">Puts two models side by side for one kind of work, read from your own checked answers. It calls no model, unless you ask it to rerun tasks with <span class="fx">--replay</span>.</p>
       <div class="sub"><div class="lbl">How it reads</div><p>For each model: how many of its answers were checked, how many passed, and the 95% lower bound on its pass rate (Wilson). If its record changed, the row also shows the record since that day. One model is called ahead only when its lower bound is above the other&rsquo;s upper bound, judged on the record since any change. Otherwise it says there is no clear difference yet, and roughly how many more checked answers each would need if the rates hold. Cost per checked answer shows as unknown for now, rather than a guess.</p></div>
+      <div class="sub"><div class="lbl">A fair sample: replay</div><p>The record only holds what each model happened to be given. <span class="fx">--replay N</span> sends up to N of the newest stored tasks of the kind to both models and runs each task's check again, so both answer the same tasks. It can rebuild <span class="fx">ground</span> and the generated checks whose spec is stored; other tasks are skipped and counted. It prints the worst-case cost and asks before spending unless you pass <span class="fx">--yes</span>, and it stops before a task that could take the spend past <span class="fx">--max-cost</span>. The answers are filed, so the replay adds to the record, and it prints the same table for that sample.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl compare claude-sonnet ollama/qwen3:4b <span class="fl">--kind</span> summary
-hyctl compare gpt-5 gemini-2.5-pro <span class="fl">--kind</span> extraction.invoices <span class="fl">--json</span></pre></div>
+hyctl compare gpt-5 gemini-2.5-pro <span class="fl">--kind</span> extraction.invoices <span class="fl">--json</span>
+hyctl compare claude-sonnet ollama/qwen3:4b <span class="fl">--kind</span> summary <span class="fl">--replay</span> 20</pre></div>
     </section>
 
     <section class="doc" id="graph-blast">

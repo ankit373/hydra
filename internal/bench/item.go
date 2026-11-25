@@ -79,11 +79,18 @@ type FieldTally struct {
 	Wrong        int `json:"wrong"`
 	RightFlagged int `json:"right_flagged"`
 	WrongFlagged int `json:"wrong_flagged"`
+	// Second is set when a second model re-extracted the answer; the two counts below are
+	// then what was flagged with its disagreement added to the source check.
+	Second             bool `json:"second,omitempty"`
+	RightFlaggedSecond int  `json:"right_flagged_second,omitempty"`
+	WrongFlaggedSecond int  `json:"wrong_flagged_second,omitempty"`
 }
 
 func (t *FieldTally) add(o FieldTally) {
 	t.Right, t.Wrong = t.Right+o.Right, t.Wrong+o.Wrong
 	t.RightFlagged, t.WrongFlagged = t.RightFlagged+o.RightFlagged, t.WrongFlagged+o.WrongFlagged
+	t.Second = t.Second || o.Second
+	t.RightFlaggedSecond, t.WrongFlaggedSecond = t.RightFlaggedSecond+o.RightFlaggedSecond, t.WrongFlaggedSecond+o.WrongFlaggedSecond
 }
 
 // The kinds FieldKind sorts a value into, so the share caught shows apart for amounts,
@@ -112,6 +119,23 @@ func FieldKind(v string) string {
 	}
 	return KindText
 }
+
+// Ask sends a second model one request and returns its reply; the runner prices, budgets
+// and records the call. A reply that never came is a *GraderError, which the suite passes up.
+type Ask func(ctx context.Context, req executor.Request) (string, error)
+
+// SecondGrader is a suite whose grade can use a second model, which Snips does to re-extract each answer.
+type SecondGrader interface {
+	GradeWithSecond(ctx context.Context, it Item, answer string, ask Ask) (Grade, error)
+}
+
+// GraderError is the second model not answering one item: the row is that item's, not the run's.
+type GraderError struct {
+	Kind      string // "transport" or "status:<code>", as an arm's error is
+	Transient bool
+}
+
+func (e *GraderError) Error() string { return "bench: the grader model did not answer: " + e.Kind }
 
 // Suite is one dataset with one verifier. Prompt is identical for every arm.
 type Suite interface {
