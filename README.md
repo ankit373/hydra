@@ -181,6 +181,8 @@ Every command: [command reference](https://hydra.uvansa.com/docs.html#commands).
 
 **Serve.** `hyctl serve` puts the router behind an OpenAI-compatible endpoint on loopback, so any tool that speaks OpenAI routes through Hydra. [hyctl serve](https://hydra.uvansa.com/docs.html#serve) · [routing objective](https://hydra.uvansa.com/docs.html#serve-objective)
 
+**Long conversations.** While a conversation is idle, Hydra can shrink it on a local model into the goal, the rules word for word, the decisions and pointers back to every original, check that against the originals, and use it only when the provider's cache has expired. Off by default, local models only, and `hyctl context restore` undoes it. [compacting while idle](https://hydra.uvansa.com/docs.html#idle)
+
 **The TUI and the desktop app.** `hyctl tui` is a terminal cockpit where you type a task and it runs, with several tasks at once in their own threads. The desktop app does the same in a window and needs no terminal. [TUI](https://hydra.uvansa.com/docs.html#tui) · [desktop app](https://hydra.uvansa.com/docs.html#app)
 
 **Code.** `hyctl edit` makes a change, runs your tests and rolls back on failure. `hyctl vet` reviews a diff, and a file many others depend on needs more confidence before a change to it is accepted. [edit](https://hydra.uvansa.com/docs.html#edit) · [blast radius](https://hydra.uvansa.com/docs.html#blast-radius) · [verifiers](https://hydra.uvansa.com/docs.html#oracle)

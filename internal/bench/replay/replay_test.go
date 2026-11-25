@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -215,4 +217,35 @@ func TestRun_RefusesWhatItCannotReplay(t *testing.T) {
 	if _, err := Score(nil); err == nil {
 		t.Error("scored no tasks")
 	}
+}
+
+func TestReplay_ReadsConverterFixture(t *testing.T) {
+	f, err := os.Open(filepath.Join("..", "..", "..", "bench", "aver", "testdata", "replay.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	rows, err := Read(f)
+	if err != nil {
+		t.Fatalf("Read refused the converter's fixture: %v", err)
+	}
+	if len(rows) != 5 {
+		t.Fatalf("got %d rows, want 5", len(rows))
+	}
+	kinds := map[string]int{}
+	for _, r := range rows {
+		kinds[r.Kind]++
+	}
+	if kinds["code"] != 2 || kinds["math"] != 2 || kinds["grounded"] != 1 {
+		t.Fatalf("kinds %v, want 2 code, 2 math, 1 grounded", kinds)
+	}
+	for _, r := range rows {
+		if r.Task == "humaneval/12" && r.Head == "code-llama-7b" {
+			if r.Correct || !r.Verdicts["base_tests"] || r.CostUSD != 6.4e-05 {
+				t.Fatalf("code-llama-7b row read as %+v", r)
+			}
+			return
+		}
+	}
+	t.Fatal("the code-llama-7b row is missing")
 }
