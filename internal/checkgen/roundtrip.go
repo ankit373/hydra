@@ -5,6 +5,7 @@ package checkgen
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,9 @@ import (
 
 const roundtripPrompt = "Extract these fields from the source below as one JSON object, " +
 	"copying each value from the source. Leave out a field the source gives no value for.\nFields: "
+
+// ErrRoundtripReply is the second extraction not being a JSON object: the answer was not confirmed.
+var ErrRoundtripReply = errors.New("checkgen roundtrip: the second model did not reply with a JSON object")
 
 // roundtripGen re-extracts the fields spec's fields from the source with the check's
 // head, another family where one exists, and compares the two answers field by field.
@@ -97,7 +101,7 @@ func (o *roundtripOracle) Verify(ctx context.Context, candidate string, _ trust.
 	}
 	theirs, ok := DecodeObject(reply)
 	if !ok {
-		return oracle.Verdict{}, fmt.Errorf("checkgen roundtrip: %s did not reply with a JSON object: %.80q", o.gen.Head, reply)
+		return oracle.Verdict{}, fmt.Errorf("%w: %s said %.80q", ErrRoundtripReply, o.gen.Head, reply)
 	}
 	var differ []string
 	for _, f := range o.body.Fields {
@@ -114,6 +118,19 @@ func (o *roundtripOracle) Verify(ctx context.Context, candidate string, _ trust.
 		return oracle.Verdict{Detail: "fields differ: " + strings.Join(differ, "; ")}, nil
 	}
 	return oracle.Verdict{Passed: true, Detail: fmt.Sprintf("all %d required fields agree", o.required)}, nil
+}
+
+// JudgeRoundtrip runs the round trip on answer with no spec, for a caller that already has the
+// field list and the source, as the bench does. Required fields are the ones compared. An
+// answer that is not a JSON object has no verdicts; a second reply that is not one is ErrRoundtripReply.
+func JudgeRoundtrip(ctx context.Context, fields []Field, source, answer string,
+	ask func(ctx context.Context, prompt string) (string, error)) ([]FieldVerdict, error) {
+	o := &roundtripOracle{body: fieldsBody{Fields: fields, Source: source}, gen: GenInfo{Head: "the second model"},
+		ask: func(ctx context.Context, _ GenInfo, prompt string) (string, error) { return ask(ctx, prompt) }}
+	if _, err := o.Verify(ctx, answer, trust.Task{}); err != nil {
+		return nil, err
+	}
+	return o.last, nil
 }
 
 func show(v any) string {

@@ -5,6 +5,7 @@ package suites
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -119,7 +120,17 @@ func (s *snips) Prompt(it bench.Item) (executor.Request, error) {
 // Grade passes only when every gold field matches, compared as checkgen's fields
 // check compares values, and no other key carries a value. Not JSON is a format fail.
 // It also runs the fields check on the answer and tallies which right and wrong fields it flagged.
-func (s *snips) Grade(_ context.Context, it bench.Item, answer string) (bench.Grade, error) {
+func (s *snips) Grade(ctx context.Context, it bench.Item, answer string) (bench.Grade, error) {
+	return s.grade(ctx, it, answer, nil)
+}
+
+// GradeWithSecond is Grade with a second model re-extracting the answer's fields, and the
+// tally also counting what was flagged once its disagreement is added to the fields check.
+func (s *snips) GradeWithSecond(ctx context.Context, it bench.Item, answer string, ask bench.Ask) (bench.Grade, error) {
+	return s.grade(ctx, it, answer, ask)
+}
+
+func (s *snips) grade(ctx context.Context, it bench.Item, answer string, ask bench.Ask) (bench.Grade, error) {
 	fields, err := s.fieldsOf(it)
 	if err != nil {
 		return bench.Grade{}, err
@@ -140,7 +151,11 @@ func (s *snips) Grade(_ context.Context, it bench.Item, answer string) (bench.Gr
 	if err != nil {
 		return bench.Grade{}, err
 	}
-	g := bench.Grade{Passed: true, Fields: tallyFields(fields, text, answer, gold, got)}
+	second, err := s.secondOpinion(ctx, fields, text, answer, got, ask)
+	if err != nil {
+		return bench.Grade{}, err
+	}
+	g := bench.Grade{Passed: true, Fields: tallyFields(fields, text, answer, gold, got, second)}
 	for _, k := range slices.Sorted(maps.Keys(gold)) {
 		v, ok := got[k]
 		if !ok || v == nil {
@@ -161,11 +176,51 @@ func (s *snips) Grade(_ context.Context, it bench.Item, answer string) (bench.Gr
 	return g, nil
 }
 
+// secondOpinion is which fields a second model's re-extraction left good, when one ran.
+type secondOpinion struct {
+	ran  bool
+	good map[string]bool
+}
+
+// secondOpinion has the second model re-extract the fields the answer gave and merges its
+// verdicts with the fields check's. A reply that is not JSON confirms nothing, so no field is good.
+func (s *snips) secondOpinion(ctx context.Context, fields []string, text, answer string, got map[string]any,
+	ask bench.Ask) (secondOpinion, error) {
+	if ask == nil {
+		return secondOpinion{}, nil
+	}
+	list := make([]checkgen.Field, len(fields))
+	asked := false
+	for i, f := range fields {
+		list[i] = checkgen.Field{Name: f, Type: "string", FromSource: true, Required: given(got[f])}
+		asked = asked || list[i].Required
+	}
+	out := secondOpinion{ran: true, good: map[string]bool{}}
+	if !asked {
+		return out, nil // the answer gave no field, so there is nothing to confirm or pay for
+	}
+	zero := 0.0
+	rt, err := checkgen.JudgeRoundtrip(ctx, list, text, answer, func(ctx context.Context, prompt string) (string, error) {
+		return ask(ctx, executor.Request{Prompt: prompt, Temperature: &zero, MaxTokens: snipsAnswerTokens})
+	})
+	if errors.Is(err, checkgen.ErrRoundtripReply) {
+		return out, nil
+	}
+	if err != nil {
+		return secondOpinion{}, err
+	}
+	for _, v := range checkgen.MergeVerdicts(checkgen.JudgeFields(list, text, answer), rt) {
+		out.good[v.Name] = v.Good()
+	}
+	return out, nil
+}
+
 // tallyFields counts each gold field and each key the answer gave a value, by the kind
 // of its gold value (or of the answer's, for a key with no gold): right when it matches
 // the gold, flagged when the fields check, holding every value to the utterance, did not
 // mark it good. A key outside the intent's fields is never checked, so always flagged.
-func tallyFields(fields []string, text, answer string, gold map[string]string, got map[string]any) map[string]bench.FieldTally {
+func tallyFields(fields []string, text, answer string, gold map[string]string, got map[string]any,
+	second secondOpinion) map[string]bench.FieldTally {
 	list := make([]checkgen.Field, len(fields))
 	for i, f := range fields {
 		list[i] = checkgen.Field{Name: f, Type: "string", FromSource: true}
@@ -187,6 +242,17 @@ func tallyFields(fields []string, text, answer string, gold map[string]string, g
 			t.Wrong, t.WrongFlagged = t.Wrong+1, t.WrongFlagged+1
 		default:
 			t.Wrong++
+		}
+		if second.ran {
+			// A field the second model did not confirm is not verified, whatever the source check said.
+			t.Second = true
+			if !second.good[k] {
+				if right {
+					t.RightFlaggedSecond++
+				} else {
+					t.WrongFlaggedSecond++
+				}
+			}
 		}
 		out[kind] = t
 	}
