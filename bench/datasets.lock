@@ -3,6 +3,7 @@
 # Commits resolved with `git ls-remote` on 2026-11-05; see bench/DATASETS.md.
 
 [banking77]
+public_since = 2020
 revision = "PolyAI-LDN/task-specific-datasets@57ec275d8078af65b7731c2a98be812d844a6d6b"
 licence = "CC-BY-4.0"
 licence_verified = "https://github.com/PolyAI-LDN/task-specific-datasets/blob/57ec275d8078af65b7731c2a98be812d844a6d6b/LICENSE, 2026-11-05"
@@ -23,6 +24,7 @@ url = "https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/57ec2
 sha256 = "53261da888122daf2d120d925458631d9619e15d82e56052e7a42e535ce32b63"
 
 [clinc150]
+public_since = 2019
 revision = "clinc/oos-eval@828f8093932c8fe6ca7936c3d2e52903b1c523de"
 licence = "CC-BY-3.0"
 licence_verified = "https://github.com/clinc/oos-eval/blob/828f8093932c8fe6ca7936c3d2e52903b1c523de/LICENSE, 2026-11-05"
@@ -35,6 +37,7 @@ sha256 = "36923c3705a59e08fe9c3883d8bc2dd966ef93e22cb78ac41171782a698d56e0"
 # CC BY-NC-SA 4.0: no row or label is committed. local_splits derives the split file
 # next to the data at run time; see bench/DATASETS.md.
 [faithbench]
+public_since = 2024
 revision = "vectara/FaithBench@cf89797d82812c23b5d5e5c121f1d9b8983bbbce"
 licence = "CC-BY-NC-SA-4.0"
 licence_verified = "https://github.com/vectara/FaithBench/blob/cf89797d82812c23b5d5e5c121f1d9b8983bbbce/LICENSE, 2026-11-16"
@@ -116,6 +119,7 @@ url = "https://raw.githubusercontent.com/vectara/FaithBench/cf89797d82812c23b5d5
 sha256 = "e35ace1069bb79844b122415d3c4192f7147737a2b9ad509185fb2c1ba7090db"
 
 [gsm8k]
+public_since = 2021
 revision = "openai/grade-school-math@3101c7d5072418e28b9008a6636bde82a006892c"
 licence = "MIT"
 licence_verified = "https://github.com/openai/grade-school-math/blob/3101c7d5072418e28b9008a6636bde82a006892c/LICENSE, 2026-11-15"
@@ -128,6 +132,7 @@ sha256 = "3730d312f6e3440559ace48831e51066acaca737f6eabec99bccb9e4b3c39d14"
 # A release asset, not a file in the repository: it is what the evalplus package
 # downloads, and the copy committed at the tag differs from it byte for byte.
 [humanevalplus]
+public_since = 2021
 revision = "evalplus/humanevalplus_release@v0.1.10 (ea5804b59b8a7837cb2faa1b10273fa804cdea5c)"
 licence = "Apache-2.0"
 licence_verified = "https://github.com/evalplus/humanevalplus_release/blob/ea5804b59b8a7837cb2faa1b10273fa804cdea5c/LICENSE, 2026-11-15"
@@ -138,6 +143,7 @@ url = "https://github.com/evalplus/humanevalplus_release/releases/download/v0.1.
 sha256 = "272720b90ac375502c8ed23cd791c2a93dfb22a911641a494da74a426c09f101"
 
 [snips]
+public_since = 2017
 revision = "sonos/nlu-benchmark@b86ac7f1577868c42158d0dec77db50956046696"
 licence = "CC0-1.0"
 licence_verified = "https://github.com/sonos/nlu-benchmark/blob/b86ac7f1577868c42158d0dec77db50956046696/LICENSE, 2026-11-16"
