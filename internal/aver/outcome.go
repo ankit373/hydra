@@ -14,7 +14,6 @@ const (
 const (
 	ReasonTooFewWrong = "too few labelled wrong answers"
 	ReasonFutile      = "futility"
-	ReasonBudget      = "budget"
 	ReasonNoCheck     = "no check for this kind"
 	ReasonCandidates  = "candidate budget"
 	ReasonCostCeiling = "cost ceiling"
@@ -29,9 +28,11 @@ type Outcome struct {
 	Bar     float64 `json:"bar,omitempty"`
 	Product float64 `json:"product,omitempty"`
 	Steps   []Step  `json:"steps,omitempty"`
-	Reason  string  `json:"reason,omitempty"`
-	Have    int     `json:"have,omitempty"`
-	Need    int     `json:"need,omitempty"`
+	// StepsOmitted counts steps cut to keep the outcome inside one log line.
+	StepsOmitted int    `json:"steps_omitted,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	Have         int    `json:"have,omitempty"`
+	Need         int    `json:"need,omitempty"`
 	// Candidates is how many answers were bought, of a budget of Budget.
 	Candidates int `json:"candidates,omitempty"`
 	Budget     int `json:"budget,omitempty"`
@@ -54,8 +55,6 @@ func (o Outcome) Line() string {
 		return fmt.Sprintf("not verified: %d labelled wrong answers, need %d", o.Have, o.Need)
 	case ReasonFutile:
 		return fmt.Sprintf("not verified: futility, product %.3g cannot reach bar %.3g", o.Product, o.Bar)
-	case ReasonBudget:
-		return fmt.Sprintf("not verified: budget spent at product %.3g, bar %.3g", o.Product, o.Bar)
 	case ReasonCandidates, ReasonCostCeiling, ReasonNoHead:
 		return fmt.Sprintf("not verified: %s after %d of %d candidates, last product %.3g < bar %.3g",
 			o.Reason, o.Candidates, o.Budget, o.Product, o.Bar)

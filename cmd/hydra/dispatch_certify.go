@@ -22,7 +22,8 @@ type certifyWalk struct {
 	checks  []answerCheck
 	esc     *decide.OnFail
 	tab     aver.Table
-	kind    string
+	kind    string // the calibration key; domain is what the verdict log is written under
+	domain  string
 	seen    []*dispatch.Result
 	lines   []string // one per candidate, for the report
 	outcome aver.Outcome
@@ -34,7 +35,7 @@ func newCertifyWalk(alpha float64, candidates int, checks []answerCheck, esc *de
 	if err != nil {
 		return nil, err
 	}
-	c := &certifyWalk{alpha: alpha, walk: w, checks: checks, esc: esc, kind: orUnknown(domain),
+	c := &certifyWalk{alpha: alpha, walk: w, checks: checks, esc: esc, kind: orUnknown(domain), domain: domain,
 		outcome: aver.Outcome{Alpha: alpha, Reason: aver.ReasonNoCheck, Budget: candidates}}
 	if len(checks) > 0 {
 		tab, err := certifyTable()
@@ -62,7 +63,7 @@ func (c *certifyWalk) Judge(ctx context.Context, r *dispatch.Result) (bool, stri
 		verdicts[name] = agree
 		if r.SpanID != "" {
 			fileVerdict(runlog.Event{SpanID: r.SpanID, Head: r.Head.ID}, evalset.Verdict{
-				CandidateHash: candidateHash(r.Output), Domain: c.kind, Check: name, Passed: agree,
+				CandidateHash: candidateHash(r.Output), Domain: c.domain, Check: name, Passed: agree,
 			})
 		}
 	}
@@ -111,8 +112,8 @@ func (c *certifyWalk) finish(r *dispatch.Result, runID, taskID string) aver.Outc
 	return o
 }
 
-// certifyTable is the calibration table from the verdict log, model votes
-// included, with checks that fail together counted once.
+// certifyTable is the verdict log's calibration, model votes included, counted
+// since each check's last change, with checks that fail together counted once.
 func certifyTable() (aver.Table, error) {
 	joint, err := evalset.Joint(evalset.VerdictsPath())
 	if err != nil {
@@ -124,7 +125,7 @@ func certifyTable() (aver.Table, error) {
 	}
 	joint, _ = evalset.AddModelVotes(joint, runs)
 	answers := averAnswers(joint)
-	tab, err := aver.Fit(answers, aver.DefaultDelta)
+	tab, err := aver.FitSince(answers, aver.DefaultDelta, aver.Changes(answers))
 	if err != nil {
 		return aver.Table{}, err
 	}

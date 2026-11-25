@@ -17,8 +17,6 @@ func TestOutcome_LineForEachMode(t *testing.T) {
 			"not verified: 41 labelled wrong answers, need 60"},
 		{Outcome{Alpha: 0.05, Reason: ReasonFutile, Product: 3.2, Bar: 40},
 			"not verified: futility, product 3.2 cannot reach bar 40"},
-		{Outcome{Alpha: 0.05, Reason: ReasonBudget, Product: 9, Bar: 40},
-			"not verified: budget spent at product 9, bar 40"},
 		{Outcome{Alpha: 0.05, Reason: ReasonNoCheck},
 			"not verified: no check for this kind"},
 		{Outcome{Mode: ModeIndependence, Alpha: 0.05, Product: 50.6, Bar: 40, Candidates: 2, Budget: 3},

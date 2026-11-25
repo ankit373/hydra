@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/ankit373/hydra/internal/drift"
 	"github.com/ankit373/hydra/internal/stats"
 )
 
@@ -36,6 +37,9 @@ type Cell struct {
 	Skip bool `json:"skip"`
 	// LinkedTo names the check this one fails together with; only that one counts.
 	LinkedTo string `json:"linked_to,omitempty"`
+	// Changed says the counts are since the check's last change; Reason says why a cell is skipped.
+	Changed bool   `json:"changed,omitempty"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 // EPass is the e-value of a pass, s/q̄. A skipped cell's verdict is worth 1.
@@ -52,29 +56,48 @@ type Table struct {
 	Cells []Cell  `json:"cells"`
 }
 
-// DefaultDelta is the chance that any calibrated bound in a kind is wrong, unless a caller sets one.
+// DefaultDelta is the chance that any calibrated bound in a kind is wrong.
 const DefaultDelta = 0.05
 
 type cellKey struct{ kind, check, head string }
 
+// MinWrongSinceChange bounds how soon a changed check counts again.
+const MinWrongSinceChange = 20
+
 // Fit bounds each cell's false-pass rate at delta/M, M the checks in its kind.
 // Heads are never pooled: a strong head's wrong answers fool tests far more often.
 func Fit(answers []Answer, delta float64) (Table, error) {
+	return FitSince(answers, delta, nil)
+}
+
+// FitSince is Fit on answers oldest first, counting each check only from its
+// change point in changes (from Changes); a check changed too recently is skipped.
+func FitSince(answers []Answer, delta float64, changes map[[3]string]int) (Table, error) {
 	if !(delta > 0 && delta < 1) {
 		return Table{}, fmt.Errorf("aver: delta %v is outside (0, 1)", delta)
 	}
 	cells := map[cellKey]*Cell{}
 	checks := map[string]map[string]bool{}
+	clock := map[[2]string]int{}
 	for _, a := range answers {
 		if checks[a.Kind] == nil {
 			checks[a.Kind] = map[string]bool{}
 		}
+		kh := [2]string{a.Kind, a.Head}
+		now := clock[kh]
+		if !a.Correct {
+			clock[kh]++
+		}
 		for check, passed := range a.Verdicts {
 			checks[a.Kind][check] = true
+			at, changed := changes[[3]string{a.Kind, check, a.Head}]
+			if now < at {
+				continue
+			}
 			k := cellKey{a.Kind, check, a.Head}
 			c := cells[k]
 			if c == nil {
-				c = &Cell{Kind: a.Kind, Check: check, Head: a.Head}
+				c = &Cell{Kind: a.Kind, Check: check, Head: a.Head, Changed: changed}
 				cells[k] = c
 			}
 			if a.Correct {
@@ -101,6 +124,9 @@ func Fit(answers []Answer, delta float64) (Table, error) {
 			c.S = float64(c.TruePass) / float64(c.Right)
 		}
 		c.Skip = c.S <= c.QBar
+		if c.Changed && c.Wrong < MinWrongSinceChange {
+			c.Skip, c.Reason = true, "changed recently"
+		}
 		t.Cells = append(t.Cells, *c)
 	}
 	sort.Slice(t.Cells, func(i, j int) bool {
@@ -114,4 +140,43 @@ func Fit(answers []Answer, delta float64) (Table, error) {
 		return a.Head < b.Head
 	})
 	return t, nil
+}
+
+// Changes finds where each (kind, check, head) false-pass rate last changed, read
+// oldest first on that head's wrong answers in the kind; per head, or a shift in
+// which heads answer reads as a change. The value is how many came before it.
+func Changes(answers []Answer) map[[3]string]int {
+	type watch struct {
+		det         *drift.Detector
+		start, seen int // start: the clock before the check first judged
+	}
+	watches := map[[3]string]*watch{}
+	clock := map[[2]string]int{}
+	for _, a := range answers {
+		if a.Correct {
+			continue
+		}
+		kh := [2]string{a.Kind, a.Head}
+		clock[kh]++
+		now := clock[kh]
+		for check, passed := range a.Verdicts {
+			k := [3]string{a.Kind, check, a.Head}
+			w := watches[k]
+			if w == nil {
+				w = &watch{det: drift.New(1, 1), start: now - 1, seen: now - 1}
+				watches[k] = w
+			}
+			// Wrong answers this check did not judge are idle steps on its clock.
+			w.det.Idle(now - 1 - w.seen)
+			w.det.Observe(passed)
+			w.seen = now
+		}
+	}
+	out := map[[3]string]int{}
+	for k, w := range watches {
+		if w.det.Best > 0 {
+			out[k] = w.start + int(w.det.Best)
+		}
+	}
+	return out
 }

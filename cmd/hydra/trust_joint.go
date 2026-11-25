@@ -16,8 +16,8 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// minSharedWrong is the fewest wrong answers a rate is printed on. Below it
-// the 95% upper bound is wider than any rate it could certify.
+// minSharedWrong bounds which rates trust joint prints: below it the 95% bound
+// is wider than the rate.
 const minSharedWrong = 20
 
 // jointAlpha is the one-sided level of every upper bound in the report.
@@ -182,28 +182,32 @@ func buildJoint(answers []evalset.Answer, domain string) []jointDomain {
 	return out
 }
 
-// inTimeOrder is the wrong answers with ground truth, oldest first. An answer's
-// first check is the earliest: model votes are put ahead of the rest.
+// inTimeOrder is the wrong answers with ground truth, oldest first.
 func inTimeOrder(answers []evalset.Answer) []evalset.Answer {
-	type dated struct {
-		a  evalset.Answer
-		at time.Time
-	}
-	var wrong []dated
-	for _, a := range answers {
-		if a.Truth == nil || a.Truth.Outcome != evalset.OutcomeIncorrect {
-			continue
+	var wrong []evalset.Answer
+	for _, a := range byFirstCheck(answers) {
+		if a.Truth != nil && a.Truth.Outcome == evalset.OutcomeIncorrect {
+			wrong = append(wrong, a)
 		}
-		var at time.Time
+	}
+	return wrong
+}
+
+// byFirstCheck sorts a copy of answers oldest first. An answer's first check is
+// the earliest: model votes are put ahead of the rest.
+func byFirstCheck(answers []evalset.Answer) []evalset.Answer {
+	at := make([]time.Time, len(answers))
+	idx := make([]int, len(answers))
+	for i, a := range answers {
+		idx[i] = i
 		if len(a.Checks) > 0 {
-			at, _ = time.Parse(time.RFC3339, a.Checks[0].TS)
+			at[i], _ = time.Parse(time.RFC3339, a.Checks[0].TS)
 		}
-		wrong = append(wrong, dated{a, at})
 	}
-	sort.SliceStable(wrong, func(i, j int) bool { return wrong[i].at.Before(wrong[j].at) })
-	out := make([]evalset.Answer, len(wrong))
-	for i, w := range wrong {
-		out[i] = w.a
+	sort.SliceStable(idx, func(i, j int) bool { return at[idx[i]].Before(at[idx[j]]) })
+	out := make([]evalset.Answer, len(answers))
+	for i, k := range idx {
+		out[i] = answers[k]
 	}
 	return out
 }

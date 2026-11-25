@@ -27,9 +27,16 @@ const (
 	alpha     = 0.05
 )
 
-// contamination is in every summary's caveats and every table's footer.
-const contamination = "both suites have been public since 2019–2020 and are likely in pre-training data; " +
-	"paired differences are the claim, absolute rates are context"
+// contamination follows the per-suite public-since lines in every summary's caveats and every table's footer.
+const contamination = "likely in pre-training data; paired differences are the claim, absolute rates are context"
+
+// publicSince is one suite's line in the caveat. A run that predates the lock's year says so.
+func publicSince(c Breadcrumb) string {
+	if c.PublicSince == 0 {
+		return c.Suite + ": first-public year not recorded"
+	}
+	return fmt.Sprintf("%s: public since %d", c.Suite, c.PublicSince)
+}
 
 // Summary is summary.json: a pure function of run.json and items.jsonl. Only
 // Execution differs between an interrupted run and an uninterrupted one.
@@ -234,7 +241,7 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		scored[k] = r
 	}
 	s := Summary{Schema: summarySchema, RunID: run.ID, Tier: run.Tier, Breadcrumb: run.Crumb,
-		Arms: map[string]ArmSummary{}, Paired: map[string]PairedStats{}, Caveats: []string{contamination}, Execution: e}
+		Arms: map[string]ArmSummary{}, Paired: map[string]PairedStats{}, Caveats: []string{publicSince(run.Crumb), contamination}, Execution: e}
 	for _, id := range run.ItemIDs {
 		for _, arm := range run.ArmOrder {
 			if _, ok := scored[pairKey{id, arm}]; !ok {

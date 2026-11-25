@@ -76,6 +76,10 @@ func (p *averPattern) Calibrate(cal []Row) error {
 			checks[c] = true
 		}
 	}
+	tasks := make([]map[string]*Row, 0, len(byTask)) // each task's rows by head, built once
+	for _, rows := range byTask {
+		tasks = append(tasks, byHead(rows))
+	}
 	if len(checks) == 0 {
 		return errors.New("aver_pattern: no calibration answer has a verdict")
 	}
@@ -88,8 +92,7 @@ func (p *averPattern) Calibrate(cal []Row) error {
 	p.slots = make([]patternSlot, len(p.order))
 	for j, h := range p.order {
 		var answers []aver.Answer
-		for _, rows := range byTask {
-			bh := byHead(rows)
+		for _, bh := range tasks {
 			r, ok := bh[h]
 			if !ok {
 				continue

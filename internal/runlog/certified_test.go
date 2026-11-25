@@ -4,6 +4,7 @@ package runlog
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/aver"
@@ -55,5 +56,28 @@ func TestRoute_CarriesCertifyAlpha(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Route == nil || events[0].Route.CertifyAlpha != 0.01 {
 		t.Fatalf("route lost certify_alpha: %+v", events)
+	}
+}
+
+func TestCertifiedScore_CapsSteps(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir())
+	span := seedSpan(t, "r3", "h1")
+	o := aver.Outcome{Alpha: 0.05, Reason: aver.ReasonFutile, Bar: 20}
+	for range MaxCertifiedSteps + 7 {
+		o.Steps = append(o.Steps, aver.Step{Check: strings.Repeat("c", 200), E: 1})
+	}
+	if err := AppendCertified("r3", span, o); err != nil {
+		t.Fatal(err)
+	}
+	events, err := Load("r3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ScoresBySpan(events)[span]
+	if len(got) != 1 || len(got[0].Outcome.Steps) != MaxCertifiedSteps || got[0].Outcome.StepsOmitted != 7 {
+		t.Fatalf("want %d steps and 7 omitted, got %+v", MaxCertifiedSteps, got)
+	}
+	if len(o.Steps) != MaxCertifiedSteps+7 {
+		t.Fatal("the caller's outcome was cut")
 	}
 }

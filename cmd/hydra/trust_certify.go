@@ -36,6 +36,10 @@ s is how often the check passed a right answer from that model. A pass is worth
 s / q-bar. When s is not above q-bar the check is marked skip and its verdict
 counts for nothing, since it does not separate right answers from wrong ones.
 
+Each check's false-pass rate is watched for a change, as hyctl trust joint does.
+After a change only the answers since then count, and until the check has ` + fmt.Sprint(aver.MinWrongSinceChange) + `
+wrong answers since, it is skipped as "changed recently".
+
 Only answers with ground truth count. Models that voted in an ensemble run count
 as checks too.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -58,7 +62,7 @@ as checks too.`,
 				}
 				answers = kept
 			}
-			table, err := aver.Fit(answers, delta)
+			table, err := aver.FitSince(answers, delta, aver.Changes(answers))
 			if err != nil {
 				return err
 			}
@@ -94,17 +98,24 @@ func renderCertifyTable(t aver.Table) {
 		if c.Skip {
 			e = "skip"
 		}
-		fmt.Fprintf(stdout, "  %-28.28s %-24.24s %6d %6d %7.3f %6.3f %9s\n",
-			c.Check, c.Head, c.Wrong, c.FalsePass, c.QBar, c.S, e)
+		note := ""
+		switch {
+		case c.Reason != "":
+			note = c.Reason
+		case c.Changed:
+			note = "counts since a change"
+		}
+		fmt.Fprintf(stdout, "  %-28.28s %-24.24s %6d %6d %7.3f %6.3f %9s  %s\n",
+			c.Check, c.Head, c.Wrong, c.FalsePass, c.QBar, c.S, e, note)
 	}
 	fmt.Fprintln(stdout)
 }
 
-// averAnswers keeps the verdict log's answers that have ground truth. A missing
-// kind or head is "unknown", as hyctl trust joint names a missing domain.
+// averAnswers keeps the verdict log's answers that have ground truth, oldest
+// first by their first check. A missing kind or head is "unknown", as in trust joint.
 func averAnswers(joint []evalset.Answer) []aver.Answer {
 	var out []aver.Answer
-	for _, a := range joint {
+	for _, a := range byFirstCheck(joint) {
 		if a.Truth == nil {
 			continue
 		}

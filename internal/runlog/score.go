@@ -44,12 +44,18 @@ type Score struct {
 // ScoreCertified is the name of the score certified acceptance writes.
 const ScoreCertified = "certified"
 
+// MaxCertifiedSteps caps an outcome's steps, so its event stays far under MaxEventBytes.
+const MaxCertifiedSteps = 50
+
 // AppendCertified records certified acceptance's outcome on an answer's span:
 // value 1 when certified, 0 when not verified, the one-line reason as comment.
 func AppendCertified(runID, spanID string, o aver.Outcome) error {
 	v := 0.0
 	if o.Certified() {
 		v = 1
+	}
+	if n := len(o.Steps); n > MaxCertifiedSteps {
+		o.Steps, o.StepsOmitted = o.Steps[:MaxCertifiedSteps:MaxCertifiedSteps], o.StepsOmitted+n-MaxCertifiedSteps
 	}
 	return AppendScore(runID, spanID, Score{Name: ScoreCertified, Value: v, Comment: o.Line(), Source: "aver", Outcome: &o})
 }
