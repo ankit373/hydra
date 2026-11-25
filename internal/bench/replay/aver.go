@@ -118,7 +118,7 @@ func (p *averProduct) Decide(task []Row, order []string) Outcome {
 			}
 			passed := r.Verdicts[c.Check]
 			o.Spent += r.CheckCostUSD[c.Check]
-			run.Add(aver.Step{Check: c.Check, Passed: passed, E: aver.EValue(c, passed)})
+			run.Add(aver.StepFor(c, passed))
 			if run.Accepted() {
 				o.Accepted = r
 				o.Reason = fmt.Sprintf("product %.3g >= bar %.3g", run.Product, bar)
