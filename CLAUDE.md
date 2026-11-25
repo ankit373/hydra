@@ -191,6 +191,8 @@ internal/verify/        ← Which command judges this work: the repo's own suite
                           validator for the file's language. Shared by the TUI and `hyctl edit`.
 internal/aver/          ← Certified acceptance (#1549). `Fit` bounds each check's false-pass rate per
                           (check, model, kind) with Clopper-Pearson at delta/M, never pooled across models.
+                          `FitSince` counts only answers after each cell's last change (`Changes`, an
+                          `internal/drift` detector per cell); under 20 wrong answers since, it is skipped.
                           `hyctl trust certify-table`.
 internal/drift/         ← When a pass rate changed, and the record since: change-point detection that
                           keeps its hazard on idle steps, so a source nobody calls can recover. Used by trust calibration.
