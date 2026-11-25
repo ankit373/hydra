@@ -95,3 +95,46 @@ func TestBenchReplay_DeltaFlagReachesTheReplay(t *testing.T) {
 		t.Fatalf("want delta 2 refused, got %v", err)
 	}
 }
+
+func TestBenchReplay_OutcomesFile(t *testing.T) {
+	testutil.NewSandbox(t)
+	base := []string{"bench", "replay", "--candidates", replayFixture(t), "--check", "tests", "--alpha", "0.05", "--splits", "2", "--json"}
+	plain, _, err := run(t, base...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "outcomes.jsonl")
+	withFile, _, err := run(t, append(base, "--outcomes", path)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withFile != plain {
+		t.Fatal("--outcomes changed the --json report")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	// 2 default policies x 1 alpha x 2 seeds x 2 test tasks.
+	if len(lines) != 8 {
+		t.Fatalf("%d outcome lines, want 8:\n%s", len(lines), raw)
+	}
+	var o struct {
+		Task     string   `json:"task"`
+		Policy   string   `json:"policy"`
+		Accepted *string  `json:"accepted_head"`
+		Correct  *bool    `json:"correct"`
+		Tried    []string `json:"tried"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &o); err != nil {
+		t.Fatal(err)
+	}
+	// always_strongest buys the dear head and accepts it unchecked; it is right.
+	if o.Policy != "always_strongest" || o.Accepted == nil || *o.Accepted != "dear" || !*o.Correct || len(o.Tried) != 1 {
+		t.Fatalf("first line: %s", lines[0])
+	}
+	if _, _, err := run(t, append(base, "--outcomes", filepath.Join(t.TempDir(), "missing", "x.jsonl"))...); err == nil {
+		t.Fatal("an unwritable --outcomes path was accepted")
+	}
+}

@@ -68,6 +68,7 @@ calibrates every policy on one half and runs it on the other. Each kind is repla
 ```bash
 hyctl bench replay --candidates answers.jsonl --check tests
 hyctl bench replay --candidates answers.jsonl --policy always_strongest --alpha 0.05 --splits 20 --json
+hyctl bench replay --candidates answers.jsonl --check tests --outcomes outcomes.jsonl
 ```
 
 One JSON line per (task, head) candidate:
@@ -103,6 +104,9 @@ One JSON line per (task, head) candidate:
   ln(patterns/delta) x bar.
 - In the AVER policies a check missing from `verdicts` did not run, unlike the older policies where
   it did not pass: calibration only sees verdicts that exist, so a missing one has no calibrated e.
+- `--outcomes FILE` also writes one JSON line per test task, policy, alpha and split: `task`, `kind`,
+  `seed`, `policy`, `alpha`, `accepted_head` and `correct` (both null when nothing was accepted),
+  `tried` (heads bought, in order) and `cost_usd`. They sum to the per-split counts, which do not change.
 - False accept per task is wrong accepted answers over all test tasks, with a two-sided 95%
   Clopper-Pearson interval. The table shows the mean over splits, the first seed's interval,
   the worst split and the share of splits over alpha, then refusal, cost per task and cost per
