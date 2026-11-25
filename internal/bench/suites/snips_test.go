@@ -4,11 +4,13 @@ package suites
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/bench"
+	"github.com/ankit373/hydra/internal/executor"
 )
 
 func TestExtractionSuite_LoadsGoldFieldsPerIntent(t *testing.T) {
@@ -102,5 +104,79 @@ func TestExtractionSuite_TalliesTheFieldsTheCheckFlagged(t *testing.T) {
 	}
 	if g, _ := s.Grade(context.Background(), it, "a table for four"); g.Fields != nil {
 		t.Errorf("a format fail tallied %+v", g.Fields)
+	}
+}
+
+// A second model that reads the utterance correctly catches the swap the source check
+// cannot, and the tally keeps both counts so the two can be shown side by side (#2013).
+func TestExtractionSuite_SecondModelCatchesWhatTheSourceCheckMisses(t *testing.T) {
+	s, items := loadFixture(t, "snips")
+	it := items[1] // "book a table for 4 at 7 pm in Lisbon"
+	reread := func(reply string) (bench.Ask, *int) {
+		calls := 0
+		return func(_ context.Context, req executor.Request) (string, error) {
+			calls++
+			if !strings.Contains(req.Prompt, "Lisbon") || *req.Temperature != 0 || req.MaxTokens == 0 {
+				t.Errorf("second request %+v does not carry the utterance, a pinned temperature and a cap", req)
+			}
+			return reply, nil
+		}, &calls
+	}
+	good := `{"city": "Lisbon", "party_size_number": "4", "timeRange": "7 pm"}`
+	type tally = bench.FieldTally
+	for name, c := range map[string]struct {
+		answer, reply string
+		want          map[string]tally
+	}{
+		"both agree": {good, good, map[string]tally{
+			"text": {Right: 2, Second: true}, "number": {Right: 1, Second: true}}},
+		"a swap only the second model sees": {
+			`{"city": "7 pm", "party_size_number": "4", "timeRange": "Lisbon"}`, good,
+			map[string]tally{"text": {Wrong: 2, Second: true, WrongFlaggedSecond: 2}, "number": {Right: 1, Second: true}}},
+		"a right field the second model reads differently": {
+			good, `{"city": "Lisbon", "party_size_number": "5", "timeRange": "7 pm"}`,
+			map[string]tally{"text": {Right: 2, Second: true}, "number": {Right: 1, Second: true, RightFlaggedSecond: 1}}},
+		"a reply that is not JSON confirms nothing": {
+			good, "I could not find any fields.",
+			map[string]tally{"text": {Right: 2, Second: true, RightFlaggedSecond: 2}, "number": {Right: 1, Second: true, RightFlaggedSecond: 1}}},
+	} {
+		ask, calls := reread(c.reply)
+		g, err := s.(bench.SecondGrader).GradeWithSecond(context.Background(), it, c.answer, ask)
+		if err != nil || *calls != 1 {
+			t.Fatalf("%s: err %v after %d calls, want one", name, err, *calls)
+		}
+		if !maps.Equal(g.Fields, c.want) {
+			t.Errorf("%s: fields = %+v, want %+v", name, g.Fields, c.want)
+		}
+	}
+}
+
+// A second model that does not answer is that item's failure, passed up as the runner reads it.
+func TestExtractionSuite_SecondModelFailureIsPassedUp(t *testing.T) {
+	s, items := loadFixture(t, "snips")
+	want := &bench.GraderError{Kind: "transport", Transient: true}
+	_, err := s.(bench.SecondGrader).GradeWithSecond(context.Background(), items[1],
+		`{"city": "Lisbon"}`, func(context.Context, executor.Request) (string, error) { return "", want })
+	var got *bench.GraderError
+	if !errors.As(err, &got) || got != want {
+		t.Fatalf("err = %v, want the grader's own", err)
+	}
+}
+
+// An answer that gives no field has nothing to confirm, so the second model is not asked.
+func TestExtractionSuite_NoFieldGivenAsksNoSecondModel(t *testing.T) {
+	s, items := loadFixture(t, "snips")
+	g, err := s.(bench.SecondGrader).GradeWithSecond(context.Background(), items[1], `{}`,
+		func(context.Context, executor.Request) (string, error) {
+			t.Fatal("asked the second model about an empty answer")
+			return "", nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for kind, f := range g.Fields {
+		if !f.Second || f.WrongFlaggedSecond != f.Wrong {
+			t.Errorf("%s: %+v, want every missing field flagged with the second model too", kind, f)
+		}
 	}
 }

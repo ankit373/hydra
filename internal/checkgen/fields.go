@@ -31,6 +31,9 @@ type Field struct {
 	Type       string `json:"type"`
 	Required   bool   `json:"required"`
 	FromSource bool   `json:"from_source"`
+	// Pattern is a regular expression the whole value must match. It comes from a JSON
+	// Schema, never from the writer, which has no way to know a code's shape.
+	Pattern string `json:"pattern,omitempty"`
 }
 
 // fieldsBody is the spec: the fields, and the fenced source their values must come from.
@@ -72,7 +75,7 @@ func (fieldsGen) Generate(ctx context.Context, task Task) ([]Spec, error) {
 		if f.Name = strings.TrimSpace(f.Name); f.Name == "" || seen[f.Name] || !slices.Contains(fieldTypes, f.Type) {
 			continue
 		}
-		seen[f.Name] = true
+		seen[f.Name], f.Pattern = true, ""
 		body.Fields = append(body.Fields, f)
 	}
 	if len(body.Fields) == 0 {
@@ -151,6 +154,7 @@ const (
 	FieldMissing           = "missing"
 	FieldWrongType         = "wrong_type"
 	FieldNotInSource       = "not_in_source"
+	FieldBadFormat         = "bad_format" // fails the field's pattern, or is the odd one out of its column
 	FieldUnverified        = "unverified"
 	FieldAgreed            = "agreed"
 	FieldDiffers           = "differs"
@@ -167,7 +171,7 @@ type FieldVerdict struct {
 
 func (f FieldVerdict) failed() bool {
 	switch f.Status {
-	case FieldMissing, FieldWrongType, FieldNotInSource, FieldDiffers:
+	case FieldMissing, FieldWrongType, FieldBadFormat, FieldNotInSource, FieldDiffers:
 		return true
 	}
 	return false
@@ -188,7 +192,7 @@ type fieldsOracle struct {
 	last []FieldVerdict
 }
 
-// Verify walks every field and fails when any is missing, of the wrong type, or not in the source.
+// Verify walks every field and fails when any is missing, of the wrong type, badly formed or not in the source.
 func (o *fieldsOracle) Verify(_ context.Context, candidate string, _ trust.Task) (oracle.Verdict, error) {
 	o.last = make([]FieldVerdict, 0, len(o.Fields))
 	got, ok := DecodeObject(candidate)
@@ -230,6 +234,7 @@ func judgeField(f Field, v any, src source) FieldVerdict {
 		fv.Status = FieldAbsent
 	case typeOf(v) != f.Type:
 		fv.Status, fv.Detail = FieldWrongType, fmt.Sprintf("is a %s, want a %s", typeOf(v), f.Type)
+	case formatFails(f, v, &fv):
 	case !f.FromSource:
 	case src.text == "":
 		fv.Status, fv.Detail = FieldUnverified, "no fenced source"
@@ -239,6 +244,30 @@ func judgeField(f Field, v any, src source) FieldVerdict {
 		fv.InSource = true
 	}
 	return fv
+}
+
+// formatFails fills fv and says so when v breaks its field's pattern, or, in a list of strings, is the one
+// value with a lookalike (O for 0) in a position every other value fills with the other class.
+func formatFails(f Field, v any, fv *FieldVerdict) bool {
+	var detail string
+	switch x := v.(type) {
+	case string:
+		if f.Pattern == "" {
+			return false
+		}
+		var unusable bool
+		if detail, unusable = badPattern(f, x); unusable {
+			fv.Status, fv.Detail = FieldUnverified, "pattern is not valid: "+detail
+			return true
+		}
+	case []any:
+		detail, _ = columnMisfit(x)
+	}
+	if detail == "" {
+		return false
+	}
+	fv.Status, fv.Detail = FieldBadFormat, detail
+	return true
 }
 
 // DecodeObject reads an answer as one JSON object, from inside its first ``` block

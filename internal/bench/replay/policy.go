@@ -28,11 +28,14 @@ type Policy interface {
 // Options configure a policy. A baseline that has no use for alpha ignores it.
 type Options struct {
 	Alpha float64
+	Delta float64 // chance a calibrated bound is wrong, for the AVER policies
 	Check string
 }
 
 var policies = map[string]func(Options) (Policy, error){
-	"always_strongest": func(Options) (Policy, error) { return &alwaysStrongest{}, nil },
+	"always_strongest":     func(Options) (Policy, error) { return &alwaysStrongest{}, nil },
+	"aver_product":         newAverProduct(false),
+	"aver_product_perhead": newAverProduct(true),
 	"first_check_pass": func(o Options) (Policy, error) {
 		if o.Check == "" {
 			return nil, errors.New("first_check_pass needs its primary check named (bench replay --check)")
