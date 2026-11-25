@@ -102,7 +102,7 @@ Anyone who sends work to AI models and wants each request answered by a model wi
 The CLI binary is named `hyctl` (the product is Hydra). Available via:
 
 ```bash
-brew install ankit373/hydra/hyctl                                                 # Homebrew
+brew trust ankit373/hydra && brew install ankit373/hydra/hyctl                    # Homebrew
 npm install -g hyctl                                                              # npm
 npx hyctl                                                                         # npx (no install)
 pip install hyctl                                                                 # pip

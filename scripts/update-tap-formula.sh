@@ -92,4 +92,4 @@ else
   git -C "$work/tap" push origin HEAD >/dev/null
 fi
 
-echo "✓ Tap updated: brew tap ankit373/hydra && brew install hyctl   (→ ${TAG})"
+echo "✓ Tap updated: brew trust ankit373/hydra && brew install ankit373/hydra/hyctl   (→ ${TAG})"

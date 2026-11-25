@@ -922,7 +922,7 @@ at the old version, and the next release is computed off the wrong base (#215).
 
 | Channel | Built from | Tag pattern | Install |
 |---|---|---|---|
-| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew install hyctl` |
+| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew trust ankit373/hydra && brew install ankit373/hydra/hyctl` |
 | **RC** | a commit on `main`, by hand | `v1.2.0-rc.1` | GitHub pre-release |
 | **edge** | every merge to `main` | `edge` (overwritten) | GitHub pre-release |
 
