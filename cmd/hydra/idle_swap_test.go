@@ -47,8 +47,11 @@ func stagePack(t *testing.T, msgs []executor.Message, v idle.Verdict) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "pack-1.json"), raw, 0o600); err != nil {
-		t.Fatal(err)
+	status := `{"key":"` + swapConv + `","outcome":"staged","at":"2026-11-24T03:00:00Z"}`
+	for name, body := range map[string]string{"pack-1.json": string(raw), "status.json": status} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

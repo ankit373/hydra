@@ -154,8 +154,8 @@ func (s *Scheduler) Tick(ctx context.Context, now time.Time) (Result, error) {
 			s.note(c.Key, OutcomeNone, fmt.Sprintf("active %s ago; idle after %s", quiet.Round(time.Second), cfg.IdleAfter), now)
 			continue
 		}
-		// Nothing new since a pack was staged or refused: skip reading the transcript.
-		if st := readStatus(s.env.Dir, c.Key); (st.Outcome == OutcomeRejected || st.Outcome == OutcomeStaged) && st.LastEvent.Equal(c.LastEvent) {
+		// Nothing new since a pack was staged or refused, or the user restored it: skip reading the transcript.
+		if st := readStatus(s.env.Dir, c.Key); ((st.Outcome == OutcomeRejected || st.Outcome == OutcomeStaged) && st.LastEvent.Equal(c.LastEvent)) || Restored(s.env.Dir, c.Key) {
 			continue
 		}
 		turns, err := s.env.Transcript(c.Key)
