@@ -162,7 +162,8 @@ type Result struct {
 	CostPerTask     float64   `json:"cost_per_task_usd"`
 	CorrectAccepted int       `json:"correct_accepted"`
 	CostPerCorrect  USD       `json:"cost_per_correct_usd"`
-	Bars            []float64 `json:"bars,omitempty"` // per candidate, AVER policies only
+	Bars            []float64 `json:"bars,omitempty"`             // per candidate, AVER policies only
+	Untestable      int       `json:"untestable_pairs,omitempty"` // aver_gated only
 }
 
 // Summary folds one (kind, policy, alpha) over its splits. The interval is the
@@ -180,7 +181,8 @@ type Summary struct {
 	Refusal          float64   `json:"refusal"`
 	CostPerTask      float64   `json:"cost_per_task_usd"`
 	CostPerCorrect   USD       `json:"cost_per_correct_usd"`
-	Bars             []float64 `json:"bars,omitempty"` // the first split's
+	Bars             []float64 `json:"bars,omitempty"`             // the first split's
+	Untestable       int       `json:"untestable_pairs,omitempty"` // the first split's
 }
 
 // Report is everything one replay printed, seeds included so it can be repeated.
@@ -284,6 +286,9 @@ func replayOne(rows []Row, byTask map[string][]Row, name string, opts Options, s
 		return Result{}, err
 	}
 	r.Kind, r.Policy, r.Alpha, r.Seed = rows[0].Kind, name, opts.Alpha, seed
+	if u, ok := p.(interface{ Untestable() int }); ok {
+		r.Untestable = u.Untestable()
+	}
 	if b, ok := p.(interface{ Bars() []float64 }); ok {
 		r.Bars = b.Bars()
 	}
@@ -335,7 +340,7 @@ func perCorrect(spent float64, correct int) USD {
 // summarise pools spend and counts across splits; rates are means over splits.
 func summarise(res []Result) Summary {
 	s := Summary{Kind: res[0].Kind, Policy: res[0].Policy, Alpha: res[0].Alpha, Splits: len(res),
-		FirstLo: res[0].FalseAcceptLo, FirstHi: res[0].FalseAcceptHi, Bars: res[0].Bars}
+		FirstLo: res[0].FalseAcceptLo, FirstHi: res[0].FalseAcceptHi, Bars: res[0].Bars, Untestable: res[0].Untestable}
 	var spent float64
 	var tasks, correct, over int
 	for _, r := range res {
