@@ -30,11 +30,8 @@ type NotVerified struct {
 	Need   int    `json:"need"`
 }
 
-// Why pattern mode refuses.
-const (
-	ReasonTooFewWrong = "too few labelled wrong answers"
-	ReasonNoPattern   = "no pattern separates right from wrong"
-)
+// ReasonNoPattern is why pattern mode refuses with enough data; ReasonTooFewWrong is the other.
+const ReasonNoPattern = "no pattern separates right from wrong"
 
 // Family is every candidate pattern: 1 to 3 features from checks and agreements,
 // at most one of them an agreement. Sorted, so the family never depends on map order.
