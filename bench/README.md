@@ -97,3 +97,6 @@ One JSON line per (task, head) candidate:
   Clopper-Pearson interval. The table shows the mean over splits, the first seed's interval,
   the worst split and the share of splits over alpha, then refusal, cost per task and cost per
   correct accepted answer (`n/a` when none was correct). `--json` adds every split.
+
+The pilot's public answers (HumanEval+, MBPP+, GSM8K, RAGTruth) are rebuilt into these rows by the
+scripts in `bench/aver/`; see its README for sources, licences and prices.
