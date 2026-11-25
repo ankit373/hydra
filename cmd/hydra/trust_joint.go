@@ -97,13 +97,7 @@ func buildJoint(answers []evalset.Answer, domain string) []jointDomain {
 		if domain != "" && d != domain {
 			continue
 		}
-		// One verdict per check on this answer: a check that ran twice passed
-		// only if it passed both times, the same rule as a span's verdict.
-		passed := map[string]bool{}
-		for _, c := range a.Checks {
-			prev, seen := passed[c.Check]
-			passed[c.Check] = c.Passed && (!seen || prev)
-		}
+		passed := a.ByCheck()
 		names := make([]string, 0, len(passed))
 		for n := range passed {
 			names = append(names, n)
