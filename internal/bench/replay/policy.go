@@ -28,11 +28,15 @@ type Policy interface {
 // Options configure a policy. A baseline that has no use for alpha ignores it.
 type Options struct {
 	Alpha float64
+	Delta float64 // chance a calibrated bound is wrong, for the AVER policies
+	Rule  string  // how the AVER policies split alpha over candidates, from "name:rule"
 	Check string
 }
 
 var policies = map[string]func(Options) (Policy, error){
-	"always_strongest": func(Options) (Policy, error) { return &alwaysStrongest{}, nil },
+	"always_strongest":     func(Options) (Policy, error) { return &alwaysStrongest{}, nil },
+	"aver_product":         newAverProduct(false),
+	"aver_product_perhead": newAverProduct(true),
 	"first_check_pass": func(o Options) (Policy, error) {
 		if o.Check == "" {
 			return nil, errors.New("first_check_pass needs its primary check named (bench replay --check)")
@@ -51,12 +55,18 @@ func Names() []string {
 	return names
 }
 
-// New makes a fresh, uncalibrated policy.
+// New makes a fresh, uncalibrated policy. An AVER policy takes its spending
+// rule as a suffix, aver_product_perhead:bonferroni; spend is the default.
 func New(name string, o Options) (Policy, error) {
-	mk, ok := policies[name]
+	base, rule, _ := strings.Cut(name, ":")
+	mk, ok := policies[base]
 	if !ok {
 		return nil, fmt.Errorf("no policy %q (known: %s)", name, strings.Join(Names(), ", "))
 	}
+	if rule != "" && !strings.HasPrefix(base, "aver_") {
+		return nil, fmt.Errorf("policy %q takes no spending rule", base)
+	}
+	o.Rule = rule
 	return mk(o)
 }
 

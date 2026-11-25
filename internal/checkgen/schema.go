@@ -15,12 +15,14 @@ import (
 var schemaTypes = map[string]string{"string": "string", "number": "number", "integer": "number", "boolean": "bool", "array": "list"}
 
 // schemaRead is every keyword SchemaFields reads; annotations change nothing, so they pass silently.
-var schemaRead = []string{"type", "properties", "required", "$schema", "$id", "title", "description"}
+var schemaRead = []string{"type", "properties", "required", "pattern", "format", "$schema", "$id", "title", "description"}
 
 type schemaNode struct {
 	Type       json.RawMessage `json:"type"`
 	Properties json.RawMessage `json:"properties"`
 	Required   []string        `json:"required"`
+	Pattern    string          `json:"pattern"`
+	Format     string          `json:"format"`
 	props      []schemaProp
 }
 
@@ -63,7 +65,7 @@ func schemaField(name string, raw json.RawMessage, required bool, unknown map[st
 		return nil, fmt.Errorf("schema: %s: %w", name, err)
 	}
 	if t != "object" {
-		return []Field{newSchemaField(name, t, required)}, nil
+		return []Field{newSchemaField(name, n, t, required, unknown)}, nil
 	}
 	var out []Field
 	for _, p := range n.props {
@@ -79,14 +81,26 @@ func schemaField(name string, raw json.RawMessage, required bool, unknown map[st
 		if err != nil {
 			return nil, fmt.Errorf("schema: %s.%s: %w", name, child, err)
 		}
-		out = append(out, newSchemaField(name+"."+child, ct, required && slices.Contains(n.Required, child)))
+		out = append(out, newSchemaField(name+"."+child, c, ct, required && slices.Contains(n.Required, child), unknown))
 	}
 	return out, nil
 }
 
 // newSchemaField marks strings and numbers as copied from the source; Generate drops that with no source.
-func newSchemaField(name, t string, required bool) Field {
-	return Field{Name: name, Type: t, Required: required, FromSource: t == "string" || t == "number"}
+// A string's pattern, or its format where a pattern is known for it, is held to a regular expression;
+// one Go's RE2 cannot compile is reported as a keyword not read, not guessed at.
+func newSchemaField(name string, n schemaNode, t string, required bool, unknown map[string]bool) Field {
+	f := Field{Name: name, Type: t, Required: required, FromSource: t == "string" || t == "number"}
+	if t != "string" {
+		return f
+	}
+	if f.Pattern = n.Pattern; f.Pattern == "" {
+		f.Pattern = schemaFormats[n.Format]
+	}
+	if _, err := anchored(f.Pattern); err != nil {
+		f.Pattern, unknown["pattern"] = "", true
+	}
+	return f
 }
 
 func readNode(raw []byte, unknown map[string]bool) (schemaNode, error) {

@@ -43,6 +43,10 @@ const (
 	KindCheck  = "check"
 )
 
+// GraderArm is the name run.json gives the second model the grader may call. It is
+// built with the arms but never scheduled, so it answers no item of its own.
+const GraderArm = "grader"
+
 // ArmConfig is what run.json freezes about an arm.
 type ArmConfig struct {
 	Kind      string   `json:"kind"`   // KindDirect or KindCheck
@@ -85,12 +89,25 @@ func ParseModel(spec string) (prov, model string, err error) {
 	return prov, model, nil
 }
 
+// ParseGrader is ParseModel that also takes "ollama:<model id>": a model on this machine, free.
+func ParseGrader(spec string) (prov, model string, err error) {
+	if p, m, ok := strings.Cut(spec, ":"); ok && p == "ollama" && m != "" && !strings.ContainsAny(m, "<> ") {
+		return p, m, nil
+	}
+	return ParseModel(spec)
+}
+
 // headFor builds the head a direct arm calls. The executor sends Meta["model"], so
 // any enabled model is reachable whatever the router's own heads are.
 func headFor(spec string) (provider.Head, string, error) {
-	prov, model, err := ParseModel(spec)
+	prov, model, err := ParseGrader(spec)
 	if err != nil {
 		return provider.Head{}, "", err
+	}
+	if prov == "ollama" {
+		id := "bench/ollama/" + model
+		return provider.Head{ID: id, Name: id, Provider: "local", Source: "port", Endpoint: provider.OllamaHost(),
+			LocalOnly: true, AuthReady: true, Meta: map[string]string{"model": model}}, model, nil
 	}
 	id := "bench/" + prov + "/" + model
 	return provider.Head{ID: id, Name: id, Provider: prov, Source: "env", Meta: map[string]string{"model": model}}, model, nil

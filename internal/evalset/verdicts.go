@@ -227,6 +227,17 @@ func VerdictBySpan(path string) (map[string]bool, error) {
 	return out, nil
 }
 
+// ByCheck is one verdict per check. A check that ran twice passed only if it
+// passed both times, the same rule as a span's verdict.
+func (a Answer) ByCheck() map[string]bool {
+	out := make(map[string]bool, len(a.Checks))
+	for _, c := range a.Checks {
+		prev, seen := out[c.Check]
+		out[c.Check] = c.Passed && (!seen || prev)
+	}
+	return out
+}
+
 func (a Answer) passed() bool {
 	if a.Truth != nil {
 		return a.Truth.Outcome == OutcomeCorrect

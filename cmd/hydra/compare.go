@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,25 +47,43 @@ type comparison struct {
 	Ahead    string        `json:"ahead,omitempty"`
 	MoreEach int           `json:"more_each,omitempty"`
 	Verdict  string        `json:"verdict"`
+	// Basis says where the numbers came from when it is not the record; Replay
+	// is set for a replayed sample.
+	Basis  string        `json:"basis,omitempty"`
+	Replay *replayResult `json:"replay,omitempty"`
 }
 
 func cmdCompare() *cobra.Command {
 	var kind string
-	var jsonOut bool
+	var jsonOut, yes bool
+	var replay int
+	var maxCost float64
 	cmd := &cobra.Command{
 		Use:   "compare <head-a> <head-b> --kind <kind>[.<area>]",
 		Short: "Two heads side by side on one kind of work, from the record",
 		Long: "Reads each head's checked answers in one kind of work from the calibration\n" +
 			"record. Calls no model. A head is called ahead only when its 95% lower bound\n" +
-			"is above the other's upper bound, judged on the record since any change.",
+			"is above the other's upper bound, judged on the record since any change.\n\n" +
+			"The record holds only what each head happened to be given. --replay N sends up to N of the\n" +
+			"newest stored tasks of the kind to both heads and runs each task's check again: ground, and\n" +
+			"generated checks whose spec is stored. Other tasks are skipped and counted. It prints the\n" +
+			"worst-case cost and asks first unless --yes, and stops before a task that could pass\n" +
+			"--max-cost. The answers are filed, so the replay adds to the record.",
 		Args: cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cc *cobra.Command, args []string) error {
 			k, err := trust.ParseKind(kind)
 			if err != nil {
 				return err
 			}
 			if args[0] == args[1] {
 				return errors.New("compare needs two different heads")
+			}
+			if replay < 0 {
+				return errors.New("--replay needs a number of tasks, 1 or more")
+			}
+			if replay > 0 {
+				return compareReplay(cc.Context(), replayArgs{kind: k, heads: [2]string{args[0], args[1]}, n: replay,
+					yes: yes, maxCost: maxCost, maxCostSet: cc.Flags().Changed("max-cost"), jsonOut: jsonOut})
 			}
 			cal, err := trust.New(trust.DefaultPath())
 			if err != nil {
@@ -83,6 +102,9 @@ func cmdCompare() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&kind, "kind", "", "kind of work, <kind>[.<area>]: "+strings.Join(trust.Kinds, ", "))
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "print the comparison as JSON")
+	cmd.Flags().IntVar(&replay, "replay", 0, "send N stored tasks of this kind to both heads and run their checks again, instead of reading the record")
+	cmd.Flags().BoolVar(&yes, "yes", false, "with --replay, do not ask before spending")
+	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "with --replay, stop before a task that could take the spend past this many USD (default policy.yaml max_cost_usd)")
 	_ = cmd.MarkFlagRequired("kind")
 	return cmd
 }
@@ -117,6 +139,13 @@ func compareHeads(cal *trust.Calibrator, kind, a, b string) (comparison, error) 
 		side.SinceLower, side.SinceUpper, _ = stats.Wilson(side.SincePassed, side.SinceChecked, stats.Z95)
 		c.Heads = append(c.Heads, side)
 	}
+	c.decide()
+	return c, nil
+}
+
+// decide sets the verdict from the bounds since any change: ahead only when one
+// head's lower bound is above the other's upper bound.
+func (c *comparison) decide() {
 	x, y := c.Heads[0], c.Heads[1]
 	switch {
 	case x.SinceChecked == 0 || y.SinceChecked == 0:
@@ -129,7 +158,6 @@ func compareHeads(cal *trust.Calibrator, kind, a, b string) (comparison, error) 
 		c.Verdict = "no_clear_difference"
 		c.MoreEach = moreToSeparate(x, y)
 	}
-	return c, nil
 }
 
 // moreToSeparate is how many more answers each head would need for the
@@ -163,8 +191,8 @@ func moreToSeparate(x, y compareSide) int {
 }
 
 func printComparison(c comparison) {
-	fmt.Fprintf(stdout, "\n  %s  %s\n\n", cortexStyle.Render(c.Kind),
-		dimStyle.Render("checked answers from the record, 95% bounds"))
+	basis := cmp.Or(c.Basis, "checked answers from the record, 95% bounds")
+	fmt.Fprintf(stdout, "\n  %s  %s\n\n", cortexStyle.Render(c.Kind), dimStyle.Render(basis))
 	fmt.Fprintf(stdout, "  %-28s %8s %6s %7s   %-26s %s\n",
 		"Head", "checked", "pass", "lower", "since change", "cost/checked")
 	fmt.Fprintln(stdout, "  "+strings.Repeat("─", 96))
@@ -196,6 +224,10 @@ func printComparison(c comparison) {
 			more = fmt.Sprintf("about %d more checked answers each would tell, if the rates hold", c.MoreEach)
 		}
 		fmt.Fprintf(stdout, "  No clear difference yet: %s.\n", more)
+	}
+	if c.Replay != nil {
+		fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(replayFooter(*c.Replay)))
+		return
 	}
 	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(
 		"Judged on the record since any change. Cost per checked answer is not joined to the record yet."))

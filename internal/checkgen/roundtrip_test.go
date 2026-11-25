@@ -4,6 +4,7 @@ package checkgen
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -154,5 +155,32 @@ func TestFieldVerdicts_MergeBothChecks(t *testing.T) {
 	}
 	if only, merged := MergeFields([]Result{fields}); merged || len(only) != 6 || only[0].Status != FieldOK {
 		t.Errorf("fields check alone = %q, merged=%v; want its own list unchanged", statuses(only), merged)
+	}
+}
+
+// A caller with the field list and the source can run the round trip without a spec (#2013).
+func TestJudgeRoundtrip_ComparesRequiredFieldsAndNamesAnUnreadableReply(t *testing.T) {
+	fields := []Field{{Name: "city", Type: "string", Required: true}, {Name: "day", Type: "string"}}
+	reply := func(s string) func(context.Context, string) (string, error) {
+		return func(_ context.Context, prompt string) (string, error) {
+			if !strings.Contains(prompt, "city (string), day (string)") || !strings.Contains(prompt, "SOURCE") {
+				t.Errorf("prompt %q does not list the fields and carry the source", prompt)
+			}
+			return s, nil
+		}
+	}
+	got, err := JudgeRoundtrip(context.Background(), fields, "visit Lisbon", `{"city": "Lisbon"}`, reply(`{"city": "lisbon"}`))
+	if err != nil || statuses(got) != "city=agreed day=not_compared" {
+		t.Fatalf("agreeing reply: %v, %v", statuses(got), err)
+	}
+	got, err = JudgeRoundtrip(context.Background(), fields, "visit Lisbon", `{"city": "Lisbon"}`, reply(`{"city": "Porto"}`))
+	if err != nil || statuses(got) != "city=differs day=not_compared" {
+		t.Fatalf("differing reply: %v, %v", statuses(got), err)
+	}
+	if _, err := JudgeRoundtrip(context.Background(), fields, "x", `{"city": "Lisbon"}`, reply("no idea")); !errors.Is(err, ErrRoundtripReply) {
+		t.Errorf("an unreadable reply: err = %v, want ErrRoundtripReply", err)
+	}
+	if got, err := JudgeRoundtrip(context.Background(), fields, "x", "not json", reply("{}")); got != nil || err != nil {
+		t.Errorf("an answer that is not an object: %v, %v; want none", got, err)
 	}
 }
