@@ -190,14 +190,19 @@ func (s *snips) secondOpinion(ctx context.Context, fields []string, text, answer
 		return secondOpinion{}, nil
 	}
 	list := make([]checkgen.Field, len(fields))
+	asked := false
 	for i, f := range fields {
 		list[i] = checkgen.Field{Name: f, Type: "string", FromSource: true, Required: given(got[f])}
+		asked = asked || list[i].Required
+	}
+	out := secondOpinion{ran: true, good: map[string]bool{}}
+	if !asked {
+		return out, nil // the answer gave no field, so there is nothing to confirm or pay for
 	}
 	zero := 0.0
 	rt, err := checkgen.JudgeRoundtrip(ctx, list, text, answer, func(ctx context.Context, prompt string) (string, error) {
 		return ask(ctx, executor.Request{Prompt: prompt, Temperature: &zero, MaxTokens: snipsAnswerTokens})
 	})
-	out := secondOpinion{ran: true, good: map[string]bool{}}
 	if errors.Is(err, checkgen.ErrRoundtripReply) {
 		return out, nil
 	}

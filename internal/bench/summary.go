@@ -223,7 +223,8 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		order[id] = i
 	}
 	scored := map[pairKey]Result{}
-	pairSpend, armSpend, graderSpend := map[pairKey]float64{}, map[string]float64{}, map[string]float64{}
+	pairSpend, pairGrader := map[pairKey]float64{}, map[pairKey]float64{}
+	armSpend, graderSpend := map[string]float64{}, map[string]float64{}
 	var e Execution
 	for _, r := range rows {
 		if _, ok := order[r.ItemID]; !ok {
@@ -234,6 +235,7 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		armSpend[r.Arm] += r.CostUSD
 		if r.Grader {
 			graderSpend[r.Arm] += r.CostUSD
+			pairGrader[pairKey{r.ItemID, r.Arm}] += r.CostUSD
 		}
 		if r.Retryable {
 			e.SpendRows++
@@ -250,7 +252,7 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 	e.WallSeconds = e.End.Sub(e.Start).Seconds()
 	// A scored pair costs everything billed for it, retries and earlier attempts included.
 	for k, r := range scored {
-		r.CostUSD = pairSpend[k]
+		r.CostUSD, r.graderUSD = pairSpend[k], pairGrader[k]
 		scored[k] = r
 	}
 	s := Summary{Schema: summarySchema, RunID: run.ID, Tier: run.Tier, Breadcrumb: run.Crumb,
@@ -271,6 +273,7 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		byArm[OracleArm] = oracleRows(byArm)
 		for _, r := range byArm[OracleArm] {
 			armSpend[OracleArm] += r.CostUSD
+			graderSpend[OracleArm] += r.graderUSD
 		}
 	}
 	for _, rs := range byArm {

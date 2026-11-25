@@ -250,3 +250,34 @@ func TestPlan_GraderModelIsFrozenIntoTheRun(t *testing.T) {
 		t.Error("an arm may not take the grader's name")
 	}
 }
+
+// The oracle arm keeps each item's best row; its cost without the second model leaves
+// out the grader calls those rows carried, as every other arm's does.
+func TestSummarize_OracleSeparatesTheGradersSpend(t *testing.T) {
+	exec := newFakeExec()
+	r := graderRunner(t, 6, exec, "frontier", "cheapest")
+	o, err := r.Execute(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Report(o.Dir, r.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oracle := s.Arms[OracleArm]
+	if math.Abs(oracle.GraderCostUSD-6*0.004) > 1e-9 {
+		t.Errorf("oracle grader cost %v, want one $0.004 grader call per item", oracle.GraderCostUSD)
+	}
+}
+
+// A second model that breaks the contract (estimated tokens) aborts the run like an arm would.
+func TestExecute_GraderContractViolationAborts(t *testing.T) {
+	exec := newFakeExec()
+	r := graderRunner(t, 4, exec, "frontier")
+	exec.set(graderHead, "*", reply{answer: "agrees", estimated: true})
+	_, err := r.Execute(context.Background())
+	var ce *ContractError
+	if !errors.As(err, &ce) || ce.Arm != GraderArm {
+		t.Fatalf("err = %v, want a contract error on the grader", err)
+	}
+}

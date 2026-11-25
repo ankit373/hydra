@@ -45,6 +45,8 @@ type Result struct {
 	LatencyInvalid bool `json:"latency_invalid,omitempty"`
 	// Retryable rows record spend only; resume asks again and the summary keeps the last.
 	Retryable bool `json:"retryable,omitempty"`
+	// graderUSD is the part of CostUSD the second model billed, set by Summarize; never written.
+	graderUSD float64
 }
 
 type itemsHeader struct {

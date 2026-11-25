@@ -118,8 +118,12 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	for _, row := range rows {
 		spent += row.CostUSD
 		done[pairKey{row.ItemID, row.Arm}] = !row.Retryable
+		arm := row.Arm
+		if row.Grader {
+			arm = GraderArm // contract keys the second model's calls under its own name
+		}
 		for _, c := range row.Calls {
-			if k := row.Arm + "/" + c.Head; c.Model != "" && models[k] == "" {
+			if k := arm + "/" + c.Head; c.Model != "" && models[k] == "" {
 				models[k] = c.Model
 			}
 		}
@@ -262,8 +266,13 @@ func (r *Runner) one(ctx context.Context, arm, grader Arm, p pair, budget *Budge
 		row.Retryable = att.transient
 		return row, nil
 	}
-	g, err := r.grade(ctx, grader, p, att.Answer, budget, spender(true))
+	g, err := r.grade(ctx, grader, p, att.Answer, budget, models, spender(true))
 	var ge *GraderError
+	var ce *ContractError
+	if errors.As(err, &ce) {
+		row.ErrKind, row.Retryable, row.Detail = "contract", true, ce.What
+		return row, ce
+	}
 	if errors.As(err, &ge) {
 		// Like an arm's own transport error: a flaky second model says nothing about the item.
 		row.ErrKind, row.Retryable, row.Detail = ge.Kind, ge.Transient, ge.Error()
@@ -281,17 +290,22 @@ func (r *Runner) one(ctx context.Context, arm, grader Arm, p pair, budget *Budge
 }
 
 // grade is the suite's grade, with the grader's second model behind it when the suite can use one.
-func (r *Runner) grade(ctx context.Context, grader Arm, p pair, answer string, budget *Budget, spend func(Call) error) (Grade, error) {
+// The second model's calls are held to the same contract as an arm's, under GraderArm.
+func (r *Runner) grade(ctx context.Context, grader Arm, p pair, answer string, budget *Budget,
+	models map[string]string, spend func(Call) error) (Grade, error) {
 	sg, ok := r.Suite.(SecondGrader)
 	if grader == nil || !ok {
 		return r.Suite.Grade(ctx, p.Item, answer)
 	}
 	ask := func(ctx context.Context, req executor.Request) (string, error) {
 		att, err := grader.Call(ctx, p.Item, req, budget, spend)
-		switch {
-		case err != nil:
+		if err != nil {
 			return "", err
-		case att.ErrKind != "":
+		}
+		if what := contract(GraderArm, att, req.MaxTokens, models); what != "" {
+			return "", &ContractError{Arm: GraderArm, Item: p.Item.ID, What: what}
+		}
+		if att.ErrKind != "" {
 			return "", &GraderError{Kind: att.ErrKind, Transient: att.transient}
 		}
 		return att.Answer, nil

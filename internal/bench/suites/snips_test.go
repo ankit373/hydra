@@ -162,3 +162,21 @@ func TestExtractionSuite_SecondModelFailureIsPassedUp(t *testing.T) {
 		t.Fatalf("err = %v, want the grader's own", err)
 	}
 }
+
+// An answer that gives no field has nothing to confirm, so the second model is not asked.
+func TestExtractionSuite_NoFieldGivenAsksNoSecondModel(t *testing.T) {
+	s, items := loadFixture(t, "snips")
+	g, err := s.(bench.SecondGrader).GradeWithSecond(context.Background(), items[1], `{}`,
+		func(context.Context, executor.Request) (string, error) {
+			t.Fatal("asked the second model about an empty answer")
+			return "", nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for kind, f := range g.Fields {
+		if !f.Second || f.WrongFlaggedSecond != f.Wrong {
+			t.Errorf("%s: %+v, want every missing field flagged with the second model too", kind, f)
+		}
+	}
+}
