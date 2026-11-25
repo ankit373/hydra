@@ -27,8 +27,12 @@ const (
 // no history of pauses to read it from. A policy value, not a measurement.
 const defaultTurnsLeft = 4
 
-// maxRequestTimes bounds the request times kept per conversation.
-const maxRequestTimes = 200
+// maxRequestTimes bounds the request times kept per conversation, and
+// maxConversations how many conversations a long-running server remembers.
+const (
+	maxRequestTimes  = 200
+	maxConversations = 1000
+)
 
 // validSwap reports whether mode is one of the three; empty is the default.
 func validSwap(mode string) error {
@@ -84,7 +88,10 @@ func (c *compactor) since(conv string) (time.Duration, []time.Time, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
-	times := c.requests[conv]
+	times, ok := c.requests[conv]
+	if !ok && len(c.requests) >= maxConversations {
+		c.forgetOldest()
+	}
 	var d time.Duration
 	if len(times) > 0 {
 		d = now.Sub(times[len(times)-1])
@@ -97,6 +104,19 @@ func (c *compactor) since(conv string) (time.Duration, []time.Time, bool) {
 	}
 	c.requests[conv] = times
 	return d, prior, known
+}
+
+// forgetOldest drops the conversation whose last request is oldest. The caller
+// holds c.mu. Linear, and only when a new conversation arrives at the cap.
+func (c *compactor) forgetOldest() {
+	var oldest string
+	var at time.Time
+	for conv, times := range c.requests {
+		if last := times[len(times)-1]; oldest == "" || last.Before(at) {
+			oldest, at = conv, last
+		}
+	}
+	delete(c.requests, oldest)
 }
 
 // apply returns the messages to send and what was swapped, nil when nothing was.
