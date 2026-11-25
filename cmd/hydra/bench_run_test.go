@@ -69,7 +69,7 @@ func benchSuiteFixture(t *testing.T, suite string, files []string, answer, maxUS
 		t.Fatal(err)
 	}
 	var lock strings.Builder
-	fmt.Fprintf(&lock, "[%s]\nrevision = %q\nlicence = \"x\"\nlicence_verified = \"fixture, 2026-11-05\"\n", suite, ds.Revision)
+	fmt.Fprintf(&lock, "[%s]\npublic_since = 2020\nrevision = %q\nlicence = \"x\"\nlicence_verified = \"fixture, 2026-11-05\"\n", suite, ds.Revision)
 	for _, f := range ds.Files {
 		fmt.Fprintf(&lock, "[[%s.file]]\nname = %q\nurl = %q\nsha256 = %q\n", suite, f.Name, f.URL, f.SHA256)
 	}

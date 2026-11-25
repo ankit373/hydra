@@ -207,6 +207,10 @@ func attemptMeta(a Attempt) map[string]any {
 	if a.Rank > 0 {
 		m["rank"] = a.Rank
 	}
+	// The full text, stderr and all; the table shows only executor.Reason.
+	if a.Err != nil {
+		m["error"] = a.Err.Error()
+	}
 	if len(m) == 0 {
 		return nil
 	}

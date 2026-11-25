@@ -132,15 +132,8 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	// Non-git workspaces: .hydra-bak on the FIRST edit only. It is internal/review's
 	// diff baseline, "what this file looked like before Hydra touched it", and is
 	// deliberately NOT what rollback restores: that is this edit's own snapshot.
-	backup := req.File + ".hydra-bak"
-	createdBackup := false
-	if resolved.GitRoot == "" && origExisted && !fileExists(backup) {
-		// 0600: the backup is a verbatim copy of the user's source, sitting
-		// beside it until the edit is approved. It was 0644, the same defect
-		// #273 fixed for runlog's edit snapshots, still present here.
-		_ = os.WriteFile(backup, []byte(origContent), 0o600)
-		createdBackup = true
-	}
+	backup := BackupPath(req.File)
+	createdBackup := resolved.GitRoot == "" && origExisted && WriteBackup(backup, origContent)
 	cleanupBackup := func() {
 		if createdBackup {
 			_ = os.Remove(backup)
@@ -338,13 +331,13 @@ func (e *editRun) apply(ctx context.Context, r *dispatch.Result) (*Result, strin
 			if errors.Is(verr, ErrValidatorUnavailable) {
 				// Not the head's fault and not a verdict, so nothing is
 				// recorded: validatorPassed stays nil and says so.
-				rollback(req.File, e.origContent, e.origExisted)
+				Rollback(req.File, e.origContent, e.origExisted)
 				return fail(verr.Error(), nil, true), "", nil
 			}
 			if verr != nil {
 				// Interrupted, so nothing was learned about this head. Recording
 				// it would teach the calibrator that a Ctrl+C is broken code.
-				rollback(req.File, e.origContent, e.origExisted)
+				Rollback(req.File, e.origContent, e.origExisted)
 				return nil, "", fmt.Errorf("validating %s: %w", req.File, verr)
 			}
 			validatorPassed = boolp(vrc == 0)
@@ -358,7 +351,7 @@ func (e *editRun) apply(ctx context.Context, r *dispatch.Result) (*Result, strin
 				Passed: vrc == 0, Detail: firstLine(vout),
 			})
 			if vrc != 0 {
-				rollback(req.File, e.origContent, e.origExisted)
+				Rollback(req.File, e.origContent, e.origExisted)
 				return fail("validation_failed: "+firstLine(vout), validatorPassed, true), vout, nil
 			}
 		}
@@ -373,7 +366,7 @@ func (e *editRun) apply(ctx context.Context, r *dispatch.Result) (*Result, strin
 	// as an applied one.
 	if e.origExisted {
 		if why, over := e.fp.DiffExceeded(added, removed, strings.Count(e.origContent, "\n")+1); over {
-			rollback(req.File, e.origContent, e.origExisted)
+			Rollback(req.File, e.origContent, e.origExisted)
 			return fail(why, validatorPassed, true), "", nil
 		}
 	}
@@ -645,6 +638,19 @@ func readFile(path string) (content string, existed bool) {
 	return string(raw), true
 }
 
+// BackupPath is where a non-git edit keeps the file's first-edit baseline.
+func BackupPath(file string) string { return file + ".hydra-bak" }
+
+// WriteBackup saves content as the baseline unless one is already there, and
+// reports whether this call wrote it. 0600: it is a verbatim copy of the user's
+// source (#273), and a stale one is never replaced by a later run (#1945).
+func WriteBackup(backup, content string) bool {
+	if fileExists(backup) {
+		return false
+	}
+	return os.WriteFile(backup, []byte(content), 0o600) == nil
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -728,7 +734,7 @@ func stripOuterFence(s string) string {
 	return strings.Join(lines[start:end+1], "\n")
 }
 
-// rollback puts back exactly what was on disk before this edit, which is the
+// Rollback puts back exactly what was on disk before this edit, which is the
 // only thing a rollback may mean.
 //
 // It used to ask git or a .hydra-bak instead, and both answer a different
@@ -738,7 +744,7 @@ func stripOuterFence(s string) string {
 // a second edit has been accepted it restores the file to before the first and
 // loses the accepted one too. The correct bytes were a parameter the whole
 // time.
-func rollback(file, origContent string, origExisted bool) {
+func Rollback(file, origContent string, origExisted bool) {
 	if !origExisted {
 		_ = os.Remove(file)
 		return
