@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/aver"
 	"github.com/ankit373/hydra/internal/bench"
 	"github.com/ankit373/hydra/internal/bench/replay"
 	"github.com/ankit373/hydra/internal/bench/suites"
@@ -124,6 +125,7 @@ func cmdBenchReplay() *cobra.Command {
 	var candidates, check string
 	var policies []string
 	var alphas []float64
+	var delta float64
 	var splits int
 	var jsonOut bool
 	cmd := &cobra.Command{
@@ -150,7 +152,7 @@ func cmdBenchReplay() *cobra.Command {
 			for i := range seeds {
 				seeds[i] = uint64(i)
 			}
-			rep, err := replay.Run(rows, replay.Config{Policies: policies, Alphas: alphas, Seeds: seeds, Check: check})
+			rep, err := replay.Run(rows, replay.Config{Policies: policies, Alphas: alphas, Seeds: seeds, Check: check, Delta: delta})
 			if err != nil {
 				return err
 			}
@@ -166,6 +168,7 @@ func cmdBenchReplay() *cobra.Command {
 	f.StringSliceVar(&policies, "policy", []string{"always_strongest", "first_check_pass"},
 		"policies to replay: "+strings.Join(replay.Names(), ", "))
 	f.Float64SliceVar(&alphas, "alpha", []float64{0.01, 0.05, 0.10}, "target false accept per task")
+	f.Float64Var(&delta, "delta", aver.DefaultDelta, "AVER policies: chance that any calibrated bound is wrong")
 	f.IntVar(&splits, "splits", 20, "random calibrate/test splits, seeded 0..n-1")
 	f.StringVar(&check, "check", "", "the primary check first_check_pass accepts on")
 	f.BoolVar(&jsonOut, "json", false, "print every split and summary as JSON")
@@ -367,10 +370,22 @@ func printDryRun(out io.Writer, s bench.Suite, run bench.Run,
 			}
 			worst += wc
 		}
+		if g, ok := arms[bench.GraderArm]; ok {
+			// One second-model call per answer, so as many as there are arms.
+			wc, err := g.WorstCaseUSD(req)
+			if err != nil {
+				return err
+			}
+			worst += wc * float64(len(run.ArmOrder))
+		}
 	}
-	fmt.Fprintf(out, "  %s: %d items × %d arms (%s) = %d calls, worst case $%.6f; dry run, nothing called\n",
+	grader := ""
+	if g, ok := run.Arms[bench.GraderArm]; ok {
+		grader = ", plus a second model per answer (" + g.Models[0] + ")"
+	}
+	fmt.Fprintf(out, "  %s: %d items × %d arms (%s) = %d calls%s, worst case $%.6f; dry run, nothing called\n",
 		run.Suite, len(run.ItemIDs), len(run.ArmOrder), strings.Join(run.ArmOrder, ","),
-		len(run.ItemIDs)*len(run.ArmOrder), worst)
+		len(run.ItemIDs)*len(run.ArmOrder), grader, worst)
 	return nil
 }
 
