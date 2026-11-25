@@ -62,7 +62,19 @@ func Table(sums []Summary) string {
 		fmt.Fprintf(&b, " Prices fetched %s.", priced.Format("2006-01-02"))
 	}
 	b.WriteString("\n\nCaveat: " + contamination + ".\n")
+	for _, line := range suiteLines(sums) {
+		b.WriteString(line + "\n")
+	}
 	return b.String()
+}
+
+// suiteLines is one public-since line per suite in sums, in first-seen order.
+func suiteLines(sums []Summary) []string {
+	var out []string
+	for _, s := range sums {
+		out = appendNew(out, publicSince(s.Breadcrumb))
+	}
+	return out
 }
 
 // DetectionTable is one row per (suite, arm) that graded a check, with its models;

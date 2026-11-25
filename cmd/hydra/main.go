@@ -38,6 +38,7 @@ import (
 	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/entropy"
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -4496,6 +4497,9 @@ func printSwarmResult(r *swarm.SwarmResult) {
 		fmt.Fprintf(stdout, "%s%-28s  %-10s  %7s  %7s  %8s\n",
 			winnerMark, a.Head.Name, statusStr, timeStr, scoreStr, costStr,
 		)
+		if a.Err != nil && a.Status != swarm.StatusCanceled {
+			fmt.Fprintf(stdout, "    %s\n", dimStyle.Render("↳ "+executor.Reason(a.Err)))
+		}
 	}
 
 	fmt.Fprintln(stdout, sep)

@@ -159,7 +159,7 @@ func TestRollback_RemovesAFileThatDidNotExistBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rollback(file, "", false)
+	Rollback(file, "", false)
 
 	if fileExists(file) {
 		t.Error("a file created by the edit survived rollback")
@@ -184,7 +184,7 @@ func TestRollback_PrefersThisEditsSnapshotOverAStaleBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rollback(file, "ACCEPTED BY THE PREVIOUS EDIT", true)
+	Rollback(file, "ACCEPTED BY THE PREVIOUS EDIT", true)
 
 	got, err := os.ReadFile(file)
 	if err != nil {
@@ -207,7 +207,7 @@ func TestRollback_RestoresTheInMemoryOriginal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rollback(file, "ORIGINAL", true)
+	Rollback(file, "ORIGINAL", true)
 
 	got, err := os.ReadFile(file)
 	if err != nil {
@@ -308,7 +308,7 @@ func TestRollback_DoesNotDiscardUncommittedWork(t *testing.T) {
 	if err := os.WriteFile(file, []byte("this does not compile\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rollback(file, precious, true)
+	Rollback(file, precious, true)
 
 	got, err := os.ReadFile(file)
 	if err != nil {
