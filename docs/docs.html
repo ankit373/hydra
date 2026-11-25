@@ -276,7 +276,7 @@
       <p class="sum">Pure Go, single static binary.</p>
       <div class="sub"><div class="lbl">Usage</div>
         <pre translate="no"><span class="c"># Homebrew (recommended)</span>
-brew install ankit373/hydra/hyctl
+brew trust ankit373/hydra &amp;&amp; brew install ankit373/hydra/hyctl
 
 <span class="c"># npm  ·  or run once, no install:  npx hyctl</span>
 npm install -g hyctl
@@ -353,7 +353,7 @@ hyctl dispatch --kind classification --check gen "is this ticket billing, bug or
 hyctl dispatch --kind extraction --check gen:fields "pull vendor, total and date as JSON: ..."   <span class="c"># a verdict on every field, each broken one listed</span>
 hyctl dispatch --check ground --require-pass "..."   <span class="c"># exit 0 passed, 1 a check failed, 2 a check could not run</span>
 hyctl dispatch --kind writing.support --source-only "reply to this customer: ... &lt;fenced policy&gt;"   <span class="c"># only what the docs say, or "the documents given do not cover this"</span>
-hyctl dispatch --schema invoice.schema.json "pull the invoice fields as JSON: ..."   <span class="c"># check every field the schema lists, no extra model call</span>
+hyctl dispatch --schema invoice.schema.json "pull the invoice fields as JSON: ..."   <span class="c"># check every field the schema lists, no extra model call; a string that breaks its pattern or format is marked bad_format</span>
 hyctl dispatch --schema tax-form.schema.json --max-fields 30 "pull every box from this form as JSON: ..."   <span class="c"># 90 fields: three calls, one merged object, checked field by field</span>
 
 <span class="c"># Serve the router to anything that speaks OpenAI</span>
@@ -991,15 +991,18 @@ hyctl trust benchmark        <span class="c"># measured SPRT numbers</span>
 hyctl trust joint            <span class="c"># how often two checks pass the same wrong answer</span></pre>
       </div>
       <div class="sub"><div class="lbl">Checks that fail together</div><p>Every verdict on an answer, from tests, a linter, a grounding check, a model vote or a person, is kept in one log. <span class="fx">hyctl trust joint</span> takes the answers that later turned out wrong and reports, per kind of work, how often each pair of checks passed the same one, next to the rate you would expect if they failed independently. A pair well above that rate is one check, not two. Below 20 shared wrong answers no rate is shown, because the 95% bound would be wider than the rate. Each check&rsquo;s rate is also watched for a change, such as a judge model swapped underneath, and a changed check shows when and its rate since.</p></div>
+      <div class="sub"><div class="lbl">Certified or not verified</div><p>Certified acceptance, which is still being built, marks each answer one of three ways: certified under independence (its checks&rsquo; evidence multiplied, after checks that fail together are counted once), certified under any dependence (a joint pass pattern), or not verified, with the reason: too few labelled wrong answers, no way to reach the bar, the budget, or no check for this kind of work. Once the certify path lands, the label and the numbers behind it go on the answer&rsquo;s span as a <span class="fx">certified</span> score. What alpha bounds is the chance of accepting a wrong answer, per task. It is never the chance that an accepted answer is wrong, which it does not bound.</p></div>
       <a class="more" href="/first-principles.html#calibration">See diagnostic power D derived →</a>
     </section>
 
     <section class="doc" id="compare">
       <h2><span class="cmd">hyctl compare</span> <span class="tagline">two models on your own kind of work</span></h2>
-      <p class="sum">Puts two models side by side for one kind of work, read from your own checked answers. It calls no model.</p>
+      <p class="sum">Puts two models side by side for one kind of work, read from your own checked answers. It calls no model, unless you ask it to rerun tasks with <span class="fx">--replay</span>.</p>
       <div class="sub"><div class="lbl">How it reads</div><p>For each model: how many of its answers were checked, how many passed, and the 95% lower bound on its pass rate (Wilson). If its record changed, the row also shows the record since that day. One model is called ahead only when its lower bound is above the other&rsquo;s upper bound, judged on the record since any change. Otherwise it says there is no clear difference yet, and roughly how many more checked answers each would need if the rates hold. Cost per checked answer shows as unknown for now, rather than a guess.</p></div>
+      <div class="sub"><div class="lbl">A fair sample: replay</div><p>The record only holds what each model happened to be given. <span class="fx">--replay N</span> sends up to N of the newest stored tasks of the kind to both models and runs each task's check again, so both answer the same tasks. It can rebuild <span class="fx">ground</span> and the generated checks whose spec is stored; other tasks are skipped and counted. It prints the worst-case cost and asks before spending unless you pass <span class="fx">--yes</span>, and it stops before a task that could take the spend past <span class="fx">--max-cost</span>. The answers are filed, so the replay adds to the record, and it prints the same table for that sample.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl compare claude-sonnet ollama/qwen3:4b <span class="fl">--kind</span> summary
-hyctl compare gpt-5 gemini-2.5-pro <span class="fl">--kind</span> extraction.invoices <span class="fl">--json</span></pre></div>
+hyctl compare gpt-5 gemini-2.5-pro <span class="fl">--kind</span> extraction.invoices <span class="fl">--json</span>
+hyctl compare claude-sonnet ollama/qwen3:4b <span class="fl">--kind</span> summary <span class="fl">--replay</span> 20</pre></div>
     </section>
 
     <section class="doc" id="graph-blast">

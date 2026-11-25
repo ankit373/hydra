@@ -46,6 +46,17 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   number, code (one token with a digit, or in capitals, like `INV-2041`) and text, since a
   check can catch wrong amounts and still miss a misread code. An answer that is not JSON
   is a format fail and adds no fields.
+- `grader_model = "<provider>:<model id>"` in a config adds a second model to the grade, for
+  a suite that can use one (snips). It re-extracts each answer's fields from the utterance, and
+  a field it reads differently is flagged, on top of the fields check. The table then adds, under
+  each field row, a `<arm> + second model` row with the catch rate and the cost per verified
+  field with it. The first row's cost leaves the second model's calls out, so the two compare.
+  It is unset by default, so no run pays for one it did not name. `ollama:<model>` uses the
+  local Ollama server (`$OLLAMA_HOST`) and costs nothing, for example `grader_model =
+  "ollama:qwen2.5:7b"` (the model has to be pulled first). A hosted one is `openrouter:` or
+  `bedrock:`, and needs a `[cutoffs]` entry and a price like any arm. Its calls count against
+  `--max-usd` and show in `--dry-run`. A second model that does not answer leaves that row
+  unscored, and the next `run` asks it again, as for an arm.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).
 
 ## replay
@@ -71,7 +82,27 @@ One JSON line per (task, head) candidate:
 - Heads are tried cheapest first, by mean cost on the calibration half.
 - Policies: `always_strongest` (the head most often correct on calibration, accepted unchecked)
   and `first_check_pass` (the cheapest answer whose `--check` passes).
+- `aver_product_perhead` and `aver_product` are certified acceptance (#1549): each verdict is an
+  e-value from a per-check bound on false passes (`hyctl trust certify-table`), and an answer is
+  accepted once their product reaches its candidate's bar, 1/(alpha w_j) for the j-th answer bought.
+  The weights are fixed from the head count before any answer is seen: `spend` (the default) gives
+  1/2, 1/4, ... and the last the rest; `bonferroni` gives 1/N and is refused past 3 heads. Name the
+  rule as a suffix, `--policy aver_product_perhead:bonferroni`; the table prints each policy's bars.
+  `aver_product_perhead` fits a bound per head, `aver_product` one pooled over heads. Checks run strongest evidence per
+  dollar first, a head that cannot reach the bar is not bought, and an answer stops as soon as the
+  bar is out of reach. Bounds hold with chance 1 - `--delta` (default 0.05).
+- `aver_pattern` certifies under any dependence: per head, it bounds how often a wrong answer
+  matches a pattern of up to 3 features (checks, plus at most one "at least m earlier answers
+  agree"), with delta split over every pattern and head, and accepts an answer matching the pattern
+  chosen on calibration. It buys heads in order without skipping, so agreement means the same on
+  both halves. Without enough wrong answers it refuses and says how many it would need, about
+  ln(patterns/delta) x bar.
+- In the AVER policies a check missing from `verdicts` did not run, unlike the older policies where
+  it did not pass: calibration only sees verdicts that exist, so a missing one has no calibrated e.
 - False accept per task is wrong accepted answers over all test tasks, with a two-sided 95%
   Clopper-Pearson interval. The table shows the mean over splits, the first seed's interval,
   the worst split and the share of splits over alpha, then refusal, cost per task and cost per
   correct accepted answer (`n/a` when none was correct). `--json` adds every split.
+
+The pilot's public answers (HumanEval+, MBPP+, GSM8K, RAGTruth) are rebuilt into these rows by the
+scripts in `bench/aver/`; see its README for sources, licences and prices.

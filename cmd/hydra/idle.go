@@ -257,10 +257,3 @@ func cmdIdleReplay() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "one JSON object with every row")
 	return cmd
 }
-
-func orUnknown(s string) string {
-	if s == "" {
-		return "not reported"
-	}
-	return s
-}

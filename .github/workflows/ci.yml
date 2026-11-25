@@ -261,7 +261,10 @@ jobs:
       # a new installer must be added to this list, not just written.
       - name: Lint shell scripts
         run: |
-          shellcheck --severity=error install.sh install-app.sh
+          shellcheck --severity=error install.sh install-app.sh bench/aver/run_evalplus.sh
+
+      - name: Test the AVER data prep
+        run: python3 -I -m unittest discover -s bench/aver
 
   # install.ps1's counterpart to the shellcheck job above. It runs on Windows
   # because that is where PowerShell's own parser lives, and because nobody

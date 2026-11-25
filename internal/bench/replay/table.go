@@ -24,6 +24,11 @@ func Table(rep Report) string {
 			100*s.OverAlpha, 100*s.Refusal, s.CostPerTask, dollars(s.CostPerCorrect))
 	}
 	w.Flush()
+	for _, s := range rep.Summaries {
+		if len(s.Bars) > 0 {
+			fmt.Fprintf(&b, "bars per candidate, %s %s alpha %.2f: %s\n", s.Kind, s.Policy, s.Alpha, bars(s.Bars))
+		}
+	}
 	fmt.Fprintf(&b, "seeds: %s\n", strings.Trim(fmt.Sprint(rep.Seeds), "[]"))
 	return b.String()
 }
@@ -33,4 +38,12 @@ func dollars(u USD) string {
 		return "n/a (none correct)"
 	}
 	return fmt.Sprintf("%.6f", float64(u))
+}
+
+func bars(b []float64) string {
+	parts := make([]string, len(b))
+	for i, x := range b {
+		parts[i] = fmt.Sprintf("%.4g", x)
+	}
+	return strings.Join(parts, ", ")
 }

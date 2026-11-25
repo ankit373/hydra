@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/ankit373/hydra/internal/aver"
 	"github.com/ankit373/hydra/internal/bench"
 	"github.com/ankit373/hydra/internal/stats"
 )
@@ -146,38 +147,40 @@ func CheapestFirst(cal []Row) []string {
 // Result is one (kind, policy, alpha, split). FalseAccept is wrong accepted over all
 // test tasks, with a two-sided 95% Clopper–Pearson interval.
 type Result struct {
-	Kind            string  `json:"kind"`
-	Policy          string  `json:"policy"`
-	Alpha           float64 `json:"alpha"`
-	Seed            uint64  `json:"seed"`
-	Tasks           int     `json:"tasks"`
-	Accepted        int     `json:"accepted"`
-	WrongAccepted   int     `json:"wrong_accepted"`
-	FalseAccept     float64 `json:"false_accept_per_task"`
-	FalseAcceptLo   float64 `json:"false_accept_lo"`
-	FalseAcceptHi   float64 `json:"false_accept_hi"`
-	Refusal         float64 `json:"refusal"`
-	SpentUSD        float64 `json:"spent_usd"`
-	CostPerTask     float64 `json:"cost_per_task_usd"`
-	CorrectAccepted int     `json:"correct_accepted"`
-	CostPerCorrect  USD     `json:"cost_per_correct_usd"`
+	Kind            string    `json:"kind"`
+	Policy          string    `json:"policy"`
+	Alpha           float64   `json:"alpha"`
+	Seed            uint64    `json:"seed"`
+	Tasks           int       `json:"tasks"`
+	Accepted        int       `json:"accepted"`
+	WrongAccepted   int       `json:"wrong_accepted"`
+	FalseAccept     float64   `json:"false_accept_per_task"`
+	FalseAcceptLo   float64   `json:"false_accept_lo"`
+	FalseAcceptHi   float64   `json:"false_accept_hi"`
+	Refusal         float64   `json:"refusal"`
+	SpentUSD        float64   `json:"spent_usd"`
+	CostPerTask     float64   `json:"cost_per_task_usd"`
+	CorrectAccepted int       `json:"correct_accepted"`
+	CostPerCorrect  USD       `json:"cost_per_correct_usd"`
+	Bars            []float64 `json:"bars,omitempty"` // per candidate, AVER policies only
 }
 
 // Summary folds one (kind, policy, alpha) over its splits. The interval is the
 // first seed's: splits share tasks, so their intervals do not combine.
 type Summary struct {
-	Kind             string  `json:"kind"`
-	Policy           string  `json:"policy"`
-	Alpha            float64 `json:"alpha"`
-	Splits           int     `json:"splits"`
-	MeanFalseAccept  float64 `json:"mean_false_accept_per_task"`
-	FirstLo          float64 `json:"first_split_lo"`
-	FirstHi          float64 `json:"first_split_hi"`
-	WorstFalseAccept float64 `json:"worst_false_accept_per_task"`
-	OverAlpha        float64 `json:"share_of_splits_over_alpha"`
-	Refusal          float64 `json:"refusal"`
-	CostPerTask      float64 `json:"cost_per_task_usd"`
-	CostPerCorrect   USD     `json:"cost_per_correct_usd"`
+	Kind             string    `json:"kind"`
+	Policy           string    `json:"policy"`
+	Alpha            float64   `json:"alpha"`
+	Splits           int       `json:"splits"`
+	MeanFalseAccept  float64   `json:"mean_false_accept_per_task"`
+	FirstLo          float64   `json:"first_split_lo"`
+	FirstHi          float64   `json:"first_split_hi"`
+	WorstFalseAccept float64   `json:"worst_false_accept_per_task"`
+	OverAlpha        float64   `json:"share_of_splits_over_alpha"`
+	Refusal          float64   `json:"refusal"`
+	CostPerTask      float64   `json:"cost_per_task_usd"`
+	CostPerCorrect   USD       `json:"cost_per_correct_usd"`
+	Bars             []float64 `json:"bars,omitempty"` // the first split's
 }
 
 // Report is everything one replay printed, seeds included so it can be repeated.
@@ -202,7 +205,8 @@ type Config struct {
 	Policies []string
 	Alphas   []float64
 	Seeds    []uint64
-	Check    string // first_check_pass's primary check
+	Check    string  // first_check_pass's primary check
+	Delta    float64 // AVER bound error; 0 means aver.DefaultDelta
 }
 
 // Run replays each kind on its own, since a check's evidence does not carry across kinds.
@@ -214,6 +218,12 @@ func Run(rows []Row, cfg Config) (Report, error) {
 		if !(a > 0 && a < 1) {
 			return Report{}, fmt.Errorf("replay: alpha %v is outside (0, 1)", a)
 		}
+	}
+	if cfg.Delta == 0 {
+		cfg.Delta = aver.DefaultDelta
+	}
+	if !(cfg.Delta > 0 && cfg.Delta < 1) {
+		return Report{}, fmt.Errorf("replay: delta %v is outside (0, 1)", cfg.Delta)
 	}
 	byKind := map[string][]Row{}
 	for _, r := range rows {
@@ -234,7 +244,7 @@ func Run(rows []Row, cfg Config) (Report, error) {
 			for _, alpha := range cfg.Alphas {
 				var res []Result
 				for _, seed := range cfg.Seeds {
-					r, err := replayOne(byKind[kind], byTask, name, Options{Alpha: alpha, Check: cfg.Check}, seed)
+					r, err := replayOne(byKind[kind], byTask, name, Options{Alpha: alpha, Delta: cfg.Delta, Check: cfg.Check}, seed)
 					if err != nil {
 						return Report{}, fmt.Errorf("replay: %s, %s: %w", kind, name, err)
 					}
@@ -274,6 +284,9 @@ func replayOne(rows []Row, byTask map[string][]Row, name string, opts Options, s
 		return Result{}, err
 	}
 	r.Kind, r.Policy, r.Alpha, r.Seed = rows[0].Kind, name, opts.Alpha, seed
+	if b, ok := p.(interface{ Bars() []float64 }); ok {
+		r.Bars = b.Bars()
+	}
 	return r, nil
 }
 
@@ -322,7 +335,7 @@ func perCorrect(spent float64, correct int) USD {
 // summarise pools spend and counts across splits; rates are means over splits.
 func summarise(res []Result) Summary {
 	s := Summary{Kind: res[0].Kind, Policy: res[0].Policy, Alpha: res[0].Alpha, Splits: len(res),
-		FirstLo: res[0].FalseAcceptLo, FirstHi: res[0].FalseAcceptHi}
+		FirstLo: res[0].FalseAcceptLo, FirstHi: res[0].FalseAcceptHi, Bars: res[0].Bars}
 	var spent float64
 	var tasks, correct, over int
 	for _, r := range res {

@@ -5291,7 +5291,7 @@ func cmdTrust() *cobra.Command {
 		Use:   "trust",
 		Short: "Confidence layer: source calibration and defect-cost (Trust Control Plane)",
 	}
-	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustOutcome(), cmdTrustReliability(), cmdTrustJoint(), cmdTrustDefect(),
+	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustOutcome(), cmdTrustReliability(), cmdTrustJoint(), cmdTrustCertifyTable(), cmdTrustDefect(),
 		cmdTrustStats(), cmdTrustExplain(), cmdTrustBenchmark())
 	return cmd
 }
