@@ -8,7 +8,7 @@ import (
 	"github.com/ankit373/hydra/internal/stats"
 )
 
-// MinSharedWrongPair bounds which pairs can be tested: fewer shared wrong answers and the pair is linked.
+// MinSharedWrongPair bounds which pairs can be tested; below it a pair is linked.
 const MinSharedWrongPair = 20
 
 // Group is checks of one (kind, head) whose false passes may go together, so
