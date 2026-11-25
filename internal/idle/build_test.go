@@ -66,7 +66,7 @@ func TestBuild_ConstraintsComeFromCodeNotModel(t *testing.T) {
 	if !slices.Equal(p.State.Files, turns.Files) {
 		t.Fatalf("files %v, want the transcript's", p.State.Files)
 	}
-	if p.Covers.To != 30 || p.Covers.Hash != coverHash(turns.Turns) || len(p.Notes) != 30 {
+	if p.Covers.To != 30 || p.Covers.Hash != CoverHash(turns.Turns) || len(p.Notes) != 30 {
 		t.Fatalf("covers %+v with %d notes", p.Covers, len(p.Notes))
 	}
 }

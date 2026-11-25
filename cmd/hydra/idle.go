@@ -19,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/payload"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/serve"
 	"github.com/ankit373/hydra/internal/sysinfo"
 )
 
@@ -191,4 +192,14 @@ func printIdleStatus(dir string) error {
 		}
 	}
 	return nil
+}
+
+// logCompacted records on the request's own run that a pack was sent, so
+// `hyctl trace` shows it beside the answer.
+func logCompacted(run, task string, c *serve.Compacted) {
+	_ = runlog.New(run).Append(runlog.Event{
+		TaskID: task, Kind: runlog.KindIdleUsed, Detail: c.Pack,
+		Meta: map[string]any{"pack": c.Pack, "probes": c.Probes, "probe_agree": c.ProbeAgree,
+			"tokens_before": c.TokensBefore, "tokens_after": c.TokensAfter},
+	})
 }

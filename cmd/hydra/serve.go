@@ -54,6 +54,9 @@ type serveRouter struct {
 	confidence     float64
 	maxEscalations int
 	cal            *trust.Calibrator
+
+	// compact sends a staged pack in place of the turns it covers; nil sends every request as it came.
+	compact *compactor
 }
 
 func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer, error) {
@@ -83,6 +86,9 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	runlog.DeclareRun(req.RequestID, opts.TaskID, prompt)
 	defer runlog.FinishRun(req.RequestID, opts.TaskID)
 
+	if ev != nil && ev.Compacted != nil {
+		logCompacted(req.RequestID, opts.TaskID, ev.Compacted)
+	}
 	res, err := r.d.Dispatch(ctx, prompt, opts)
 	if err != nil {
 		// Every head over the client's own ceiling is the request's limit, not
@@ -202,6 +208,8 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 	if err != nil {
 		return dispatch.Options{}, nil, err
 	}
+	conv := cmp.Or(req.Conversation, conversationKey(req.Messages))
+	msgs, swapped := r.compact.apply(req.Messages, conv, head)
 	opts := dispatch.Options{
 		TierHint:     tier,
 		Enum:         enum,
@@ -209,12 +217,12 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		LocalOnly:    r.localOnly,
 		MaxTokens:    req.MaxTokens,
 		Temperature:  req.Temperature,
-		Messages:     req.Messages,
+		Messages:     msgs,
 		Tools:        req.Tools,
 		ToolChoice:   req.ToolChoice,
 		OnStream:     streamEvents(req.OnEvent),
 		RunID:        req.RequestID,
-		Conversation: cmp.Or(req.Conversation, conversationKey(req.Messages)),
+		Conversation: conv,
 		Redact:       req.Redact,
 		Vault:        req.Vault,
 	}
@@ -236,6 +244,15 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		// The cache key does not cover the class, so a class-routed answer
 		// must neither be served from nor stored for an unclassed request.
 		opts.Domain, opts.NoCache = ev.TaskClass, true
+	}
+	// A pack stands in for turns the cache key still covers, so an answer given
+	// from it is neither stored for the full conversation nor read from there.
+	if swapped != nil {
+		if ev == nil {
+			ev = &serve.Evidence{}
+		}
+		ev.Compacted = swapped
+		opts.NoCache = true
 	}
 	// Only an unpinned route is ordered by an objective. The cache key does not
 	// cover one, so a client choosing it neither reads nor fills the cache.
@@ -528,6 +545,9 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := validSwap(cfg.Idle.Swap); err != nil {
+				return err
+			}
 			if cfg.Idle.Enabled {
 				go idleLoop(ctx, d, cfg.Idle)
 			}
@@ -535,6 +555,7 @@ func cmdServe() *cobra.Command {
 				d: d, defaultEnum: enum, objective: objective, implicit: implicitDefault(c, objective),
 				notice: newDeprecationNotice(stderr), defaultClass: defaultClass, localOnly: localOnly,
 				verifiers: verifiers, confidence: confidence, maxEscalations: maxEscalations, cal: cal,
+				compact: newCompactor(cfg.Idle.Swap),
 			}
 			printServeBanner(stdout, ln.Addr().String(), defaultRouting(enum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token),

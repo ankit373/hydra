@@ -97,3 +97,26 @@ func TestStatusFor_GradesEachKindOnce(t *testing.T) {
 		}
 	}
 }
+
+// A request that went out with a pack in place of its covered turns says so
+// in the header and in the body's hydra block, buffered or not.
+func TestChat_CompactedHeaderAndBody(t *testing.T) {
+	ev := &Evidence{Compacted: &Compacted{Pack: "conv-a/3", ProbeAgree: 9, Probes: 10, TokensBefore: 9000, TokensAfter: 1200}}
+	r := &stubRouter{answer: Answer{Output: "ok", Head: "ollama/x", Evidence: ev}}
+	w := post(t, r, "", "", `{"model":"hydra","messages":[{"role":"user","content":"hi"}]}`)
+	if got := w.Header().Get(CompactedHeader); got != "conv-a/3; probes 9/10" {
+		t.Fatalf("%s = %q", CompactedHeader, got)
+	}
+	var body struct {
+		Hydra struct {
+			Compacted Compacted `json:"compacted"`
+		} `json:"hydra"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Hydra.Compacted.TokensAfter != 1200 {
+		t.Fatalf("body %s, err %v", w.Body.String(), err)
+	}
+	plain := &stubRouter{answer: Answer{Output: "ok", Head: "ollama/x"}}
+	if got := post(t, plain, "", "", `{"model":"hydra","messages":[{"role":"user","content":"hi"}]}`).Header().Get(CompactedHeader); got != "" {
+		t.Fatalf("an uncompacted request carries %s: %q", CompactedHeader, got)
+	}
+}
