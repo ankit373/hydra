@@ -197,6 +197,9 @@ internal/stats/         ← Pure maths, one implementation each: seeded paired b
 internal/bench/         ← Benchmark harness: pinned datasets, committed splits, scored arms. `hyctl bench`.
                           Snips also tallies each field against the gold and the fields check, by
                           `FieldKind` (number, code, text), so the table shows the share of wrong fields caught.
+                          `grader_model` in the config (`ollama:<model>` free, or a priced hosted one) lets a
+                          suite that implements `SecondGrader` re-extract each answer with a second model; the
+                          table adds a `+ second model` row per field row, and `Call`s of it are marked `Grader`.
                           `replay/` runs acceptance policies on cached labelled answers over seeded
                           splits, with no model calls. `hyctl bench replay`. A check arm (`checks` in
                           the config) answers with the suite's own check, no model; a check suite

@@ -26,9 +26,12 @@ type Config struct {
 	// Arms is the rotation order; each is a [models] key, a check or static-fallback.
 	Arms []string `toml:"arms"`
 	// Checks are arms the suite answers itself with that check, calling no model.
-	Checks   []string          `toml:"checks"`
-	Models   map[string]string `toml:"models"` // arm → "<provider>:<model id>"
-	Fallback *struct {
+	Checks []string `toml:"checks"`
+	// GraderModel is a second model the grader may call, "<provider>:<model id>" with ollama
+	// allowed. Unset by default, so no run pays for one it did not name.
+	GraderModel string            `toml:"grader_model"`
+	Models      map[string]string `toml:"models"` // arm → "<provider>:<model id>"
+	Fallback    *struct {
 		Arms      []string `toml:"arms"` // [models] keys, in fallback order
 		FaultRate float64  `toml:"fault_rate"`
 	} `toml:"static_fallback"`
@@ -61,6 +64,11 @@ func ReadConfig(path string) (*Config, error) {
 	if _, err := c.ArmConfigs(); err != nil {
 		return nil, fmt.Errorf("bench: %s: %w", path, err)
 	}
+	if c.GraderModel != "" {
+		if _, _, err := ParseGrader(c.GraderModel); err != nil {
+			return nil, fmt.Errorf("bench: %s: grader_model: %w", path, err)
+		}
+	}
 	for _, m := range c.ModelIDs() {
 		if c.Cutoffs[m] == "" {
 			return nil, fmt.Errorf("bench: %s: [cutoffs] states nothing for %s (write \"unstated\" if the vendor does not)", path, m)
@@ -73,6 +81,9 @@ func ReadConfig(path string) (*Config, error) {
 func (c *Config) ArmConfigs() (map[string]ArmConfig, error) {
 	out := map[string]ArmConfig{}
 	for _, name := range c.Arms {
+		if name == GraderArm {
+			return nil, fmt.Errorf("arm name %s is taken by grader_model", name)
+		}
 		if _, dup := out[name]; dup {
 			return nil, fmt.Errorf("arm %s is listed twice", name)
 		}
@@ -116,13 +127,16 @@ func (c *Config) ArmConfigs() (map[string]ArmConfig, error) {
 	return out, nil
 }
 
-// ModelIDs is every model id the config can call, sorted.
+// ModelIDs is every model id the config can call that has a price, sorted. A local grader costs nothing and has none.
 func (c *Config) ModelIDs() []string {
 	seen := map[string]bool{}
 	for _, spec := range c.Models {
 		if _, m, err := ParseModel(spec); err == nil {
 			seen[m] = true
 		}
+	}
+	if prov, m, err := ParseGrader(c.GraderModel); err == nil && prov != "ollama" {
+		seen[m] = true
 	}
 	out := make([]string, 0, len(seen))
 	for m := range seen {
