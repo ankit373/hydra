@@ -19,6 +19,12 @@ func TestOutcome_LineForEachMode(t *testing.T) {
 			"not verified: futility, product 3.2 cannot reach bar 40"},
 		{Outcome{Alpha: 0.05, Reason: ReasonNoCheck},
 			"not verified: no check for this kind"},
+		{Outcome{Mode: ModeIndependence, Alpha: 0.05, Product: 50.6, Bar: 40, Candidates: 2, Budget: 3},
+			"certified (under independence) at alpha 0.05: product 50.6 >= bar 40, candidate 2 of 3"},
+		{Outcome{Alpha: 0.05, Reason: ReasonCandidates, Product: 0, Bar: 80, Candidates: 3, Budget: 3},
+			"not verified: candidate budget after 3 of 3 candidates, last product 0 < bar 80"},
+		{Outcome{Alpha: 0.05, Reason: ReasonCostCeiling, Product: 1, Bar: 40, Candidates: 1, Budget: 3},
+			"not verified: cost ceiling after 1 of 3 candidates, last product 1 < bar 40"},
 	} {
 		if got := c.o.Line(); got != c.want {
 			t.Errorf("Line() = %q, want %q", got, c.want)

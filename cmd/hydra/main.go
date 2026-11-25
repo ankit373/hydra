@@ -893,6 +893,8 @@ func cmdDispatch() *cobra.Command {
 		schemaPath   string
 		maxFields    int
 		maxEsc       int
+		certify      float64
+		certifyN     int
 		requirePass  bool
 		sourceOnly   bool
 	)
@@ -1042,6 +1044,15 @@ func cmdDispatch() *cobra.Command {
 				(math.IsNaN(confidence) || confidence <= 0 || confidence >= 1) {
 				return fmt.Errorf("--confidence must be in (0,1), got %v", confidence)
 			}
+			if cmd.Flags().Changed("certify") && !(certify > 0 && certify < 0.5) {
+				return fmt.Errorf("--certify must be in (0, 0.5), got %v", certify)
+			}
+			if certifyN < 1 {
+				return fmt.Errorf("--certify-candidates must be at least 1, got %d", certifyN)
+			}
+			if certify > 0 && (cmd.Flags().Changed("confidence") || doSwarm) {
+				return errors.New("--certify judges one answer by its checks; it does not combine with --confidence or --swarm")
+			}
 			effectiveConf := confidence
 			// Classified once, here, the only place a plain, swarm, or SPRT
 			// dispatch first needs it, and threaded through so nothing downstream
@@ -1155,6 +1166,10 @@ func cmdDispatch() *cobra.Command {
 			if redact != "" && (effectiveConf > 0 || doSwarm) {
 				return errors.New("--redact runs a single dispatch; it does not combine " +
 					"with --swarm or a confidence run (--confidence, --file, --irreversible, --production)")
+			}
+			if certify > 0 && effectiveConf > 0 {
+				return errors.New("--certify judges one answer by its checks; this request needs a confidence run " +
+					"(--file, --irreversible, --production, or PII in the prompt)")
 			}
 			// A check judges one answer and scores its span; an ensemble has neither yet.
 			if (len(checks) > 0 || sourceOnly) && (effectiveConf > 0 || doSwarm) {
@@ -1311,10 +1326,11 @@ func cmdDispatch() *cobra.Command {
 				// The same key --confidence reads. A plain dispatch now routes
 				// on it too, so the domain a session fills is the domain its
 				// next dispatch is ranked for (#885).
-				Domain:      domain,
-				Decision:    &ruleDecision,
-				Redact:      redact != "",
-				RedactNames: redact == "names",
+				Domain:       domain,
+				Decision:     &ruleDecision,
+				Redact:       redact != "",
+				RedactNames:  redact == "names",
+				CertifyAlpha: certify,
 			}
 
 			// Streamed on a terminal only. A pipe keeps the buffered rendering
@@ -1323,6 +1339,9 @@ func cmdDispatch() *cobra.Command {
 			// Every --check judges inside dispatch, so a failed one can ask a stronger head.
 			if !cmd.Flags().Changed("max-escalations") {
 				maxEsc = policy.Escalations(fp)
+			}
+			if certify > 0 {
+				maxEsc = 0 // the certify walk, not a failed check, decides who is asked next
 			}
 			if sourceOnly {
 				claims, err := sourceOnlyChecks(ctx, d, prompt, domain, runID, localOnly)
@@ -1334,6 +1353,19 @@ func cmdDispatch() *cobra.Command {
 			}
 			esc := checkRule(&opts, answerChecks, maxEsc)
 			chunked := len(chunks) > 1 && !dryRun
+			var walk *certifyWalk
+			if certify > 0 {
+				if chunked {
+					return errors.New("--certify judges whole answers; it does not combine with a schema asked for in chunks")
+				}
+				if walk, err = newCertifyWalk(certify, certifyN, answerChecks, esc, domain); err != nil {
+					return err
+				}
+				if len(answerChecks) > 0 {
+					// Each candidate answers the same prompt on its own, or agreement means nothing.
+					opts.Escalate, opts.Retry, opts.NoCache = walk.Judge, nil, true
+				}
+			}
 			if chunked {
 				// No chunk is a whole answer, so the checks judge the merged object once, with no rerun.
 				opts.Escalate, opts.Retry = nil, nil
@@ -1424,10 +1456,16 @@ func cmdDispatch() *cobra.Command {
 				}
 				return nil
 			}
+			certified := func() {
+				if certify > 0 {
+					walk.finish(result, runID, taskID)
+				}
+			}
 			finish := func() error {
 				printOutputWarning(result.OutputProvenance)
 				var v verified
 				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID, &v)
+				certified()
 				runGen(&v)
 				return settle(&v)
 			}
@@ -1436,6 +1474,7 @@ func cmdDispatch() *cobra.Command {
 				printOutputWarning(result.OutputProvenance)
 				var v verified
 				runChecks(ctx, answerChecks, esc, result, prompt, enumKey, domain, runID, &v)
+				certified()
 				if err := refuseUncovered(answerChecks, esc); err != nil {
 					return err
 				}
@@ -1520,6 +1559,9 @@ func cmdDispatch() *cobra.Command {
 		"hyctl prints \""+notCoveredReply+"\" with the failed sentences instead of the reply and exits 1 (2 when it could not check)")
 	cmd.Flags().StringVar(&schemaPath, "schema", "", "JSON Schema file whose top-level properties, types and required list are the fields check's field list, with no model call to write it; implies --check gen:fields")
 	cmd.Flags().IntVar(&maxFields, "max-fields", 30, "with --schema, ask for at most this many fields per call; a wider schema is split into chunks on one head and merged")
+	cmd.Flags().Float64Var(&certify, "certify", 0, "accept only if the checks bound the chance of accepting a wrong answer, per task, "+
+		"at this alpha, e.g. 0.05; otherwise print not verified and why. Asks the next model while one is not certified (0 = off)")
+	cmd.Flags().IntVar(&certifyN, "certify-candidates", 3, "with --certify, how many models may answer in turn; alpha is split over them, 1/2, 1/4, ... fixed before the first call")
 	cmd.Flags().IntVar(&maxEsc, "max-escalations", 1, "with --check, how many stronger heads a failed check may ask; default from policy.yaml max_retries and escalate_on_fail, 0 turns it off")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
