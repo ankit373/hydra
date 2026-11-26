@@ -47,6 +47,12 @@ hyctl bench replay --candidates $D/gsm8k.replay.jsonl --check format
   Python that has it. The converter and the Go side stay free of parquet.
 - `run_evalplus.sh` needs macOS `sandbox-exec`. Without it the script stops; it never runs
   generated code unsandboxed. It installs `evalplus==0.3.1` in `$D/venv`.
+- Each sample goes through EvalPlus's own `sanitize` into `$D/sanitized/` before it is scored.
+  The MBPP+ chat models answer in prose around a fenced block, which scores 0 unsanitized.
+- `fetch` refuses a zip that lacks a sample for any problem or has one task twice, and `merge`
+  refuses a model with no result, fewer rows than problems, or a result not scored on the
+  sanitized sample. Results from before sanitizing fail that last check: delete `$D/results/`
+  and score again.
 - EvalPlus has time limits. On a busy machine correct code times out and is labelled
   wrong. Score on an idle machine and read the timeout count `merge` prints.
 
@@ -107,7 +113,7 @@ recomputed with no model call.
 
 | Set | `correct` | Checks |
 |---|---|---|
-| HumanEval+, MBPP+ | passes the base and the extra EvalPlus tests | `base_tests`: base tests pass. `compiles`: the source parses |
+| HumanEval+, MBPP+ | passes the base and the extra EvalPlus tests | `base_tests`: base tests pass. `compiles`: the sanitized source parses |
 | GSM8K | the final `#### n` equals the gold number | `format`: a final answer is present. `arithmetic`: at least one `<<a*b=c>>` note, all of them right |
 | RAGTruth | the annotators marked no hallucinated span | `numbers_in_source`: every number in the answer is in the prompt. `complete`: the dataset's quality label is `good` |
 
@@ -154,6 +160,8 @@ python -I -m unittest discover -s bench/aver
 go test ./internal/bench/replay/ -run ConverterFixture
 ```
 
+`test_prep_code.py` covers sample extraction at any folder depth, sanitizing and the
+`merge` refusals; its EvalPlus case runs only where `evalplus` is installed.
 `test_to_replay.py` checks the field mapping on the five-row fixture in `testdata/`, and
 that converting `prepped.jsonl` gives exactly `replay.jsonl`. The Go test loads
 `replay.jsonl` with `replay.Read`, so a change to the replay format breaks it.
