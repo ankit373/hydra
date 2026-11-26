@@ -29,11 +29,15 @@ for suite in humaneval mbpp; do
     [ "$only" = "  " ] || [[ "$only" == *" $head "* ]] || continue
     out="$data/results/$suite/$head.json"
     [ -f "$out" ] && continue
-    rm -f "$dir/eval_results.json"
+    clean="$data/sanitized/$suite/$head"
+    rm -rf "$clean"
     echo "scoring $suite/$head"
+    # Chat replies wrap code in prose and fences; EvalPlus's own sanitizer strips them.
     sandbox-exec -D WORK="$data" -f "$here/sandbox.sb" \
-      "$data/venv/bin/evalplus.evaluate" "$suite" --samples "$dir"
+      "$data/venv/bin/python" -I "$here/prep_code.py" sanitize --data "$data" --suite "$suite" --head "$head"
+    sandbox-exec -D WORK="$data" -f "$here/sandbox.sb" \
+      "$data/venv/bin/evalplus.evaluate" "$suite" --samples "$clean"
     mkdir -p "$(dirname "$out")"
-    mv "$dir/eval_results.json" "$out"
+    mv "$clean/eval_results.json" "$out"
   done
 done
