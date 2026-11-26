@@ -6,6 +6,39 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.10.0](https://github.com/ankit373/hydra/compare/v1.9.0...v1.10.0) (2026-11-26)
+
+
+### Features
+
+* **aver:** calibrate each check per model and kind of work, with an upper bound on false passes ([#2062](https://github.com/ankit373/hydra/issues/2062)) ([a0745b6](https://github.com/ankit373/hydra/commit/a0745b6b72d142eb34c7e7bd0cb9d4ca1b228cc3))
+* **aver:** calibrate on data since the last change, and distrust a check that changed ([#2065](https://github.com/ankit373/hydra/issues/2065)) ([b20cb06](https://github.com/ankit373/hydra/commit/b20cb06abe8842fbf413bc99d9c1cdf9f71d1f2f))
+* **aver:** dependence-free mode, certify on a joint pass pattern or say how much data is missing ([#2069](https://github.com/ankit373/hydra/issues/2069)) ([24212ae](https://github.com/ankit373/hydra/commit/24212aea3e620e0bf39915d4b36ffca1683d9bf2))
+* **aver:** e-value product with an early stop when the bar is out of reach ([#2063](https://github.com/ankit373/hydra/issues/2063)) ([1226f4d](https://github.com/ankit373/hydra/commit/1226f4d27e3cf6e314f3d469774f6d7544be384d))
+* **aver:** mark each answer certified or not verified, with the reason, on its span ([#2068](https://github.com/ankit373/hydra/issues/2068)) ([97dbdb4](https://github.com/ankit373/hydra/commit/97dbdb4079c78e5146ca5a1ef2c934f66e1f3540))
+* **aver:** only multiply checks that do not fail together ([#2067](https://github.com/ankit373/hydra/issues/2067)) ([30c2797](https://github.com/ankit373/hydra/commit/30c27973125aa6dd522133df348b6f6607e925b6))
+* **aver:** split alpha across candidate answers with fixed spending weights ([#2066](https://github.com/ankit373/hydra/issues/2066)) ([694f464](https://github.com/ankit373/hydra/commit/694f464ab7576d11531608b7e9d746b85fb04a6c))
+* **bench:** a replay policy for the current SPRT default, fitted in memory ([#2094](https://github.com/ankit373/hydra/issues/2094)) ([28218b6](https://github.com/ankit373/hydra/commit/28218b608067682fcb7e2eb247d3439a638af9fc))
+* **bench:** bench replay --outcomes writes per-task outcomes as JSONL ([#2092](https://github.com/ankit373/hydra/issues/2092)) ([a8ef172](https://github.com/ankit373/hydra/commit/a8ef1726d1e3f6470699ed2a385cb04755d558dd))
+* **bench:** check in the AVER data prep and convert it to replay rows ([#2058](https://github.com/ankit373/hydra/issues/2058)) ([d640105](https://github.com/ankit373/hydra/commit/d6401051de0bc59bd6c5405c9f647a0110572441))
+* **bench:** the grader can run the second-model check, local by default ([#2013](https://github.com/ankit373/hydra/issues/2013)) ([#2035](https://github.com/ankit373/hydra/issues/2035)) ([9347618](https://github.com/ankit373/hydra/commit/934761839489048e2b72ba08251f3817e1d421c5))
+* **checkgen:** bad_format verdict for identifiers and codes ([#1981](https://github.com/ankit373/hydra/issues/1981)) ([#2034](https://github.com/ankit373/hydra/issues/2034)) ([dfa7a20](https://github.com/ankit373/hydra/commit/dfa7a202e7b872bd68f78f4e2ffe9e5d299cb1f2))
+* **compare:** rerun stored tasks on both models with --replay N ([#1873](https://github.com/ankit373/hydra/issues/1873)) ([#2057](https://github.com/ankit373/hydra/issues/2057)) ([98366be](https://github.com/ankit373/hydra/commit/98366be224643e77a696c15d946da4e7f492150d))
+* **dispatch:** --certify &lt;alpha&gt;, certified or not verified for one answer ([#2070](https://github.com/ankit373/hydra/issues/2070)) ([a5afcac](https://github.com/ankit373/hydra/commit/a5afcacdb24898501eeb4d3f9de1b2636a97b922))
+* **idle:** a pack must answer the same probe questions as the full turns ([#1633](https://github.com/ankit373/hydra/issues/1633)) ([#2042](https://github.com/ankit373/hydra/issues/2042)) ([426fbd3](https://github.com/ankit373/hydra/commit/426fbd3d90a8fdc28db963ad115b45c9a1b86b60))
+* **idle:** a scheduler that builds and checks a pack, and stops when the user is back ([#1635](https://github.com/ankit373/hydra/issues/1635)) ([#2051](https://github.com/ankit373/hydra/issues/2051)) ([ffe977d](https://github.com/ankit373/hydra/commit/ffe977da2ed06892dcf4f53c6d0d1b5df048505e))
+* **idle:** list packs and restore the full conversation ([#1638](https://github.com/ankit373/hydra/issues/1638)) ([#2056](https://github.com/ankit373/hydra/issues/2056)) ([cd33aaa](https://github.com/ankit373/hydra/commit/cd33aaa01c85544dc6321be012c2f929b95316c4))
+* **idle:** reject a pack that rewrites a rule, invents a number or grows ([#1632](https://github.com/ankit373/hydra/issues/1632)) ([#2041](https://github.com/ankit373/hydra/issues/2041)) ([316de14](https://github.com/ankit373/hydra/commit/316de1435376145561b1893003230a3c6ba9725c))
+* **idle:** swap in a pack only when the cache math says it pays ([#1636](https://github.com/ankit373/hydra/issues/1636)) ([#2052](https://github.com/ankit373/hydra/issues/2052)) ([32af5f0](https://github.com/ankit373/hydra/commit/32af5f0ef430ad1b05189ee8af6501cc35016a42))
+* **idle:** use a staged pack on the next request, and say so ([#1637](https://github.com/ankit373/hydra/issues/1637)) ([#2054](https://github.com/ankit373/hydra/issues/2054)) ([e4b4c95](https://github.com/ankit373/hydra/commit/e4b4c951003a807ddd0c921a62df782658dc00f1))
+
+
+### Bug Fixes
+
+* **bench:** extract nested aver code samples and sanitize before scoring ([#2104](https://github.com/ankit373/hydra/issues/2104)) ([2c107a8](https://github.com/ankit373/hydra/commit/2c107a8cb520c17549eb736792c4250248ebc325))
+* **install:** trust the tap before brew install ([#2075](https://github.com/ankit373/hydra/issues/2075)) ([a289760](https://github.com/ankit373/hydra/commit/a289760162b6bd8e0bb624c29fdbbd4a91daa964))
+* **site:** open dark by default and keep the hero install on one line ([#2095](https://github.com/ankit373/hydra/issues/2095)) ([26f6fa8](https://github.com/ankit373/hydra/commit/26f6fa8d020f83a87421c67f2ac453b553aabe91))
+
 ## [1.9.0](https://github.com/ankit373/hydra/compare/v1.8.0...v1.9.0) (2026-11-24)
 
 

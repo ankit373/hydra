@@ -1,0 +1,168 @@
+{
+  "advisories": [],
+  "prs": {
+    "2034": {
+      "author": "ankit373",
+      "issues": [
+        1981
+      ],
+      "upgrade_notes": ""
+    },
+    "2035": {
+      "author": "ankit373",
+      "issues": [
+        2013
+      ],
+      "upgrade_notes": ""
+    },
+    "2041": {
+      "author": "ankit373",
+      "issues": [
+        1632
+      ],
+      "upgrade_notes": ""
+    },
+    "2042": {
+      "author": "ankit373",
+      "issues": [
+        1633
+      ],
+      "upgrade_notes": ""
+    },
+    "2051": {
+      "author": "ankit373",
+      "issues": [
+        1635
+      ],
+      "upgrade_notes": ""
+    },
+    "2052": {
+      "author": "ankit373",
+      "issues": [
+        1636
+      ],
+      "upgrade_notes": ""
+    },
+    "2054": {
+      "author": "ankit373",
+      "issues": [
+        1637
+      ],
+      "upgrade_notes": ""
+    },
+    "2056": {
+      "author": "ankit373",
+      "issues": [
+        1638
+      ],
+      "upgrade_notes": ""
+    },
+    "2057": {
+      "author": "ankit373",
+      "issues": [
+        1873
+      ],
+      "upgrade_notes": ""
+    },
+    "2058": {
+      "author": "ankit373",
+      "issues": [
+        1645
+      ],
+      "upgrade_notes": ""
+    },
+    "2062": {
+      "author": "ankit373",
+      "issues": [
+        1640
+      ],
+      "upgrade_notes": ""
+    },
+    "2063": {
+      "author": "ankit373",
+      "issues": [
+        1641
+      ],
+      "upgrade_notes": ""
+    },
+    "2065": {
+      "author": "ankit373",
+      "issues": [
+        1647
+      ],
+      "upgrade_notes": ""
+    },
+    "2066": {
+      "author": "ankit373",
+      "issues": [
+        1643
+      ],
+      "upgrade_notes": ""
+    },
+    "2067": {
+      "author": "ankit373",
+      "issues": [
+        1644
+      ],
+      "upgrade_notes": ""
+    },
+    "2068": {
+      "author": "ankit373",
+      "issues": [
+        1648
+      ],
+      "upgrade_notes": ""
+    },
+    "2069": {
+      "author": "ankit373",
+      "issues": [
+        1646
+      ],
+      "upgrade_notes": ""
+    },
+    "2070": {
+      "author": "ankit373",
+      "issues": [
+        1649
+      ],
+      "upgrade_notes": ""
+    },
+    "2075": {
+      "author": "ankit373",
+      "issues": [
+        2074
+      ],
+      "upgrade_notes": ""
+    },
+    "2092": {
+      "author": "ankit373",
+      "issues": [
+        2091
+      ],
+      "upgrade_notes": ""
+    },
+    "2094": {
+      "author": "ankit373",
+      "issues": [
+        2090
+      ],
+      "upgrade_notes": ""
+    },
+    "2095": {
+      "author": "ankit373",
+      "issues": [
+        2093
+      ],
+      "upgrade_notes": ""
+    },
+    "2104": {
+      "author": "ankit373",
+      "issues": [
+        2103
+      ],
+      "upgrade_notes": "a data dir scored before this change fails `merge` with \"did not score the sanitized sample\". delete `$D/results/` and run `run_evalplus.sh` again."
+    }
+  },
+  "release": null,
+  "version": "1.10.0"
+}
