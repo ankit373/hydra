@@ -4,8 +4,15 @@
   <id>https://hydra.uvansa.com/releases/</id>
   <link href="https://hydra.uvansa.com/releases/"/>
   <link rel="self" href="https://hydra.uvansa.com/releases/feed.xml"/>
-  <updated>2026-11-24T00:00:00Z</updated>
+  <updated>2026-11-26T00:00:00Z</updated>
   <author><name>Hydra</name></author>
+  <entry>
+    <title>Hydra 1.10.0</title>
+    <id>https://hydra.uvansa.com/releases/v1.10.0.html</id>
+    <link href="https://hydra.uvansa.com/releases/v1.10.0.html"/>
+    <updated>2026-11-26T00:00:00Z</updated>
+    <summary>20 new, 3 fixed. Most of the work is in other, long conversations, benchmarks.</summary>
+  </entry>
   <entry>
     <title>Hydra 1.9.0</title>
     <id>https://hydra.uvansa.com/releases/v1.9.0.html</id>

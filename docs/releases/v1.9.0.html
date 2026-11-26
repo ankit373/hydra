@@ -52,6 +52,7 @@
       <a href="/releases/">All releases</a>
       <a href="/releases/feed.xml">Atom feed</a>
       <div class="grp">Versions</div>
+      <a href="/releases/v1.10.0.html">v1.10.0 <span class="when">Nov 26, 2026</span></a>
       <a href="/releases/v1.9.0.html" class="active" aria-current="page">v1.9.0 <span class="when">Nov 24, 2026</span></a>
       <a href="/releases/v1.8.0.html">v1.8.0 <span class="when">Nov 13, 2026</span></a>
       <a href="/releases/v1.7.0.html">v1.7.0 <span class="when">Nov 12, 2026</span></a>
@@ -274,12 +275,34 @@
 </section>
 <section class="doc" id="security">
 <h2>Security</h2>
-<div class="sub md"><p>This release includes security hardening for serve, validators and the upgrade path. Details will be published as GitHub advisories, and this page will link them once they are public.</p></div>
+<div class="sub md"><ul class="items">
+<li><a href="https://github.com/ankit373/hydra/security/advisories/GHSA-ph3h-xhx5-j7cr">GHSA-ph3h-xhx5-j7cr</a>: Signed releases, fail-closed installers, and an upgrade that verifies before it runs <span class=refs>high</span></li>
+<li><a href="https://github.com/ankit373/hydra/security/advisories/GHSA-hjjh-pv6w-xx55">GHSA-hjjh-pv6w-xx55</a>: Run validators and oracles with a minimal environment and no network <span class=refs>high</span></li>
+<li><a href="https://github.com/ankit373/hydra/security/advisories/GHSA-wjfh-pjv8-hrq3">GHSA-wjfh-pjv8-hrq3</a>: serve: refuse browser and rebinding requests, and always apply the cost policy <span class=refs>high</span></li>
+</ul>
+<p>This release includes security hardening for serve, validators and the upgrade path. Details will be published as GitHub advisories, and this page will link them once they are public.</p></div>
 </section>
 <section class="doc" id="downloads">
 <h2>Download and verify</h2>
 <p class="sum">Most people upgrade with <code>hyctl upgrade</code>, <code>brew upgrade hyctl</code>, npm or pip; see <a href="/docs.html#install">install</a>. The files below are for a manual install.</p>
-<p class="sum">The files are attached when the release is published, on <a href="https://github.com/ankit373/hydra/releases/tag/v1.9.0">the v1.9.0 release page</a>.</p>
+<table class="ladder"><thead><tr><th>Platform</th><th>Command line (hyctl)</th><th>Desktop app</th></tr></thead>
+<tbody>
+<tr><td>macOS x86-64</td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra_1.9.0_darwin_amd64.tar.gz" translate="no">hydra_1.9.0_darwin_amd64.tar.gz</a> <span class="refs">9.9 MB</span></td><td>not built</td></tr>
+<tr><td>macOS ARM64</td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra_1.9.0_darwin_arm64.tar.gz" translate="no">hydra_1.9.0_darwin_arm64.tar.gz</a> <span class="refs">9.2 MB</span></td><td>not built</td></tr>
+<tr><td>macOS universal</td><td>not built</td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra-desktop_v1.9.0_darwin_universal.zip" translate="no">hydra-desktop_v1.9.0_darwin_universal.zip</a> <span class="refs">11.5 MB</span></td></tr>
+<tr><td>Linux x86-64</td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra_1.9.0_linux_amd64.tar.gz" translate="no">hydra_1.9.0_linux_amd64.tar.gz</a> <span class="refs">9.8 MB</span></td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra-desktop_v1.9.0_linux_amd64.tar.gz" translate="no">hydra-desktop_v1.9.0_linux_amd64.tar.gz</a> <span class="refs">5.8 MB</span></td></tr>
+<tr><td>Linux ARM64</td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra_1.9.0_linux_arm64.tar.gz" translate="no">hydra_1.9.0_linux_arm64.tar.gz</a> <span class="refs">8.9 MB</span></td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra-desktop_v1.9.0_linux_arm64.tar.gz" translate="no">hydra-desktop_v1.9.0_linux_arm64.tar.gz</a> <span class="refs">5.3 MB</span></td></tr>
+<tr><td>Windows x86-64</td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra_1.9.0_windows_amd64.zip" translate="no">hydra_1.9.0_windows_amd64.zip</a> <span class="refs">10.0 MB</span></td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra-desktop_v1.9.0_windows_amd64.zip" translate="no">hydra-desktop_v1.9.0_windows_amd64.zip</a> <span class="refs">6.2 MB</span></td></tr>
+<tr><td>Windows ARM64</td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra_1.9.0_windows_arm64.zip" translate="no">hydra_1.9.0_windows_arm64.zip</a> <span class="refs">9.0 MB</span></td><td><a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/hydra-desktop_v1.9.0_windows_arm64.zip" translate="no">hydra-desktop_v1.9.0_windows_arm64.zip</a> <span class="refs">5.6 MB</span></td></tr>
+</tbody></table>
+<p class="sum">Also attached: <a href="https://github.com/ankit373/hydra/releases/download/v1.9.0/checksums.txt">checksums.txt</a>, an SBOM for each command-line archive. Every file is on <a href="https://github.com/ankit373/hydra/releases/tag/v1.9.0">the release page</a>.</p>
+<div class="sub"><div class="lbl">Verify a download</div>
+<p>Check the file against the release checksums, from the folder you downloaded it to:</p>
+<div class="term"><div class="copyline"><code translate="no"><span class="p">$</span> sha256sum --ignore-missing -c checksums.txt</code><button type="button" class="copy-btn" data-copy="sha256sum --ignore-missing -c checksums.txt">copy</button></div></div>
+<p>On macOS use <code>shasum -a 256 --ignore-missing -c checksums.txt</code>. Each desktop file also has its own <code>.sha256</code> beside it.</p>
+<p>Check that GitHub Actions built it from this repository (needs the <code>gh</code> CLI):</p>
+<div class="term"><div class="copyline"><code translate="no"><span class="p">$</span> gh attestation verify hydra_1.9.0_linux_amd64.tar.gz --repo ankit373/hydra</code><button type="button" class="copy-btn" data-copy="gh attestation verify hydra_1.9.0_linux_amd64.tar.gz --repo ankit373/hydra">copy</button></div></div>
+</div>
 </section>
 <section class="doc" id="contributors">
 <h2>Contributors</h2>
